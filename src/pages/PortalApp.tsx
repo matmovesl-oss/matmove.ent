@@ -42,51 +42,31 @@ export function PortalApp() {
     const numAmount = parseFloat(amount);
 
     try {
-      if (modalType === 'topup') {
-        const newBalance = Number(wallet.balance) + numAmount;
-        await supabase.from('wallets').update({ balance: newBalance }).eq('id', wallet.id);
-        
-        await supabase.from('wallet_transactions').insert({
-          wallet_id: wallet.id,
-          amount: numAmount,
-          transaction_type: 'credit',
-          status: 'completed',
-          description: 'Wallet Top-Up via Card/Mobile Money'
-        });
+      // Execute transaction securely via Supabase Stored Procedure (RPC)
+      const { error } = await supabase.rpc('process_wallet_transaction', {
+        p_amount: numAmount,
+        p_type: modalType,
+        p_description: modalType === 'topup' ? 'Wallet Top-Up via Card/Mobile Money' : 'Withdrawal Request via Vult'
+      });
 
-        setSuccessMsg(`Successfully added SLE ${numAmount} to your wallet!`);
-      } 
-      else if (modalType === 'withdraw') {
-        if (numAmount > wallet.balance) {
-          alert("Insufficient funds!");
-          setProcessing(false);
-          return;
-        }
+      if (error) throw error;
 
-        const refCode = `VULT-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-        await supabase.from('withdrawal_requests').insert({
-          user_id: profile.id,
-          amount: numAmount,
-          provider: 'vult',
-          reference_code: refCode,
-          status: 'pending'
-        });
+      setSuccessMsg(
+        modalType === 'topup'
+          ? `Successfully added SLE ${numAmount} to your wallet!`
+          : `Withdrawal request of SLE ${numAmount} processed!`
+      );
 
-        const newBalance = Number(wallet.balance) - numAmount;
-        await supabase.from('wallets').update({ balance: newBalance }).eq('id', wallet.id);
-
-        setSuccessMsg(`Withdrawal request of SLE ${numAmount} submitted to Vult. Reference: ${refCode}`);
-      }
-
-      await fetchUserData();
+      await fetchUserData(); // Refresh balance from server
       setAmount('');
       setTimeout(() => {
         setIsModalOpen(false);
         setSuccessMsg('');
       }, 3000);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("Transaction error:", error);
+      alert(error.message || "Transaction failed. Please try again.");
     } finally {
       setProcessing(false);
     }
