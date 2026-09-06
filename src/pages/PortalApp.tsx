@@ -43,11 +43,9 @@ export function PortalApp() {
 
     try {
       if (modalType === 'topup') {
-        // 1. Update wallet balance
         const newBalance = Number(wallet.balance) + numAmount;
         await supabase.from('wallets').update({ balance: newBalance }).eq('id', wallet.id);
         
-        // 2. Log transaction
         await supabase.from('wallet_transactions').insert({
           wallet_id: wallet.id,
           amount: numAmount,
@@ -65,7 +63,6 @@ export function PortalApp() {
           return;
         }
 
-        // 1. Create pending withdrawal request
         const refCode = `VULT-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
         await supabase.from('withdrawal_requests').insert({
           user_id: profile.id,
@@ -75,14 +72,13 @@ export function PortalApp() {
           status: 'pending'
         });
 
-        // 2. Deduct from wallet immediately (escrow)
         const newBalance = Number(wallet.balance) - numAmount;
         await supabase.from('wallets').update({ balance: newBalance }).eq('id', wallet.id);
 
         setSuccessMsg(`Withdrawal request of SLE ${numAmount} submitted to Vult. Reference: ${refCode}`);
       }
 
-      await fetchUserData(); // Refresh balance
+      await fetchUserData();
       setAmount('');
       setTimeout(() => {
         setIsModalOpen(false);
@@ -108,7 +104,6 @@ export function PortalApp() {
 
   return (
     <div className="flex-1 bg-slate-50 h-screen overflow-y-auto relative">
-      {/* Top Navigation Bar */}
       <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center sticky top-0 z-10">
         <div className="w-1/2">
           <input type="text" placeholder="Search bookings, payments..." className="w-full bg-slate-100 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 outline-none"/>
@@ -130,7 +125,6 @@ export function PortalApp() {
         </div>
       </header>
 
-      {/* KYC Warning Banner */}
       {isPendingKYC && (
         <div className="bg-orange-50 text-orange-700 p-3 flex justify-center items-center gap-2 text-sm font-medium border-b border-orange-100">
           <Lock size={16} /> Your account is under review. Full features will unlock once approved.
@@ -138,7 +132,6 @@ export function PortalApp() {
       )}
 
       <div className="p-8 max-w-6xl mx-auto space-y-8 pb-24">
-        {/* Welcome Section */}
         <div className="flex justify-between items-end">
           <div>
             <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
@@ -154,7 +147,6 @@ export function PortalApp() {
           )}
         </div>
 
-        {/* Top Widgets */}
         <div className="grid grid-cols-3 gap-6">
           <div className="col-span-2 bg-blue-700 rounded-2xl p-6 text-white flex flex-col justify-between relative overflow-hidden shadow-lg">
             <div className="absolute right-0 top-0 opacity-10 pointer-events-none">
@@ -177,7 +169,6 @@ export function PortalApp() {
                 >
                   Add money
                 </button>
-                {/* Condition correctly applied below */}
                 {!isRider && (
                   <button 
                     onClick={() => { setModalType('withdraw'); setIsModalOpen(true); }}
@@ -210,7 +201,6 @@ export function PortalApp() {
           </div>
         </div>
 
-        {/* Services Section */}
         {isRider && (
           <div>
             <div className="flex justify-between items-center mb-4">
@@ -235,7 +225,6 @@ export function PortalApp() {
         )}
       </div>
 
-      {/* Transaction Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative">
@@ -289,4 +278,3 @@ export function PortalApp() {
     </div>
   );
 }
-export const PortalApp = CustomerDashboard;
