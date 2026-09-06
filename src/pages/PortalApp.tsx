@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Wallet, Car, Package, Truck, Bus, Lock, Bell, ChevronDown, X, CheckCircle2 } from 'lucide-react';
+import { Wallet, Car, Package, Truck, Bus, Lock, Bell, ChevronDown, X, CheckCircle2, TrendingUp, Store, ShieldCheck } from 'lucide-react';
 
 export function PortalApp() {
   const [profile, setProfile] = useState<any>(null);
   const [wallet, setWallet] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   
-  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'topup' | 'withdraw'>('topup');
   const [amount, setAmount] = useState('');
@@ -42,11 +41,10 @@ export function PortalApp() {
     const numAmount = parseFloat(amount);
 
     try {
-      // Execute transaction securely via Supabase Stored Procedure (RPC)
       const { error } = await supabase.rpc('process_wallet_transaction', {
         p_amount: numAmount,
         p_type: modalType,
-        p_description: modalType === 'topup' ? 'Wallet Top-Up via Card/Mobile Money' : 'Withdrawal Request via Vult'
+        p_description: modalType === 'topup' ? 'Wallet Top-Up' : 'Withdrawal Request via Vult'
       });
 
       if (error) throw error;
@@ -57,7 +55,7 @@ export function PortalApp() {
           : `Withdrawal request of SLE ${numAmount} processed!`
       );
 
-      await fetchUserData(); // Refresh balance from server
+      await fetchUserData();
       setAmount('');
       setTimeout(() => {
         setIsModalOpen(false);
@@ -66,27 +64,31 @@ export function PortalApp() {
       
     } catch (error: any) {
       console.error("Transaction error:", error);
-      alert(error.message || "Transaction failed. Please try again.");
+      alert(error.message || "Transaction failed.");
     } finally {
       setProcessing(false);
     }
   };
 
-  if (loading) return <div className="p-8 text-slate-500">Loading dashboard...</div>;
+  if (loading) return <div className="p-8 text-slate-500 font-medium">Loading MatMove portal...</div>;
+
+  const role = (profile?.role || 'rider').toLowerCase();
+  const isRider = role === 'rider' || role === 'client';
+  const isDriver = role === 'driver';
+  const isMerchant = role === 'merchant';
+  const isPendingKYC = profile?.kyc_status === 'pending';
 
   const getInitials = (name: string) => {
     if (!name) return 'U';
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   };
 
-  const isRider = profile?.role === 'rider' || profile?.role === 'client';
-  const isPendingKYC = profile?.kyc_status === 'pending';
-
   return (
     <div className="flex-1 bg-slate-50 h-screen overflow-y-auto relative">
+      {/* Top Bar */}
       <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center sticky top-0 z-10">
         <div className="w-1/2">
-          <input type="text" placeholder="Search bookings, payments..." className="w-full bg-slate-100 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 outline-none"/>
+          <input type="text" placeholder="Search orders, transactions..." className="w-full bg-slate-100 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 outline-none"/>
         </div>
         <div className="flex items-center gap-6">
           <button className="relative text-slate-400 hover:text-slate-600">
@@ -97,41 +99,45 @@ export function PortalApp() {
             <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
               {getInitials(profile?.full_name)}
             </div>
-            <div className="flex items-center gap-1 cursor-pointer">
-              <span className="text-sm font-medium text-slate-700 capitalize">{profile?.role || 'User'}</span>
+            <div className="flex items-center gap-1">
+              <span className="text-sm font-bold text-slate-800 capitalize">{profile?.role || 'Rider'}</span>
               <ChevronDown size={16} className="text-slate-400" />
             </div>
           </div>
         </div>
       </header>
 
+      {/* KYC Alert */}
       {isPendingKYC && (
-        <div className="bg-orange-50 text-orange-700 p-3 flex justify-center items-center gap-2 text-sm font-medium border-b border-orange-100">
-          <Lock size={16} /> Your account is under review. Full features will unlock once approved.
+        <div className="bg-amber-50 text-amber-800 p-3 flex justify-center items-center gap-2 text-sm font-semibold border-b border-amber-200">
+          <Lock size={16} /> Account pending KYC verification. Production operations restricted until approved.
         </div>
       )}
 
       <div className="p-8 max-w-6xl mx-auto space-y-8 pb-24">
+        {/* Header Title */}
         <div className="flex justify-between items-end">
           <div>
             <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
             </div>
             <h1 className="text-3xl font-bold text-slate-900">Good morning, {profile?.full_name?.split(' ')[0] || 'User'} ✨</h1>
-            <p className="text-slate-500 mt-1">{isRider ? 'Where are you moving today?' : 'Ready to start earning today?'}</p>
+            <p className="text-slate-500 mt-1">
+              {isRider && "Where are you moving today?"}
+              {isDriver && "Ready to start accepting trips today?"}
+              {isMerchant && "Manage your business dispatch and orders."}
+            </p>
           </div>
           {isRider && (
             <button className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-md hover:bg-blue-700 transition flex items-center gap-2">
-              <Car size={18} /> Book a service
+              <Car size={18} /> Book a Service
             </button>
           )}
         </div>
 
+        {/* Wallet & Main Cards */}
         <div className="grid grid-cols-3 gap-6">
           <div className="col-span-2 bg-blue-700 rounded-2xl p-6 text-white flex flex-col justify-between relative overflow-hidden shadow-lg">
-            <div className="absolute right-0 top-0 opacity-10 pointer-events-none">
-              <Wallet size={200} className="-mt-10 -mr-10" />
-            </div>
             <div className="relative z-10">
               <div className="flex justify-between items-start mb-6">
                 <div>
@@ -149,6 +155,7 @@ export function PortalApp() {
                 >
                   Add money
                 </button>
+                {/* HIDE WITHDRAW FROM RIDERS */}
                 {!isRider && (
                   <button 
                     onClick={() => { setModalType('withdraw'); setIsModalOpen(true); }}
@@ -157,42 +164,46 @@ export function PortalApp() {
                     Withdraw
                   </button>
                 )}
-                <button className="ml-auto text-sm font-bold text-blue-200 hover:text-white transition flex items-center gap-1">
-                  View wallet →
-                </button>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-center cursor-pointer hover:border-blue-300 transition">
-            {isRider ? (
+          {/* Role-Specific Right Card */}
+          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-center">
+            {isRider && (
               <>
-                <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 mb-4"><Lock size={24} /></div>
-                <h3 className="font-bold text-slate-900 text-lg">Moving with MatMove</h3>
-                <p className="text-slate-500 text-sm mt-1">Safe, reliable journeys across Sierra Leone.</p>
+                <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 mb-4"><ShieldCheck size={24} /></div>
+                <h3 className="font-bold text-slate-900 text-lg">Safe Passenger Rides</h3>
+                <p className="text-slate-500 text-sm mt-1">Tracked journeys with verified MatMove drivers.</p>
               </>
-            ) : (
+            )}
+            {isDriver && (
               <>
-                <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 mb-4"><Wallet size={24} /></div>
-                <h3 className="font-bold text-slate-900 text-lg">Payout Settings</h3>
-                <p className="text-slate-500 text-sm mt-1">Manage your Vult integration and bank details.</p>
+                <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 mb-4"><TrendingUp size={24} /></div>
+                <h3 className="font-bold text-slate-900 text-lg">Driver Payouts</h3>
+                <p className="text-slate-500 text-sm mt-1">Direct wallet withdrawals via Vult / Mobile Money.</p>
+              </>
+            )}
+            {isMerchant && (
+              <>
+                <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 mb-4"><Store size={24} /></div>
+                <h3 className="font-bold text-slate-900 text-lg">Merchant Gateway</h3>
+                <p className="text-slate-500 text-sm mt-1">Batch delivery dispatches and commercial billing.</p>
               </>
             )}
           </div>
         </div>
 
+        {/* RIDER-ONLY SECTION */}
         {isRider && (
           <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold text-slate-900">What do you need today?</h2>
-              <button className="text-blue-600 text-sm font-bold hover:underline">View all services →</button>
-            </div>
+            <h2 className="text-lg font-bold text-slate-900 mb-4">Book a Transportation Service</h2>
             <div className="grid grid-cols-4 gap-4">
               {[
-                { name: 'Ride', desc: 'Get where you need to go', icon: Car, color: 'text-blue-600', bg: 'bg-blue-50' },
-                { name: 'Delivery', desc: 'Send something fast', icon: Package, color: 'text-orange-600', bg: 'bg-orange-50' },
-                { name: 'Truck', desc: 'Move heavy items', icon: Truck, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                { name: 'Bus', desc: 'Group travel made easy', icon: Bus, color: 'text-indigo-600', bg: 'bg-indigo-50' }
+                { name: 'Ride', desc: 'Passenger travel', icon: Car, color: 'text-blue-600', bg: 'bg-blue-50' },
+                { name: 'Delivery', desc: 'Fast courier', icon: Package, color: 'text-orange-600', bg: 'bg-orange-50' },
+                { name: 'Truck', desc: 'Heavy cargo', icon: Truck, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                { name: 'Bus', desc: 'Intercity travel', icon: Bus, color: 'text-indigo-600', bg: 'bg-indigo-50' }
               ].map((s, i) => (
                 <div key={i} className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-blue-300 transition cursor-pointer shadow-sm">
                   <div className={`w-10 h-10 ${s.bg} ${s.color} rounded-lg flex items-center justify-center mb-3`}><s.icon size={20} /></div>
@@ -203,8 +214,32 @@ export function PortalApp() {
             </div>
           </div>
         )}
+
+        {/* DRIVER-ONLY SECTION */}
+        {isDriver && (
+          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+            <h2 className="text-lg font-bold text-slate-900 mb-2">Driver Dispatch Console</h2>
+            <p className="text-sm text-slate-500 mb-4">You are currently visible to nearby passenger requests.</p>
+            <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl font-medium text-sm flex justify-between items-center">
+              <span>Status: Online & Ready</span>
+              <button className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold text-xs">Toggle Offline</button>
+            </div>
+          </div>
+        )}
+
+        {/* MERCHANT-ONLY SECTION */}
+        {isMerchant && (
+          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+            <h2 className="text-lg font-bold text-slate-900 mb-2">Merchant Logistics Dashboard</h2>
+            <p className="text-sm text-slate-500 mb-4">Manage deliveries for your store and business orders.</p>
+            <button className="bg-purple-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm">
+              + Schedule Bulk Delivery
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* Transaction Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative">
@@ -215,9 +250,6 @@ export function PortalApp() {
             <h2 className="text-2xl font-bold text-slate-900 mb-2">
               {modalType === 'topup' ? 'Top-up Wallet' : 'Withdraw Funds'}
             </h2>
-            <p className="text-slate-500 text-sm mb-6">
-              {modalType === 'topup' ? 'Add funds to your MatMove wallet.' : 'Withdraw to your linked Vult account.'}
-            </p>
 
             {successMsg ? (
               <div className="bg-emerald-50 text-emerald-700 p-4 rounded-xl flex items-start gap-3 border border-emerald-100">
@@ -232,15 +264,11 @@ export function PortalApp() {
                     type="number" 
                     required 
                     min="1"
-                    max={modalType === 'withdraw' ? wallet?.balance : undefined}
                     value={amount} 
                     onChange={e => setAmount(e.target.value)} 
                     className="w-full border border-slate-300 p-3 rounded-xl text-lg font-medium focus:ring-2 focus:ring-blue-600 outline-none" 
                     placeholder="e.g. 500"
                   />
-                  {modalType === 'withdraw' && (
-                    <p className="text-xs text-slate-500 mt-2">Available to withdraw: <b>SLE {Number(wallet?.balance || 0).toLocaleString()}</b></p>
-                  )}
                 </div>
 
                 <button 
