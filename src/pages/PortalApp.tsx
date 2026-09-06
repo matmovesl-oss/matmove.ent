@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Wallet, Car, Package, Truck, Bus, Lock, Bell, ChevronDown, X, CheckCircle2 } from 'lucide-react';
 
-export function CustomerDashboard() {
+export function PortalApp() {
   const [profile, setProfile] = useState<any>(null);
   const [wallet, setWallet] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -289,3 +289,4 @@ export function CustomerDashboard() {
     </div>
   );
 }
+export const PortalApp = CustomerDashboard;
