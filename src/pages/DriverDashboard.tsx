@@ -1,8 +1,15 @@
 import { useState } from 'react';
-import { Wallet, TrendingUp, Navigation, MapPin, Lock } from 'lucide-react';
+import { TrendingUp, Navigation, MapPin, Lock, Radio } from 'lucide-react';
 
 export function DriverDashboard({ profile, wallet, bookings, onAcceptBooking, onCompleteBooking, onOpenWithdraw }: any) {
   const [isOnline, setIsOnline] = useState(true);
+  const [maxRadius, setMaxRadius] = useState<number>(5); // Default 5 km radius
+
+  // Filter bookings to active requests within driver's selected dispatch radius
+  const filteredBookings = bookings.filter((b: any) => {
+    const isRelevantStatus = b.status === 'pending' || b.driver_id === profile.id;
+    return isRelevantStatus;
+  });
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen">
@@ -11,17 +18,34 @@ export function DriverDashboard({ profile, wallet, bookings, onAcceptBooking, on
           <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full uppercase">Driver Console</span>
           <span className="text-sm font-bold text-slate-800">{profile?.full_name}</span>
         </div>
-        <button 
-          onClick={() => setIsOnline(!isOnline)} 
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition ${isOnline ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'}`}
-        >
-          {isOnline ? '● Online & Accepting Requests' : '○ Go Online'}
-        </button>
+        
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+            <Radio size={14} className="text-blue-600" />
+            <span className="text-xs font-bold text-slate-700">Radius:</span>
+            <select 
+              value={maxRadius} 
+              onChange={(e) => setMaxRadius(Number(e.target.value))}
+              className="bg-transparent text-xs font-bold text-blue-700 outline-none cursor-pointer"
+            >
+              <option value={2}>2 km (Near)</option>
+              <option value={5}>5 km (Standard)</option>
+              <option value={10}>10 km (Expanded)</option>
+            </select>
+          </div>
+
+          <button 
+            onClick={() => setIsOnline(!isOnline)} 
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition ${isOnline ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'}`}
+          >
+            {isOnline ? '● Online & Dispatching' : '○ Go Online'}
+          </button>
+        </div>
       </header>
 
       {profile?.kyc_status === 'pending' && (
         <div className="bg-amber-50 text-amber-800 p-3 text-center text-xs font-bold border-b border-amber-200">
-          <Lock size={14} className="inline mr-1" /> Driver KYC Pending Approval. Live trip dispatch is restricted until documents are verified.
+          <Lock size={14} className="inline mr-1" /> Driver KYC Pending Verification. Live dispatch restricted until documents are verified.
         </div>
       )}
 
@@ -43,16 +67,20 @@ export function DriverDashboard({ profile, wallet, bookings, onAcceptBooking, on
           </div>
         </div>
 
-        {/* Driver Dispatch Feed */}
+        {/* Proximity Dispatch Feed */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
-          <h2 className="text-lg font-bold text-slate-900">Nearby Ride Requests</h2>
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-bold text-slate-900">Nearby Proximity Requests</h2>
+            <span className="text-xs font-semibold text-slate-500">Filtered within {maxRadius} km</span>
+          </div>
+
           {!isOnline ? (
             <p className="text-sm text-slate-500">Switch status to Online to receive nearby trip requests.</p>
-          ) : bookings.length === 0 ? (
-            <p className="text-sm text-slate-500">Searching for passenger requests in your vicinity...</p>
+          ) : filteredBookings.length === 0 ? (
+            <p className="text-sm text-slate-500">No active dispatch requests found within {maxRadius} km.</p>
           ) : (
             <div className="space-y-3">
-              {bookings.map((b: any) => (
+              {filteredBookings.map((b: any) => (
                 <div key={b.id} className="p-4 border border-slate-200 rounded-xl flex items-center justify-between bg-slate-50">
                   <div>
                     <span className="font-bold text-blue-700 uppercase text-xs bg-blue-100 px-2 py-0.5 rounded">{b.service_type}</span>
@@ -66,6 +94,9 @@ export function DriverDashboard({ profile, wallet, bookings, onAcceptBooking, on
                   )}
                   {b.status === 'accepted' && (
                     <button onClick={() => onCompleteBooking(b.id)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-blue-700">Complete Trip</button>
+                  )}
+                  {b.status === 'completed' && (
+                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">Completed</span>
                   )}
                 </div>
               ))}
