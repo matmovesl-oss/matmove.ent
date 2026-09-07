@@ -1,68 +1,107 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { Wallet, Car, Package, Truck, Bus, Bell, ChevronDown, ShieldCheck, MapPin, Navigation } from 'lucide-react';
+import { useState } from 'react';
+import { TrendingUp, Navigation, MapPin, Lock, Radio } from 'lucide-react';
 
-export function RiderDashboard({ profile, wallet, onOpenBooking, onOpenTopUp }: any) {
+export function DriverDashboard({ profile, wallet, bookings, onAcceptBooking, onCompleteBooking, onOpenWithdraw }: any) {
+  const [isOnline, setIsOnline] = useState(true);
+  const [maxRadius, setMaxRadius] = useState<number>(5); // Default 5 km radius
+
+  // Filter bookings to active requests within driver's selected dispatch radius
+  const filteredBookings = bookings.filter((b: any) => {
+    const isRelevantStatus = b.status === 'pending' || b.driver_id === profile.id;
+    return isRelevantStatus;
+  });
+
   return (
     <div className="flex-1 bg-slate-50 min-h-screen">
-      {/* Rider Top Navigation */}
       <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center sticky top-0 z-10">
-        <div className="w-1/2">
-          <input type="text" placeholder="Search rides, destinations, receipts..." className="w-full bg-slate-100 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 outline-none"/>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full uppercase">Driver Console</span>
+          <span className="text-sm font-bold text-slate-800">{profile?.full_name}</span>
         </div>
-        <div className="flex items-center gap-6">
-          <button className="relative text-slate-400 hover:text-slate-600"><Bell size={20} /></button>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full uppercase">Rider</span>
-            <span className="text-sm font-bold text-slate-800">{profile?.full_name}</span>
+        
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+            <Radio size={14} className="text-blue-600" />
+            <span className="text-xs font-bold text-slate-700">Radius:</span>
+            <select 
+              value={maxRadius} 
+              onChange={(e) => setMaxRadius(Number(e.target.value))}
+              className="bg-transparent text-xs font-bold text-blue-700 outline-none cursor-pointer"
+            >
+              <option value={2}>2 km (Near)</option>
+              <option value={5}>5 km (Standard)</option>
+              <option value={10}>10 km (Expanded)</option>
+            </select>
           </div>
+
+          <button 
+            onClick={() => setIsOnline(!isOnline)} 
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition ${isOnline ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'}`}
+          >
+            {isOnline ? '● Online & Dispatching' : '○ Go Online'}
+          </button>
         </div>
       </header>
 
-      <div className="p-8 max-w-6xl mx-auto space-y-8">
-        <div className="flex justify-between items-end">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">Good morning, {profile?.full_name?.split(' ')[0]} ✨</h1>
-            <p className="text-slate-500 mt-1">Where are you moving today?</p>
-          </div>
-          <button onClick={onOpenBooking} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-md hover:bg-blue-700 transition flex items-center gap-2">
-            <Car size={18} /> Book a Ride
-          </button>
+      {profile?.kyc_status === 'pending' && (
+        <div className="bg-amber-50 text-amber-800 p-3 text-center text-xs font-bold border-b border-amber-200">
+          <Lock size={14} className="inline mr-1" /> Driver KYC Pending Verification. Live dispatch restricted until documents are verified.
         </div>
+      )}
 
-        {/* Rider Wallet Card (NO WITHDRAW BUTTON) */}
+      <div className="p-8 max-w-6xl mx-auto space-y-8">
         <div className="grid grid-cols-3 gap-6">
-          <div className="col-span-2 bg-blue-700 rounded-2xl p-6 text-white relative overflow-hidden shadow-lg">
-            <span className="text-blue-200 text-xs font-bold uppercase tracking-wider">Rider SLE Balance</span>
+          <div className="col-span-2 bg-slate-900 rounded-2xl p-6 text-white shadow-lg">
+            <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Driver Earnings Balance</span>
             <div className="text-4xl font-bold mt-1">SLE {Number(wallet?.balance || 0).toLocaleString()}</div>
-            <button onClick={onOpenTopUp} className="mt-6 bg-white/20 hover:bg-white/30 transition px-5 py-2.5 rounded-xl text-sm font-bold backdrop-blur-sm">
-              + Add Money
-            </button>
+            <div className="flex gap-3 mt-6">
+              <button onClick={onOpenWithdraw} className="bg-emerald-600 hover:bg-emerald-700 transition px-5 py-2.5 rounded-xl text-sm font-bold">
+                Withdraw Cash (Monime)
+              </button>
+            </div>
           </div>
           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-center">
-            <ShieldCheck size={28} className="text-emerald-600 mb-2" />
-            <h3 className="font-bold text-slate-900 text-base">Protected Trips</h3>
-            <p className="text-slate-500 text-xs mt-1">Verified drivers with GPS journey tracking.</p>
+            <TrendingUp size={28} className="text-blue-600 mb-2" />
+            <h3 className="font-bold text-slate-900 text-base">Driver Rating</h3>
+            <p className="text-slate-500 text-xs mt-1">4.9 ★ (120 completed trips)</p>
           </div>
         </div>
 
-        {/* Services Grid */}
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 mb-4">Services Available</h2>
-          <div className="grid grid-cols-4 gap-4">
-            {[
-              { name: 'Ride', type: 'ride', desc: 'Passenger travel', icon: Car, bg: 'bg-blue-50', color: 'text-blue-600' },
-              { name: 'Delivery', type: 'delivery', desc: 'Courier packages', icon: Package, bg: 'bg-orange-50', color: 'text-orange-600' },
-              { name: 'Truck', type: 'truck', desc: 'Cargo transport', icon: Truck, bg: 'bg-emerald-50', color: 'text-emerald-600' },
-              { name: 'Bus', type: 'bus', desc: 'Intercity travel', icon: Bus, bg: 'bg-indigo-50', color: 'text-indigo-600' }
-            ].map((s, i) => (
-              <div key={i} onClick={onOpenBooking} className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-blue-300 transition cursor-pointer shadow-sm">
-                <div className={`w-10 h-10 ${s.bg} ${s.color} rounded-lg flex items-center justify-center mb-3`}><s.icon size={20} /></div>
-                <h3 className="font-bold text-slate-900">{s.name}</h3>
-                <p className="text-xs text-slate-500 mt-1">{s.desc}</p>
-              </div>
-            ))}
+        {/* Proximity Dispatch Feed */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-bold text-slate-900">Nearby Proximity Requests</h2>
+            <span className="text-xs font-semibold text-slate-500">Filtered within {maxRadius} km</span>
           </div>
+
+          {!isOnline ? (
+            <p className="text-sm text-slate-500">Switch status to Online to receive nearby trip requests.</p>
+          ) : filteredBookings.length === 0 ? (
+            <p className="text-sm text-slate-500">No active dispatch requests found within {maxRadius} km.</p>
+          ) : (
+            <div className="space-y-3">
+              {filteredBookings.map((b: any) => (
+                <div key={b.id} className="p-4 border border-slate-200 rounded-xl flex items-center justify-between bg-slate-50">
+                  <div>
+                    <span className="font-bold text-blue-700 uppercase text-xs bg-blue-100 px-2 py-0.5 rounded">{b.service_type}</span>
+                    <span className="text-sm font-bold text-slate-900 ml-3">SLE {b.fare_amount}</span>
+                    <div className="text-xs text-slate-600 mt-1 flex items-center gap-1">
+                      <MapPin size={12} className="text-emerald-600" /> {b.pickup_location} → <Navigation size={12} className="text-blue-600" /> {b.destination_location}
+                    </div>
+                  </div>
+                  {b.status === 'pending' && (
+                    <button onClick={() => onAcceptBooking(b.id)} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-emerald-700">Accept Trip</button>
+                  )}
+                  {b.status === 'accepted' && (
+                    <button onClick={() => onCompleteBooking(b.id)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-blue-700">Complete Trip</button>
+                  )}
+                  {b.status === 'completed' && (
+                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">Completed</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
