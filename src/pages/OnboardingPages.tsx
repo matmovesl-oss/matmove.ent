@@ -5,7 +5,7 @@ import { OnboardingShell } from '@/components/AuthShell';
 import { DocumentUpload, SelfieUpload } from '@/components/DocumentUpload';
 import { useAuth } from '@/context/AuthContext';
 import { roleLabels, roleDescriptions } from '@/services/roleService';
-import { getRequiredDocuments, getDocumentLabel } from '@/services/kycService';
+import { supabase } from '@/lib/supabase';
 import type { UserRole, PersonalInfo, IdentityInfo, DriverInfo, MerchantInfo, UploadedDocument, DocumentType } from '@/types';
 
 function useOnboardingState<T>(key: string, initialValue: T) {
@@ -116,7 +116,7 @@ export function PersonalInfoPage() {
 export function IdentityPage() {
   const navigate = useNavigate();
   const role = getActiveRole();
-  
+
   const [identity, setIdentity] = useOnboardingState<Partial<IdentityInfo>>('ob_identity', { idType: '', idNumber: '', idIssuingCountry: 'Sierra Leone', idExpiryDate: '' });
   const [driver, setDriver] = useOnboardingState<Partial<DriverInfo>>('ob_driver', { licenseNumber: '', licenseClass: '', issueDate: '', expiryDate: '' });
   const [merchant, setMerchant] = useOnboardingState<Partial<MerchantInfo> & { infrastructure?: string }>('ob_merchant', { businessName: '', businessType: '', businessRegNumber: '', businessAddress: '', authRepName: '', authRepPhone: '', infrastructure: 'Physical Shop / Location' });
@@ -128,7 +128,7 @@ export function IdentityPage() {
   const idTypes = role === 'driver' ? ["Driver's License"] : role === 'merchant' ? ['National ID', 'Passport', 'Business Registration'] : ['National ID', 'Passport'];
   const currentIdType = identity.idType || idTypes[0];
   const isDigitalMerchant = role === 'merchant' && merchant.infrastructure === 'Digital / Online Only';
-  
+
   const hideStandardIdFields = (role === 'driver' && currentIdType === "Driver's License") || (role === 'merchant' && currentIdType === 'Business Registration');
 
   useEffect(() => {
@@ -140,7 +140,7 @@ export function IdentityPage() {
       <div className="ob-page animate-in">
         <h2 className="ob-title">{role === 'driver' ? 'Driver identity' : role === 'merchant' ? 'Business identity' : 'Identity verification'}</h2>
         <p className="ob-subtitle">{role === 'merchant' ? 'Provide your business and representative details.' : 'Provide your identity document details.'}</p>
-        
+
         <div className="ob-form-grid">
           <Field label="ID type">
             <div className="ob-select-wrap">
@@ -149,7 +149,7 @@ export function IdentityPage() {
               </select>
             </div>
           </Field>
-          
+
           {!hideStandardIdFields && (
             <>
               <Field label="ID number"><input className="ob-input" value={identity.idNumber ?? ''} onChange={(e) => updateId('idNumber', e.target.value)} placeholder="Enter ID number" /></Field>
@@ -207,7 +207,7 @@ export function IdentityPage() {
 export function DocumentsPage() {
   const navigate = useNavigate();
   const role = getActiveRole();
-  
+
   const [identity] = useOnboardingState<Partial<IdentityInfo>>('ob_identity', {});
   const [merchant] = useOnboardingState<Partial<MerchantInfo> & { infrastructure?: string }>('ob_merchant', {});
   const currentIdType = identity.idType || 'National ID';
@@ -234,7 +234,6 @@ export function DocumentsPage() {
       ];
     }
   } else {
-    // Rider / Customer Role
     if (currentIdType === 'Passport') {
       displayDocs = [{ id: 'id_front', label: 'Passport (Front/Photo Page)', required: true }];
     } else {
@@ -342,7 +341,7 @@ export function VehicleSelectionPage() {
       <div className="ob-page animate-in">
         <h2 className="ob-title font-extrabold tracking-tight">Vehicle details</h2>
         <p className="ob-subtitle">Provide details about the vehicle you will be driving.</p>
-        
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
           {vehicles.map((v) => (
             <button 
@@ -388,10 +387,11 @@ export function VehicleSelectionPage() {
 }
 
 export function ReviewPage() {
-  const { session, submitKycForReview, loading } = useAuth();
+  const { session, submitKycForReview } = useAuth();
   const navigate = useNavigate();
   const role = getActiveRole();
-  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [info] = useOnboardingState<Partial<PersonalInfo>>('ob_personal', {});
   const [identity] = useOnboardingState<Partial<IdentityInfo>>('ob_identity', {});
   const [merchant] = useOnboardingState<Partial<MerchantInfo> & { infrastructure?: string }>('ob_merchant', {});
@@ -399,12 +399,58 @@ export function ReviewPage() {
 
   const displayPhone = session?.user?.phone || 'Number saved securely';
 
+  const handleFinalSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      const { data: { session: authSession } } = await supabase.auth.getSession();
+      if (!authSession?.user) throw new Error("No active user session found.");
+  
+      const userId = authSession.user.id;
+      const userEmail = authSession.user.email;
+      const fullName = `${info.firstName || ''} ${info.middleName || ''} ${info.lastName || ''}`.replace(/\s+/g, ' ').trim() || 'New User';
+      const userStatus = role === 'rider' ? 'approved' : 'pending';
+  
+      // Force write to profiles table
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: userId,
+          email: userEmail,
+          full_name: fullName,
+          role: role,
+          kyc_status: userStatus,
+          updated_at: new Date().toISOString()
+        });
+  
+      if (profileError) throw profileError;
+  
+      // Ensure wallet row exists
+      await supabase.from('wallets').upsert({
+        user_id: userId,
+        balance: 0,
+        currency: 'SLE'
+      });
+  
+      // Use existing context submit if available, else route directly
+      if (submitKycForReview) {
+        await submitKycForReview();
+      } else {
+        navigate('/onboarding/submitted');
+      }
+    } catch (err: any) {
+      console.error("Error submitting onboarding:", err);
+      alert(err.message || "Failed to save verification details.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <OnboardingShell step={7}>
       <div className="ob-page animate-in">
         <h2 className="ob-title">Review your submission</h2>
         <p className="ob-subtitle">Please check everything is correct before submitting for verification.</p>
-        
+
         <div className="space-y-6 mt-8">
           <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 relative">
             <div className="flex items-center justify-between mb-4">
@@ -471,11 +517,11 @@ export function ReviewPage() {
         </div>
 
         <div className="mt-8 p-4 bg-slate-50 rounded-xl flex items-start gap-3 text-sm text-slate-600 border border-slate-200"><ShieldCheck className="text-[#184f9a] shrink-0" size={20} /> <span>By submitting, you confirm the information is accurate. False information may result in account suspension.</span></div>
-        
+
         <div className="ob-actions">
-          <button className="back-button" onClick={() => navigate(role === 'driver' ? '/onboarding/vehicle' : '/onboarding/selfie')} disabled={loading}><ArrowLeft size={16} /> Back</button>
-          <button className="primary-button" onClick={submitKycForReview} disabled={loading}>
-            {loading ? 'Submitting...' : 'Submit for verification'} <ArrowRight size={17} />
+          <button className="back-button" onClick={() => navigate(role === 'driver' ? '/onboarding/vehicle' : '/onboarding/selfie')} disabled={isSubmitting}><ArrowLeft size={16} /> Back</button>
+          <button className="primary-button" onClick={handleFinalSubmit} disabled={isSubmitting}>
+            {isSubmitting ? 'Submitting...' : 'Submit for verification'} <ArrowRight size={17} />
           </button>
         </div>
       </div>
@@ -487,6 +533,7 @@ export function SubmittedPage() {
   const { session, resubmitKycForReview } = useAuth();
   const navigate = useNavigate();
   const isRejected = session?.kycStatus === 'rejected';
+  const role = getActiveRole(); // Fallback if session role isn't arrayed yet
 
   return (
     <OnboardingShell step={7}>
@@ -496,14 +543,14 @@ export function SubmittedPage() {
             <div className="w-20 h-20 bg-green-100 text-[#32a84a] rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-100"><Check size={40} strokeWidth={3} /></div>
             <h2 className="text-3xl font-bold text-slate-900 mb-3">Submission received!</h2>
             <p className="text-slate-500 mb-10 max-w-sm mx-auto text-lg">Your verification is now under review. We'll notify you within 24–48 hours.</p>
-            
+
             <div className="bg-slate-50 rounded-2xl border border-slate-200 p-6 mb-10 text-left max-w-md mx-auto">
               <div className="flex justify-between items-center py-3 border-b border-slate-200 last:border-0"><span className="text-slate-500">Submission date</span><strong className="text-slate-900">{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</strong></div>
               <div className="flex justify-between items-center py-3 border-b border-slate-200 last:border-0"><span className="text-slate-500">KYC status</span><strong className="text-orange-600 bg-orange-50 px-3 py-1 rounded-full text-sm">Under Review</strong></div>
-              <div className="flex justify-between items-center py-3 border-b border-slate-200 last:border-0"><span className="text-slate-500">Account type</span><strong className="text-slate-900">{roleLabels[session?.roles[0] ?? 'rider']}</strong></div>
+              <div className="flex justify-between items-center py-3 border-b border-slate-200 last:border-0"><span className="text-slate-500">Account type</span><strong className="text-slate-900 capitalize">{role}</strong></div>
             </div>
-            
-            <button className="primary-button w-full max-w-md mx-auto py-4" onClick={() => navigate('/customer')}>Access dashboard <ArrowRight size={17} /></button>
+
+            <button className="primary-button w-full max-w-md mx-auto py-4" onClick={() => navigate('/portal')}>Access dashboard <ArrowRight size={17} /></button>
           </>
         ) : (
           <>
@@ -522,7 +569,6 @@ export function SubmittedPage() {
   );
 }
 
-// Keep the VerificationPage component exported to prevent App.tsx from breaking during imports, but merge its UI directly into SubmittedPage above.
 export function VerificationPage() {
   return <SubmittedPage />;
 }
