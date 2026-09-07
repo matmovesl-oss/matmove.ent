@@ -1,24 +1,25 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Wallet, Car, Package, Truck, Bus, Lock, Bell, ChevronDown, X, CheckCircle2, TrendingUp, Store, ShieldCheck, MapPin, Navigation } from 'lucide-react';
+import { RiderDashboard } from './RiderDashboard';
+import { DriverDashboard } from './DriverDashboard';
+import { X, CheckCircle2, ShieldCheck, MapPin, Navigation, Calculator } from 'lucide-react';
 
 export function PortalApp() {
   const [profile, setProfile] = useState<any>(null);
   const [wallet, setWallet] = useState<any>(null);
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Wallet Modal
+
+  // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'topup' | 'withdraw'>('topup');
   const [amount, setAmount] = useState('');
-  
-  // Booking Modal
+
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [serviceType, setServiceType] = useState<'ride' | 'delivery' | 'truck' | 'bus'>('ride');
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
-  const [fare, setFare] = useState('50');
+  const [calculatedFare, setCalculatedFare] = useState<number>(30);
 
   const [processing, setProcessing] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -30,18 +31,13 @@ export function PortalApp() {
 
       const { data: profileData } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
       const { data: walletData } = await supabase.from('wallets').select('*').eq('user_id', session.user.id).single();
-      
-      // Fetch Live Bookings
-      const { data: bookingData } = await supabase
-        .from('bookings')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data: bookingData } = await supabase.from('bookings').select('*').order('created_at', { ascending: false });
 
       if (profileData) setProfile(profileData);
       if (walletData) setWallet(walletData);
       if (bookingData) setBookings(bookingData);
-    } catch (error) {
-      console.error('Error fetching user data:', error);
+    } catch (err) {
+      console.error("Error fetching portal state:", err);
     } finally {
       setLoading(false);
     }
@@ -49,55 +45,26 @@ export function PortalApp() {
 
   useEffect(() => {
     fetchUserData();
-
-    // Subscribe to Realtime Booking Updates
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
-        fetchUserData();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
 
-  const handleTransaction = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setProcessing(true);
-    setSuccessMsg('');
-    const numAmount = parseFloat(amount);
-
-    try {
-      const { error } = await supabase.rpc('process_wallet_transaction', {
-        p_amount: numAmount,
-        p_type: modalType,
-        p_description: modalType === 'topup' ? 'Wallet Top-Up' : 'Withdrawal Request via Vult'
+  // Recalculate dynamic fare whenever service type or locations change
+  useEffect(() => {
+    const fetchEstimatedFare = async () => {
+      const estimatedDistanceKm = pickup && destination ? 8.5 : 4.0; // Simulated distance for Sierra Leone urban routes
+      const { data, error } = await supabase.rpc('calculate_trip_fare', {
+        p_service_type: serviceType,
+        p_distance_km: estimatedDistanceKm
       });
 
-      if (error) throw error;
+      if (!error && data) {
+        setCalculatedFare(data);
+      }
+    };
 
-      setSuccessMsg(
-        modalType === 'topup'
-          ? `Successfully added SLE ${numAmount} to your wallet!`
-          : `Withdrawal request of SLE ${numAmount} processed!`
-      );
-
-      await fetchUserData();
-      setAmount('');
-      setTimeout(() => {
-        setIsModalOpen(false);
-        setSuccessMsg('');
-      }, 3000);
-      
-    } catch (error: any) {
-      console.error("Transaction error:", error);
-      alert(error.message || "Transaction failed.");
-    } finally {
-      setProcessing(false);
+    if (isBookingOpen) {
+      fetchEstimatedFare();
     }
-  };
+  }, [serviceType, pickup, destination, isBookingOpen]);
 
   const handleCreateBooking = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,245 +76,64 @@ export function PortalApp() {
         service_type: serviceType,
         pickup_location: pickup,
         destination_location: destination,
-        fare_amount: parseFloat(fare),
+        fare_amount: calculatedFare, // BACKEND-AUTHORITATIVE FARE
         status: 'pending'
       });
 
       if (error) throw error;
 
-      setSuccessMsg('Booking requested! Nearby drivers have been notified.');
+      setSuccessMsg('Booking requested! MatMove drivers are being dispatched.');
       setPickup('');
       setDestination('');
       setTimeout(() => {
         setIsBookingOpen(false);
         setSuccessMsg('');
-      }, 2500);
+      }, 2000);
 
-    } catch (error: any) {
-      alert(error.message || "Booking failed.");
+      fetchUserData();
+    } catch (err: any) {
+      alert(err.message || "Booking request failed.");
     } finally {
       setProcessing(false);
-    }
-  };
-
-  const handleUpdateBookingStatus = async (bookingId: string, newStatus: string) => {
-    try {
-      const updateData: any = { status: newStatus };
-      if (newStatus === 'accepted') updateData.driver_id = profile.id;
-
-      const { error } = await supabase.from('bookings').update(updateData).eq('id', bookingId);
-      if (error) throw error;
-      fetchUserData();
-    } catch (error: any) {
-      alert(error.message || "Failed to update trip status.");
     }
   };
 
   if (loading) return <div className="p-8 text-slate-500 font-medium">Loading MatMove portal...</div>;
 
   const role = (profile?.role || 'rider').toLowerCase();
-  const isRider = role === 'rider' || role === 'client';
-  const isDriver = role === 'driver';
-  const isMerchant = role === 'merchant';
-  const isPendingKYC = profile?.kyc_status === 'pending';
-
-  const getInitials = (name: string) => {
-    if (!name) return 'U';
-    return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-  };
 
   return (
-    <div className="flex-1 bg-slate-50 h-screen overflow-y-auto relative">
-      {/* Top Header */}
-      <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center sticky top-0 z-10">
-        <div className="w-1/2">
-          <input type="text" placeholder="Search orders, bookings, transactions..." className="w-full bg-slate-100 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 outline-none"/>
-        </div>
-        <div className="flex items-center gap-6">
-          <button className="relative text-slate-400 hover:text-slate-600">
-            <Bell size={20} />
-            <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full"></span>
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
-              {getInitials(profile?.full_name)}
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-sm font-bold text-slate-800 capitalize">{profile?.role || 'Rider'}</span>
-              <ChevronDown size={16} className="text-slate-400" />
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* KYC Alert Banner */}
-      {isPendingKYC && (
-        <div className="bg-amber-50 text-amber-800 p-3 flex justify-center items-center gap-2 text-sm font-semibold border-b border-amber-200">
-          <Lock size={16} /> Account pending KYC verification. Restricted access mode active.
-        </div>
+    <div className="relative min-h-screen bg-slate-50">
+      {/* Dynamic Role-Based Layout Routing */}
+      {(role === 'rider' || role === 'client') && (
+        <RiderDashboard 
+          profile={profile} 
+          wallet={wallet} 
+          onOpenBooking={() => setIsBookingOpen(true)} 
+          onOpenTopUp={() => { setModalType('topup'); setIsModalOpen(true); }}
+        />
       )}
 
-      <div className="p-8 max-w-6xl mx-auto space-y-8 pb-24">
-        {/* Title Bar */}
-        <div className="flex justify-between items-end">
-          <div>
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
-            </div>
-            <h1 className="text-3xl font-bold text-slate-900">Good morning, {profile?.full_name?.split(' ')[0] || 'User'} ✨</h1>
-            <p className="text-slate-500 mt-1">
-              {isRider && "Where are you moving today?"}
-              {isDriver && "Ready to start accepting dispatch requests?"}
-              {isMerchant && "Manage business logistics and courier orders."}
-            </p>
-          </div>
-          {isRider && (
-            <button 
-              onClick={() => setIsBookingOpen(true)}
-              className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-md hover:bg-blue-700 transition flex items-center gap-2"
-            >
-              <Car size={18} /> Book a Service
-            </button>
-          )}
-        </div>
+      {role === 'driver' && (
+        <DriverDashboard 
+          profile={profile} 
+          wallet={wallet} 
+          bookings={bookings}
+          onAcceptBooking={(id: string) => fetchUserData()}
+          onCompleteBooking={(id: string) => fetchUserData()}
+          onOpenWithdraw={() => { setModalType('withdraw'); setIsModalOpen(true); }}
+        />
+      )}
 
-        {/* Wallet & Status Cards */}
-        <div className="grid grid-cols-3 gap-6">
-          <div className="col-span-2 bg-blue-700 rounded-2xl p-6 text-white flex flex-col justify-between relative overflow-hidden shadow-lg">
-            <div className="relative z-10">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <span className="text-blue-200 text-xs font-bold uppercase tracking-wider">Wallet Balance</span>
-                  <div className="text-4xl font-bold mt-1">SLE {Number(wallet?.balance || 0).toLocaleString()}</div>
-                </div>
-                <div className="p-3 bg-white/10 rounded-xl backdrop-blur-sm">
-                  <Wallet size={24} className="text-white" />
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <button 
-                  onClick={() => { setModalType('topup'); setIsModalOpen(true); }}
-                  className="bg-white/20 hover:bg-white/30 transition px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 backdrop-blur-sm"
-                >
-                  Add money
-                </button>
-                {!isRider && (
-                  <button 
-                    onClick={() => { setModalType('withdraw'); setIsModalOpen(true); }}
-                    className="bg-white/20 hover:bg-white/30 transition px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 backdrop-blur-sm"
-                  >
-                    Withdraw
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-center">
-            {isRider && (
-              <>
-                <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 mb-4"><ShieldCheck size={24} /></div>
-                <h3 className="font-bold text-slate-900 text-lg">Protected Journeys</h3>
-                <p className="text-slate-500 text-sm mt-1">Verified drivers and real-time trip verification.</p>
-              </>
-            )}
-            {isDriver && (
-              <>
-                <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 mb-4"><TrendingUp size={24} /></div>
-                <h3 className="font-bold text-slate-900 text-lg">Active Driver Status</h3>
-                <p className="text-slate-500 text-sm mt-1">Online & synced to dispatch requests nearby.</p>
-              </>
-            )}
-            {isMerchant && (
-              <>
-                <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 mb-4"><Store size={24} /></div>
-                <h3 className="font-bold text-slate-900 text-lg">Merchant Logistics</h3>
-                <p className="text-slate-500 text-sm mt-1">Direct integration for commercial deliveries.</p>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* DRIVER REAL-TIME DISPATCH FEED */}
-        {isDriver && (
-          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
-            <h2 className="text-lg font-bold text-slate-900">Available Dispatch Requests</h2>
-            {bookings.filter(b => b.status === 'pending' || b.driver_id === profile.id).length === 0 ? (
-              <p className="text-sm text-slate-500">No active dispatch requests available in your area.</p>
-            ) : (
-              <div className="space-y-3">
-                {bookings.filter(b => b.status === 'pending' || b.driver_id === profile.id).map((b) => (
-                  <div key={b.id} className="p-4 border border-slate-200 rounded-xl flex items-center justify-between bg-slate-50">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 uppercase text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-md">{b.service_type}</span>
-                        <span className="text-xs text-slate-400">SLE {b.fare_amount}</span>
-                      </div>
-                      <div className="text-sm font-semibold text-slate-800 mt-1 flex items-center gap-2">
-                        <MapPin size={14} className="text-emerald-600" /> {b.pickup_location} → <Navigation size={14} className="text-blue-600" /> {b.destination_location}
-                      </div>
-                    </div>
-                    {b.status === 'pending' && (
-                      <button 
-                        onClick={() => handleUpdateBookingStatus(b.id, 'accepted')}
-                        className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-emerald-700 transition"
-                      >
-                        Accept Trip
-                      </button>
-                    )}
-                    {b.status === 'accepted' && (
-                      <button 
-                        onClick={() => handleUpdateBookingStatus(b.id, 'completed')}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-blue-700 transition"
-                      >
-                        Complete Trip
-                      </button>
-                    )}
-                    {b.status === 'completed' && (
-                      <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">Completed</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* RIDER SERVICES SELECTOR */}
-        {isRider && (
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 mb-4">Book a Transportation Service</h2>
-            <div className="grid grid-cols-4 gap-4">
-              {[
-                { name: 'Ride', type: 'ride', desc: 'Passenger travel', icon: Car, color: 'text-blue-600', bg: 'bg-blue-50' },
-                { name: 'Delivery', type: 'delivery', desc: 'Fast courier', icon: Package, color: 'text-orange-600', bg: 'bg-orange-50' },
-                { name: 'Truck', type: 'truck', desc: 'Heavy cargo', icon: Truck, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                { name: 'Bus', type: 'bus', desc: 'Intercity travel', icon: Bus, color: 'text-indigo-600', bg: 'bg-indigo-50' }
-              ].map((s, i) => (
-                <div 
-                  key={i} 
-                  onClick={() => { setServiceType(s.type as any); setIsBookingOpen(true); }}
-                  className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-blue-300 transition cursor-pointer shadow-sm"
-                >
-                  <div className={`w-10 h-10 ${s.bg} ${s.color} rounded-lg flex items-center justify-center mb-3`}><s.icon size={20} /></div>
-                  <h3 className="font-bold text-slate-900">{s.name}</h3>
-                  <p className="text-xs text-slate-500 mt-1">{s.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* BOOKING MODAL */}
+      {/* READ-ONLY PRICING BOOKING MODAL */}
       {isBookingOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative">
-            <button onClick={() => setIsBookingOpen(false)} className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition">
+            <button onClick={() => setIsBookingOpen(false)} className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full">
               <X size={20} />
             </button>
-            <h2 className="text-2xl font-bold text-slate-900 mb-1 capitalize">Request {serviceType}</h2>
-            <p className="text-slate-500 text-sm mb-6">Enter pickup and destination details in Sierra Leone.</p>
+            <h2 className="text-2xl font-bold text-slate-900 mb-1 capitalize">Book {serviceType}</h2>
+            <p className="text-slate-500 text-sm mb-6">Select locations to calculate authoritative fare.</p>
 
             {successMsg ? (
               <div className="bg-emerald-50 text-emerald-700 p-4 rounded-xl flex items-start gap-3 border border-emerald-100">
@@ -378,15 +164,16 @@ export function PortalApp() {
                     placeholder="e.g. Cotton Tree, Central Freetown"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Estimated Fare (SLE)</label>
-                  <input 
-                    type="number" 
-                    required 
-                    value={fare} 
-                    onChange={e => setFare(e.target.value)} 
-                    className="w-full border border-slate-300 p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-600"
-                  />
+
+                {/* READ-ONLY FARE ESTIMATE */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex justify-between items-center">
+                  <div>
+                    <span className="text-xs font-bold text-blue-700 uppercase flex items-center gap-1">
+                      <Calculator size={14} /> Estimated System Fare
+                    </span>
+                    <span className="text-2xl font-bold text-blue-900 mt-1 block">SLE {calculatedFare}</span>
+                  </div>
+                  <span className="text-xs font-semibold text-blue-600 bg-blue-100 px-2.5 py-1 rounded-md">Read-Only</span>
                 </div>
 
                 <button 
@@ -394,51 +181,7 @@ export function PortalApp() {
                   disabled={processing}
                   className="w-full bg-blue-600 text-white p-3.5 rounded-xl font-bold mt-4 hover:bg-blue-700 transition flex justify-center"
                 >
-                  {processing ? 'Notifying Drivers...' : 'Confirm Request'}
-                </button>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* WALLET TRANSACTION MODAL */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative">
-            <button onClick={() => setIsModalOpen(false)} className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition">
-              <X size={20} />
-            </button>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">
-              {modalType === 'topup' ? 'Top-up Wallet' : 'Withdraw Funds'}
-            </h2>
-
-            {successMsg ? (
-              <div className="bg-emerald-50 text-emerald-700 p-4 rounded-xl flex items-start gap-3 border border-emerald-100">
-                <CheckCircle2 size={24} className="mt-0.5 shrink-0" />
-                <p className="font-medium text-sm">{successMsg}</p>
-              </div>
-            ) : (
-              <form onSubmit={handleTransaction} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Amount (SLE)</label>
-                  <input 
-                    type="number" 
-                    required 
-                    min="1"
-                    value={amount} 
-                    onChange={e => setAmount(e.target.value)} 
-                    className="w-full border border-slate-300 p-3 rounded-xl text-lg font-medium focus:ring-2 focus:ring-blue-600 outline-none" 
-                    placeholder="e.g. 500"
-                  />
-                </div>
-
-                <button 
-                  type="submit" 
-                  disabled={processing}
-                  className="w-full bg-blue-600 text-white p-3.5 rounded-xl font-bold mt-4 hover:bg-blue-700 transition disabled:opacity-70 flex justify-center"
-                >
-                  {processing ? 'Processing...' : modalType === 'topup' ? 'Confirm Top-up' : 'Request Withdrawal'}
+                  {processing ? 'Calculating & Requesting...' : 'Confirm Request'}
                 </button>
               </form>
             )}
