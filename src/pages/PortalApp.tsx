@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { RiderDashboard } from './RiderDashboard';
 import { DriverDashboard } from './DriverDashboard';
+import { MerchantDashboard } from './MerchantDashboard';
 import { X, CheckCircle2, Calculator } from 'lucide-react';
 
 export function PortalApp() {
@@ -196,7 +197,7 @@ export function PortalApp() {
 
   return (
     <div className="relative min-h-screen bg-slate-50">
-      {/* Role Routing */}
+      {/* Dynamic Role-Based Layout Routing */}
       {(role === 'rider' || role === 'client') && (
         <RiderDashboard 
           profile={profile} 
@@ -213,6 +214,14 @@ export function PortalApp() {
           bookings={bookings}
           onAcceptBooking={handleAcceptTrip}
           onCompleteBooking={handleCompleteTrip}
+          onOpenWithdraw={() => { setModalType('withdraw'); setIsModalOpen(true); }}
+        />
+      )}
+
+      {(role === 'merchant' || role === 'vendor') && (
+        <MerchantDashboard 
+          profile={profile} 
+          wallet={wallet} 
           onOpenWithdraw={() => { setModalType('withdraw'); setIsModalOpen(true); }}
         />
       )}
