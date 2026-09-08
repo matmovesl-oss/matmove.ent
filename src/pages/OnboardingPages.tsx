@@ -531,7 +531,6 @@ export function ReviewPage() {
 
 export function SubmittedPage() {
   const { session, resubmitKycForReview } = useAuth();
-  const navigate = useNavigate();
   const isRejected = session?.kycStatus === 'rejected';
   const role = getActiveRole(); // Fallback if session role isn't arrayed yet
 
@@ -550,7 +549,7 @@ export function SubmittedPage() {
               <div className="flex justify-between items-center py-3 border-b border-slate-200 last:border-0"><span className="text-slate-500">Account type</span><strong className="text-slate-900 capitalize">{role}</strong></div>
             </div>
 
-            <button className="primary-button w-full max-w-md mx-auto py-4" onClick={() => navigate('/portal')}>Access dashboard <ArrowRight size={17} /></button>
+            <button className="primary-button w-full max-w-md mx-auto py-4" onClick={() => window.location.href = '/portal'}>Access dashboard <ArrowRight size={17} /></button>
           </>
         ) : (
           <>
