@@ -3,6 +3,7 @@ import {
   useEffect,
   useCallback,
   type FormEvent,
+  type ReactNode,
 } from 'react';
 import {
   useLocation,
@@ -27,7 +28,6 @@ import {
   CreditCard,
   Landmark,
 } from 'lucide-react';
-import type { UserRole } from '@/types';
 
 type WalletAction =
   | 'topup'
@@ -160,6 +160,7 @@ export function PortalApp() {
     useCallback(async () => {
       try {
         setPortalError('');
+        setLoading(true);
 
         const {
           data: {
@@ -183,6 +184,15 @@ export function PortalApp() {
         const userId =
           session.user.id;
 
+        /*
+          The URL is an intentional fallback for customer portal
+          routing. The database role remains the preferred source.
+        */
+        const pathRole =
+          getRoleFromPath(
+            location.pathname
+          );
+
         const {
           data: profileData,
           error: profileError,
@@ -194,7 +204,10 @@ export function PortalApp() {
             .maybeSingle();
 
         if (profileError) {
-          throw profileError;
+          console.warn(
+            'Could not load profile:',
+            profileError.message
+          );
         }
 
         const {
@@ -233,72 +246,84 @@ export function PortalApp() {
             : '';
 
         /*
-          Prefer the explicit database profile role.
-          Fall back to user_roles if profile.role is absent.
+          Role priority:
+
+          1. Explicit customer role stored on profiles.
+          2. Customer role stored in user_roles.
+          3. Existing customer-specific URL.
+
+          The URL fallback is only for portal routing. It does not
+          grant database permissions or bypass Supabase RLS.
         */
-        const resolvedRole =
+        let resolvedRole: CustomerRole | '' =
+          '';
+
+        if (
           isCustomerRole(
             profileRole
           )
-            ? profileRole
-            : databaseRoles[0] ||
-              '';
+        ) {
+          resolvedRole =
+            profileRole;
+        } else if (
+          databaseRoles.length > 0
+        ) {
+          resolvedRole =
+            databaseRoles[0];
+        } else if (
+          pathRole
+        ) {
+          resolvedRole =
+            pathRole;
+        }
+
+        /*
+          Admin accounts must never be rendered as customer portals.
+        */
+        if (
+          profileRole ===
+          'admin'
+        ) {
+          setPortalError(
+            'This is an administrator account. Please use the MatMove Admin system.'
+          );
+          return;
+        }
 
         if (
           !resolvedRole
         ) {
-          if (
-            profileRole ===
-              'admin'
-          ) {
-            setPortalError(
-              'This is an administrator account. Please use the MatMove Admin system.'
-            );
-          } else {
-            setPortalError(
-              'Your customer role has not been configured yet. Please complete account setup.'
-            );
-          }
-
+          setPortalError(
+            'Your customer role has not been configured yet. Please complete account setup.'
+          );
           return;
         }
 
         /*
-          If the customer entered the generic /customer route,
-          immediately move them to their role-specific route.
+          If a customer is on the generic /customer route, or on
+          the wrong customer route, move them to the correct portal.
         */
-        const pathRole =
-          getRoleFromPath(
-            location.pathname
+        const canonicalPath =
+          getCanonicalPortalPath(
+            resolvedRole
           );
 
         if (
-          !pathRole ||
-          pathRole !==
-            resolvedRole
+          location.pathname !==
+          canonicalPath
         ) {
-          const canonicalPath =
-            getCanonicalPortalPath(
-              resolvedRole
-            );
-
-          if (
-            location.pathname !==
-            canonicalPath
-          ) {
-            navigate(
-              canonicalPath,
-              {
-                replace: true,
-              }
-            );
-          }
+          navigate(
+            canonicalPath,
+            {
+              replace: true,
+            }
+          );
         }
 
         /*
-          Wallets are now multi-currency.
-          We deliberately do not use maybeSingle() here because
-          each customer can have both SLE and USD wallets.
+          Wallets are multi-currency.
+          Keep all wallets available while preserving the SLE wallet
+          as the primary wallet for the existing dashboard interfaces.
         */
         const {
           data: walletData,
@@ -325,11 +350,6 @@ export function PortalApp() {
           );
         }
 
-        /*
-          Keep the existing dashboard interface compatible by
-          exposing the primary SLE wallet while retaining all
-          wallets for future multi-currency UI.
-        */
         const wallets =
           walletData || [];
 
@@ -390,9 +410,8 @@ export function PortalApp() {
             );
         } else {
           /*
-            Merchant orders will use a dedicated merchant/order
-            data model. Until that is connected, don't expose
-            unrelated rider bookings.
+            Merchant orders will use the dedicated merchant/order
+            data model when that section is connected.
           */
           bookingQuery =
             bookingQuery.eq(
@@ -465,7 +484,7 @@ export function PortalApp() {
     const bookingChannel =
       supabase
         .channel(
-          'portal-booking-changes'
+          `portal-booking-changes-${Date.now()}`
         )
         .on(
           'postgres_changes',
@@ -483,7 +502,7 @@ export function PortalApp() {
     const walletChannel =
       supabase
         .channel(
-          'portal-wallet-changes'
+          `portal-wallet-changes-${Date.now()}`
         )
         .on(
           'postgres_changes',
@@ -952,16 +971,6 @@ export function PortalApp() {
         return;
       }
 
-      /*
-        Important:
-        The browser no longer directly calls
-        process_wallet_transaction.
-
-        External funding and withdrawals must go through
-        the secure backend/provider flow. This prevents the
-        UI from creating or claiming successful financial
-        transactions on its own.
-      */
       setProcessing(true);
 
       try {
@@ -969,11 +978,6 @@ export function PortalApp() {
           walletAction ===
           'withdraw'
         ) {
-          /*
-            Withdrawal initiation will be connected to the
-            secure initiate_wallet_withdrawal RPC once the
-            provider/customer payout flow is ready.
-          */
           setSuccessMsg(
             `Withdrawal request for SLE ${numAmount.toLocaleString()} is ready for secure provider processing.`
           );
@@ -1066,10 +1070,6 @@ export function PortalApp() {
   const isMerchant =
     role === 'merchant';
 
-  /*
-    A customer portal must never silently render an empty
-    interface for an unknown/admin role.
-  */
   if (
     !isRider &&
     !isDriver &&
@@ -1506,7 +1506,7 @@ function FundingMethodButton({
   onClick: () => void;
   title: string;
   description: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   iconClass: string;
   activeClass: string;
 }) {
