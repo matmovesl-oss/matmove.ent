@@ -91,10 +91,6 @@ export function AuthProvider({
 
   const navigate = useNavigate();
 
-  /**
-   * Restore the application session from
-   * the authenticated Supabase session.
-   */
   const restoreSession = useCallback(
     async () => {
       try {
@@ -150,8 +146,7 @@ export function AuthProvider({
         const roles =
           (rolesData || [])
             .map(
-              (item) =>
-                item.role
+              (item) => item.role
             )
             .filter(
               Boolean
@@ -216,18 +211,11 @@ export function AuthProvider({
         setSession(null);
 
         return null;
-      } finally {
-        setLoading(false);
       }
     },
     []
   );
 
-  /**
-   * Restore the session when the provider
-   * first mounts and listen for Supabase
-   * authentication changes.
-   */
   useEffect(() => {
     let mounted = true;
 
@@ -238,6 +226,10 @@ export function AuthProvider({
         }
 
         await restoreSession();
+
+        if (mounted) {
+          setLoading(false);
+        }
       };
 
     initialiseAuth();
@@ -248,7 +240,7 @@ export function AuthProvider({
       },
     } =
       supabase.auth.onAuthStateChange(
-        async (
+        (
           event,
           supabaseSession
         ) => {
@@ -266,6 +258,14 @@ export function AuthProvider({
             return;
           }
 
+          /*
+           * Do not await Supabase database requests
+           * directly inside onAuthStateChange.
+           *
+           * The auth callback must finish first so that
+           * signup/signin can complete without waiting
+           * on another Supabase operation.
+           */
           if (
             event ===
               'SIGNED_IN' ||
@@ -276,7 +276,20 @@ export function AuthProvider({
             event ===
               'INITIAL_SESSION'
           ) {
-            await restoreSession();
+            setTimeout(() => {
+              if (!mounted) {
+                return;
+              }
+
+              restoreSession().catch(
+                (error) => {
+                  console.error(
+                    'Failed to refresh session after auth event:',
+                    error
+                  );
+                }
+              );
+            }, 0);
           }
         }
       );
@@ -308,6 +321,13 @@ export function AuthProvider({
         navigate(
           '/select-role'
         );
+      } catch (error) {
+        console.error(
+          'Signup failed:',
+          error
+        );
+
+        throw error;
       } finally {
         setLoading(false);
       }
@@ -472,10 +492,6 @@ export function AuthProvider({
             );
           }
 
-          /*
-            Keep the role table synchronized with
-            the role selected during onboarding.
-          */
           const {
             error:
               roleDeleteError,
@@ -562,11 +578,6 @@ export function AuthProvider({
             updatedSession
           );
 
-          /*
-            Remove onboarding-only information
-            after it has been successfully written
-            to the database.
-          */
           sessionStorage.removeItem(
             'ob_personal'
           );
@@ -586,11 +597,6 @@ export function AuthProvider({
             'ob_vehicle'
           );
 
-          /*
-            Riders can enter the portal immediately.
-            Drivers and merchants go to the
-            submission/verification screen first.
-          */
           if (
             finalStatus ===
             'approved'
@@ -680,17 +686,17 @@ export function AuthProvider({
 
   const value:
     AuthContextValue = {
-      session,
-      loading,
-      signUp,
-      signIn,
-      signOut,
-      setRoles,
-      completeKyc,
-      submitKycForReview,
-      resubmitKycForReview,
-      resetPassword,
-    };
+    session,
+    loading,
+    signUp,
+    signIn,
+    signOut,
+    setRoles,
+    completeKyc,
+    submitKycForReview,
+    resubmitKycForReview,
+    resetPassword,
+  };
 
   return (
     <AuthContext.Provider
