@@ -51,6 +51,14 @@ interface AuthContextValue {
 const AuthContext =
   createContext<AuthContextValue | null>(null);
 
+interface StoredKycDocument {
+  id: string;
+  type: string;
+  fileName: string;
+  fileSize: number;
+  status: 'uploaded';
+}
+
 function getPrimaryCustomerRole(
   session: AuthSession | null
 ): UserRole {
@@ -76,6 +84,94 @@ function getCustomerPortalPath(
     getPrimaryCustomerRole(session);
 
   return `/customer/${role}`;
+}
+
+function getStoredDocuments(): StoredKycDocument[] {
+  try {
+    const raw =
+      sessionStorage.getItem(
+        'ob_documents'
+      );
+
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed)
+    ) {
+      return [];
+    }
+
+    return Object.values(parsed).filter(
+      (item): item is StoredKycDocument => {
+        if (
+          !item ||
+          typeof item !== 'object'
+        ) {
+          return false;
+        }
+
+        const document =
+          item as StoredKycDocument;
+
+        return (
+          typeof document.id === 'string' &&
+          document.id.length > 0 &&
+          document.id !== 'temp' &&
+          typeof document.type === 'string' &&
+          typeof document.fileName === 'string'
+        );
+      }
+    );
+  } catch (error) {
+    console.error(
+      'Could not read stored KYC documents:',
+      error
+    );
+
+    return [];
+  }
+}
+
+function getStoredSelfie():
+  | StoredKycDocument
+  | null {
+  try {
+    const raw =
+      sessionStorage.getItem(
+        'ob_selfie'
+      );
+
+    if (!raw) {
+      return null;
+    }
+
+    const parsed =
+      JSON.parse(raw) as StoredKycDocument;
+
+    if (
+      !parsed ||
+      typeof parsed.id !== 'string' ||
+      !parsed.id ||
+      parsed.id === 'temp'
+    ) {
+      return null;
+    }
+
+    return parsed;
+  } catch (error) {
+    console.error(
+      'Could not read stored selfie metadata:',
+      error
+    );
+
+    return null;
+  }
 }
 
 export function AuthProvider({
@@ -442,12 +538,25 @@ export function AuthProvider({
         setLoading(true);
 
         try {
-          const personalInfo =
-            JSON.parse(
-              sessionStorage.getItem(
-                'ob_personal'
-              ) || '{}'
-            );
+          // ==================================================
+          // 1. Read onboarding information
+          // ==================================================
+
+          let personalInfo: {
+            firstName?: string;
+            lastName?: string;
+          } = {};
+
+          try {
+            personalInfo =
+              JSON.parse(
+                sessionStorage.getItem(
+                  'ob_personal'
+                ) || '{}'
+              );
+          } catch {
+            personalInfo = {};
+          }
 
           const storedRole =
             sessionStorage.getItem(
@@ -463,6 +572,20 @@ export function AuthProvider({
             role === 'rider'
               ? 'approved'
               : 'submitted';
+
+          // ==================================================
+          // 2. Read uploaded document metadata
+          // ==================================================
+
+          const storedDocuments =
+            getStoredDocuments();
+
+          const storedSelfie =
+            getStoredSelfie();
+
+          // ==================================================
+          // 3. Update own profile
+          // ==================================================
 
           const {
             error:
@@ -491,6 +614,10 @@ export function AuthProvider({
               `Profile Update Failed: ${profileError.message}`
             );
           }
+
+          // ==================================================
+          // 4. Synchronize role
+          // ==================================================
 
           const {
             error:
@@ -528,13 +655,18 @@ export function AuthProvider({
           if (
             roleInsertError
           ) {
-            console.warn(
-              'Could not synchronize onboarding role:',
-              roleInsertError.message
+            throw new Error(
+              `Role Synchronization Failed: ${roleInsertError.message}`
             );
           }
 
+          // ==================================================
+          // 5. Create KYC submission
+          // ==================================================
+
           const {
+            data:
+              submission,
             error:
               submissionError,
           } =
@@ -549,7 +681,9 @@ export function AuthProvider({
                   role,
                 status:
                   finalStatus,
-              });
+              })
+              .select('id')
+              .single();
 
           if (
             submissionError
@@ -558,6 +692,85 @@ export function AuthProvider({
               `Submission Insert Failed: ${submissionError.message}`
             );
           }
+
+          if (!submission?.id) {
+            throw new Error(
+              'KYC submission was created but no submission ID was returned.'
+            );
+          }
+
+          // ==================================================
+          // 6. Prepare KYC document records
+          // ==================================================
+
+          const documentRows = [
+            ...storedDocuments,
+            ...(storedSelfie
+              ? [storedSelfie]
+              : []),
+          ]
+            .filter(
+              (document, index, array) =>
+                document &&
+                document.id &&
+                document.id !== 'temp' &&
+                array.findIndex(
+                  (item) =>
+                    item.id ===
+                    document.id
+                ) === index
+            )
+            .map(
+              (document) => ({
+                submission_id:
+                  submission.id,
+                document_type:
+                  document.type,
+                file_name:
+                  document.fileName,
+                storage_path:
+                  document.id,
+                file_size_bytes:
+                  document.fileSize,
+              })
+            );
+
+          // ==================================================
+          // 7. Insert uploaded documents
+          // ==================================================
+
+          if (
+            documentRows.length > 0
+          ) {
+            const {
+              error:
+                documentsError,
+            } =
+              await supabase
+                .from(
+                  'kyc_documents'
+                )
+                .insert(
+                  documentRows
+                );
+
+            if (
+              documentsError
+            ) {
+              /*
+               * The KYC submission exists but its documents
+               * could not be registered. Do not silently send
+               * the customer to a completed state.
+               */
+              throw new Error(
+                `KYC Documents Insert Failed: ${documentsError.message}`
+              );
+            }
+          }
+
+          // ==================================================
+          // 8. Build updated local session
+          // ==================================================
 
           const updatedRoles =
             [role] as UserRole[];
@@ -571,6 +784,14 @@ export function AuthProvider({
                 finalStatus,
               user: {
                 ...session.user,
+                firstName:
+                  personalInfo.firstName ||
+                  session.user.firstName ||
+                  '',
+                lastName:
+                  personalInfo.lastName ||
+                  session.user.lastName ||
+                  '',
               },
             };
 
@@ -578,24 +799,37 @@ export function AuthProvider({
             updatedSession
           );
 
+          // ==================================================
+          // 9. Clear onboarding state
+          // ==================================================
+
           sessionStorage.removeItem(
             'ob_personal'
           );
+
           sessionStorage.removeItem(
             'ob_role'
           );
+
           sessionStorage.removeItem(
             'ob_identity'
           );
+
           sessionStorage.removeItem(
             'ob_documents'
           );
+
           sessionStorage.removeItem(
             'ob_selfie'
           );
+
           sessionStorage.removeItem(
             'ob_vehicle'
           );
+
+          // ==================================================
+          // 10. Navigate
+          // ==================================================
 
           if (
             finalStatus ===
@@ -611,19 +845,21 @@ export function AuthProvider({
               '/onboarding/submitted'
             );
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error(
             'Submission error:',
             error
           );
 
+          const message =
+            error instanceof Error
+              ? error.message
+              : JSON.stringify(
+                  error
+                );
+
           alert(
-            `Error details: ${
-              error.message ||
-              JSON.stringify(
-                error
-              )
-            }`
+            `Error details: ${message}`
           );
         } finally {
           setLoading(false);
