@@ -286,12 +286,12 @@ export function AuthProvider({
 
         const restoredSession:
           AuthSession = {
-            user: restoredUser,
-            roles: resolvedRoles,
-            kycStatus:
-              profile?.kyc_status ||
-              'not_started',
-          };
+          user: restoredUser,
+          roles: resolvedRoles,
+          kycStatus:
+            profile?.kyc_status ||
+            'not_started',
+        };
 
         setSession(
           restoredSession
@@ -584,34 +584,71 @@ export function AuthProvider({
             getStoredSelfie();
 
           // ==================================================
-          // 3. Update own profile
+          // 3. GUARANTEE THE PROFILE EXISTS
           // ==================================================
+          /*
+           * The previous implementation used UPDATE here.
+           * UPDATE does nothing when the profile row does not
+           * already exist. That caused the subsequent
+           * user_roles INSERT to violate:
+           *
+           * user_roles_profile_id_fkey
+           *
+           * Upsert guarantees that the parent profiles row
+           * exists before we create the child role record.
+           */
 
           const {
+            data:
+              ensuredProfile,
             error:
               profileError,
           } =
             await supabase
               .from('profiles')
-              .update({
-                first_name:
-                  personalInfo.firstName ||
-                  '',
-                last_name:
-                  personalInfo.lastName ||
-                  '',
-                kyc_status:
-                  finalStatus,
-                role,
-              })
-              .eq(
-                'id',
-                session.user.id
-              );
+              .upsert(
+                {
+                  id:
+                    session.user.id,
+                  email:
+                    session.user.email ||
+                    '',
+                  phone:
+                    session.user.phone ||
+                    '',
+                  first_name:
+                    personalInfo.firstName ||
+                    session.user.firstName ||
+                    '',
+                  last_name:
+                    personalInfo.lastName ||
+                    session.user.lastName ||
+                    '',
+                  kyc_status:
+                    finalStatus,
+                  role,
+                  updated_at:
+                    new Date().toISOString(),
+                },
+                {
+                  onConflict:
+                    'id',
+                }
+              )
+              .select('id')
+              .single();
 
           if (profileError) {
             throw new Error(
-              `Profile Update Failed: ${profileError.message}`
+              `Profile Synchronization Failed: ${profileError.message}`
+            );
+          }
+
+          if (
+            !ensuredProfile?.id
+          ) {
+            throw new Error(
+              'Profile synchronization completed but no profile ID was returned.'
             );
           }
 
@@ -634,9 +671,8 @@ export function AuthProvider({
           if (
             roleDeleteError
           ) {
-            console.warn(
-              'Could not clear previous roles:',
-              roleDeleteError.message
+            throw new Error(
+              `Role Cleanup Failed: ${roleDeleteError.message}`
             );
           }
 
@@ -648,7 +684,7 @@ export function AuthProvider({
               .from('user_roles')
               .insert({
                 profile_id:
-                  session.user.id,
+                  ensuredProfile.id,
                 role,
               });
 
@@ -676,7 +712,7 @@ export function AuthProvider({
               )
               .insert({
                 profile_id:
-                  session.user.id,
+                  ensuredProfile.id,
                 target_role:
                   role,
                 status:
@@ -757,11 +793,6 @@ export function AuthProvider({
             if (
               documentsError
             ) {
-              /*
-               * The KYC submission exists but its documents
-               * could not be registered. Do not silently send
-               * the customer to a completed state.
-               */
               throw new Error(
                 `KYC Documents Insert Failed: ${documentsError.message}`
               );
