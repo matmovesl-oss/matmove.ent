@@ -584,19 +584,74 @@ export function AuthProvider({
             getStoredSelfie();
 
           // ==================================================
-          // 3. GUARANTEE THE PROFILE EXISTS
+          // 3. Normalize phone
+          // ==================================================
+
+          const normalizedPhone =
+            (
+              session.user.phone ||
+              ''
+            ).trim();
+
+          // ==================================================
+          // 4. Verify phone ownership before touching profile
           // ==================================================
           /*
-           * The previous implementation used UPDATE here.
-           * UPDATE does nothing when the profile row does not
-           * already exist. That caused the subsequent
-           * user_roles INSERT to violate:
+           * profiles.phone is unique.
            *
-           * user_roles_profile_id_fkey
+           * Before creating/updating a profile, check whether
+           * another profile already owns this phone number.
            *
-           * Upsert guarantees that the parent profiles row
-           * exists before we create the child role record.
+           * We never overwrite another user's phone number.
            */
+
+          let existingPhoneProfile:
+            | {
+                id: string;
+              }
+            | null = null;
+
+          if (normalizedPhone) {
+            const {
+              data:
+                phoneProfile,
+              error:
+                phoneLookupError,
+            } =
+              await supabase
+                .from('profiles')
+                .select('id')
+                .eq(
+                  'phone',
+                  normalizedPhone
+                )
+                .maybeSingle();
+
+            if (
+              phoneLookupError
+            ) {
+              throw new Error(
+                `Phone Verification Failed: ${phoneLookupError.message}`
+              );
+            }
+
+            existingPhoneProfile =
+              phoneProfile;
+          }
+
+          if (
+            existingPhoneProfile &&
+            existingPhoneProfile.id !==
+              session.user.id
+          ) {
+            throw new Error(
+              'This phone number is already registered to another MatMove account. Please sign in to the existing account or use a different phone number.'
+            );
+          }
+
+          // ==================================================
+          // 5. Guarantee the current user's profile exists
+          // ==================================================
 
           const {
             data:
@@ -613,9 +668,12 @@ export function AuthProvider({
                   email:
                     session.user.email ||
                     '',
-                  phone:
-                    session.user.phone ||
-                    '',
+                  ...(normalizedPhone
+                    ? {
+                        phone:
+                          normalizedPhone,
+                      }
+                    : {}),
                   first_name:
                     personalInfo.firstName ||
                     session.user.firstName ||
@@ -653,7 +711,7 @@ export function AuthProvider({
           }
 
           // ==================================================
-          // 4. Synchronize role
+          // 6. Synchronize role
           // ==================================================
 
           const {
@@ -665,7 +723,7 @@ export function AuthProvider({
               .delete()
               .eq(
                 'profile_id',
-                session.user.id
+                ensuredProfile.id
               );
 
           if (
@@ -697,7 +755,7 @@ export function AuthProvider({
           }
 
           // ==================================================
-          // 5. Create KYC submission
+          // 7. Create KYC submission
           // ==================================================
 
           const {
@@ -736,7 +794,7 @@ export function AuthProvider({
           }
 
           // ==================================================
-          // 6. Prepare KYC document records
+          // 8. Prepare KYC document records
           // ==================================================
 
           const documentRows = [
@@ -772,7 +830,7 @@ export function AuthProvider({
             );
 
           // ==================================================
-          // 7. Insert uploaded documents
+          // 9. Insert uploaded documents
           // ==================================================
 
           if (
@@ -800,7 +858,7 @@ export function AuthProvider({
           }
 
           // ==================================================
-          // 8. Build updated local session
+          // 10. Build updated local session
           // ==================================================
 
           const updatedRoles =
@@ -815,6 +873,10 @@ export function AuthProvider({
                 finalStatus,
               user: {
                 ...session.user,
+                phone:
+                  normalizedPhone ||
+                  session.user.phone ||
+                  '',
                 firstName:
                   personalInfo.firstName ||
                   session.user.firstName ||
@@ -831,7 +893,7 @@ export function AuthProvider({
           );
 
           // ==================================================
-          // 9. Clear onboarding state
+          // 11. Clear onboarding state
           // ==================================================
 
           sessionStorage.removeItem(
@@ -859,7 +921,7 @@ export function AuthProvider({
           );
 
           // ==================================================
-          // 10. Navigate
+          // 12. Navigate
           // ==================================================
 
           if (
