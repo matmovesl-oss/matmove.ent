@@ -14,10 +14,9 @@ import {
   ChevronRight,
   CircleCheck,
   CircleAlert,
-  Power,
   RefreshCw,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 type MerchantDashboardProps = {
   profile?: any;
@@ -59,11 +58,9 @@ export function MerchantDashboard({
     profile?.address ||
     'Business location not yet configured';
 
-  const kycStatus =
-    String(
-      profile?.kyc_status ||
-        'not_started'
-    ).toLowerCase();
+  const kycStatus = String(
+    profile?.kyc_status || 'not_started'
+  ).toLowerCase();
 
   const verificationPending = [
     'pending',
@@ -80,13 +77,21 @@ export function MerchantDashboard({
     'resubmission_required',
   ].includes(kycStatus);
 
+  /*
+   * Merchant financial permissions are intentionally tied
+   * to successful admin verification.
+   *
+   * This is a UI permission gate. The backend must remain
+   * the final authority for all financial operations.
+   */
   const canAcceptOrders =
     verificationApproved;
 
+  const canWithdraw =
+    verificationApproved;
+
   const wallets =
-    Array.isArray(
-      wallet?.wallets
-    )
+    Array.isArray(wallet?.wallets)
       ? wallet.wallets
       : wallet
         ? [wallet]
@@ -141,6 +146,15 @@ export function MerchantDashboard({
     storeIsOpen
       ? 'ACCEPTING ORDERS'
       : 'STORE CLOSED';
+
+  const handleOpenWithdraw =
+    () => {
+      if (!canWithdraw) {
+        return;
+      }
+
+      onOpenWithdraw?.();
+    };
 
   const stats =
     useMemo<MerchantStat[]>(
@@ -258,9 +272,7 @@ export function MerchantDashboard({
           <div className="flex items-center gap-3 sm:gap-4">
             <button
               type="button"
-              onClick={
-                handleRefresh
-              }
+              onClick={handleRefresh}
               className="w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition"
               aria-label="Refresh merchant dashboard"
             >
@@ -281,12 +293,8 @@ export function MerchantDashboard({
 
               <button
                 type="button"
-                disabled={
-                  !canAcceptOrders
-                }
-                onClick={
-                  handleToggleStore
-                }
+                disabled={!canAcceptOrders}
+                onClick={handleToggleStore}
                 className={`text-xs font-bold px-3 py-1.5 rounded-full transition ${
                   !canAcceptOrders
                     ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
@@ -318,9 +326,7 @@ export function MerchantDashboard({
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
             <div className="flex items-start gap-4">
               <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                <Store
-                  size={27}
-                />
+                <Store size={27} />
               </div>
 
               <div>
@@ -356,9 +362,7 @@ export function MerchantDashboard({
               type="button"
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 transition"
             >
-              <Settings
-                size={17}
-              />
+              <Settings size={17} />
               Store Settings
             </button>
           </div>
@@ -378,9 +382,9 @@ export function MerchantDashboard({
               </h4>
 
               <p className="text-sm text-amber-700 mt-1 leading-relaxed">
-                Your business documents are being reviewed. Store visibility
-                and live order acceptance will become available after
-                verification is approved.
+                Your business documents are being reviewed. Store visibility,
+                live order acceptance and merchant cash withdrawal will become
+                available after verification is approved.
               </p>
             </div>
           </section>
@@ -400,7 +404,7 @@ export function MerchantDashboard({
 
               <p className="text-sm text-rose-700 mt-1 leading-relaxed">
                 Your verification requires attention before your store can
-                accept customer orders.
+                accept customer orders or withdraw merchant earnings.
               </p>
 
               <button
@@ -427,7 +431,7 @@ export function MerchantDashboard({
 
               <p className="text-sm text-emerald-700 mt-1">
                 Your merchant account is verified and eligible to receive
-                customer orders.
+                customer orders and access approved financial operations.
               </p>
             </div>
 
@@ -457,56 +461,53 @@ export function MerchantDashboard({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
-            {stats.map(
-              (stat) => {
-                const Icon =
-                  stat.icon;
+            {stats.map((stat) => {
+              const Icon = stat.icon;
 
-                return (
-                  <div
-                    key={
-                      stat.label
-                    }
-                    className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm"
-                  >
-                    <div className="flex justify-between items-start mb-5">
-                      <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">
-                        {stat.label}
-                      </span>
+              return (
+                <div
+                  key={stat.label}
+                  className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm"
+                >
+                  <div className="flex justify-between items-start mb-5">
+                    <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">
+                      {stat.label}
+                    </span>
 
-                      <div
-                        className={`p-2.5 rounded-xl ${stat.iconClass}`}
-                      >
-                        <Icon
-                          size={18}
-                        />
-                      </div>
+                    <div
+                      className={`p-2.5 rounded-xl ${stat.iconClass}`}
+                    >
+                      <Icon size={18} />
                     </div>
-
-                    <div className="text-2xl sm:text-3xl font-bold text-slate-900">
-                      {stat.value}
-                    </div>
-
-                    <p className="text-xs text-slate-400 mt-2">
-                      {stat.helper}
-                    </p>
-
-                    {stat.label ===
-                      'Merchant Wallet' && (
-                      <button
-                        type="button"
-                        onClick={
-                          onOpenWithdraw
-                        }
-                        className="text-xs font-bold text-blue-600 mt-3 hover:underline"
-                      >
-                        Withdraw Cash →
-                      </button>
-                    )}
                   </div>
-                );
-              }
-            )}
+
+                  <div className="text-2xl sm:text-3xl font-bold text-slate-900">
+                    {stat.value}
+                  </div>
+
+                  <p className="text-xs text-slate-400 mt-2">
+                    {stat.helper}
+                  </p>
+
+                  {stat.label === 'Merchant Wallet' && (
+                    <button
+                      type="button"
+                      disabled={!canWithdraw}
+                      onClick={handleOpenWithdraw}
+                      className={`text-xs font-bold mt-3 transition ${
+                        canWithdraw
+                          ? 'text-blue-600 hover:underline'
+                          : 'text-slate-400 cursor-not-allowed'
+                      }`}
+                    >
+                      {canWithdraw
+                        ? 'Withdraw Cash →'
+                        : 'Verification Required'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
 
@@ -524,11 +525,7 @@ export function MerchantDashboard({
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <MerchantActionCard
-              icon={
-                <ShoppingBag
-                  size={21}
-                />
-              }
+              icon={<ShoppingBag size={21} />}
               iconClass="bg-blue-50 text-blue-600"
               title="Orders"
               description="Review, accept and prepare customer orders."
@@ -536,11 +533,7 @@ export function MerchantDashboard({
             />
 
             <MerchantActionCard
-              icon={
-                <Boxes
-                  size={21}
-                />
-              }
+              icon={<Boxes size={21} />}
               iconClass="bg-purple-50 text-purple-600"
               title="Inventory"
               description="Manage products, stock levels and availability."
@@ -548,11 +541,7 @@ export function MerchantDashboard({
             />
 
             <MerchantActionCard
-              icon={
-                <Truck
-                  size={21}
-                />
-              }
+              icon={<Truck size={21} />}
               iconClass="bg-emerald-50 text-emerald-600"
               title="Dispatch"
               description="Prepare orders for delivery and monitor dispatch."
@@ -560,18 +549,25 @@ export function MerchantDashboard({
             />
 
             <MerchantActionCard
-              icon={
-                <Wallet
-                  size={21}
-                />
-              }
+              icon={<Wallet size={21} />}
               iconClass="bg-amber-50 text-amber-600"
               title="Earnings"
-              description="Review sales, wallet activity and withdrawals."
-              badge="Financials"
-              onClick={
-                onOpenWithdraw
+              description={
+                canWithdraw
+                  ? 'Review sales, wallet activity and withdrawals.'
+                  : 'Wallet earnings are visible, but withdrawals require admin verification.'
               }
+              badge={
+                canWithdraw
+                  ? 'Financials'
+                  : 'Verification required'
+              }
+              onClick={
+                canWithdraw
+                  ? handleOpenWithdraw
+                  : undefined
+              }
+              disabled={!canWithdraw}
             />
           </div>
         </section>
@@ -619,9 +615,7 @@ export function MerchantDashboard({
 
               {!canAcceptOrders && (
                 <div className="mt-5 inline-flex items-center gap-2 bg-amber-50 border border-amber-100 text-amber-700 px-3 py-2 rounded-xl text-xs font-semibold">
-                  <CircleAlert
-                    size={15}
-                  />
+                  <CircleAlert size={15} />
                   Verification required before orders can be accepted.
                 </div>
               )}
@@ -649,24 +643,16 @@ export function MerchantDashboard({
                 }`}
               >
                 {canAcceptOrders ? (
-                  <CircleCheck
-                    size={20}
-                  />
+                  <CircleCheck size={20} />
                 ) : (
-                  <CircleAlert
-                    size={20}
-                  />
+                  <CircleAlert size={20} />
                 )}
               </div>
             </div>
 
             <div className="space-y-4">
               <ReadinessRow
-                icon={
-                  <ShieldCheck
-                    size={18}
-                  />
-                }
+                icon={<ShieldCheck size={18} />}
                 label="Business verification"
                 status={
                   verificationApproved
@@ -685,11 +671,7 @@ export function MerchantDashboard({
               />
 
               <ReadinessRow
-                icon={
-                  <Store
-                    size={18}
-                  />
-                }
+                icon={<Store size={18} />}
                 label="Store status"
                 status={
                   storeIsOpen
@@ -704,25 +686,32 @@ export function MerchantDashboard({
               />
 
               <ReadinessRow
-                icon={
-                  <Package
-                    size={18}
-                  />
-                }
+                icon={<Package size={18} />}
                 label="Inventory"
                 status="Ready"
                 tone="neutral"
               />
 
               <ReadinessRow
-                icon={
-                  <Truck
-                    size={18}
-                  />
-                }
+                icon={<Truck size={18} />}
                 label="Dispatch"
                 status="Ready"
                 tone="neutral"
+              />
+
+              <ReadinessRow
+                icon={<Wallet size={18} />}
+                label="Cash withdrawal"
+                status={
+                  canWithdraw
+                    ? 'Enabled'
+                    : 'Verification required'
+                }
+                tone={
+                  canWithdraw
+                    ? 'success'
+                    : 'warning'
+                }
               />
             </div>
 
@@ -735,8 +724,9 @@ export function MerchantDashboard({
                   />
 
                   <p className="text-xs text-slate-600 leading-relaxed">
-                    Customer order acceptance will be enabled once your
-                    business verification is approved.
+                    Customer order acceptance and merchant cash withdrawal
+                    will be enabled once your business verification is
+                    approved by MatMove Admin.
                   </p>
                 </div>
               </div>
@@ -753,9 +743,7 @@ export function MerchantDashboard({
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
                 <div className="flex items-center gap-2 text-blue-300 text-xs font-bold uppercase tracking-wider">
-                  <Wallet
-                    size={15}
-                  />
+                  <Wallet size={15} />
                   MatMove Merchant Wallet
                 </div>
 
@@ -798,18 +786,29 @@ export function MerchantDashboard({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={
-                  onOpenWithdraw
-                }
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white text-slate-900 text-sm font-bold hover:bg-slate-100 transition"
-              >
-                Withdraw Cash
-                <ChevronRight
-                  size={17}
-                />
-              </button>
+              <div className="flex flex-col items-stretch lg:items-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenWithdraw}
+                  disabled={!canWithdraw}
+                  className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition ${
+                    canWithdraw
+                      ? 'bg-white text-slate-900 hover:bg-slate-100'
+                      : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                  }`}
+                >
+                  {canWithdraw
+                    ? 'Withdraw Cash'
+                    : 'Verification Required'}
+                  <ChevronRight size={17} />
+                </button>
+
+                {!canWithdraw && (
+                  <span className="text-xs text-slate-400 text-center lg:text-right">
+                    Admin approval is required before cash withdrawal.
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="border-t border-white/10 mt-6 pt-5 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-slate-400">
@@ -851,19 +850,26 @@ function MerchantActionCard({
   description,
   badge,
   onClick,
+  disabled = false,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   iconClass: string;
   title: string;
   description: string;
   badge: string;
   onClick?: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm hover:shadow-md hover:border-slate-300 transition group"
+      disabled={disabled}
+      className={`bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm transition group ${
+        disabled
+          ? 'opacity-80 cursor-not-allowed'
+          : 'hover:shadow-md hover:border-slate-300'
+      }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div
@@ -874,7 +880,11 @@ function MerchantActionCard({
 
         <ChevronRight
           size={18}
-          className="text-slate-300 group-hover:text-slate-500 transition"
+          className={
+            disabled
+              ? 'text-slate-200'
+              : 'text-slate-300 group-hover:text-slate-500 transition'
+          }
         />
       </div>
 
@@ -886,7 +896,13 @@ function MerchantActionCard({
         {description}
       </p>
 
-      <span className="inline-flex mt-4 text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">
+      <span
+        className={`inline-flex mt-4 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
+          disabled
+            ? 'bg-amber-50 text-amber-700'
+            : 'bg-slate-100 text-slate-500'
+        }`}
+      >
         {badge}
       </span>
     </button>
@@ -899,7 +915,7 @@ function ReadinessRow({
   status,
   tone,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   status: string;
   tone:
@@ -929,9 +945,7 @@ function ReadinessRow({
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="flex items-center gap-3 min-w-0">
-        <span
-          className={iconClass}
-        >
+        <span className={iconClass}>
           {icon}
         </span>
 
