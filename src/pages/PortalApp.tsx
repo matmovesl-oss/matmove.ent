@@ -27,6 +27,11 @@ import {
   Smartphone,
   CreditCard,
   Landmark,
+  LogOut,
+  Mail,
+  Phone,
+  ShieldCheck,
+  RefreshCw,
 } from 'lucide-react';
 
 type WalletAction =
@@ -156,6 +161,9 @@ export function PortalApp() {
   const [successMsg, setSuccessMsg] =
     useState('');
 
+  const [loggingOut, setLoggingOut] =
+    useState(false);
+
   const fetchUserData =
     useCallback(async () => {
       try {
@@ -184,10 +192,6 @@ export function PortalApp() {
         const userId =
           session.user.id;
 
-        /*
-          The URL is an intentional fallback for customer portal
-          routing. The database role remains the preferred source.
-        */
         const pathRole =
           getRoleFromPath(
             location.pathname
@@ -245,16 +249,6 @@ export function PortalApp() {
               ).toLowerCase()
             : '';
 
-        /*
-          Role priority:
-
-          1. Explicit customer role stored on profiles.
-          2. Customer role stored in user_roles.
-          3. Existing customer-specific URL.
-
-          The URL fallback is only for portal routing. It does not
-          grant database permissions or bypass Supabase RLS.
-        */
         let resolvedRole: CustomerRole | '' =
           '';
 
@@ -277,9 +271,6 @@ export function PortalApp() {
             pathRole;
         }
 
-        /*
-          Admin accounts must never be rendered as customer portals.
-        */
         if (
           profileRole ===
           'admin'
@@ -299,10 +290,6 @@ export function PortalApp() {
           return;
         }
 
-        /*
-          If a customer is on the generic /customer route, or on
-          the wrong customer route, move them to the correct portal.
-        */
         const canonicalPath =
           getCanonicalPortalPath(
             resolvedRole
@@ -320,11 +307,6 @@ export function PortalApp() {
           );
         }
 
-        /*
-          Wallets are multi-currency.
-          Keep all wallets available while preserving the SLE wallet
-          as the primary wallet for the existing dashboard interfaces.
-        */
         const {
           data: walletData,
           error: walletError,
@@ -377,9 +359,6 @@ export function PortalApp() {
           wallets,
         };
 
-        /*
-          Load bookings according to the customer's actual role.
-        */
         let bookingQuery =
           supabase
             .from('bookings')
@@ -409,10 +388,6 @@ export function PortalApp() {
               userId
             );
         } else {
-          /*
-            Merchant orders will use the dedicated merchant/order
-            data model when that section is connected.
-          */
           bookingQuery =
             bookingQuery.eq(
               'rider_id',
@@ -832,6 +807,27 @@ export function PortalApp() {
         return;
       }
 
+      /*
+        Important:
+        The backend remains the final authority for withdrawal
+        eligibility. The UI does not modify wallet balances.
+      */
+      const kycStatus =
+        String(
+          profile?.kyc_status ||
+            ''
+        ).toLowerCase();
+
+      if (
+        kycStatus !==
+          'approved'
+      ) {
+        alert(
+          'Cash withdrawal is available only after your account has been verified and approved by MatMove Admin.'
+        );
+        return;
+      }
+
       setWalletAction(
         'withdraw'
       );
@@ -850,10 +846,55 @@ export function PortalApp() {
       );
     };
 
+  const handleLogout =
+    async () => {
+      if (loggingOut) {
+        return;
+      }
+
+      setLoggingOut(true);
+
+      try {
+        const {
+          error,
+        } =
+          await supabase.auth.signOut();
+
+        if (error) {
+          throw error;
+        }
+
+        setProfile(null);
+        setWallet(null);
+        setBookings([]);
+
+        navigate(
+          '/login',
+          {
+            replace: true,
+          }
+        );
+      } catch (err: any) {
+        console.error(
+          'Logout failed:',
+          err
+        );
+
+        alert(
+          err?.message ||
+            'Unable to sign out. Please try again.'
+        );
+      } finally {
+        setLoggingOut(false);
+      }
+    };
+
   const handleNavigation =
     (
       section: PortalSection
     ) => {
+      setSuccessMsg('');
+
       if (
         section === 'home'
       ) {
@@ -878,8 +919,8 @@ export function PortalApp() {
         alert(
           profile?.role ===
             'merchant'
-            ? 'Merchant orders are the next merchant portal section we will build.'
-            : 'Trips and order history are the next portal section we will build.'
+            ? 'Merchant Orders will be connected to the live order system in the next portal phase.'
+            : 'Trips and order history will be connected to the live trip system in the next portal phase.'
         );
         return;
       }
@@ -888,7 +929,7 @@ export function PortalApp() {
         section === 'support'
       ) {
         alert(
-          'MatMove Support is the next portal section we will build.'
+          'MatMove Support will be connected to the live support system in the next portal phase.'
         );
         return;
       }
@@ -896,8 +937,8 @@ export function PortalApp() {
       if (
         section === 'account'
       ) {
-        alert(
-          'Account and profile settings are the next portal section we will build.'
+        setActiveSection(
+          'account'
         );
       }
     };
@@ -958,6 +999,27 @@ export function PortalApp() {
           'Only drivers and merchants can withdraw wallet funds.'
         );
         return;
+      }
+
+      if (
+        walletAction ===
+          'withdraw'
+      ) {
+        const kycStatus =
+          String(
+            profile?.kyc_status ||
+              ''
+          ).toLowerCase();
+
+        if (
+          kycStatus !==
+          'approved'
+        ) {
+          alert(
+            'Cash withdrawal requires MatMove Admin verification approval.'
+          );
+          return;
+        }
       }
 
       if (
@@ -1046,8 +1108,11 @@ export function PortalApp() {
             onClick={() =>
               window.location.reload()
             }
-            className="mt-6 bg-blue-600 text-white px-5 py-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition"
+            className="mt-6 bg-blue-600 text-white px-5 py-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition flex items-center justify-center gap-2 mx-auto"
           >
+            <RefreshCw
+              size={16}
+            />
             Refresh portal
           </button>
         </div>
@@ -1101,6 +1166,45 @@ export function PortalApp() {
             Return Home
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (
+    activeSection ===
+    'account'
+  ) {
+    return (
+      <div className="min-h-screen bg-slate-50 pb-28">
+        <AccountSection
+          profile={profile}
+          role={
+            role as CustomerRole
+          }
+          loggingOut={
+            loggingOut
+          }
+          onLogout={
+            handleLogout
+          }
+          onBack={() =>
+            setActiveSection(
+              'home'
+            )
+          }
+        />
+
+        <PortalNavigation
+          activeSection={
+            activeSection
+          }
+          onNavigate={
+            handleNavigation
+          }
+          isRider={isRider}
+          isDriver={isDriver}
+          isMerchant={isMerchant}
+        />
       </div>
     );
   }
@@ -1174,7 +1278,7 @@ export function PortalApp() {
   }
 
   return (
-    <div className="relative min-h-screen bg-slate-50">
+    <div className="relative min-h-screen bg-slate-50 pb-24">
       {isRider && (
         <RiderDashboard
           profile={profile}
@@ -1265,6 +1369,241 @@ export function PortalApp() {
             }
           />
         )}
+    </div>
+  );
+}
+
+function AccountSection({
+  profile,
+  role,
+  loggingOut,
+  onLogout,
+  onBack,
+}: {
+  profile: any;
+  role: CustomerRole;
+  loggingOut: boolean;
+  onLogout: () => Promise<void>;
+  onBack: () => void;
+}) {
+  const firstName =
+    profile?.first_name ||
+    profile?.firstName ||
+    '';
+
+  const lastName =
+    profile?.last_name ||
+    profile?.lastName ||
+    '';
+
+  const fullName =
+    `${firstName} ${lastName}`.trim() ||
+    'MatMove User';
+
+  const email =
+    profile?.email ||
+    'Not available';
+
+  const phone =
+    profile?.phone ||
+    'Not available';
+
+  const roleLabel =
+    role.charAt(0).toUpperCase() +
+    role.slice(1);
+
+  const kycStatus =
+    String(
+      profile?.kyc_status ||
+        'not_started'
+    ).toLowerCase();
+
+  const kycLabel =
+    kycStatus ===
+    'approved'
+      ? 'Verified'
+      : kycStatus ===
+          'pending'
+        ? 'Under Review'
+        : kycStatus ===
+            'rejected'
+          ? 'Rejected'
+          : 'Not Started';
+
+  const kycClasses =
+    kycStatus ===
+    'approved'
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+      : kycStatus ===
+          'rejected'
+        ? 'bg-red-50 text-red-700 border-red-100'
+        : 'bg-amber-50 text-amber-700 border-amber-100';
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 md:py-12">
+        <div className="mb-8">
+          <button
+            onClick={
+              onBack
+            }
+            className="text-sm font-semibold text-slate-500 hover:text-blue-600 transition mb-5"
+          >
+            ← Back to portal
+          </button>
+
+          <div>
+            <div className="text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">
+              MatMove Account
+            </div>
+
+            <h1 className="text-3xl md:text-4xl font-bold text-slate-900">
+              Account & Profile
+            </h1>
+
+            <p className="text-slate-500 mt-2">
+              Manage your MatMove account information and security.
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+          <div className="p-6 md:p-8 border-b border-slate-200">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+              <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <UserCircle
+                  size={34}
+                />
+              </div>
+
+              <div className="flex-1">
+                <div className="text-2xl font-bold text-slate-900">
+                  {fullName}
+                </div>
+
+                <div className="text-sm text-slate-500 mt-1">
+                  MatMove {roleLabel}
+                </div>
+              </div>
+
+              <div className="px-3 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold uppercase tracking-wide self-start">
+                {roleLabel}
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 md:p-8">
+            <h2 className="text-lg font-bold text-slate-900 mb-5">
+              Personal Information
+            </h2>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="border border-slate-200 rounded-2xl p-4">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">
+                  <Mail
+                    size={15}
+                  />
+                  Email
+                </div>
+
+                <div className="font-semibold text-slate-900 break-all">
+                  {email}
+                </div>
+              </div>
+
+              <div className="border border-slate-200 rounded-2xl p-4">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">
+                  <Phone
+                    size={15}
+                  />
+                  Phone
+                </div>
+
+                <div className="font-semibold text-slate-900">
+                  {phone}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8">
+              <h2 className="text-lg font-bold text-slate-900 mb-5">
+                Verification Status
+              </h2>
+
+              <div className="border border-slate-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center">
+                  <ShieldCheck
+                    size={22}
+                  />
+                </div>
+
+                <div className="flex-1">
+                  <div className="font-bold text-slate-900">
+                    Identity & Account Verification
+                  </div>
+
+                  <div className="text-sm text-slate-500 mt-1">
+                    Your account capabilities depend on MatMove verification status.
+                  </div>
+                </div>
+
+                <div
+                  className={`px-3 py-2 rounded-xl border text-xs font-bold ${kycClasses}`}
+                >
+                  {kycLabel}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 bg-slate-50 border border-slate-200 rounded-2xl p-5">
+              <div className="flex items-start gap-3">
+                <ShieldCheck
+                  size={21}
+                  className="text-emerald-600 mt-0.5 shrink-0"
+                />
+
+                <div>
+                  <div className="font-bold text-slate-900">
+                    Account security
+                  </div>
+
+                  <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                    MatMove keeps authentication and financial operations separated. Wallet balances are controlled by the secure backend and transaction ledger.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-slate-200">
+              <h2 className="text-lg font-bold text-slate-900">
+                Sign out
+              </h2>
+
+              <p className="text-sm text-slate-500 mt-1 mb-4">
+                Sign out of this MatMove account on this device.
+              </p>
+
+              <button
+                onClick={
+                  onLogout
+                }
+                disabled={
+                  loggingOut
+                }
+                className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-red-600 text-white font-bold text-sm hover:bg-red-700 transition flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <LogOut
+                  size={18}
+                />
+
+                {loggingOut
+                  ? 'Signing out...'
+                  : 'Log out of MatMove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

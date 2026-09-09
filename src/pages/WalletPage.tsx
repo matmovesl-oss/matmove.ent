@@ -60,8 +60,55 @@ export function WalletPage({
     wallet?.balance || 0
   );
 
+  const reservedBalance = Number(
+    wallet?.reserved_balance ||
+      wallet?.reservedBalance ||
+      0
+  );
+
+  const availableBalance = Math.max(
+    0,
+    balance - reservedBalance
+  );
+
   const currency =
     wallet?.currency || 'SLE';
+
+  const isFrozen =
+    wallet?.frozen === true ||
+    wallet?.is_frozen === true ||
+    wallet?.isFrozen === true;
+
+  /*
+   * MatMove verification rule:
+   *
+   * Driver and merchant withdrawals are only
+   * available after KYC/business verification
+   * has been approved by MatMove Admin.
+   *
+   * We intentionally require an explicit
+   * "approved" status. Missing/unknown status
+   * therefore remains locked.
+   */
+  const verificationStatus = String(
+    profile?.kyc_status ||
+      profile?.kycStatus ||
+      profile?.verification_status ||
+      profile?.verificationStatus ||
+      ''
+  ).toLowerCase();
+
+  const isVerified =
+    verificationStatus === 'approved';
+
+  const hasAvailableBalance =
+    availableBalance > 0;
+
+  const canWithdraw =
+    isReceiver &&
+    isVerified &&
+    !isFrozen &&
+    hasAvailableBalance;
 
   const firstName =
     profile?.first_name ||
@@ -86,6 +133,36 @@ export function WalletPage({
       : isMerchant
         ? 'Receive customer payments and securely withdraw your business earnings.'
         : 'Manage your MatMove wallet and permitted transactions.';
+
+  const withdrawalStatusLabel =
+    !isVerified
+      ? 'Verification Required'
+      : isFrozen
+        ? 'Wallet Frozen'
+        : !hasAvailableBalance
+          ? 'No Available Funds'
+          : 'Withdraw Available Funds';
+
+  const withdrawalStatusDescription =
+    !isVerified
+      ? isMerchant
+        ? 'Merchant cash withdrawal becomes available after your business verification is approved by MatMove Admin.'
+        : 'Driver cash withdrawal becomes available after your account verification is approved by MatMove Admin.'
+      : isFrozen
+        ? 'This wallet is currently restricted and cannot process withdrawals.'
+        : !hasAvailableBalance
+          ? reservedBalance > 0
+            ? 'Some funds are reserved for a pending financial operation. Your remaining available balance can be withdrawn once funds are released.'
+            : 'There are currently no funds available for withdrawal.'
+          : 'Withdraw your available earnings through a secure supported cash-out method.';
+
+  const handleWithdraw = () => {
+    if (!canWithdraw) {
+      return;
+    }
+
+    onWithdraw?.();
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 md:pb-10">
@@ -146,7 +223,7 @@ export function WalletPage({
 
                 <div className="text-4xl sm:text-5xl font-bold mt-3 tracking-tight">
                   {currency}{' '}
-                  {balance.toLocaleString(
+                  {availableBalance.toLocaleString(
                     undefined,
                     {
                       minimumFractionDigits: 2,
@@ -158,6 +235,20 @@ export function WalletPage({
                 <p className="text-xs text-slate-400 mt-3">
                   Your available MatMove wallet balance.
                 </p>
+
+                {reservedBalance > 0 && (
+                  <p className="text-xs text-amber-300 mt-2">
+                    {currency}{' '}
+                    {reservedBalance.toLocaleString(
+                      undefined,
+                      {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      }
+                    )}{' '}
+                    currently reserved for a pending financial operation.
+                  </p>
+                )}
               </div>
 
               <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center shrink-0">
@@ -288,28 +379,134 @@ export function WalletPage({
                 </div>
               </div>
 
+              {/* =========================
+                  WITHDRAWAL CONTROL
+                 ========================= */}
+
               <button
-                onClick={onWithdraw}
-                className="group bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm hover:border-blue-300 hover:shadow-md transition"
+                onClick={handleWithdraw}
+                disabled={!canWithdraw}
+                aria-disabled={!canWithdraw}
+                className={`group rounded-2xl p-5 text-left shadow-sm transition border ${
+                  canWithdraw
+                    ? 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md cursor-pointer'
+                    : 'bg-slate-100 border-slate-200 cursor-not-allowed'
+                }`}
               >
-                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-100 transition">
-                  <ArrowUpFromLine size={22} />
+                <div
+                  className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${
+                    canWithdraw
+                      ? 'bg-blue-50 text-blue-600 group-hover:bg-blue-100'
+                      : 'bg-slate-200 text-slate-400'
+                  }`}
+                >
+                  {canWithdraw ? (
+                    <ArrowUpFromLine size={22} />
+                  ) : (
+                    <LockKeyhole size={22} />
+                  )}
                 </div>
 
-                <h3 className="font-bold text-slate-900">
-                  Withdraw Cash
-                </h3>
+                <div className="flex items-start justify-between gap-3">
+                  <h3
+                    className={`font-bold ${
+                      canWithdraw
+                        ? 'text-slate-900'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    Withdraw Cash
+                  </h3>
 
-                <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                  Withdraw available earnings through a secure supported
-                  cash-out method.
+                  <span
+                    className={`text-[10px] uppercase tracking-wide font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${
+                      canWithdraw
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-amber-50 text-amber-700'
+                    }`}
+                  >
+                    {canWithdraw
+                      ? 'Available'
+                      : 'Locked'}
+                  </span>
+                </div>
+
+                <p
+                  className={`text-sm mt-1 leading-relaxed ${
+                    canWithdraw
+                      ? 'text-slate-500'
+                      : 'text-slate-400'
+                  }`}
+                >
+                  {withdrawalStatusDescription}
                 </p>
 
-                <div className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-blue-600">
-                  Start secure cash-out
-                  <span aria-hidden="true">→</span>
+                <div
+                  className={`mt-4 inline-flex items-center gap-2 text-xs font-bold ${
+                    canWithdraw
+                      ? 'text-blue-600'
+                      : 'text-slate-400'
+                  }`}
+                >
+                  {withdrawalStatusLabel}
+
+                  {canWithdraw && (
+                    <span aria-hidden="true">
+                      →
+                    </span>
+                  )}
                 </div>
               </button>
+            </div>
+          )}
+
+          {/* =========================
+              VERIFICATION NOTICE
+             ========================= */}
+
+          {isReceiver && !isVerified && (
+            <div className="mt-4 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+              <div className="flex items-start gap-3">
+                <LockKeyhole
+                  size={18}
+                  className="text-amber-600 mt-0.5 shrink-0"
+                />
+
+                <div>
+                  <p className="text-sm font-bold text-amber-900">
+                    Cash withdrawal is locked
+                  </p>
+
+                  <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                    {isMerchant
+                      ? 'Your merchant wallet can receive customer payments, but cash withdrawal will remain locked until MatMove Admin approves your business verification.'
+                      : 'Your driver wallet can receive trip earnings, but cash withdrawal will remain locked until MatMove Admin approves your account verification.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isReceiver && isVerified && isFrozen && (
+            <div className="mt-4 bg-red-50 border border-red-200 rounded-2xl p-4">
+              <div className="flex items-start gap-3">
+                <LockKeyhole
+                  size={18}
+                  className="text-red-600 mt-0.5 shrink-0"
+                />
+
+                <div>
+                  <p className="text-sm font-bold text-red-900">
+                    Wallet withdrawals are temporarily locked
+                  </p>
+
+                  <p className="text-xs text-red-800 mt-1 leading-relaxed">
+                    Your account has an active wallet restriction.
+                    Withdrawals cannot be initiated until the restriction
+                    is removed by the appropriate MatMove process.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </section>
@@ -484,18 +681,33 @@ export function WalletPage({
                 </p>
               </div>
 
-              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
-                <div className="text-xs font-bold uppercase tracking-wider text-blue-700">
+              <div
+                className={`rounded-2xl p-4 border ${
+                  canWithdraw
+                    ? 'bg-blue-50 border-blue-100'
+                    : 'bg-amber-50 border-amber-100'
+                }`}
+              >
+                <div
+                  className={`text-xs font-bold uppercase tracking-wider ${
+                    canWithdraw
+                      ? 'text-blue-700'
+                      : 'text-amber-700'
+                  }`}
+                >
                   Cash Out
                 </div>
 
                 <div className="font-bold text-slate-900 mt-1">
-                  Secure withdrawal
+                  {canWithdraw
+                    ? 'Secure withdrawal available'
+                    : 'Withdrawal locked'}
                 </div>
 
                 <p className="text-xs text-slate-600 mt-1">
-                  Withdrawal is completed only after the payout process
-                  is confirmed.
+                  {canWithdraw
+                    ? 'Withdrawal is completed only after the payout process is confirmed.'
+                    : 'Admin verification is required before cash withdrawal becomes available.'}
                 </p>
               </div>
             </div>
@@ -602,7 +814,7 @@ export function WalletPage({
 
             <SecurityItem
               title="Withdrawal protection"
-              text="Cash-out requests should verify available balance and provider confirmation before final settlement."
+              text="Cash-out requests require approved verification, available balance, and provider confirmation before final settlement."
             />
           </div>
         </section>
@@ -624,7 +836,7 @@ export function WalletPage({
 
               <p className="text-xs text-slate-500 mt-1">
                 Available wallet operations depend on your MatMove
-                account role.
+                account role and verification status.
               </p>
             </div>
           </div>
@@ -657,8 +869,12 @@ export function WalletPage({
                 />
 
                 <PermissionItem
-                  allowed
-                  text="Withdraw available funds"
+                  allowed={canWithdraw}
+                  text={
+                    canWithdraw
+                      ? 'Withdraw available funds'
+                      : 'Withdraw available funds — Admin verification required'
+                  }
                 />
 
                 <PermissionItem
