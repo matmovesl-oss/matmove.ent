@@ -82,7 +82,7 @@ export function RoleSelectionPage() {
 export function PersonalInfoPage() {
   const navigate = useNavigate();
   const [info, setInfo] = useOnboardingState<Partial<PersonalInfo>>('ob_personal', {
-    firstName: '', middleName: '', lastName: '', dateOfBirth: '', 
+    firstName: '', middleName: '', lastName: '', dateOfBirth: '',
     nationality: 'Sierra Leonean', country: 'Sierra Leone', residentialAddress: '', city: '',
   });
 
@@ -329,7 +329,7 @@ export function VehicleSelectionPage() {
 
   const vehicles = [
     { name: 'Motorbike (Okada)', image: '/bike.jpg' },
-    { name: 'Tricycle (Keke)', image: '/keke.jpg' }, 
+    { name: 'Tricycle (Keke)', image: '/keke.jpg' },
     { name: 'Car', image: '/car.jpg' },
     { name: 'Van / Truck', image: '/van.jpg' }
   ];
@@ -344,16 +344,16 @@ export function VehicleSelectionPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
           {vehicles.map((v) => (
-            <button 
-              key={v.name} 
+            <button
+              key={v.name}
               className={`p-6 rounded-3xl border-2 text-left flex flex-col items-center justify-center gap-4 transition-all duration-200 ${vehicle.type === v.name ? 'border-[#184f9a] bg-[#eff6ff] shadow-md' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
               onClick={() => setVehicle({ ...vehicle, type: v.name })}
             >
               <div className="w-full h-28 flex items-center justify-center overflow-hidden">
-                <img 
-                  src={v.image} 
-                  alt={v.name} 
-                  className="max-h-full max-w-full object-contain drop-shadow-sm mix-blend-multiply" 
+                <img
+                  src={v.image}
+                  alt={v.name}
+                  className="max-h-full max-w-full object-contain drop-shadow-sm mix-blend-multiply"
                 />
               </div>
               <strong className="text-lg font-bold text-slate-900">{v.name}</strong>
@@ -387,7 +387,7 @@ export function VehicleSelectionPage() {
 }
 
 export function ReviewPage() {
-  const { session } = useAuth(); // Bypassing context submission to avoid stale state overwriting
+  const { session } = useAuth();
   const navigate = useNavigate();
   const role = getActiveRole();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -404,36 +404,36 @@ export function ReviewPage() {
     try {
       const { data: { session: authSession } } = await supabase.auth.getSession();
       if (!authSession?.user) throw new Error("No active user session found.");
-  
+
       const userId = authSession.user.id;
       const userEmail = authSession.user.email;
       const fullName = `${info.firstName || ''} ${info.middleName || ''} ${info.lastName || ''}`.replace(/\s+/g, ' ').trim() || 'New User';
       const userStatus = role === 'rider' ? 'approved' : 'pending';
-  
-      // Force write to profiles table
+
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
           id: userId,
           email: userEmail,
+          phone: authSession.user.phone || session?.user?.phone || '',
+          first_name: info.firstName || '',
+          last_name: info.lastName || '',
           full_name: fullName,
           role: role,
           kyc_status: userStatus,
           updated_at: new Date().toISOString()
         });
-  
+
       if (profileError) throw profileError;
-  
-      // Ensure wallet row exists
+
       await supabase.from('wallets').upsert({
         user_id: userId,
         balance: 0,
         currency: 'SLE'
       });
-  
-      // Immediately proceed to submission success without calling the stale context
+
       navigate('/onboarding/submitted');
-      
+
     } catch (err: any) {
       console.error("Error submitting onboarding:", err);
       alert(err.message || "Failed to save verification details.");
@@ -528,8 +528,9 @@ export function ReviewPage() {
 
 export function SubmittedPage() {
   const { session, resubmitKycForReview } = useAuth();
+  const navigate = useNavigate();
   const isRejected = session?.kycStatus === 'rejected';
-  const role = getActiveRole(); // Correctly grabbed from local storage to display the exact role applied for
+  const role = getActiveRole();
 
   return (
     <OnboardingShell step={7}>
@@ -546,8 +547,12 @@ export function SubmittedPage() {
               <div className="flex justify-between items-center py-3 border-b border-slate-200 last:border-0"><span className="text-slate-500">Account type</span><strong className="text-slate-900 capitalize">{role}</strong></div>
             </div>
 
-            {/* Forces a hard page reload to root so AuthContext fetches explicitly from the updated database row */}
-            <button className="primary-button w-full max-w-md mx-auto py-4" onClick={() => window.location.href = '/'}>Access dashboard <ArrowRight size={17} /></button>
+            <button
+              className="primary-button w-full max-w-md mx-auto py-4"
+              onClick={() => navigate('/customer')}
+            >
+              Access dashboard <ArrowRight size={17} />
+            </button>
           </>
         ) : (
           <>
