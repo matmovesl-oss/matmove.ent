@@ -23,7 +23,6 @@ import {
   roleLabels,
   roleDescriptions,
 } from '@/services/roleService';
-import { supabase } from '@/lib/supabase';
 import type {
   UserRole,
   PersonalInfo,
@@ -34,13 +33,17 @@ import type {
   DocumentType,
 } from '@/types';
 
+type OnboardingPersonalInfo =
+  Partial<PersonalInfo> & {
+    phone?: string;
+  };
+
 function useOnboardingState<T>(
   key: string,
   initialValue: T
 ) {
   const [state, setState] = useState<T>(() => {
-    const stored =
-      sessionStorage.getItem(key);
+    const stored = sessionStorage.getItem(key);
 
     if (!stored) {
       return initialValue;
@@ -83,6 +86,12 @@ function getActiveRole(): UserRole {
   return 'rider';
 }
 
+function normalizePhone(value: string): string {
+  return value
+    .trim()
+    .replace(/[^\d+]/g, '');
+}
+
 export function RoleSelectionPage() {
   const { setRoles } = useAuth();
   const navigate = useNavigate();
@@ -115,38 +124,35 @@ export function RoleSelectionPage() {
     },
   ];
 
-  const handleContinue =
-    async () => {
-      if (!selected) {
-        return;
-      }
+  const handleContinue = async () => {
+    if (!selected) {
+      return;
+    }
 
-      setIsProcessing(true);
+    setIsProcessing(true);
 
-      try {
-        sessionStorage.setItem(
-          'ob_role',
-          selected
-        );
+    try {
+      sessionStorage.setItem(
+        'ob_role',
+        selected
+      );
 
-        await setRoles([selected]);
+      await setRoles([selected]);
 
-        navigate(
-          '/onboarding/personal'
-        );
-      } catch (error) {
-        console.error(
-          'Role selection error:',
-          error
-        );
+      navigate('/onboarding/personal');
+    } catch (error) {
+      console.error(
+        'Role selection error:',
+        error
+      );
 
-        alert(
-          'Failed to save your account type. Please check your internet connection and try again.'
-        );
-      } finally {
-        setIsProcessing(false);
-      }
-    };
+      alert(
+        'Failed to save your account type. Please check your internet connection and try again.'
+      );
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <OnboardingShell step={2}>
@@ -207,9 +213,7 @@ export function RoleSelectionPage() {
           <button
             type="button"
             className="back-button"
-            onClick={() =>
-              navigate('/')
-            }
+            onClick={() => navigate('/')}
             disabled={isProcessing}
           >
             <ArrowLeft size={16} />
@@ -245,27 +249,25 @@ export function PersonalInfoPage() {
     info,
     setInfo,
   ] =
-    useOnboardingState<
-      Partial<PersonalInfo>
-    >(
+    useOnboardingState<OnboardingPersonalInfo>(
       'ob_personal',
       {
         firstName: '',
         middleName: '',
         lastName: '',
+        phone: '',
         dateOfBirth: '',
         nationality:
           'Sierra Leonean',
         country:
           'Sierra Leone',
-        residentialAddress:
-          '',
+        residentialAddress: '',
         city: '',
       }
     );
 
   const update = (
-    field: keyof PersonalInfo,
+    field: keyof OnboardingPersonalInfo,
     value: string
   ) => {
     setInfo({
@@ -274,13 +276,19 @@ export function PersonalInfoPage() {
     });
   };
 
+  const normalizedPhone =
+    normalizePhone(
+      info.phone ?? ''
+    );
+
   const isValid =
     Boolean(
-      info.firstName &&
-        info.lastName &&
+      info.firstName?.trim() &&
+        info.lastName?.trim() &&
+        normalizedPhone &&
         info.dateOfBirth &&
-        info.residentialAddress &&
-        info.city
+        info.residentialAddress?.trim() &&
+        info.city?.trim()
     );
 
   return (
@@ -310,6 +318,7 @@ export function PersonalInfoPage() {
                 )
               }
               placeholder="Aisha"
+              autoComplete="given-name"
             />
           </Field>
 
@@ -326,6 +335,7 @@ export function PersonalInfoPage() {
                 )
               }
               placeholder="Mariama"
+              autoComplete="additional-name"
             />
           </Field>
 
@@ -342,7 +352,34 @@ export function PersonalInfoPage() {
                 )
               }
               placeholder="Kamara"
+              autoComplete="family-name"
             />
+          </Field>
+
+          <Field label="Phone number">
+            <input
+              className="ob-input"
+              value={
+                info.phone ?? ''
+              }
+              onChange={(e) =>
+                update(
+                  'phone',
+                  e.target.value
+                )
+              }
+              placeholder="+232 76 123 456"
+              inputMode="tel"
+              autoComplete="tel"
+              required
+            />
+
+            <small className="block mt-1 text-xs text-slate-500">
+              Use the phone number you will
+              use for MatMove payments,
+              withdrawals and account
+              verification.
+            </small>
           </Field>
 
           <Field label="Date of birth">
@@ -408,6 +445,7 @@ export function PersonalInfoPage() {
                 )
               }
               placeholder="123 Lumley Beach Road"
+              autoComplete="street-address"
             />
           </Field>
 
@@ -424,8 +462,25 @@ export function PersonalInfoPage() {
                 )
               }
               placeholder="Freetown"
+              autoComplete="address-level2"
             />
           </Field>
+        </div>
+
+        <div className="mt-8 p-4 bg-slate-50 rounded-xl flex items-start gap-3 text-sm text-slate-600 border border-slate-200">
+          <ShieldCheck
+            className="text-[#32a84a] shrink-0"
+            size={20}
+          />
+
+          <span>
+            Your personal information is
+            encrypted and securely stored.
+            Your phone number is used to
+            identify your MatMove account
+            and support verified financial
+            transactions.
+          </span>
         </div>
 
         <div className="ob-actions">
@@ -433,9 +488,7 @@ export function PersonalInfoPage() {
             type="button"
             className="back-button"
             onClick={() =>
-              navigate(
-                '/select-role'
-              )
+              navigate('/select-role')
             }
           >
             <ArrowLeft size={16} />
@@ -446,11 +499,17 @@ export function PersonalInfoPage() {
             type="button"
             className="primary-button"
             disabled={!isValid}
-            onClick={() =>
+            onClick={() => {
+              setInfo({
+                ...info,
+                phone:
+                  normalizedPhone,
+              });
+
               navigate(
                 '/onboarding/identity'
-              )
-            }
+              );
+            }}
           >
             Continue
             <ArrowRight size={17} />
@@ -895,6 +954,7 @@ export function IdentityPage() {
                       e.target.value
                     )
                   }
+                  inputMode="tel"
                 />
               </Field>
             </div>
@@ -1311,6 +1371,55 @@ export function SelfiePage() {
       UploadedDocument | undefined
     >(undefined);
 
+  useEffect(() => {
+    const stored =
+      sessionStorage.getItem(
+        'ob_selfie'
+      );
+
+    if (stored) {
+      try {
+        setSelfie(
+          JSON.parse(
+            stored
+          ) as UploadedDocument
+        );
+      } catch {
+        sessionStorage.removeItem(
+          'ob_selfie'
+        );
+      }
+    }
+  }, []);
+
+  const handleSelfieUpload = (
+    document: UploadedDocument
+  ) => {
+    setSelfie(document);
+
+    sessionStorage.setItem(
+      'ob_selfie',
+      JSON.stringify({
+        id: document.id,
+        type: document.type,
+        fileName:
+          document.fileName,
+        fileSize:
+          document.fileSize,
+        status:
+          document.status,
+      })
+    );
+  };
+
+  const handleSelfieRemove =
+    () => {
+      setSelfie(undefined);
+      sessionStorage.removeItem(
+        'ob_selfie'
+      );
+    };
+
   return (
     <OnboardingShell step={6}>
       <div className="ob-page animate-in">
@@ -1336,12 +1445,10 @@ export function SelfiePage() {
             <SelfieUpload
               document={selfie}
               onUpload={
-                setSelfie
+                handleSelfieUpload
               }
-              onRemove={() =>
-                setSelfie(
-                  undefined
-                )
+              onRemove={
+                handleSelfieRemove
               }
             />
           </div>
@@ -1594,9 +1701,7 @@ export function ReviewPage() {
     useState(false);
 
   const [info] =
-    useOnboardingState<
-      Partial<PersonalInfo>
-    >(
+    useOnboardingState<OnboardingPersonalInfo>(
       'ob_personal',
       {}
     );
@@ -1634,12 +1739,19 @@ export function ReviewPage() {
     );
 
   const displayPhone =
-    session?.user?.phone ||
-    'Number saved securely';
+    normalizePhone(
+      info.phone ??
+        session?.user?.phone ??
+        ''
+    ) ||
+    'Phone number not provided';
 
   const handleFinalSubmit =
     async () => {
-      if (isSubmitting || loading) {
+      if (
+        isSubmitting ||
+        loading
+      ) {
         return;
       }
 
@@ -1652,15 +1764,23 @@ export function ReviewPage() {
         return;
       }
 
+      if (!displayPhone ||
+        displayPhone ===
+          'Phone number not provided'
+      ) {
+        alert(
+          'Please return to Personal Information and enter your phone number before submitting.'
+        );
+
+        navigate(
+          '/onboarding/personal'
+        );
+        return;
+      }
+
       setIsSubmitting(true);
 
       try {
-        /*
-         * The secure submission logic now lives in
-         * AuthContext. This prevents the review page
-         * from creating duplicate profiles or wallets
-         * directly from the browser.
-         */
         await submitKycForReview();
       } catch (error: any) {
         console.error(
