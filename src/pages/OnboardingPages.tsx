@@ -43,7 +43,8 @@ function useOnboardingState<T>(
   initialValue: T
 ) {
   const [state, setState] = useState<T>(() => {
-    const stored = sessionStorage.getItem(key);
+    const stored =
+      sessionStorage.getItem(key);
 
     if (!stored) {
       return initialValue;
@@ -59,6 +60,7 @@ function useOnboardingState<T>(
 
   const setPersistentState = (value: T) => {
     setState(value);
+
     sessionStorage.setItem(
       key,
       JSON.stringify(value)
@@ -86,18 +88,61 @@ function getActiveRole(): UserRole {
   return 'rider';
 }
 
-function normalizePhone(value: string): string {
+function normalizePhone(
+  value: string
+): string {
   return value
     .trim()
     .replace(/[^\d+]/g, '');
 }
 
+function getOnboardingVehicle() {
+  try {
+    const raw =
+      sessionStorage.getItem(
+        'ob_vehicle'
+      );
+
+    if (!raw) {
+      return {
+        type: '',
+        plateNumber: '',
+        region: '',
+      };
+    }
+
+    return JSON.parse(raw) as {
+      type: string;
+      plateNumber: string;
+      region: string;
+    };
+  } catch {
+    return {
+      type: '',
+      plateNumber: '',
+      region: '',
+    };
+  }
+}
+
 export function RoleSelectionPage() {
-  const { setRoles } = useAuth();
   const navigate = useNavigate();
 
   const [selected, setSelected] =
-    useState<UserRole | null>(null);
+    useState<UserRole | null>(
+      () => {
+        const stored =
+          sessionStorage.getItem(
+            'ob_role'
+          );
+
+        return stored === 'rider' ||
+          stored === 'driver' ||
+          stored === 'merchant'
+          ? stored
+          : null;
+      }
+    );
 
   const [isProcessing, setIsProcessing] =
     useState(false);
@@ -132,14 +177,22 @@ export function RoleSelectionPage() {
     setIsProcessing(true);
 
     try {
+      /*
+       * Role selection is onboarding state.
+       *
+       * The customer browser must not directly
+       * modify user_roles. Final role persistence
+       * belongs to the secured backend onboarding
+       * workflow.
+       */
       sessionStorage.setItem(
         'ob_role',
         selected
       );
 
-      await setRoles([selected]);
-
-      navigate('/onboarding/personal');
+      navigate(
+        '/onboarding/personal'
+      );
     } catch (error) {
       console.error(
         'Role selection error:',
@@ -147,7 +200,7 @@ export function RoleSelectionPage() {
       );
 
       alert(
-        'Failed to save your account type. Please check your internet connection and try again.'
+        'Failed to save your account type. Please try again.'
       );
     } finally {
       setIsProcessing(false);
@@ -163,7 +216,6 @@ export function RoleSelectionPage() {
 
         <p className="ob-subtitle">
           Choose your primary account type.
-          You can add more roles later.
         </p>
 
         <div className="role-choice-grid">
@@ -183,6 +235,9 @@ export function RoleSelectionPage() {
                 }`}
                 onClick={() =>
                   setSelected(key)
+                }
+                disabled={
+                  isProcessing
                 }
               >
                 <div
@@ -213,8 +268,12 @@ export function RoleSelectionPage() {
           <button
             type="button"
             className="back-button"
-            onClick={() => navigate('/')}
-            disabled={isProcessing}
+            onClick={() =>
+              navigate('/')
+            }
+            disabled={
+              isProcessing
+            }
           >
             <ArrowLeft size={16} />
             Back
@@ -475,11 +534,10 @@ export function PersonalInfoPage() {
 
           <span>
             Your personal information is
-            encrypted and securely stored.
-            Your phone number is used to
-            identify your MatMove account
-            and support verified financial
-            transactions.
+            securely stored. Your phone number
+            is used to identify your MatMove
+            account and support verified
+            financial transactions.
           </span>
         </div>
 
@@ -488,7 +546,9 @@ export function PersonalInfoPage() {
             type="button"
             className="back-button"
             onClick={() =>
-              navigate('/select-role')
+              navigate(
+                '/select-role'
+              )
             }
           >
             <ArrowLeft size={16} />
@@ -1415,6 +1475,7 @@ export function SelfiePage() {
   const handleSelfieRemove =
     () => {
       setSelfie(undefined);
+
       sessionStorage.removeItem(
         'ob_selfie'
       );
@@ -1511,7 +1572,7 @@ export function VehicleSelectionPage() {
       plateNumber: string;
       region: string;
     }>(
-      'ob_vehicle_details',
+      'ob_vehicle',
       {
         type: '',
         plateNumber: '',
@@ -1542,7 +1603,7 @@ export function VehicleSelectionPage() {
   const isValid =
     Boolean(
       vehicle.type &&
-        vehicle.plateNumber &&
+        vehicle.plateNumber?.trim() &&
         vehicle.region
     );
 
@@ -1697,7 +1758,10 @@ export function ReviewPage() {
   const navigate = useNavigate();
   const role = getActiveRole();
 
-  const [isSubmitting, setIsSubmitting] =
+  const [
+    isSubmitting,
+    setIsSubmitting,
+  ] =
     useState(false);
 
   const [info] =
@@ -1730,7 +1794,7 @@ export function ReviewPage() {
       plateNumber: string;
       region: string;
     }>(
-      'ob_vehicle_details',
+      'ob_vehicle',
       {
         type: '',
         plateNumber: '',
@@ -1743,8 +1807,7 @@ export function ReviewPage() {
       info.phone ??
         session?.user?.phone ??
         ''
-    ) ||
-    'Phone number not provided';
+    );
 
   const handleFinalSubmit =
     async () => {
@@ -1764,10 +1827,7 @@ export function ReviewPage() {
         return;
       }
 
-      if (!displayPhone ||
-        displayPhone ===
-          'Phone number not provided'
-      ) {
+      if (!displayPhone) {
         alert(
           'Please return to Personal Information and enter your phone number before submitting.'
         );
@@ -1782,15 +1842,16 @@ export function ReviewPage() {
 
       try {
         await submitKycForReview();
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(
           'Error submitting onboarding:',
           error
         );
 
         const message =
-          error?.message ||
-          'Failed to submit your verification details. Please try again.';
+          error instanceof Error
+            ? error.message
+            : 'Failed to submit your verification details. Please try again.';
 
         alert(message);
       } finally {
@@ -1812,11 +1873,9 @@ export function ReviewPage() {
 
         <div className="space-y-6 mt-8">
           <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 relative">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2 font-bold text-lg text-slate-900">
-                <FileText className="text-[#184f9a]" size={20} />
-                Account type
-              </div>
+            <div className="flex items-center gap-2 font-bold text-lg text-slate-900 mb-4">
+              <FileText className="text-[#184f9a]" size={20} />
+              Account type
             </div>
 
             <div className="text-xl font-bold text-[#184f9a]">
@@ -1867,7 +1926,8 @@ export function ReviewPage() {
                 </small>
 
                 <strong className="text-slate-900 text-lg">
-                  {displayPhone}
+                  {displayPhone ||
+                    'Phone number not provided'}
                 </strong>
               </div>
 
@@ -2053,7 +2113,8 @@ export function ReviewPage() {
             By submitting, you confirm the
             information is accurate. False
             information may result in account
-            suspension.
+            suspension. Your submission will
+            be reviewed by MatMove.
           </span>
         </div>
 
@@ -2118,8 +2179,8 @@ export function SubmittedPage() {
     )
       ? 'driver'
       : session?.roles?.includes(
-            'merchant'
-          )
+          'merchant'
+        )
         ? 'merchant'
         : getActiveRole();
 
@@ -2155,8 +2216,8 @@ export function SubmittedPage() {
 
             <p className="text-slate-500 mb-10 max-w-sm mx-auto text-lg">
               Your verification is now under
-              review. We'll notify you within
-              24–48 hours.
+              review. MatMove will notify you
+              when a decision has been made.
             </p>
 
             <div className="bg-slate-50 rounded-2xl border border-slate-200 p-6 mb-10 text-left max-w-md mx-auto">
@@ -2183,7 +2244,7 @@ export function SubmittedPage() {
                 </span>
 
                 <strong className="text-orange-600 bg-orange-50 px-3 py-1 rounded-full text-sm">
-                  Under Review
+                  Pending
                 </strong>
               </div>
 
@@ -2235,9 +2296,10 @@ export function SubmittedPage() {
               />
 
               <span className="font-medium">
-                The ID document image is blurry
-                or unreadable. Please upload a
-                clearer copy.
+                Your verification requires
+                additional information. Please
+                review your submission and
+                upload the requested documents.
               </span>
             </div>
 

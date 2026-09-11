@@ -23,13 +23,102 @@ type WalletRole =
   | 'vendor'
   | string;
 
+type WalletCurrency =
+  | 'SLE'
+  | 'USD';
+
+interface WalletRecord {
+  id?: string;
+  user_id?: string;
+  balance?: number | string;
+  reserved_balance?: number | string;
+  currency?: string;
+  is_frozen?: boolean;
+  frozen?: boolean;
+  isFrozen?: boolean;
+}
+
 interface WalletPageProps {
   profile?: any;
-  wallet?: any;
+  wallet?: WalletRecord & {
+    wallets?: WalletRecord[];
+  };
   onClose?: () => void;
   onTopUp?: () => void;
   onWithdraw?: () => void;
   onSendMoney?: () => void;
+}
+
+function normalizeCurrency(
+  value: unknown
+): WalletCurrency {
+  return String(
+    value || ''
+  ).toUpperCase() === 'USD'
+    ? 'USD'
+    : 'SLE';
+}
+
+function formatMoney(
+  value: number,
+  currency: WalletCurrency
+) {
+  return `${currency} ${value.toLocaleString(
+    undefined,
+    {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }
+  )}`;
+}
+
+function getWalletBalance(
+  wallet?: WalletRecord
+) {
+  const value = Number(
+    wallet?.balance || 0
+  );
+
+  return Number.isFinite(value)
+    ? Math.max(0, value)
+    : 0;
+}
+
+function getReservedBalance(
+  wallet?: WalletRecord
+) {
+  const value = Number(
+    wallet?.reserved_balance || 0
+  );
+
+  return Number.isFinite(value)
+    ? Math.max(0, value)
+    : 0;
+}
+
+function getAvailableBalance(
+  wallet?: WalletRecord
+) {
+  const balance =
+    getWalletBalance(wallet);
+
+  const reserved =
+    getReservedBalance(wallet);
+
+  return Math.max(
+    0,
+    balance - reserved
+  );
+}
+
+function isWalletFrozen(
+  wallet?: WalletRecord
+) {
+  return (
+    wallet?.frozen === true ||
+    wallet?.is_frozen === true ||
+    wallet?.isFrozen === true
+  );
 }
 
 export function WalletPage({
@@ -40,75 +129,218 @@ export function WalletPage({
   onWithdraw,
   onSendMoney,
 }: WalletPageProps) {
-  const role: WalletRole = String(
-    profile?.role || ''
-  ).toLowerCase();
+  const role: WalletRole =
+    String(
+      profile?.role || ''
+    ).toLowerCase();
 
   const isRider =
-    role === 'rider' || role === 'client';
+    role === 'rider' ||
+    role === 'client';
 
-  const isDriver = role === 'driver';
+  const isDriver =
+    role === 'driver';
 
   const isMerchant =
     role === 'merchant' ||
     role === 'vendor';
 
   const isReceiver =
-    isDriver || isMerchant;
-
-  const balance = Number(
-    wallet?.balance || 0
-  );
-
-  const reservedBalance = Number(
-    wallet?.reserved_balance ||
-      wallet?.reservedBalance ||
-      0
-  );
-
-  const availableBalance = Math.max(
-    0,
-    balance - reservedBalance
-  );
-
-  const currency =
-    wallet?.currency || 'SLE';
-
-  const isFrozen =
-    wallet?.frozen === true ||
-    wallet?.is_frozen === true ||
-    wallet?.isFrozen === true;
+    isDriver ||
+    isMerchant;
 
   /*
-   * MatMove verification rule:
+   * ---------------------------------------------------------
+   * MULTI-CURRENCY WALLET MODEL
+   * ---------------------------------------------------------
    *
-   * Driver and merchant withdrawals are only
-   * available after KYC/business verification
-   * has been approved by MatMove Admin.
+   * PortalApp may supply:
    *
-   * We intentionally require an explicit
-   * "approved" status. Missing/unknown status
-   * therefore remains locked.
+   * wallet.wallets = [
+   *   SLE wallet,
+   *   USD wallet
+   * ]
+   *
+   * Each currency is resolved independently.
    */
-  const verificationStatus = String(
-    profile?.kyc_status ||
-      profile?.kycStatus ||
-      profile?.verification_status ||
-      profile?.verificationStatus ||
-      ''
-  ).toLowerCase();
+
+  const walletList =
+    Array.isArray(
+      wallet?.wallets
+    )
+      ? wallet.wallets
+      : wallet
+        ? [wallet]
+        : [];
+
+  const sleWallet =
+    walletList.find(
+      (item) =>
+        normalizeCurrency(
+          item.currency
+        ) === 'SLE'
+    );
+
+  const usdWallet =
+    walletList.find(
+      (item) =>
+        normalizeCurrency(
+          item.currency
+        ) === 'USD'
+    );
+
+  /*
+   * Backward-compatible fallback for older
+   * PortalApp state where only one wallet
+   * object is supplied.
+   */
+
+  const resolvedSleWallet =
+    sleWallet ||
+    (normalizeCurrency(
+      wallet?.currency
+    ) === 'SLE'
+      ? wallet
+      : undefined);
+
+  const resolvedUsdWallet =
+    usdWallet ||
+    (normalizeCurrency(
+      wallet?.currency
+    ) === 'USD'
+      ? wallet
+      : undefined);
+
+  /*
+   * ---------------------------------------------------------
+   * SLE WALLET
+   * ---------------------------------------------------------
+   */
+
+  const sleBalance =
+    getWalletBalance(
+      resolvedSleWallet
+    );
+
+  const sleReserved =
+    getReservedBalance(
+      resolvedSleWallet
+    );
+
+  const sleAvailable =
+    getAvailableBalance(
+      resolvedSleWallet
+    );
+
+  const sleFrozen =
+    isWalletFrozen(
+      resolvedSleWallet
+    );
+
+  /*
+   * ---------------------------------------------------------
+   * USD WALLET
+   * ---------------------------------------------------------
+   */
+
+  const usdBalance =
+    getWalletBalance(
+      resolvedUsdWallet
+    );
+
+  const usdReserved =
+    getReservedBalance(
+      resolvedUsdWallet
+    );
+
+  const usdAvailable =
+    getAvailableBalance(
+      resolvedUsdWallet
+    );
+
+  const usdFrozen =
+    isWalletFrozen(
+      resolvedUsdWallet
+    );
+
+  /*
+   * ---------------------------------------------------------
+   * PRIMARY DISPLAY BALANCE
+   * ---------------------------------------------------------
+   *
+   * SLE is the default operational wallet.
+   *
+   * If an older rider-only state contains
+   * only USD, use USD as the fallback.
+   */
+
+  const primaryCurrency: WalletCurrency =
+    isRider &&
+    !resolvedSleWallet &&
+    !!resolvedUsdWallet
+      ? 'USD'
+      : 'SLE';
+
+  const primaryBalance =
+    primaryCurrency === 'USD'
+      ? usdAvailable
+      : sleAvailable;
+
+  const primaryReserved =
+    primaryCurrency === 'USD'
+      ? usdReserved
+      : sleReserved;
+
+  const primaryFrozen =
+    primaryCurrency === 'USD'
+      ? usdFrozen
+      : sleFrozen;
+
+  /*
+   * ---------------------------------------------------------
+   * VERIFICATION
+   * ---------------------------------------------------------
+   *
+   * Driver and merchant withdrawals are
+   * available only after Admin approval.
+   */
+
+  const verificationStatus =
+    String(
+      profile?.kyc_status ||
+        profile?.kycStatus ||
+        profile?.verification_status ||
+        profile?.verificationStatus ||
+        ''
+    ).toLowerCase();
 
   const isVerified =
-    verificationStatus === 'approved';
+    verificationStatus ===
+    'approved';
 
-  const hasAvailableBalance =
-    availableBalance > 0;
+  /*
+   * ---------------------------------------------------------
+   * WITHDRAWAL PERMISSION
+   * ---------------------------------------------------------
+   *
+   * Withdrawal is:
+   *
+   * 1. Driver/merchant only
+   * 2. KYC approved
+   * 3. SLE wallet not frozen
+   * 4. Available SLE balance > 0
+   *
+   * Reserved SLE is deliberately excluded.
+   */
+
+  const hasAvailableSleBalance =
+    sleAvailable > 0;
 
   const canWithdraw =
     isReceiver &&
     isVerified &&
-    !isFrozen &&
-    hasAvailableBalance;
+    !sleFrozen &&
+    hasAvailableSleBalance;
 
   const firstName =
     profile?.first_name ||
@@ -118,51 +350,57 @@ export function WalletPage({
       ?.filter(Boolean)?.[0] ||
     'User';
 
-  const roleLabel = isRider
-    ? 'Rider Wallet'
-    : isDriver
-      ? 'Driver Wallet'
-      : isMerchant
-        ? 'Merchant Wallet'
-        : 'MatMove Wallet';
+  const roleLabel =
+    isRider
+      ? 'Rider Wallet'
+      : isDriver
+        ? 'Driver Wallet'
+        : isMerchant
+          ? 'Merchant Wallet'
+          : 'MatMove Wallet';
 
-  const roleDescription = isRider
-    ? 'Fund your wallet securely and use your MatMove balance to pay for services and purchases.'
-    : isDriver
-      ? 'Receive trip payments and securely withdraw your available earnings.'
-      : isMerchant
-        ? 'Receive customer payments and securely withdraw your business earnings.'
-        : 'Manage your MatMove wallet and permitted transactions.';
+  const roleDescription =
+    isRider
+      ? 'Fund your wallet securely and use your MatMove balance to pay for services and purchases.'
+      : isDriver
+        ? 'Receive trip payments and securely withdraw your available earnings.'
+        : isMerchant
+          ? 'Receive customer payments and securely withdraw your business earnings.'
+          : 'Manage your MatMove wallet and permitted transactions.';
 
   const withdrawalStatusLabel =
     !isVerified
       ? 'Verification Required'
-      : isFrozen
+      : sleFrozen
         ? 'Wallet Frozen'
-        : !hasAvailableBalance
-          ? 'No Available Funds'
-          : 'Withdraw Available Funds';
+        : !hasAvailableSleBalance
+          ? 'No Available SLE Funds'
+          : 'Withdraw Available SLE Funds';
 
   const withdrawalStatusDescription =
     !isVerified
       ? isMerchant
         ? 'Merchant cash withdrawal becomes available after your business verification is approved by MatMove Admin.'
         : 'Driver cash withdrawal becomes available after your account verification is approved by MatMove Admin.'
-      : isFrozen
-        ? 'This wallet is currently restricted and cannot process withdrawals.'
-        : !hasAvailableBalance
-          ? reservedBalance > 0
-            ? 'Some funds are reserved for a pending financial operation. Your remaining available balance can be withdrawn once funds are released.'
-            : 'There are currently no funds available for withdrawal.'
-          : 'Withdraw your available earnings through a secure supported cash-out method.';
+      : sleFrozen
+        ? 'Your SLE wallet is currently restricted and cannot process withdrawals.'
+        : !hasAvailableSleBalance
+          ? sleReserved > 0
+            ? `${formatMoney(
+                sleReserved,
+                'SLE'
+              )} is reserved for a pending financial operation. Your remaining available SLE balance can be withdrawn once funds are released.`
+            : 'There are currently no SLE funds available for withdrawal.'
+          : 'Withdraw your available SLE earnings through a secure supported Mobile Money method.';
 
-  const handleWithdraw = () => {
-    if (!canWithdraw) {
-      return;
-    }
+  const handleWithdraw =
+    () => {
+      if (!canWithdraw) {
+        return;
+      }
 
-    onWithdraw?.();
-  };
+      onWithdraw?.();
+    };
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 md:pb-10">
@@ -188,13 +426,16 @@ export function WalletPage({
             </h1>
 
             <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-              Hello, {firstName}. {roleDescription}
+              Hello, {firstName}.{' '}
+              {roleDescription}
             </p>
           </div>
 
           {onClose && (
             <button
-              onClick={onClose}
+              onClick={
+                onClose
+              }
               className="p-2.5 rounded-full bg-slate-100 text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition shrink-0"
               aria-label="Close wallet"
             >
@@ -206,11 +447,66 @@ export function WalletPage({
 
       <main className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         {/* =========================
-            BALANCE
+            CURRENCY BALANCES
+           ========================= */}
+
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <CurrencyBalanceCard
+            currency="SLE"
+            balance={
+              sleAvailable
+            }
+            reserved={
+              sleReserved
+            }
+            frozen={
+              sleFrozen
+            }
+            label={
+              isReceiver
+                ? 'Earnings Wallet'
+                : 'Spending Wallet'
+            }
+            description={
+              isReceiver
+                ? 'Trip and customer payments are held here.'
+                : 'Mobile Money funding and MatMove spending.'
+            }
+            icon={
+              <Banknote
+                size={21}
+              />
+            }
+          />
+
+          <CurrencyBalanceCard
+            currency="USD"
+            balance={
+              usdAvailable
+            }
+            reserved={
+              usdReserved
+            }
+            frozen={
+              usdFrozen
+            }
+            label="USD Wallet"
+            description="Available for supported USD wallet funding and transactions."
+            icon={
+              <CreditCard
+                size={21}
+              />
+            }
+          />
+        </section>
+
+        {/* =========================
+            PRIMARY BALANCE
            ========================= */}
 
         <section className="bg-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-lg overflow-hidden relative">
           <div className="absolute -right-20 -top-20 w-56 h-56 rounded-full bg-blue-500/10" />
+
           <div className="absolute -right-10 -bottom-24 w-48 h-48 rounded-full bg-emerald-500/10" />
 
           <div className="relative">
@@ -218,17 +514,16 @@ export function WalletPage({
               <div>
                 <div className="flex items-center gap-2 text-slate-300 text-sm font-medium">
                   <Wallet size={18} />
-                  Available Balance
+
+                  Available{' '}
+                  {primaryCurrency}{' '}
+                  Balance
                 </div>
 
                 <div className="text-4xl sm:text-5xl font-bold mt-3 tracking-tight">
-                  {currency}{' '}
-                  {availableBalance.toLocaleString(
-                    undefined,
-                    {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }
+                  {formatMoney(
+                    primaryBalance,
+                    primaryCurrency
                   )}
                 </div>
 
@@ -236,15 +531,12 @@ export function WalletPage({
                   Your available MatMove wallet balance.
                 </p>
 
-                {reservedBalance > 0 && (
+                {primaryReserved >
+                  0 && (
                   <p className="text-xs text-amber-300 mt-2">
-                    {currency}{' '}
-                    {reservedBalance.toLocaleString(
-                      undefined,
-                      {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      }
+                    {formatMoney(
+                      primaryReserved,
+                      primaryCurrency
                     )}{' '}
                     currently reserved for a pending financial operation.
                   </p>
@@ -252,7 +544,15 @@ export function WalletPage({
               </div>
 
               <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center shrink-0">
-                <LockKeyhole size={22} />
+                {primaryFrozen ? (
+                  <LockKeyhole
+                    size={22}
+                  />
+                ) : (
+                  <ShieldCheck
+                    size={22}
+                  />
+                )}
               </div>
             </div>
 
@@ -282,6 +582,68 @@ export function WalletPage({
         </section>
 
         {/* =========================
+            CURRENCY INFORMATION
+           ========================= */}
+
+        <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+          <div className="flex items-start gap-3 mb-5">
+            <div className="w-10 h-10 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center shrink-0">
+              <Landmark size={20} />
+            </div>
+
+            <div>
+              <h2 className="font-bold text-slate-900">
+                Your MatMove Wallets
+              </h2>
+
+              <p className="text-sm text-slate-500 mt-1">
+                MatMove maintains separate SLE and USD wallet balances.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <WalletSummary
+              currency="SLE"
+              balance={
+                sleBalance
+              }
+              available={
+                sleAvailable
+              }
+              reserved={
+                sleReserved
+              }
+              frozen={
+                sleFrozen
+              }
+              description={
+                isReceiver
+                  ? 'Driver and merchant earnings, customer payments, and Mobile Money withdrawals.'
+                  : 'Mobile Money funding and everyday MatMove spending.'
+              }
+            />
+
+            <WalletSummary
+              currency="USD"
+              balance={
+                usdBalance
+              }
+              available={
+                usdAvailable
+              }
+              reserved={
+                usdReserved
+              }
+              frozen={
+                usdFrozen
+              }
+              description="Supported USD wallet funding through secure card checkout."
+            />
+          </div>
+        </section>
+
+        {/* =========================
             PRIMARY ACTIONS
            ========================= */}
 
@@ -305,7 +667,9 @@ export function WalletPage({
           {isRider && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <button
-                onClick={onTopUp}
+                onClick={
+                  onTopUp
+                }
                 className="group bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm hover:border-blue-300 hover:shadow-md transition"
               >
                 <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-100 transition">
@@ -317,18 +681,34 @@ export function WalletPage({
                 </h3>
 
                 <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                  Add money to your MatMove wallet using Mobile Money or
-                  a supported bank card.
+                  Add money securely using Mobile Money for SLE or a
+                  supported bank card for USD.
                 </p>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg">
+                    <Smartphone size={13} />
+                    SLE
+                  </span>
+
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg">
+                    <CreditCard size={13} />
+                    USD
+                  </span>
+                </div>
 
                 <div className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-blue-600">
                   Start wallet funding
-                  <span aria-hidden="true">→</span>
+                  <span aria-hidden="true">
+                    →
+                  </span>
                 </div>
               </button>
 
               <button
-                onClick={onSendMoney}
+                onClick={
+                  onSendMoney
+                }
                 className="group bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm hover:border-emerald-300 hover:shadow-md transition"
               >
                 <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-100 transition">
@@ -346,7 +726,9 @@ export function WalletPage({
 
                 <div className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-emerald-600">
                   Wallet-to-wallet payment
-                  <span aria-hidden="true">→</span>
+                  <span aria-hidden="true">
+                    →
+                  </span>
                 </div>
               </button>
             </div>
@@ -369,8 +751,8 @@ export function WalletPage({
 
                 <p className="text-sm text-slate-500 mt-1 leading-relaxed">
                   {isDriver
-                    ? 'Receive customer and trip payments directly into your MatMove wallet.'
-                    : 'Receive customer payments directly into your merchant wallet.'}
+                    ? 'Receive customer and trip payments directly into your MatMove SLE wallet.'
+                    : 'Receive customer payments directly into your merchant SLE wallet.'}
                 </p>
 
                 <div className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg">
@@ -379,14 +761,16 @@ export function WalletPage({
                 </div>
               </div>
 
-              {/* =========================
-                  WITHDRAWAL CONTROL
-                 ========================= */}
-
               <button
-                onClick={handleWithdraw}
-                disabled={!canWithdraw}
-                aria-disabled={!canWithdraw}
+                onClick={
+                  handleWithdraw
+                }
+                disabled={
+                  !canWithdraw
+                }
+                aria-disabled={
+                  !canWithdraw
+                }
                 className={`group rounded-2xl p-5 text-left shadow-sm transition border ${
                   canWithdraw
                     ? 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md cursor-pointer'
@@ -415,7 +799,7 @@ export function WalletPage({
                         : 'text-slate-500'
                     }`}
                   >
-                    Withdraw Cash
+                    Withdraw SLE
                   </h3>
 
                   <span
@@ -464,51 +848,54 @@ export function WalletPage({
               VERIFICATION NOTICE
              ========================= */}
 
-          {isReceiver && !isVerified && (
-            <div className="mt-4 bg-amber-50 border border-amber-200 rounded-2xl p-4">
-              <div className="flex items-start gap-3">
-                <LockKeyhole
-                  size={18}
-                  className="text-amber-600 mt-0.5 shrink-0"
-                />
+          {isReceiver &&
+            !isVerified && (
+              <div className="mt-4 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                <div className="flex items-start gap-3">
+                  <LockKeyhole
+                    size={18}
+                    className="text-amber-600 mt-0.5 shrink-0"
+                  />
 
-                <div>
-                  <p className="text-sm font-bold text-amber-900">
-                    Cash withdrawal is locked
-                  </p>
+                  <div>
+                    <p className="text-sm font-bold text-amber-900">
+                      Cash withdrawal is locked
+                    </p>
 
-                  <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                    {isMerchant
-                      ? 'Your merchant wallet can receive customer payments, but cash withdrawal will remain locked until MatMove Admin approves your business verification.'
-                      : 'Your driver wallet can receive trip earnings, but cash withdrawal will remain locked until MatMove Admin approves your account verification.'}
-                  </p>
+                    <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                      {isMerchant
+                        ? 'Your merchant wallet can receive customer payments, but cash withdrawal will remain locked until MatMove Admin approves your business verification.'
+                        : 'Your driver wallet can receive trip earnings, but cash withdrawal will remain locked until MatMove Admin approves your account verification.'}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {isReceiver && isVerified && isFrozen && (
-            <div className="mt-4 bg-red-50 border border-red-200 rounded-2xl p-4">
-              <div className="flex items-start gap-3">
-                <LockKeyhole
-                  size={18}
-                  className="text-red-600 mt-0.5 shrink-0"
-                />
+          {isReceiver &&
+            isVerified &&
+            sleFrozen && (
+              <div className="mt-4 bg-red-50 border border-red-200 rounded-2xl p-4">
+                <div className="flex items-start gap-3">
+                  <LockKeyhole
+                    size={18}
+                    className="text-red-600 mt-0.5 shrink-0"
+                  />
 
-                <div>
-                  <p className="text-sm font-bold text-red-900">
-                    Wallet withdrawals are temporarily locked
-                  </p>
+                  <div>
+                    <p className="text-sm font-bold text-red-900">
+                      SLE wallet withdrawals are temporarily locked
+                    </p>
 
-                  <p className="text-xs text-red-800 mt-1 leading-relaxed">
-                    Your account has an active wallet restriction.
-                    Withdrawals cannot be initiated until the restriction
-                    is removed by the appropriate MatMove process.
-                  </p>
+                    <p className="text-xs text-red-800 mt-1 leading-relaxed">
+                      Your SLE wallet has an active restriction.
+                      Withdrawals cannot be initiated until the restriction
+                      is removed by the appropriate MatMove process.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
         </section>
 
         {/* =========================
@@ -528,15 +915,13 @@ export function WalletPage({
                 </h2>
 
                 <p className="text-xs text-slate-500 mt-1">
-                  Select your funding method before entering your
-                  payment information.
+                  Choose your funding method before entering your payment
+                  information.
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Mobile Money */}
-
               <div className="border border-slate-200 rounded-2xl p-5 hover:border-blue-200 transition">
                 <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4">
                   <Smartphone size={19} />
@@ -551,19 +936,16 @@ export function WalletPage({
                 </h3>
 
                 <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                  Choose Mobile Money first, then enter the amount and
-                  mobile-money number.
+                  Fund your SLE wallet through secure Monime checkout.
                 </p>
 
                 <div className="mt-4 text-xs text-slate-600 space-y-2">
                   <Step text="Choose Mobile Money" />
-                  <Step text="Enter amount and number" />
-                  <Step text="Complete secure provider checkout" />
-                  <Step text="MatMove credits after confirmation" />
+                  <Step text="Enter SLE amount" />
+                  <Step text="Complete secure Monime checkout" />
+                  <Step text="MatMove credits after provider confirmation" />
                 </div>
               </div>
-
-              {/* Bank Card */}
 
               <div className="border border-slate-200 rounded-2xl p-5 hover:border-emerald-200 transition">
                 <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4">
@@ -579,19 +961,16 @@ export function WalletPage({
                 </h3>
 
                 <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                  Choose Card first, enter the amount, then continue to
-                  secure card checkout.
+                  Fund your USD wallet through secure Vult checkout.
                 </p>
 
                 <div className="mt-4 text-xs text-slate-600 space-y-2">
                   <Step text="Choose Bank Card" />
-                  <Step text="Enter amount" />
+                  <Step text="Enter USD amount" />
                   <Step text="Complete secure Visa/Mastercard checkout" />
-                  <Step text="MatMove credits after confirmation" />
+                  <Step text="MatMove credits after provider confirmation" />
                 </div>
               </div>
-
-              {/* MatMove Ledger */}
 
               <div className="border border-slate-200 rounded-2xl p-5 hover:border-purple-200 transition">
                 <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-4">
@@ -608,14 +987,14 @@ export function WalletPage({
 
                 <p className="text-xs text-slate-500 mt-2 leading-relaxed">
                   External payment confirmation is reconciled with the
-                  MatMove wallet and central ledger.
+                  correct currency wallet and MatMove ledger.
                 </p>
 
                 <div className="mt-4 text-xs text-slate-600 space-y-2">
                   <Step text="Provider confirms transaction" />
                   <Step text="MatMove verifies the reference" />
-                  <Step text="Ledger records the movement" />
-                  <Step text="User wallet is updated" />
+                  <Step text="Correct currency ledger is posted" />
+                  <Step text="Customer wallet is updated" />
                 </div>
               </div>
             </div>
@@ -632,11 +1011,11 @@ export function WalletPage({
                 </p>
 
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  MatMove should not store raw bank-card details or rely
-                  on a button click to credit a wallet. The payment
-                  provider must confirm the transaction first, after
-                  which the MatMove backend records the transaction and
-                  updates the wallet ledger.
+                  MatMove does not store raw bank-card details or rely on
+                  a browser button click to credit a wallet. The payment
+                  provider confirms the transaction first, after which
+                  the secure MatMove backend records the transaction and
+                  updates the correct wallet ledger.
                 </p>
               </div>
             </div>
@@ -700,14 +1079,14 @@ export function WalletPage({
 
                 <div className="font-bold text-slate-900 mt-1">
                   {canWithdraw
-                    ? 'Secure withdrawal available'
+                    ? 'Secure SLE withdrawal available'
                     : 'Withdrawal locked'}
                 </div>
 
                 <p className="text-xs text-slate-600 mt-1">
                   {canWithdraw
-                    ? 'Withdrawal is completed only after the payout process is confirmed.'
-                    : 'Admin verification is required before cash withdrawal becomes available.'}
+                    ? 'Withdrawal is completed only after the Mobile Money payout is confirmed.'
+                    : 'Admin verification and available SLE funds are required before cash withdrawal becomes available.'}
                 </p>
               </div>
             </div>
@@ -747,8 +1126,7 @@ export function WalletPage({
                 </h2>
 
                 <p className="text-sm text-slate-500 mt-1">
-                  Your wallet ledger will show funding, payments,
-                  earnings, withdrawals, fees, and reversals.
+                  Your confirmed wallet transactions will appear here.
                 </p>
               </div>
             </div>
@@ -763,14 +1141,19 @@ export function WalletPage({
             </div>
 
             <h3 className="font-bold text-slate-900">
-              No transactions yet
+              No transactions displayed yet
             </h3>
 
             <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
-              Once you load your wallet, pay, receive money, complete
-              trips, or withdraw funds, your confirmed transactions will
-              appear here.
+              Confirmed wallet transactions will be displayed here once
+              the wallet history feed is connected to the live MatMove
+              transaction ledger.
             </p>
+
+            <div className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-slate-500 bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg">
+              <ReceiptText size={14} />
+              Live ledger integration pending
+            </div>
           </div>
         </section>
 
@@ -814,7 +1197,7 @@ export function WalletPage({
 
             <SecurityItem
               title="Withdrawal protection"
-              text="Cash-out requests require approved verification, available balance, and provider confirmation before final settlement."
+              text="Cash-out requests require approved verification, available SLE balance, and provider confirmation before final settlement."
             />
           </div>
         </section>
@@ -846,7 +1229,12 @@ export function WalletPage({
               <>
                 <PermissionItem
                   allowed
-                  text="Load wallet"
+                  text="Load SLE wallet through Mobile Money"
+                />
+
+                <PermissionItem
+                  allowed
+                  text="Load USD wallet through supported bank card"
                 />
 
                 <PermissionItem
@@ -869,11 +1257,13 @@ export function WalletPage({
                 />
 
                 <PermissionItem
-                  allowed={canWithdraw}
+                  allowed={
+                    canWithdraw
+                  }
                   text={
                     canWithdraw
-                      ? 'Withdraw available funds'
-                      : 'Withdraw available funds — Admin verification required'
+                      ? 'Withdraw available SLE funds'
+                      : 'Withdraw available SLE funds — Admin verification required'
                   }
                 />
 
@@ -891,6 +1281,163 @@ export function WalletPage({
           </div>
         </section>
       </main>
+    </div>
+  );
+}
+
+function CurrencyBalanceCard({
+  currency,
+  balance,
+  reserved,
+  frozen,
+  label,
+  description,
+  icon,
+}: {
+  currency: WalletCurrency;
+  balance: number;
+  reserved: number;
+  frozen: boolean;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center">
+            {icon}
+          </div>
+
+          <div>
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              {currency}
+            </div>
+
+            <div className="font-bold text-slate-900">
+              {label}
+            </div>
+          </div>
+        </div>
+
+        {frozen && (
+          <span className="text-[10px] uppercase tracking-wide font-bold bg-red-50 text-red-700 px-2 py-1 rounded-full">
+            Frozen
+          </span>
+        )}
+      </div>
+
+      <div className="text-2xl font-bold text-slate-900 mt-5">
+        {formatMoney(
+          balance,
+          currency
+        )}
+      </div>
+
+      <p className="text-xs text-slate-500 mt-1">
+        {description}
+      </p>
+
+      {reserved >
+        0 && (
+        <div className="mt-4 bg-amber-50 border border-amber-100 rounded-xl p-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-amber-700">
+            Reserved
+          </div>
+
+          <div className="text-sm font-bold text-amber-900 mt-1">
+            {formatMoney(
+              reserved,
+              currency
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WalletSummary({
+  currency,
+  balance,
+  available,
+  reserved,
+  frozen,
+  description,
+}: {
+  currency: WalletCurrency;
+  balance: number;
+  available: number;
+  reserved: number;
+  frozen: boolean;
+  description: string;
+}) {
+  return (
+    <div className="border border-slate-200 rounded-2xl p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+          {currency} Wallet
+        </div>
+
+        <span
+          className={`text-[10px] uppercase tracking-wide font-bold px-2 py-1 rounded-full ${
+            frozen
+              ? 'bg-red-50 text-red-700'
+              : 'bg-emerald-50 text-emerald-700'
+          }`}
+        >
+          {frozen
+            ? 'Frozen'
+            : 'Active'}
+        </span>
+      </div>
+
+      <div className="mt-4">
+        <div className="text-xs text-slate-400">
+          Total balance
+        </div>
+
+        <div className="text-xl font-bold text-slate-900 mt-1">
+          {formatMoney(
+            balance,
+            currency
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 pt-4 border-t border-slate-100">
+        <div className="text-xs text-slate-400">
+          Available
+        </div>
+
+        <div className="font-bold text-emerald-700 mt-1">
+          {formatMoney(
+            available,
+            currency
+          )}
+        </div>
+      </div>
+
+      {reserved >
+        0 && (
+        <div className="mt-3">
+          <div className="text-xs text-slate-400">
+            Reserved
+          </div>
+
+          <div className="font-semibold text-amber-700 mt-1">
+            {formatMoney(
+              reserved,
+              currency
+            )}
+          </div>
+        </div>
+      )}
+
+      <p className="text-xs text-slate-500 mt-4 leading-relaxed">
+        {description}
+      </p>
     </div>
   );
 }

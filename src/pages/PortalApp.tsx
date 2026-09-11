@@ -26,7 +26,6 @@ import {
   UserCircle,
   Smartphone,
   CreditCard,
-  Landmark,
   LogOut,
   Mail,
   Phone,
@@ -40,8 +39,11 @@ type WalletAction =
 
 type TopUpMethod =
   | 'mobile_money'
-  | 'card'
-  | 'vault_float';
+  | 'card';
+
+type MobileMoneyNetwork =
+  | 'orange'
+  | 'afrimoney';
 
 type PortalSection =
   | 'home'
@@ -126,8 +128,10 @@ export function PortalApp() {
   const [activeSection, setActiveSection] =
     useState<PortalSection>('home');
 
-  const [isWalletModalOpen, setIsWalletModalOpen] =
-    useState(false);
+  const [
+    isWalletModalOpen,
+    setIsWalletModalOpen,
+  ] = useState(false);
 
   const [walletAction, setWalletAction] =
     useState<WalletAction>('topup');
@@ -137,6 +141,17 @@ export function PortalApp() {
 
   const [topUpMethod, setTopUpMethod] =
     useState<TopUpMethod | null>(null);
+
+  const [
+    mobileMoneyNetwork,
+    setMobileMoneyNetwork,
+  ] =
+    useState<MobileMoneyNetwork>(
+      'orange'
+    );
+
+  const [withdrawalPhone, setWithdrawalPhone] =
+    useState('');
 
   const [isBookingOpen, setIsBookingOpen] =
     useState(false);
@@ -221,7 +236,10 @@ export function PortalApp() {
           await supabase
             .from('user_roles')
             .select('role')
-            .eq('profile_id', userId);
+            .eq(
+              'profile_id',
+              userId
+            );
 
         if (rolesError) {
           console.warn(
@@ -249,8 +267,9 @@ export function PortalApp() {
               ).toLowerCase()
             : '';
 
-        let resolvedRole: CustomerRole | '' =
-          '';
+        let resolvedRole:
+          | CustomerRole
+          | '' = '';
 
         if (
           isCustomerRole(
@@ -782,6 +801,10 @@ export function PortalApp() {
         'topup'
       );
       setTopUpMethod(null);
+      setMobileMoneyNetwork(
+        'orange'
+      );
+      setWithdrawalPhone('');
       setAmount('');
       setSuccessMsg('');
       setIsWalletModalOpen(
@@ -807,20 +830,16 @@ export function PortalApp() {
         return;
       }
 
-      /*
-        Important:
-        The backend remains the final authority for withdrawal
-        eligibility. The UI does not modify wallet balances.
-      */
       const kycStatus =
         String(
           profile?.kyc_status ||
+            profile?.kycStatus ||
             ''
         ).toLowerCase();
 
       if (
         kycStatus !==
-          'approved'
+        'approved'
       ) {
         alert(
           'Cash withdrawal is available only after your account has been verified and approved by MatMove Admin.'
@@ -832,6 +851,15 @@ export function PortalApp() {
         'withdraw'
       );
       setTopUpMethod(null);
+      setMobileMoneyNetwork(
+        'orange'
+      );
+      setWithdrawalPhone(
+        String(
+          profile?.phone ||
+            ''
+        )
+      );
       setAmount('');
       setSuccessMsg('');
       setIsWalletModalOpen(
@@ -1008,6 +1036,7 @@ export function PortalApp() {
         const kycStatus =
           String(
             profile?.kyc_status ||
+              profile?.kycStatus ||
               ''
           ).toLowerCase();
 
@@ -1017,6 +1046,15 @@ export function PortalApp() {
         ) {
           alert(
             'Cash withdrawal requires MatMove Admin verification approval.'
+          );
+          return;
+        }
+
+        if (
+          !withdrawalPhone.trim()
+        ) {
+          alert(
+            'Please enter the Mobile Money phone number.'
           );
           return;
         }
@@ -1034,39 +1072,306 @@ export function PortalApp() {
       }
 
       setProcessing(true);
+      setSuccessMsg('');
 
       try {
+        /*
+         * =====================================================
+         * SECURE CUSTOMER WALLET TOP-UP
+         * =====================================================
+         *
+         * SLE:
+         *   Browser
+         *     -> Vercel create-monime-checkout
+         *     -> Monime hosted checkout
+         *     -> Monime webhook
+         *     -> secure Supabase settlement RPC
+         *     -> SLE customer wallet
+         *
+         * USD:
+         *   Browser
+         *     -> Vercel create-vult-checkout
+         *     -> Vult hosted checkout
+         *     -> Vult webhook
+         *     -> secure Supabase settlement RPC
+         *     -> USD customer wallet
+         *
+         * The browser NEVER credits the wallet.
+         */
+
         if (
           walletAction ===
-          'withdraw'
+          'topup'
         ) {
-          setSuccessMsg(
-            `Withdrawal request for SLE ${numAmount.toLocaleString()} is ready for secure provider processing.`
-          );
-        } else {
-          const methodLabel =
+          const {
+            data: sessionData,
+            error: sessionError,
+          } =
+            await supabase.auth.getSession();
+
+          if (
+            sessionError
+          ) {
+            throw sessionError;
+          }
+
+          const accessToken =
+            sessionData.session
+              ?.access_token;
+
+          if (
+            !accessToken
+          ) {
+            throw new Error(
+              'Your session has expired. Please sign in again.'
+            );
+          }
+
+          const idempotencyKey =
+            crypto.randomUUID();
+
+          const isMobileMoney =
             topUpMethod ===
-            'mobile_money'
-              ? 'Mobile Money'
-              : topUpMethod ===
-                  'card'
-                ? 'Bank Card'
-                : 'MatMove Vault / Float';
+            'mobile_money';
+
+          const endpoint =
+            isMobileMoney
+              ? '/api/create-monime-checkout'
+              : '/api/create-vult-checkout';
+
+          const requestBody =
+            isMobileMoney
+              ? {
+                  amount:
+                    numAmount,
+                  currency:
+                    'SLE',
+                  idempotencyKey,
+                }
+              : {
+                  amount:
+                    numAmount,
+                  currency:
+                    'USD',
+                  type:
+                    'card',
+                  idempotencyKey,
+                };
+
+          const response =
+            await fetch(
+              endpoint,
+              {
+                method:
+                  'POST',
+                headers: {
+                  'Content-Type':
+                    'application/json',
+                  Authorization:
+                    `Bearer ${accessToken}`,
+                },
+                body:
+                  JSON.stringify(
+                    requestBody
+                  ),
+              }
+            );
+
+          const responseText =
+            await response.text();
+
+          let responseData:
+            | any
+            | null = null;
+
+          try {
+            responseData =
+              responseText
+                ? JSON.parse(
+                    responseText
+                  )
+                : null;
+          } catch {
+            responseData =
+              null;
+          }
+
+          if (
+            !response.ok
+          ) {
+            throw new Error(
+              responseData?.error ||
+                responseData?.message ||
+                'The secure payment service could not create your checkout.'
+            );
+          }
+
+          const redirectUrl =
+            responseData?.redirectUrl ||
+            responseData?.redirect_url;
+
+          if (
+            typeof redirectUrl !==
+              'string' ||
+            !redirectUrl.trim()
+          ) {
+            throw new Error(
+              'The secure payment service did not return a checkout URL.'
+            );
+          }
 
           setSuccessMsg(
-            `${methodLabel} funding is ready for secure provider checkout. Your wallet will only be credited after authoritative payment confirmation.`
+            `Secure ${
+              isMobileMoney
+                ? 'SLE Mobile Money'
+                : 'USD card'
+            } checkout created. Redirecting...`
+          );
+
+          /*
+           * The provider owns the payment form.
+           * No raw card or Mobile Money credentials
+           * are collected by this browser form.
+           */
+          window.location.assign(
+            redirectUrl
+          );
+
+          return;
+        }
+
+        /*
+         * =====================================================
+         * SECURE CUSTOMER WALLET WITHDRAWAL
+         * =====================================================
+         *
+         * Browser
+         *   -> Vercel /api/monime-payout
+         *   -> secure initiate_wallet_withdrawal()
+         *   -> Monime payout
+         *   -> Monime webhook
+         *   -> process_provider_webhook_event()
+         *   -> settle_wallet_withdrawal()
+         *   -> wallet debit + ledger settlement
+         *
+         * A successful API response means the request entered
+         * the secure payout workflow. It does NOT mean that
+         * Mobile Money has already completed the payout.
+         */
+
+        const {
+          data: sessionData,
+          error: sessionError,
+        } =
+          await supabase.auth.getSession();
+
+        if (
+          sessionError
+        ) {
+          throw sessionError;
+        }
+
+        const accessToken =
+          sessionData.session
+            ?.access_token;
+
+        if (
+          !accessToken
+        ) {
+          throw new Error(
+            'Your session has expired. Please sign in again.'
           );
         }
 
+        const idempotencyKey =
+          crypto.randomUUID();
+
+        const response =
+          await fetch(
+            '/api/monime-payout',
+            {
+              method:
+                'POST',
+              headers: {
+                'Content-Type':
+                  'application/json',
+                Authorization:
+                  `Bearer ${accessToken}`,
+              },
+              body:
+                JSON.stringify({
+                  amount:
+                    numAmount,
+                  currency:
+                    'SLE',
+                  phone:
+                    withdrawalPhone.trim(),
+                  network:
+                    mobileMoneyNetwork,
+                  idempotencyKey,
+                }),
+            }
+          );
+
+        const responseText =
+          await response.text();
+
+        let responseData:
+          | any
+          | null = null;
+
+        try {
+          responseData =
+            responseText
+              ? JSON.parse(
+                  responseText
+                )
+              : null;
+        } catch {
+          responseData =
+            null;
+        }
+
+        if (
+          !response.ok
+        ) {
+          throw new Error(
+            responseData?.error ||
+              responseData?.message ||
+              'The secure withdrawal service could not process your request.'
+          );
+        }
+
+        setSuccessMsg(
+          responseData?.message ||
+            'Withdrawal submitted. Your funds are reserved while MatMove waits for Monime confirmation.'
+        );
+
         setAmount('');
+
+        await fetchUserData();
 
         setTimeout(() => {
           setIsWalletModalOpen(
             false
           );
           setTopUpMethod(null);
+          setMobileMoneyNetwork(
+            'orange'
+          );
+          setWithdrawalPhone('');
           setSuccessMsg('');
-        }, 2500);
+        }, 3000);
+      } catch (err: any) {
+        console.error(
+          'Secure wallet transaction failed:',
+          err
+        );
+
+        alert(
+          err?.message ||
+            'The secure payment service could not process this request. Please try again.'
+        );
       } finally {
         setProcessing(false);
       }
@@ -1254,6 +1559,18 @@ export function PortalApp() {
             }
             setTopUpMethod={
               setTopUpMethod
+            }
+            mobileMoneyNetwork={
+              mobileMoneyNetwork
+            }
+            setMobileMoneyNetwork={
+              setMobileMoneyNetwork
+            }
+            withdrawalPhone={
+              withdrawalPhone
+            }
+            setWithdrawalPhone={
+              setWithdrawalPhone
             }
             amount={amount}
             setAmount={
@@ -1612,6 +1929,10 @@ function WalletTransactionModal({
   walletAction,
   topUpMethod,
   setTopUpMethod,
+  mobileMoneyNetwork,
+  setMobileMoneyNetwork,
+  withdrawalPhone,
+  setWithdrawalPhone,
   amount,
   setAmount,
   processing,
@@ -1628,6 +1949,15 @@ function WalletTransactionModal({
       | TopUpMethod
       | null
   ) => void;
+  mobileMoneyNetwork:
+    MobileMoneyNetwork;
+  setMobileMoneyNetwork: (
+    network: MobileMoneyNetwork
+  ) => void;
+  withdrawalPhone: string;
+  setWithdrawalPhone: (
+    value: string
+  ) => void;
   amount: string;
   setAmount: (
     value: string
@@ -1641,6 +1971,12 @@ function WalletTransactionModal({
     e: FormEvent
   ) => Promise<void>;
 }) {
+  const topUpCurrency =
+    topUpMethod ===
+    'card'
+      ? 'USD'
+      : 'SLE';
+
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
@@ -1650,6 +1986,10 @@ function WalletTransactionModal({
               false
             );
             setTopUpMethod(null);
+            setMobileMoneyNetwork(
+              'orange'
+            );
+            setWithdrawalPhone('');
           }}
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full"
           aria-label="Close wallet transaction"
@@ -1708,7 +2048,7 @@ function WalletTransactionModal({
                       )
                     }
                     title="Mobile Money"
-                    description="Fund using a supported mobile-money provider."
+                    description="Secure Mobile Money checkout powered by Monime."
                     icon={
                       <Smartphone
                         size={20}
@@ -1729,7 +2069,7 @@ function WalletTransactionModal({
                       )
                     }
                     title="Bank Card"
-                    description="Fund using an eligible debit or credit card."
+                    description="Secure Visa/Mastercard checkout powered by Vult."
                     icon={
                       <CreditCard
                         size={20}
@@ -1738,26 +2078,86 @@ function WalletTransactionModal({
                     iconClass="bg-emerald-50 text-emerald-600"
                     activeClass="border-emerald-600 bg-emerald-50"
                   />
+                </div>
+              </div>
+            )}
 
-                  <FundingMethodButton
-                    selected={
-                      topUpMethod ===
-                      'vault_float'
+            {walletAction ===
+              'withdraw' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Mobile Money Network
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMobileMoneyNetwork(
+                          'orange'
+                        )
+                      }
+                      className={`p-3 rounded-xl border-2 text-left transition ${
+                        mobileMoneyNetwork ===
+                        'orange'
+                          ? 'border-orange-500 bg-orange-50'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="font-bold text-slate-900">
+                        Orange Money
+                      </div>
+
+                      <div className="text-xs text-slate-500 mt-1">
+                        Sierra Leone
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMobileMoneyNetwork(
+                          'afrimoney'
+                        )
+                      }
+                      className={`p-3 rounded-xl border-2 text-left transition ${
+                        mobileMoneyNetwork ===
+                        'afrimoney'
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="font-bold text-slate-900">
+                        Afrimoney
+                      </div>
+
+                      <div className="text-xs text-slate-500 mt-1">
+                        Sierra Leone
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">
+                    Mobile Money Number
+                  </label>
+
+                  <input
+                    type="tel"
+                    required
+                    value={
+                      withdrawalPhone
                     }
-                    onClick={() =>
-                      setTopUpMethod(
-                        'vault_float'
+                    onChange={(e) =>
+                      setWithdrawalPhone(
+                        e.target.value
                       )
                     }
-                    title="MatMove Vault / Float"
-                    description="Use an approved MatMove internal funding balance."
-                    icon={
-                      <Landmark
-                        size={20}
-                      />
-                    }
-                    iconClass="bg-purple-50 text-purple-600"
-                    activeClass="border-purple-600 bg-purple-50"
+                    className="w-full border border-slate-300 p-3 rounded-xl text-base font-medium focus:ring-2 focus:ring-blue-600 outline-none"
+                    placeholder="e.g. 076123456"
+                    autoComplete="tel"
                   />
                 </div>
               </div>
@@ -1765,7 +2165,12 @@ function WalletTransactionModal({
 
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-1">
-                Amount (SLE)
+                Amount (
+                {walletAction ===
+                'topup'
+                  ? topUpCurrency
+                  : 'SLE'}
+                )
               </label>
 
               <input
@@ -1780,7 +2185,15 @@ function WalletTransactionModal({
                   )
                 }
                 className="w-full border border-slate-300 p-3 rounded-xl text-lg font-medium focus:ring-2 focus:ring-blue-600 outline-none"
-                placeholder="e.g. 150"
+                placeholder={
+                  walletAction ===
+                  'topup'
+                    ? topUpCurrency ===
+                      'USD'
+                      ? 'e.g. 50'
+                      : 'e.g. 150'
+                    : 'e.g. 150'
+                }
               />
             </div>
 
@@ -1795,11 +2208,8 @@ function WalletTransactionModal({
                   <div className="text-sm font-bold text-slate-900 mt-1">
                     {topUpMethod ===
                     'mobile_money'
-                      ? 'Mobile Money'
-                      : topUpMethod ===
-                          'card'
-                        ? 'Bank Card'
-                        : 'MatMove Vault / Float'}
+                      ? 'Mobile Money — Monime — SLE'
+                      : 'Bank Card — Vult — USD'}
                   </div>
                 </div>
               )}
@@ -1818,8 +2228,8 @@ function WalletTransactionModal({
                 ? 'Processing...'
                 : walletAction ===
                     'topup'
-                  ? 'Continue Top-Up'
-                  : 'Request Cash-Out'}
+                  ? 'Continue to Secure Checkout'
+                  : 'Confirm Withdrawal'}
             </button>
 
             <p className="text-[11px] text-slate-400 text-center leading-relaxed">
