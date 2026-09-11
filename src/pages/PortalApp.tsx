@@ -106,6 +106,63 @@ function getCanonicalPortalPath(
   return `/customer/${role}`;
 }
 
+function normalizePhone(
+  value: unknown
+): string {
+  if (
+    typeof value !== 'string'
+  ) {
+    return '';
+  }
+
+  return value.trim();
+}
+
+function normalizeKycStatus(
+  value: unknown
+): string {
+  const status =
+    String(
+      value || ''
+    )
+      .trim()
+      .toLowerCase();
+
+  /*
+   * Customer-facing MatMove statuses:
+   *
+   * approved -> approved
+   * declined/rejected -> declined
+   * anything submitted/in review/pending -> pending
+   * empty/not_started -> not_started
+   */
+  if (
+    status === 'approved'
+  ) {
+    return 'approved';
+  }
+
+  if (
+    status === 'declined' ||
+    status === 'rejected'
+  ) {
+    return 'declined';
+  }
+
+  if (
+    status === 'pending' ||
+    status === 'submitted' ||
+    status === 'under_review' ||
+    status ===
+      'resubmission_required' ||
+    status === 'in_review'
+  ) {
+    return 'pending';
+  }
+
+  return 'not_started';
+}
+
 export function PortalApp() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -326,6 +383,114 @@ export function PortalApp() {
           );
         }
 
+        /*
+         * =====================================================
+         * PHONE RESOLUTION
+         * =====================================================
+         *
+         * Email/password Supabase users can have an empty
+         * auth.users.phone because the phone was not used as
+         * the authentication identifier.
+         *
+         * MatMove onboarding stores the captured number in
+         * user metadata and should also persist it to profiles.
+         *
+         * We therefore use the following authoritative fallback:
+         *
+         * 1. profiles.phone
+         * 2. auth.users.phone
+         * 3. auth.users.user_metadata.phone
+         * 4. auth.users.user_metadata.phone_number
+         */
+        const profilePhone =
+          normalizePhone(
+            profileData?.phone
+          );
+
+        const authPhone =
+          normalizePhone(
+            session.user.phone
+          );
+
+        const metadataPhone =
+          normalizePhone(
+            session.user
+              .user_metadata
+              ?.phone
+          );
+
+        const metadataPhoneNumber =
+          normalizePhone(
+            session.user
+              .user_metadata
+              ?.phone_number
+          );
+
+        const resolvedPhone =
+          profilePhone ||
+          authPhone ||
+          metadataPhone ||
+          metadataPhoneNumber ||
+          '';
+
+        /*
+         * =====================================================
+         * LIVE KYC SUBMISSION
+         * =====================================================
+         *
+         * The profile is useful for compatibility, but the
+         * latest KYC submission is the operational verification
+         * record. This keeps the customer portal synchronized
+         * with Admin review.
+         */
+        const {
+          data: kycSubmission,
+          error: kycError,
+        } =
+          await supabase
+            .from('kyc_submissions')
+            .select(
+              'id,status,target_role,created_at,updated_at'
+            )
+            .eq(
+              'profile_id',
+              userId
+            )
+            .order(
+              'created_at',
+              {
+                ascending: false,
+              }
+            )
+            .limit(1)
+            .maybeSingle();
+
+        if (kycError) {
+          console.warn(
+            'Could not load KYC submission:',
+            kycError.message
+          );
+        }
+
+        const profileKycStatus =
+          normalizeKycStatus(
+            profileData?.kyc_status
+          );
+
+        const submissionKycStatus =
+          normalizeKycStatus(
+            kycSubmission?.status
+          );
+
+        /*
+         * A live submission takes precedence when it exists.
+         * If there is no submission, retain the profile status.
+         */
+        const resolvedKycStatus =
+          kycSubmission?.status
+            ? submissionKycStatus
+            : profileKycStatus;
+
         const {
           data: walletData,
           error: walletError,
@@ -407,6 +572,11 @@ export function PortalApp() {
               userId
             );
         } else {
+          /*
+           * Merchant orders will use the merchant/order
+           * relationship when that live subsystem is connected.
+           * Do not expose another customer's bookings.
+           */
           bookingQuery =
             bookingQuery.eq(
               'rider_id',
@@ -431,14 +601,33 @@ export function PortalApp() {
           {
             ...(profileData || {}),
             id: userId,
+
             email:
               profileData?.email ||
               session.user.email ||
               '',
+
             phone:
-              profileData?.phone ||
-              session.user.phone ||
-              '',
+              resolvedPhone,
+
+            /*
+             * Keep both database-style and frontend-style
+             * KYC properties available to the child portals.
+             */
+            kyc_status:
+              resolvedKycStatus,
+
+            kycStatus:
+              resolvedKycStatus,
+
+            kyc_submission_id:
+              kycSubmission?.id ||
+              null,
+
+            kyc_submission_status:
+              kycSubmission?.status ||
+              null,
+
             role:
               resolvedRole,
           };
@@ -511,6 +700,25 @@ export function PortalApp() {
         )
         .subscribe();
 
+    const kycChannel =
+      supabase
+        .channel(
+          `portal-kyc-changes-${Date.now()}`
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'kyc_submissions',
+            filter: undefined,
+          },
+          () => {
+            fetchUserData();
+          }
+        )
+        .subscribe();
+
     return () => {
       supabase.removeChannel(
         bookingChannel
@@ -518,6 +726,10 @@ export function PortalApp() {
 
       supabase.removeChannel(
         walletChannel
+      );
+
+      supabase.removeChannel(
+        kycChannel
       );
     };
   }, [
@@ -831,11 +1043,10 @@ export function PortalApp() {
       }
 
       const kycStatus =
-        String(
+        normalizeKycStatus(
           profile?.kyc_status ||
-            profile?.kycStatus ||
-            ''
-        ).toLowerCase();
+            profile?.kycStatus
+        );
 
       if (
         kycStatus !==
@@ -855,9 +1066,8 @@ export function PortalApp() {
         'orange'
       );
       setWithdrawalPhone(
-        String(
-          profile?.phone ||
-            ''
+        normalizePhone(
+          profile?.phone
         )
       );
       setAmount('');
@@ -1034,11 +1244,10 @@ export function PortalApp() {
           'withdraw'
       ) {
         const kycStatus =
-          String(
+          normalizeKycStatus(
             profile?.kyc_status ||
-              profile?.kycStatus ||
-              ''
-          ).toLowerCase();
+              profile?.kycStatus
+          );
 
         if (
           kycStatus !==
@@ -1722,7 +1931,9 @@ function AccountSection({
     'Not available';
 
   const phone =
-    profile?.phone ||
+    normalizePhone(
+      profile?.phone
+    ) ||
     'Not available';
 
   const roleLabel =
@@ -1730,10 +1941,10 @@ function AccountSection({
     role.slice(1);
 
   const kycStatus =
-    String(
+    normalizeKycStatus(
       profile?.kyc_status ||
-        'not_started'
-    ).toLowerCase();
+        profile?.kycStatus
+    );
 
   const kycLabel =
     kycStatus ===
@@ -1743,8 +1954,8 @@ function AccountSection({
           'pending'
         ? 'Under Review'
         : kycStatus ===
-            'rejected'
-          ? 'Rejected'
+            'declined'
+          ? 'Declined'
           : 'Not Started';
 
   const kycClasses =
@@ -1752,7 +1963,7 @@ function AccountSection({
     'approved'
       ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
       : kycStatus ===
-          'rejected'
+          'declined'
         ? 'bg-red-50 text-red-700 border-red-100'
         : 'bg-amber-50 text-amber-700 border-amber-100';
 

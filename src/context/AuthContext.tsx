@@ -25,24 +25,32 @@ import { supabase } from '@/lib/supabase';
 interface AuthContextValue {
   session: AuthSession | null;
   loading: boolean;
+
   signUp: (
     email: string,
     phone: string,
     password: string
   ) => Promise<void>;
+
   signIn: (
     email: string,
     password: string
   ) => Promise<void>;
+
   signOut: () => Promise<void>;
+
   setRoles: (
     roles: UserRole[]
   ) => Promise<void>;
+
   completeKyc: (
     status: KycStatus
   ) => Promise<void>;
+
   submitKycForReview: () => Promise<void>;
+
   resubmitKycForReview: () => Promise<void>;
+
   resetPassword: (
     email: string
   ) => Promise<void>;
@@ -59,6 +67,69 @@ interface StoredKycDocument {
   status: 'uploaded';
 }
 
+function normalizeKycStatus(
+  status: string | null | undefined
+): KycStatus {
+  const normalized =
+    String(status || '')
+      .trim()
+      .toLowerCase();
+
+  /*
+   * Database status:
+   *
+   * not_started
+   * draft
+   * submitted
+   * under_review
+   * approved
+   * rejected
+   * resubmission_required
+   *
+   * Customer UI uses:
+   *
+   * not_started
+   * draft
+   * submitted
+   * approved
+   * declined
+   *
+   * Historical/internal review states are represented
+   * to the customer as submitted/pending.
+   */
+  if (
+    normalized === 'approved'
+  ) {
+    return 'approved';
+  }
+
+  if (
+    normalized === 'rejected' ||
+    normalized === 'declined'
+  ) {
+    return 'declined' as KycStatus;
+  }
+
+  if (
+    normalized === 'draft'
+  ) {
+    return 'draft';
+  }
+
+  if (
+    normalized === 'submitted' ||
+    normalized === 'pending' ||
+    normalized === 'under_review' ||
+    normalized === 'resubmission_required' ||
+    normalized === 'in_review' ||
+    normalized === 'review'
+  ) {
+    return 'submitted';
+  }
+
+  return 'not_started';
+}
+
 function getPrimaryCustomerRole(
   session: AuthSession | null
 ): UserRole {
@@ -66,11 +137,19 @@ function getPrimaryCustomerRole(
     return 'rider';
   }
 
-  if (session.roles.includes('driver')) {
+  if (
+    session.roles.includes(
+      'driver'
+    )
+  ) {
     return 'driver';
   }
 
-  if (session.roles.includes('merchant')) {
+  if (
+    session.roles.includes(
+      'merchant'
+    )
+  ) {
     return 'merchant';
   }
 
@@ -81,12 +160,15 @@ function getCustomerPortalPath(
   session: AuthSession | null
 ): string {
   const role =
-    getPrimaryCustomerRole(session);
+    getPrimaryCustomerRole(
+      session
+    );
 
   return `/customer/${role}`;
 }
 
-function getStoredDocuments(): StoredKycDocument[] {
+function getStoredDocuments():
+  StoredKycDocument[] {
   try {
     const raw =
       sessionStorage.getItem(
@@ -97,7 +179,8 @@ function getStoredDocuments(): StoredKycDocument[] {
       return [];
     }
 
-    const parsed = JSON.parse(raw);
+    const parsed =
+      JSON.parse(raw);
 
     if (
       !parsed ||
@@ -107,11 +190,16 @@ function getStoredDocuments(): StoredKycDocument[] {
       return [];
     }
 
-    return Object.values(parsed).filter(
-      (item): item is StoredKycDocument => {
+    return Object.values(
+      parsed
+    ).filter(
+      (
+        item
+      ): item is StoredKycDocument => {
         if (
           !item ||
-          typeof item !== 'object'
+          typeof item !==
+            'object'
         ) {
           return false;
         }
@@ -120,11 +208,14 @@ function getStoredDocuments(): StoredKycDocument[] {
           item as StoredKycDocument;
 
         return (
-          typeof document.id === 'string' &&
+          typeof document.id ===
+            'string' &&
           document.id.length > 0 &&
           document.id !== 'temp' &&
-          typeof document.type === 'string' &&
-          typeof document.fileName === 'string'
+          typeof document.type ===
+            'string' &&
+          typeof document.fileName ===
+            'string'
         );
       }
     );
@@ -152,11 +243,14 @@ function getStoredSelfie():
     }
 
     const parsed =
-      JSON.parse(raw) as StoredKycDocument;
+      JSON.parse(
+        raw
+      ) as StoredKycDocument;
 
     if (
       !parsed ||
-      typeof parsed.id !== 'string' ||
+      typeof parsed.id !==
+        'string' ||
       !parsed.id ||
       parsed.id === 'temp'
     ) {
@@ -174,359 +268,592 @@ function getStoredSelfie():
   }
 }
 
+function readStoredPersonalInfo(): {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  address?: string;
+} {
+  try {
+    const raw =
+      sessionStorage.getItem(
+        'ob_personal'
+      );
+
+    if (!raw) {
+      return {};
+    }
+
+    const parsed =
+      JSON.parse(
+        raw
+      );
+
+    if (
+      !parsed ||
+      typeof parsed !==
+        'object' ||
+      Array.isArray(parsed)
+    ) {
+      return {};
+    }
+
+    return {
+      firstName:
+        typeof parsed.firstName ===
+        'string'
+          ? parsed.firstName
+          : '',
+
+      lastName:
+        typeof parsed.lastName ===
+        'string'
+          ? parsed.lastName
+          : '',
+
+      phone:
+        typeof parsed.phone ===
+        'string'
+          ? parsed.phone
+          : '',
+
+      address:
+        typeof parsed.address ===
+        'string'
+          ? parsed.address
+          : '',
+    };
+  } catch (error) {
+    console.error(
+      'Could not read stored personal information:',
+      error
+    );
+
+    return {};
+  }
+}
+
+function normalizePhone(
+  phone: string | null | undefined
+): string {
+  return String(phone || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function normalizeCustomerRole(
+  role: string | null | undefined
+): UserRole {
+  const normalized =
+    String(role || '')
+      .trim()
+      .toLowerCase();
+
+  if (
+    normalized === 'driver'
+  ) {
+    return 'driver';
+  }
+
+  if (
+    normalized === 'merchant' ||
+    normalized === 'vendor'
+  ) {
+    return 'merchant';
+  }
+
+  return 'rider';
+}
+
 export function AuthProvider({
   children,
 }: {
   children: ReactNode;
 }) {
   const [session, setSession] =
-    useState<AuthSession | null>(null);
+    useState<AuthSession | null>(
+      null
+    );
 
   const [loading, setLoading] =
     useState(true);
 
-  const navigate = useNavigate();
+  const navigate =
+    useNavigate();
 
-  const restoreSession = useCallback(
-    async () => {
-      try {
-        const {
-          data: {
-            session: supabaseSession,
-          },
-          error,
-        } =
-          await supabase.auth.getSession();
+  const restoreSession =
+    useCallback(
+      async () => {
+        try {
+          const {
+            data: {
+              session:
+                supabaseSession,
+            },
+            error,
+          } =
+            await supabase.auth.getSession();
 
-        if (error) {
-          throw error;
-        }
+          if (error) {
+            throw error;
+          }
 
-        if (!supabaseSession?.user) {
+          if (
+            !supabaseSession?.user
+          ) {
+            setSession(null);
+            return null;
+          }
+
+          const userId =
+            supabaseSession.user.id;
+
+          /*
+           * Load profile.
+           */
+          const {
+            data: profile,
+            error:
+              profileError,
+          } =
+            await supabase
+              .from('profiles')
+              .select('*')
+              .eq(
+                'id',
+                userId
+              )
+              .maybeSingle();
+
+          if (
+            profileError
+          ) {
+            throw profileError;
+          }
+
+          /*
+           * Load roles.
+           *
+           * Customers can read their own roles,
+           * but cannot write them directly.
+           */
+          const {
+            data: rolesData,
+            error:
+              rolesError,
+          } =
+            await supabase
+              .from('user_roles')
+              .select('role')
+              .eq(
+                'profile_id',
+                userId
+              );
+
+          if (
+            rolesError
+          ) {
+            console.warn(
+              'Could not restore user roles:',
+              rolesError.message
+            );
+          }
+
+          const roles =
+            (rolesData || [])
+              .map(
+                (
+                  item
+                ) =>
+                  String(
+                    item.role
+                  )
+              )
+              .map(
+                normalizeCustomerRole
+              );
+
+          const uniqueRoles =
+            Array.from(
+              new Set(
+                roles
+              )
+            );
+
+          /*
+           * Compatibility fallback for older profiles.
+           */
+          const profileRole =
+            profile?.role
+              ? normalizeCustomerRole(
+                  String(
+                    profile.role
+                  )
+                )
+              : null;
+
+          const resolvedRoles =
+            uniqueRoles.length >
+            0
+              ? uniqueRoles
+              : profileRole
+                ? [
+                    profileRole,
+                  ]
+                : [];
+
+          /*
+           * KYC submissions are authoritative.
+           *
+           * The latest submission takes precedence
+           * over profiles.kyc_status.
+           */
+          const {
+            data:
+              latestSubmission,
+            error:
+              submissionError,
+          } =
+            await supabase
+              .from(
+                'kyc_submissions'
+              )
+              .select(
+                'id,status,created_at'
+              )
+              .eq(
+                'profile_id',
+                userId
+              )
+              .order(
+                'created_at',
+                {
+                  ascending:
+                    false,
+                }
+              )
+              .limit(1)
+              .maybeSingle();
+
+          if (
+            submissionError
+          ) {
+            console.warn(
+              'Could not restore latest KYC submission:',
+              submissionError.message
+            );
+          }
+
+          const authoritativeKycStatus =
+            normalizeKycStatus(
+              latestSubmission?.status ||
+                profile?.kyc_status ||
+                'not_started'
+            );
+
+          const restoredUser = {
+            id: userId,
+
+            email:
+              profile?.email ||
+              supabaseSession.user
+                .email ||
+              '',
+
+            phone:
+              profile?.phone ||
+              supabaseSession.user
+                .phone ||
+              supabaseSession.user
+                .user_metadata
+                ?.phone ||
+              supabaseSession.user
+                .user_metadata
+                ?.phone_number ||
+              '',
+
+            firstName:
+              profile?.first_name ||
+              '',
+
+            lastName:
+              profile?.last_name ||
+              '',
+          };
+
+          const restoredSession:
+            AuthSession = {
+            user:
+              restoredUser,
+
+            roles:
+              resolvedRoles,
+
+            kycStatus:
+              authoritativeKycStatus,
+          };
+
+          setSession(
+            restoredSession
+          );
+
+          return restoredSession;
+        } catch (error) {
+          console.error(
+            'Failed to restore authentication session:',
+            error
+          );
+
           setSession(null);
+
           return null;
         }
-
-        const userId =
-          supabaseSession.user.id;
-
-        const {
-          data: profile,
-          error: profileError,
-        } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
-
-        if (profileError) {
-          throw profileError;
-        }
-
-        const {
-          data: rolesData,
-          error: rolesError,
-        } =
-          await supabase
-            .from('user_roles')
-            .select('role')
-            .eq('profile_id', userId);
-
-        if (rolesError) {
-          console.warn(
-            'Could not restore user roles:',
-            rolesError.message
-          );
-        }
-
-        const roles =
-          (rolesData || [])
-            .map(
-              (item) => item.role
-            )
-            .filter(
-              Boolean
-            ) as UserRole[];
-
-        const profileRole =
-          profile?.role
-            ? String(
-                profile.role
-              ).toLowerCase()
-            : '';
-
-        const resolvedRoles =
-          roles.length > 0
-            ? roles
-            : profileRole
-              ? [
-                  profileRole as UserRole,
-                ]
-              : [];
-
-        const restoredUser = {
-          id: userId,
-          email:
-            profile?.email ||
-            supabaseSession.user
-              .email ||
-            '',
-          phone:
-            profile?.phone ||
-            supabaseSession.user
-              .phone ||
-            '',
-          firstName:
-            profile?.first_name ||
-            '',
-          lastName:
-            profile?.last_name ||
-            '',
-        };
-
-        const restoredSession:
-          AuthSession = {
-          user: restoredUser,
-          roles: resolvedRoles,
-          kycStatus:
-            profile?.kyc_status ||
-            'not_started',
-        };
-
-        setSession(
-          restoredSession
-        );
-
-        return restoredSession;
-      } catch (error) {
-        console.error(
-          'Failed to restore authentication session:',
-          error
-        );
-
-        setSession(null);
-
-        return null;
-      }
-    },
-    []
-  );
-
-  useEffect(() => {
-    let mounted = true;
-
-    const initialiseAuth =
-      async () => {
-        if (!mounted) {
-          return;
-        }
-
-        await restoreSession();
-
-        if (mounted) {
-          setLoading(false);
-        }
-      };
-
-    initialiseAuth();
-
-    const {
-      data: {
-        subscription,
       },
-    } =
-      supabase.auth.onAuthStateChange(
-        (
-          event,
-          supabaseSession
-        ) => {
+      []
+    );
+
+  useEffect(
+    () => {
+      let mounted = true;
+
+      const initialiseAuth =
+        async () => {
           if (!mounted) {
             return;
           }
 
-          if (
-            event ===
-              'SIGNED_OUT' ||
-            !supabaseSession
-          ) {
-            setSession(null);
-            setLoading(false);
-            return;
+          await restoreSession();
+
+          if (mounted) {
+            setLoading(
+              false
+            );
           }
+        };
 
-          /*
-           * Do not await Supabase database requests
-           * directly inside onAuthStateChange.
-           *
-           * The auth callback must finish first so that
-           * signup/signin can complete without waiting
-           * on another Supabase operation.
-           */
-          if (
-            event ===
-              'SIGNED_IN' ||
-            event ===
-              'TOKEN_REFRESHED' ||
-            event ===
-              'USER_UPDATED' ||
-            event ===
-              'INITIAL_SESSION'
-          ) {
-            setTimeout(() => {
-              if (!mounted) {
-                return;
-              }
+      initialiseAuth();
 
-              restoreSession().catch(
-                (error) => {
-                  console.error(
-                    'Failed to refresh session after auth event:',
-                    error
-                  );
-                }
+      const {
+        data: {
+          subscription,
+        },
+      } =
+        supabase.auth.onAuthStateChange(
+          (
+            event,
+            supabaseSession
+          ) => {
+            if (!mounted) {
+              return;
+            }
+
+            if (
+              event ===
+                'SIGNED_OUT' ||
+              !supabaseSession
+            ) {
+              setSession(null);
+              setLoading(
+                false
               );
-            }, 0);
+              return;
+            }
+
+            /*
+             * Never await database requests directly
+             * inside onAuthStateChange.
+             */
+            if (
+              event ===
+                'SIGNED_IN' ||
+              event ===
+                'TOKEN_REFRESHED' ||
+              event ===
+                'USER_UPDATED' ||
+              event ===
+                'INITIAL_SESSION'
+            ) {
+              setTimeout(
+                () => {
+                  if (!mounted) {
+                    return;
+                  }
+
+                  restoreSession().catch(
+                    (
+                      error
+                    ) => {
+                      console.error(
+                        'Failed to refresh session after auth event:',
+                        error
+                      );
+                    }
+                  );
+                },
+                0
+              );
+            }
           }
+        );
+
+      return () => {
+        mounted = false;
+        subscription.unsubscribe();
+      };
+    },
+    [
+      restoreSession,
+    ]
+  );
+
+  const signUp =
+    useCallback(
+      async (
+        email: string,
+        phone: string,
+        password: string
+      ) => {
+        setLoading(true);
+
+        try {
+          const s =
+            await svcSignUp(
+              email,
+              phone,
+              password
+            );
+
+          setSession(s);
+
+          navigate(
+            '/select-role'
+          );
+        } catch (error) {
+          console.error(
+            'Signup failed:',
+            error
+          );
+
+          throw error;
+        } finally {
+          setLoading(
+            false
+          );
         }
-      );
+      },
+      [navigate]
+    );
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, [restoreSession]);
+  const signIn =
+    useCallback(
+      async (
+        email: string,
+        password: string
+      ) => {
+        setLoading(true);
 
-  const signUp = useCallback(
-    async (
-      email: string,
-      phone: string,
-      password: string
-    ) => {
-      setLoading(true);
+        try {
+          const s =
+            await svcSignIn(
+              email,
+              password
+            );
 
-      try {
-        const s =
-          await svcSignUp(
-            email,
-            phone,
-            password
+          setSession(s);
+
+          navigate(
+            getCustomerPortalPath(
+              s
+            )
           );
-
-        setSession(s);
-
-        navigate(
-          '/select-role'
-        );
-      } catch (error) {
-        console.error(
-          'Signup failed:',
-          error
-        );
-
-        throw error;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [navigate]
-  );
-
-  const signIn = useCallback(
-    async (
-      email: string,
-      password: string
-    ) => {
-      setLoading(true);
-
-      try {
-        const s =
-          await svcSignIn(
-            email,
-            password
+        } finally {
+          setLoading(
+            false
           );
+        }
+      },
+      [navigate]
+    );
 
-        setSession(s);
+  const signOut =
+    useCallback(
+      async () => {
+        setLoading(true);
 
-        navigate(
-          getCustomerPortalPath(s)
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [navigate]
-  );
+        try {
+          await svcSignOut();
 
-  const signOut = useCallback(
-    async () => {
-      setLoading(true);
+          setSession(null);
 
-      try {
-        await svcSignOut();
-
-        setSession(null);
-
-        navigate('/');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [navigate]
-  );
-
-  const setRoles = useCallback(
-    async (
-      roles: UserRole[]
-    ) => {
-      if (!session) {
-        return;
-      }
-
-      setLoading(true);
-
-      try {
-        const updated =
-          await updateRoles(
-            session,
-            roles
+          navigate('/');
+        } finally {
+          setLoading(
+            false
           );
+        }
+      },
+      [navigate]
+    );
 
-        setSession(
-          updated
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [session]
-  );
+  const setRoles =
+    useCallback(
+      async (
+        roles: UserRole[]
+      ) => {
+        if (!session) {
+          return;
+        }
 
-  const completeKyc = useCallback(
-    async (
-      status: KycStatus
-    ) => {
-      if (!session) {
-        return;
-      }
+        setLoading(true);
 
-      setLoading(true);
+        try {
+          const updated =
+            await updateRoles(
+              session,
+              roles
+            );
 
-      try {
-        const updated =
-          await updateKycStatus(
-            session,
-            status
+          setSession(
+            updated
           );
+        } finally {
+          setLoading(
+            false
+          );
+        }
+      },
+      [session]
+    );
 
-        setSession(
-          updated
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [session]
-  );
+  const completeKyc =
+    useCallback(
+      async (
+        status: KycStatus
+      ) => {
+        if (!session) {
+          return;
+        }
+
+        setLoading(true);
+
+        try {
+          const updated =
+            await updateKycStatus(
+              session,
+              status
+            );
+
+          setSession(
+            updated
+          );
+        } finally {
+          setLoading(
+            false
+          );
+        }
+      },
+      [session]
+    );
 
   const submitKycForReview =
     useCallback(
@@ -542,21 +869,8 @@ export function AuthProvider({
           // 1. Read onboarding information
           // ==================================================
 
-          let personalInfo: {
-            firstName?: string;
-            lastName?: string;
-          } = {};
-
-          try {
-            personalInfo =
-              JSON.parse(
-                sessionStorage.getItem(
-                  'ob_personal'
-                ) || '{}'
-              );
-          } catch {
-            personalInfo = {};
-          }
+          const personalInfo =
+            readStoredPersonalInfo();
 
           const storedRole =
             sessionStorage.getItem(
@@ -564,17 +878,22 @@ export function AuthProvider({
             );
 
           const role =
-            storedRole ||
-            session.roles[0] ||
-            'rider';
+            normalizeCustomerRole(
+              storedRole ||
+                session.roles[0] ||
+                'rider'
+            );
 
+          /*
+           * Every customer role requires Admin review.
+           *
+           * No customer role is auto-approved.
+           */
           const finalStatus =
-            role === 'rider'
-              ? 'approved'
-              : 'submitted';
+            'submitted' as KycStatus;
 
           // ==================================================
-          // 2. Read uploaded document metadata
+          // 2. Read uploaded documents
           // ==================================================
 
           const storedDocuments =
@@ -584,217 +903,18 @@ export function AuthProvider({
             getStoredSelfie();
 
           // ==================================================
-          // 3. Normalize phone
+          // 3. Resolve phone
           // ==================================================
 
           const normalizedPhone =
-            (
-              session.user.phone ||
-              ''
-            ).trim();
-
-          // ==================================================
-          // 4. Verify phone ownership before touching profile
-          // ==================================================
-          /*
-           * profiles.phone is unique.
-           *
-           * Before creating/updating a profile, check whether
-           * another profile already owns this phone number.
-           *
-           * We never overwrite another user's phone number.
-           */
-
-          let existingPhoneProfile:
-            | {
-                id: string;
-              }
-            | null = null;
-
-          if (normalizedPhone) {
-            const {
-              data:
-                phoneProfile,
-              error:
-                phoneLookupError,
-            } =
-              await supabase
-                .from('profiles')
-                .select('id')
-                .eq(
-                  'phone',
-                  normalizedPhone
-                )
-                .maybeSingle();
-
-            if (
-              phoneLookupError
-            ) {
-              throw new Error(
-                `Phone Verification Failed: ${phoneLookupError.message}`
-              );
-            }
-
-            existingPhoneProfile =
-              phoneProfile;
-          }
-
-          if (
-            existingPhoneProfile &&
-            existingPhoneProfile.id !==
-              session.user.id
-          ) {
-            throw new Error(
-              'This phone number is already registered to another MatMove account. Please sign in to the existing account or use a different phone number.'
+            normalizePhone(
+              personalInfo.phone ||
+                session.user.phone ||
+                ''
             );
-          }
 
           // ==================================================
-          // 5. Guarantee the current user's profile exists
-          // ==================================================
-
-          const {
-            data:
-              ensuredProfile,
-            error:
-              profileError,
-          } =
-            await supabase
-              .from('profiles')
-              .upsert(
-                {
-                  id:
-                    session.user.id,
-                  email:
-                    session.user.email ||
-                    '',
-                  ...(normalizedPhone
-                    ? {
-                        phone:
-                          normalizedPhone,
-                      }
-                    : {}),
-                  first_name:
-                    personalInfo.firstName ||
-                    session.user.firstName ||
-                    '',
-                  last_name:
-                    personalInfo.lastName ||
-                    session.user.lastName ||
-                    '',
-                  kyc_status:
-                    finalStatus,
-                  role,
-                  updated_at:
-                    new Date().toISOString(),
-                },
-                {
-                  onConflict:
-                    'id',
-                }
-              )
-              .select('id')
-              .single();
-
-          if (profileError) {
-            throw new Error(
-              `Profile Synchronization Failed: ${profileError.message}`
-            );
-          }
-
-          if (
-            !ensuredProfile?.id
-          ) {
-            throw new Error(
-              'Profile synchronization completed but no profile ID was returned.'
-            );
-          }
-
-          // ==================================================
-          // 6. Synchronize role
-          // ==================================================
-
-          const {
-            error:
-              roleDeleteError,
-          } =
-            await supabase
-              .from('user_roles')
-              .delete()
-              .eq(
-                'profile_id',
-                ensuredProfile.id
-              );
-
-          if (
-            roleDeleteError
-          ) {
-            throw new Error(
-              `Role Cleanup Failed: ${roleDeleteError.message}`
-            );
-          }
-
-          const {
-            error:
-              roleInsertError,
-          } =
-            await supabase
-              .from('user_roles')
-              .insert({
-                profile_id:
-                  ensuredProfile.id,
-                role,
-              });
-
-          if (
-            roleInsertError
-          ) {
-            throw new Error(
-              `Role Synchronization Failed: ${roleInsertError.message}`
-            );
-          }
-
-          // ==================================================
-          // 7. Create KYC submission
-          // ==================================================
-
-          const {
-            data:
-              submission,
-            error:
-              submissionError,
-          } =
-            await supabase
-              .from(
-                'kyc_submissions'
-              )
-              .insert({
-                profile_id:
-                  ensuredProfile.id,
-                target_role:
-                  role,
-                status:
-                  finalStatus,
-              })
-              .select('id')
-              .single();
-
-          if (
-            submissionError
-          ) {
-            throw new Error(
-              `Submission Insert Failed: ${submissionError.message}`
-            );
-          }
-
-          if (!submission?.id) {
-            throw new Error(
-              'KYC submission was created but no submission ID was returned.'
-            );
-          }
-
-          // ==================================================
-          // 8. Prepare KYC document records
+          // 4. Build secure RPC document payload
           // ==================================================
 
           const documentRows = [
@@ -804,96 +924,170 @@ export function AuthProvider({
               : []),
           ]
             .filter(
-              (document, index, array) =>
+              (
+                document,
+                index,
+                array
+              ) =>
                 document &&
                 document.id &&
-                document.id !== 'temp' &&
+                document.id !==
+                  'temp' &&
                 array.findIndex(
-                  (item) =>
+                  (
+                    item
+                  ) =>
                     item.id ===
                     document.id
                 ) === index
             )
             .map(
-              (document) => ({
-                submission_id:
-                  submission.id,
+              (
+                document
+              ) => ({
                 document_type:
                   document.type,
-                file_name:
-                  document.fileName,
+
                 storage_path:
                   document.id,
+
+                file_name:
+                  document.fileName,
+
                 file_size_bytes:
                   document.fileSize,
               })
             );
 
           // ==================================================
-          // 9. Insert uploaded documents
+          // 5. Call secure backend onboarding RPC
           // ==================================================
+          /*
+           * IMPORTANT:
+           *
+           * We no longer directly INSERT/DELETE user_roles.
+           *
+           * We no longer rely on the browser to change
+           * profiles.role.
+           *
+           * submit_customer_kyc() is SECURITY DEFINER and
+           * performs the controlled customer onboarding
+           * transaction on the backend.
+           */
 
-          if (
-            documentRows.length > 0
-          ) {
-            const {
-              error:
-                documentsError,
-            } =
-              await supabase
-                .from(
-                  'kyc_documents'
-                )
-                .insert(
-                  documentRows
-                );
+          const {
+            data:
+              onboardingResult,
+            error:
+              onboardingError,
+          } =
+            await supabase.rpc(
+              'submit_customer_kyc',
+              {
+                p_role:
+                  role,
 
-            if (
-              documentsError
-            ) {
-              throw new Error(
-                `KYC Documents Insert Failed: ${documentsError.message}`
-              );
-            }
-          }
-
-          // ==================================================
-          // 10. Build updated local session
-          // ==================================================
-
-          const updatedRoles =
-            [role] as UserRole[];
-
-          const updatedSession:
-            AuthSession = {
-              ...session,
-              roles:
-                updatedRoles,
-              kycStatus:
-                finalStatus,
-              user: {
-                ...session.user,
-                phone:
-                  normalizedPhone ||
-                  session.user.phone ||
-                  '',
-                firstName:
+                p_first_name:
                   personalInfo.firstName ||
                   session.user.firstName ||
                   '',
-                lastName:
+
+                p_last_name:
                   personalInfo.lastName ||
                   session.user.lastName ||
                   '',
-              },
-            };
+
+                p_phone:
+                  normalizedPhone,
+
+                p_address:
+                  personalInfo.address ||
+                  '',
+
+                p_documents:
+                  documentRows,
+              }
+            );
+
+          if (
+            onboardingError
+          ) {
+            throw new Error(
+              `KYC submission failed: ${onboardingError.message}`
+            );
+          }
+
+          if (
+            !onboardingResult ||
+            onboardingResult.success !==
+              true
+          ) {
+            throw new Error(
+              'KYC submission did not return a successful confirmation from MatMove.'
+            );
+          }
+
+          // ==================================================
+          // 6. Confirm authoritative backend result
+          // ==================================================
+
+          const returnedRole =
+            normalizeCustomerRole(
+              String(
+                onboardingResult.role ||
+                  role
+              )
+            );
+
+          const returnedKycStatus =
+            normalizeKycStatus(
+              String(
+                onboardingResult.kyc_status ||
+                  finalStatus
+              )
+            );
+
+          // ==================================================
+          // 7. Update local session only
+          // ==================================================
+
+          const updatedSession:
+            AuthSession = {
+            ...session,
+
+            roles: [
+              returnedRole,
+            ],
+
+            kycStatus:
+              returnedKycStatus,
+
+            user: {
+              ...session.user,
+
+              phone:
+                normalizedPhone ||
+                session.user.phone ||
+                '',
+
+              firstName:
+                personalInfo.firstName ||
+                session.user.firstName ||
+                '',
+
+              lastName:
+                personalInfo.lastName ||
+                session.user.lastName ||
+                '',
+            },
+          };
 
           setSession(
             updatedSession
           );
 
           // ==================================================
-          // 11. Clear onboarding state
+          // 8. Clear onboarding state
           // ==================================================
 
           sessionStorage.removeItem(
@@ -921,44 +1115,36 @@ export function AuthProvider({
           );
 
           // ==================================================
-          // 12. Navigate
+          // 9. Navigate to submitted state
           // ==================================================
 
-          if (
-            finalStatus ===
-            'approved'
-          ) {
-            navigate(
-              getCustomerPortalPath(
-                updatedSession
-              )
-            );
-          } else {
-            navigate(
-              '/onboarding/submitted'
-            );
-          }
+          navigate(
+            '/onboarding/submitted'
+          );
         } catch (error: unknown) {
           console.error(
-            'Submission error:',
+            'KYC submission error:',
             error
           );
 
           const message =
             error instanceof Error
               ? error.message
-              : JSON.stringify(
-                  error
-                );
+              : 'Unable to submit KYC for review.';
 
           alert(
-            `Error details: ${message}`
+            `KYC submission failed: ${message}`
           );
         } finally {
-          setLoading(false);
+          setLoading(
+            false
+          );
         }
       },
-      [session, navigate]
+      [
+        session,
+        navigate,
+      ]
     );
 
   const resubmitKycForReview =
@@ -971,6 +1157,12 @@ export function AuthProvider({
         setLoading(true);
 
         try {
+          /*
+           * Resubmission preparation remains local/draft.
+           *
+           * The actual new submission will go through
+           * submit_customer_kyc() again.
+           */
           const updated =
             await updateKycStatus(
               session,
@@ -986,13 +1178,19 @@ export function AuthProvider({
           );
         } catch (error) {
           console.error(
+            'KYC resubmission preparation failed:',
             error
           );
         } finally {
-          setLoading(false);
+          setLoading(
+            false
+          );
         }
       },
-      [session, navigate]
+      [
+        session,
+        navigate,
+      ]
     );
 
   const resetPassword =
@@ -1007,7 +1205,9 @@ export function AuthProvider({
             email
           );
         } finally {
-          setLoading(false);
+          setLoading(
+            false
+          );
         }
       },
       []
@@ -1029,7 +1229,9 @@ export function AuthProvider({
 
   return (
     <AuthContext.Provider
-      value={value}
+      value={
+        value
+      }
     >
       {children}
     </AuthContext.Provider>
