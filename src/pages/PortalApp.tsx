@@ -388,19 +388,11 @@ export function PortalApp() {
          * PHONE RESOLUTION
          * =====================================================
          *
-         * Email/password Supabase users can have an empty
-         * auth.users.phone because the phone was not used as
-         * the authentication identifier.
-         *
-         * MatMove onboarding stores the captured number in
-         * user metadata and should also persist it to profiles.
-         *
-         * We therefore use the following authoritative fallback:
-         *
+         * Priority:
          * 1. profiles.phone
          * 2. auth.users.phone
-         * 3. auth.users.user_metadata.phone
-         * 4. auth.users.user_metadata.phone_number
+         * 3. auth user metadata phone
+         * 4. auth user metadata phone_number
          */
         const profilePhone =
           normalizePhone(
@@ -438,10 +430,12 @@ export function PortalApp() {
          * LIVE KYC SUBMISSION
          * =====================================================
          *
-         * The profile is useful for compatibility, but the
-         * latest KYC submission is the operational verification
-         * record. This keeps the customer portal synchronized
-         * with Admin review.
+         * KYC remains a live operational record for Admin and
+         * restricted financial operations.
+         *
+         * IMPORTANT:
+         * KYC does NOT prevent the customer from entering the
+         * dashboard or using the wallet.
          */
         const {
           data: kycSubmission,
@@ -482,15 +476,24 @@ export function PortalApp() {
             kycSubmission?.status
           );
 
-        /*
-         * A live submission takes precedence when it exists.
-         * If there is no submission, retain the profile status.
-         */
         const resolvedKycStatus =
           kycSubmission?.status
             ? submissionKycStatus
             : profileKycStatus;
 
+        /*
+         * =====================================================
+         * CUSTOMER WALLETS
+         * =====================================================
+         *
+         * Wallet visibility is NOT dependent on KYC.
+         *
+         * All legitimate customer roles can access their wallet
+         * immediately after account creation.
+         *
+         * Backend financial functions remain authoritative for
+         * actual balance-changing operations.
+         */
         const {
           data: walletData,
           error: walletError,
@@ -575,6 +578,7 @@ export function PortalApp() {
           /*
            * Merchant orders will use the merchant/order
            * relationship when that live subsystem is connected.
+           *
            * Do not expose another customer's bookings.
            */
           bookingQuery =
@@ -610,10 +614,6 @@ export function PortalApp() {
             phone:
               resolvedPhone,
 
-            /*
-             * Keep both database-style and frontend-style
-             * KYC properties available to the child portals.
-             */
             kyc_status:
               resolvedKycStatus,
 
@@ -992,7 +992,29 @@ export function PortalApp() {
       setSuccessMsg('');
     };
 
-  const openRiderTopUp =
+  /*
+   * ==========================================================
+   * CUSTOMER WALLET TOP-UP
+   * ==========================================================
+   *
+   * IMPORTANT:
+   *
+   * All customer roles can access wallet funding.
+   *
+   * KYC is intentionally NOT checked here.
+   *
+   * The backend/provider settlement layer remains responsible
+   * for validating the authenticated customer and safely
+   * applying the resulting wallet credit.
+   *
+   * Current methods:
+   *
+   * Mobile Money -> Monime -> SLE wallet
+   * Card         -> Vult   -> USD wallet
+   *
+   * Flote will be added after its API documentation is reviewed.
+   */
+  const openWalletTopUp =
     () => {
       const role =
         String(
@@ -1001,10 +1023,12 @@ export function PortalApp() {
         ).toLowerCase();
 
       if (
-        role !== 'rider'
+        role !== 'rider' &&
+        role !== 'driver' &&
+        role !== 'merchant'
       ) {
         alert(
-          'Only riders can fund their MatMove wallet.'
+          'Your account is not configured as a MatMove customer.'
         );
         return;
       }
@@ -1012,13 +1036,19 @@ export function PortalApp() {
       setWalletAction(
         'topup'
       );
+
       setTopUpMethod(null);
+
       setMobileMoneyNetwork(
         'orange'
       );
+
       setWithdrawalPhone('');
+
       setAmount('');
+
       setSuccessMsg('');
+
       setIsWalletModalOpen(
         true
       );
@@ -1042,6 +1072,17 @@ export function PortalApp() {
         return;
       }
 
+      /*
+       * KYC is intentionally enforced ONLY for withdrawal.
+       *
+       * Drivers and merchants may:
+       * - access dashboard
+       * - access wallet
+       * - fund wallet
+       * - receive wallet-to-wallet funds
+       *
+       * Admin approval is required before cash withdrawal.
+       */
       const kycStatus =
         normalizeKycStatus(
           profile?.kyc_status ||
@@ -1061,17 +1102,23 @@ export function PortalApp() {
       setWalletAction(
         'withdraw'
       );
+
       setTopUpMethod(null);
+
       setMobileMoneyNetwork(
         'orange'
       );
+
       setWithdrawalPhone(
         normalizePhone(
           profile?.phone
         )
       );
+
       setAmount('');
+
       setSuccessMsg('');
+
       setIsWalletModalOpen(
         true
       );
@@ -1210,24 +1257,44 @@ export function PortalApp() {
         return;
       }
 
-      const isRider =
-        role === 'rider';
+      const isCustomer =
+        role === 'rider' ||
+        role === 'driver' ||
+        role === 'merchant';
 
       const isReceiver =
         role === 'driver' ||
         role === 'merchant';
 
+      /*
+       * ======================================================
+       * TOP-UP ACCESS
+       * ======================================================
+       *
+       * All customer roles can fund their wallet.
+       *
+       * There is intentionally NO KYC requirement here.
+       */
       if (
         walletAction ===
           'topup' &&
-        !isRider
+        !isCustomer
       ) {
         alert(
-          'Only riders can fund their MatMove wallet.'
+          'Your account is not configured as a MatMove customer.'
         );
         return;
       }
 
+      /*
+       * ======================================================
+       * WITHDRAWAL ACCESS
+       * ======================================================
+       *
+       * Only drivers and merchants can withdraw.
+       *
+       * Admin approval is required.
+       */
       if (
         walletAction ===
           'withdraw' &&
@@ -1289,25 +1356,29 @@ export function PortalApp() {
          * SECURE CUSTOMER WALLET TOP-UP
          * =====================================================
          *
-         * SLE:
-         *   Browser
-         *     -> Vercel create-monime-checkout
-         *     -> Monime hosted checkout
-         *     -> Monime webhook
-         *     -> secure Supabase settlement RPC
-         *     -> SLE customer wallet
+         * SLE Mobile Money:
          *
-         * USD:
-         *   Browser
-         *     -> Vercel create-vult-checkout
-         *     -> Vult hosted checkout
-         *     -> Vult webhook
-         *     -> secure Supabase settlement RPC
-         *     -> USD customer wallet
+         * Browser
+         *   -> /api/create-monime-checkout
+         *   -> Monime hosted checkout
+         *   -> Monime webhook
+         *   -> secure Supabase settlement RPC
+         *   -> customer SLE wallet
          *
-         * The browser NEVER credits the wallet.
+         * USD Card:
+         *
+         * Browser
+         *   -> /api/create-vult-checkout
+         *   -> Vult hosted checkout
+         *   -> Vult webhook
+         *   -> secure Supabase settlement RPC
+         *   -> customer USD wallet
+         *
+         * No wallet balance is changed by this browser code.
+         *
+         * IMPORTANT:
+         * KYC is NOT checked here.
          */
-
         if (
           walletAction ===
           'topup'
@@ -1438,9 +1509,10 @@ export function PortalApp() {
           );
 
           /*
-           * The provider owns the payment form.
-           * No raw card or Mobile Money credentials
-           * are collected by this browser form.
+           * Provider-owned checkout.
+           *
+           * MatMove does not collect raw card credentials or
+           * Mobile Money authentication information.
            */
           window.location.assign(
             redirectUrl
@@ -1455,7 +1527,7 @@ export function PortalApp() {
          * =====================================================
          *
          * Browser
-         *   -> Vercel /api/monime-payout
+         *   -> /api/monime-payout
          *   -> secure initiate_wallet_withdrawal()
          *   -> Monime payout
          *   -> Monime webhook
@@ -1464,10 +1536,9 @@ export function PortalApp() {
          *   -> wallet debit + ledger settlement
          *
          * A successful API response means the request entered
-         * the secure payout workflow. It does NOT mean that
-         * Mobile Money has already completed the payout.
+         * the secure payout workflow. It does NOT necessarily
+         * mean Mobile Money has already completed.
          */
-
         const {
           data: sessionData,
           error: sessionError,
@@ -1736,7 +1807,7 @@ export function PortalApp() {
             closeWalletPage
           }
           onTopUp={
-            openRiderTopUp
+            openWalletTopUp
           }
           onWithdraw={
             openWalletWithdrawal
@@ -2071,7 +2142,7 @@ function AccountSection({
                   </div>
 
                   <div className="text-sm text-slate-500 mt-1">
-                    Your account capabilities depend on MatMove verification status.
+                    Verification is required for restricted operations such as driver and merchant cash withdrawal.
                   </div>
                 </div>
 

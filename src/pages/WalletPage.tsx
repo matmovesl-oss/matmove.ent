@@ -131,7 +131,10 @@ export function WalletPage({
 }: WalletPageProps) {
   const role: WalletRole =
     String(
-      profile?.role || ''
+      profile?.role ||
+        profile?.customer_role ||
+        profile?.customerRole ||
+        ''
     ).toLowerCase();
 
   const isRider =
@@ -145,23 +148,34 @@ export function WalletPage({
     role === 'merchant' ||
     role === 'vendor';
 
+  const isCustomer =
+    isRider ||
+    isDriver ||
+    isMerchant;
+
   const isReceiver =
     isDriver ||
     isMerchant;
 
   /*
-   * ---------------------------------------------------------
-   * MULTI-CURRENCY WALLET MODEL
-   * ---------------------------------------------------------
+   * =========================================================
+   * IMPORTANT CUSTOMER WALLET RULE
+   * =========================================================
    *
-   * PortalApp may supply:
+   * Wallet access is NOT controlled by KYC status.
    *
-   * wallet.wallets = [
-   *   SLE wallet,
-   *   USD wallet
-   * ]
+   * A registered Rider, Driver, or Merchant can:
    *
-   * Each currency is resolved independently.
+   * - access the dashboard
+   * - access the wallet
+   * - view SLE/USD balances
+   * - load their wallet
+   *
+   * Driver/Merchant KYC approval is only required
+   * for cash withdrawal.
+   *
+   * Backend financial RPCs and provider webhooks
+   * remain authoritative for actual money movement.
    */
 
   const walletList =
@@ -189,12 +203,6 @@ export function WalletPage({
         ) === 'USD'
     );
 
-  /*
-   * Backward-compatible fallback for older
-   * PortalApp state where only one wallet
-   * object is supplied.
-   */
-
   const resolvedSleWallet =
     sleWallet ||
     (normalizeCurrency(
@@ -212,9 +220,9 @@ export function WalletPage({
       : undefined);
 
   /*
-   * ---------------------------------------------------------
-   * SLE WALLET
-   * ---------------------------------------------------------
+   * =========================================================
+   * SLE
+   * =========================================================
    */
 
   const sleBalance =
@@ -238,9 +246,9 @@ export function WalletPage({
     );
 
   /*
-   * ---------------------------------------------------------
-   * USD WALLET
-   * ---------------------------------------------------------
+   * =========================================================
+   * USD
+   * =========================================================
    */
 
   const usdBalance =
@@ -264,18 +272,12 @@ export function WalletPage({
     );
 
   /*
-   * ---------------------------------------------------------
-   * PRIMARY DISPLAY BALANCE
-   * ---------------------------------------------------------
-   *
-   * SLE is the default operational wallet.
-   *
-   * If an older rider-only state contains
-   * only USD, use USD as the fallback.
+   * =========================================================
+   * PRIMARY BALANCE
+   * =========================================================
    */
 
   const primaryCurrency: WalletCurrency =
-    isRider &&
     !resolvedSleWallet &&
     !!resolvedUsdWallet
       ? 'USD'
@@ -297,12 +299,12 @@ export function WalletPage({
       : sleFrozen;
 
   /*
-   * ---------------------------------------------------------
-   * VERIFICATION
-   * ---------------------------------------------------------
+   * =========================================================
+   * KYC
+   * =========================================================
    *
-   * Driver and merchant withdrawals are
-   * available only after Admin approval.
+   * KYC ONLY controls withdrawal for drivers
+   * and merchants.
    */
 
   const verificationStatus =
@@ -312,25 +314,18 @@ export function WalletPage({
         profile?.verification_status ||
         profile?.verificationStatus ||
         ''
-    ).toLowerCase();
+    )
+      .trim()
+      .toLowerCase();
 
   const isVerified =
     verificationStatus ===
     'approved';
 
   /*
-   * ---------------------------------------------------------
-   * WITHDRAWAL PERMISSION
-   * ---------------------------------------------------------
-   *
-   * Withdrawal is:
-   *
-   * 1. Driver/merchant only
-   * 2. KYC approved
-   * 3. SLE wallet not frozen
-   * 4. Available SLE balance > 0
-   *
-   * Reserved SLE is deliberately excluded.
+   * =========================================================
+   * WITHDRAWAL
+   * =========================================================
    */
 
   const hasAvailableSleBalance =
@@ -361,11 +356,11 @@ export function WalletPage({
 
   const roleDescription =
     isRider
-      ? 'Fund your wallet securely and use your MatMove balance to pay for services and purchases.'
+      ? 'Fund your wallet and use your MatMove balance to pay for services and purchases.'
       : isDriver
-        ? 'Receive trip payments and securely withdraw your available earnings.'
+        ? 'Receive MatMove payments, load your wallet, and withdraw available earnings after verification.'
         : isMerchant
-          ? 'Receive customer payments and securely withdraw your business earnings.'
+          ? 'Receive customer payments, load your wallet, and withdraw available earnings after verification.'
           : 'Manage your MatMove wallet and permitted transactions.';
 
   const withdrawalStatusLabel =
@@ -380,8 +375,8 @@ export function WalletPage({
   const withdrawalStatusDescription =
     !isVerified
       ? isMerchant
-        ? 'Merchant cash withdrawal becomes available after your business verification is approved by MatMove Admin.'
-        : 'Driver cash withdrawal becomes available after your account verification is approved by MatMove Admin.'
+        ? 'You can receive and hold funds, but cash withdrawal becomes available after MatMove Admin approves your business verification.'
+        : 'You can receive and hold funds, but cash withdrawal becomes available after MatMove Admin approves your account verification.'
       : sleFrozen
         ? 'Your SLE wallet is currently restricted and cannot process withdrawals.'
         : !hasAvailableSleBalance
@@ -389,7 +384,7 @@ export function WalletPage({
             ? `${formatMoney(
                 sleReserved,
                 'SLE'
-              )} is reserved for a pending financial operation. Your remaining available SLE balance can be withdrawn once funds are released.`
+              )} is reserved for a pending financial operation. Your remaining available balance can be withdrawn once funds are released.`
             : 'There are currently no SLE funds available for withdrawal.'
           : 'Withdraw your available SLE earnings through a secure supported Mobile Money method.';
 
@@ -400,6 +395,21 @@ export function WalletPage({
       }
 
       onWithdraw?.();
+    };
+
+  /*
+   * A registered customer always has wallet
+   * funding access from this page.
+   *
+   * No KYC check is performed here.
+   */
+  const handleTopUp =
+    () => {
+      if (!isCustomer) {
+        return;
+      }
+
+      onTopUp?.();
     };
 
   return (
@@ -446,6 +456,7 @@ export function WalletPage({
       </header>
 
       <main className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+
         {/* =========================
             CURRENCY BALANCES
            ========================= */}
@@ -469,8 +480,8 @@ export function WalletPage({
             }
             description={
               isReceiver
-                ? 'Trip and customer payments are held here.'
-                : 'Mobile Money funding and MatMove spending.'
+                ? 'Receive MatMove payments and manage available SLE funds.'
+                : 'Load and use your SLE MatMove balance.'
             }
             icon={
               <Banknote
@@ -582,7 +593,7 @@ export function WalletPage({
         </section>
 
         {/* =========================
-            CURRENCY INFORMATION
+            WALLET INFORMATION
            ========================= */}
 
         <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
@@ -619,7 +630,7 @@ export function WalletPage({
               }
               description={
                 isReceiver
-                  ? 'Driver and merchant earnings, customer payments, and Mobile Money withdrawals.'
+                  ? 'Receive MatMove wallet payments and supported SLE funding.'
                   : 'Mobile Money funding and everyday MatMove spending.'
               }
             />
@@ -644,31 +655,29 @@ export function WalletPage({
         </section>
 
         {/* =========================
-            PRIMARY ACTIONS
+            WALLET ACTIONS
            ========================= */}
 
-        <section>
-          <div className="mb-4">
-            <h2 className="text-lg font-bold text-slate-900">
-              Wallet Actions
-            </h2>
+        {isCustomer && (
+          <section>
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-slate-900">
+                Wallet Actions
+              </h2>
 
-            <p className="text-sm text-slate-500 mt-1">
-              {isRider
-                ? 'Choose what you want to do with your MatMove wallet.'
-                : 'Manage money received through your MatMove account.'}
-            </p>
-          </div>
+              <p className="text-sm text-slate-500 mt-1">
+                Manage your MatMove funds. Verification does not prevent
+                wallet access or wallet funding.
+              </p>
+            </div>
 
-          {/* =========================
-              RIDER ACTIONS
-             ========================= */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
-          {isRider && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* LOAD WALLET — ALL CUSTOMER ROLES */}
+
               <button
                 onClick={
-                  onTopUp
+                  handleTopUp
                 }
                 className="group bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm hover:border-blue-300 hover:shadow-md transition"
               >
@@ -681,8 +690,8 @@ export function WalletPage({
                 </h3>
 
                 <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                  Add money securely using Mobile Money for SLE or a
-                  supported bank card for USD.
+                  Add money to your MatMove wallet using an available
+                  payment provider.
                 </p>
 
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -705,201 +714,181 @@ export function WalletPage({
                 </div>
               </button>
 
-              <button
-                onClick={
-                  onSendMoney
-                }
-                className="group bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm hover:border-emerald-300 hover:shadow-md transition"
-              >
-                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-100 transition">
-                  <Send size={22} />
-                </div>
+              {/* RIDER PAYMENT */}
 
-                <h3 className="font-bold text-slate-900">
-                  Pay / Send Money
-                </h3>
-
-                <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                  Pay MatMove drivers or merchants directly from your
-                  available wallet balance.
-                </p>
-
-                <div className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-emerald-600">
-                  Wallet-to-wallet payment
-                  <span aria-hidden="true">
-                    →
-                  </span>
-                </div>
-              </button>
-            </div>
-          )}
-
-          {/* =========================
-              DRIVER / MERCHANT ACTIONS
-             ========================= */}
-
-          {isReceiver && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4">
-                  <Banknote size={22} />
-                </div>
-
-                <h3 className="font-bold text-slate-900">
-                  Receive Payments
-                </h3>
-
-                <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                  {isDriver
-                    ? 'Receive customer and trip payments directly into your MatMove SLE wallet.'
-                    : 'Receive customer payments directly into your merchant SLE wallet.'}
-                </p>
-
-                <div className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg">
-                  <CheckCircle2 size={14} />
-                  Incoming payments enabled
-                </div>
-              </div>
-
-              <button
-                onClick={
-                  handleWithdraw
-                }
-                disabled={
-                  !canWithdraw
-                }
-                aria-disabled={
-                  !canWithdraw
-                }
-                className={`group rounded-2xl p-5 text-left shadow-sm transition border ${
-                  canWithdraw
-                    ? 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md cursor-pointer'
-                    : 'bg-slate-100 border-slate-200 cursor-not-allowed'
-                }`}
-              >
-                <div
-                  className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${
-                    canWithdraw
-                      ? 'bg-blue-50 text-blue-600 group-hover:bg-blue-100'
-                      : 'bg-slate-200 text-slate-400'
-                  }`}
+              {isRider && (
+                <button
+                  onClick={
+                    onSendMoney
+                  }
+                  className="group bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm hover:border-emerald-300 hover:shadow-md transition"
                 >
-                  {canWithdraw ? (
-                    <ArrowUpFromLine size={22} />
-                  ) : (
-                    <LockKeyhole size={22} />
-                  )}
-                </div>
+                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-100 transition">
+                    <Send size={22} />
+                  </div>
 
-                <div className="flex items-start justify-between gap-3">
-                  <h3
-                    className={`font-bold ${
-                      canWithdraw
-                        ? 'text-slate-900'
-                        : 'text-slate-500'
-                    }`}
-                  >
-                    Withdraw SLE
+                  <h3 className="font-bold text-slate-900">
+                    Pay / Send Money
                   </h3>
 
-                  <span
-                    className={`text-[10px] uppercase tracking-wide font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${
-                      canWithdraw
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-amber-50 text-amber-700'
-                    }`}
-                  >
-                    {canWithdraw
-                      ? 'Available'
-                      : 'Locked'}
-                  </span>
-                </div>
+                  <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                    Pay MatMove drivers or merchants directly from your
+                    available wallet balance.
+                  </p>
 
-                <p
-                  className={`text-sm mt-1 leading-relaxed ${
-                    canWithdraw
-                      ? 'text-slate-500'
-                      : 'text-slate-400'
-                  }`}
-                >
-                  {withdrawalStatusDescription}
-                </p>
-
-                <div
-                  className={`mt-4 inline-flex items-center gap-2 text-xs font-bold ${
-                    canWithdraw
-                      ? 'text-blue-600'
-                      : 'text-slate-400'
-                  }`}
-                >
-                  {withdrawalStatusLabel}
-
-                  {canWithdraw && (
+                  <div className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-emerald-600">
+                    Wallet-to-wallet payment
                     <span aria-hidden="true">
                       →
                     </span>
-                  )}
+                  </div>
+                </button>
+              )}
+
+              {/* DRIVER / MERCHANT RECEIVE */}
+
+              {isReceiver && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4">
+                    <Banknote size={22} />
+                  </div>
+
+                  <h3 className="font-bold text-slate-900">
+                    Receive Payments
+                  </h3>
+
+                  <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                    {isDriver
+                      ? 'Receive customer and trip payments directly into your MatMove SLE wallet.'
+                      : 'Receive customer payments directly into your merchant SLE wallet.'}
+                  </p>
+
+                  <div className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg">
+                    <CheckCircle2 size={14} />
+                    Incoming payments enabled
+                  </div>
                 </div>
-              </button>
+              )}
+
+              {/* DRIVER / MERCHANT WITHDRAW */}
+
+              {isReceiver && (
+                <button
+                  onClick={
+                    handleWithdraw
+                  }
+                  disabled={
+                    !canWithdraw
+                  }
+                  aria-disabled={
+                    !canWithdraw
+                  }
+                  className={`group rounded-2xl p-5 text-left shadow-sm transition border ${
+                    canWithdraw
+                      ? 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md cursor-pointer'
+                      : 'bg-slate-100 border-slate-200 cursor-not-allowed'
+                  }`}
+                >
+                  <div
+                    className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${
+                      canWithdraw
+                        ? 'bg-blue-50 text-blue-600 group-hover:bg-blue-100'
+                        : 'bg-slate-200 text-slate-400'
+                    }`}
+                  >
+                    {canWithdraw ? (
+                      <ArrowUpFromLine size={22} />
+                    ) : (
+                      <LockKeyhole size={22} />
+                    )}
+                  </div>
+
+                  <div className="flex items-start justify-between gap-3">
+                    <h3
+                      className={`font-bold ${
+                        canWithdraw
+                          ? 'text-slate-900'
+                          : 'text-slate-500'
+                      }`}
+                    >
+                      Withdraw SLE
+                    </h3>
+
+                    <span
+                      className={`text-[10px] uppercase tracking-wide font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${
+                        canWithdraw
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      {canWithdraw
+                        ? 'Available'
+                        : 'Locked'}
+                    </span>
+                  </div>
+
+                  <p
+                    className={`text-sm mt-1 leading-relaxed ${
+                      canWithdraw
+                        ? 'text-slate-500'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    {withdrawalStatusDescription}
+                  </p>
+
+                  <div
+                    className={`mt-4 inline-flex items-center gap-2 text-xs font-bold ${
+                      canWithdraw
+                        ? 'text-blue-600'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    {withdrawalStatusLabel}
+
+                    {canWithdraw && (
+                      <span aria-hidden="true">
+                        →
+                      </span>
+                    )}
+                  </div>
+                </button>
+              )}
             </div>
-          )}
-
-          {/* =========================
-              VERIFICATION NOTICE
-             ========================= */}
-
-          {isReceiver &&
-            !isVerified && (
-              <div className="mt-4 bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                <div className="flex items-start gap-3">
-                  <LockKeyhole
-                    size={18}
-                    className="text-amber-600 mt-0.5 shrink-0"
-                  />
-
-                  <div>
-                    <p className="text-sm font-bold text-amber-900">
-                      Cash withdrawal is locked
-                    </p>
-
-                    <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                      {isMerchant
-                        ? 'Your merchant wallet can receive customer payments, but cash withdrawal will remain locked until MatMove Admin approves your business verification.'
-                        : 'Your driver wallet can receive trip earnings, but cash withdrawal will remain locked until MatMove Admin approves your account verification.'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-          {isReceiver &&
-            isVerified &&
-            sleFrozen && (
-              <div className="mt-4 bg-red-50 border border-red-200 rounded-2xl p-4">
-                <div className="flex items-start gap-3">
-                  <LockKeyhole
-                    size={18}
-                    className="text-red-600 mt-0.5 shrink-0"
-                  />
-
-                  <div>
-                    <p className="text-sm font-bold text-red-900">
-                      SLE wallet withdrawals are temporarily locked
-                    </p>
-
-                    <p className="text-xs text-red-800 mt-1 leading-relaxed">
-                      Your SLE wallet has an active restriction.
-                      Withdrawals cannot be initiated until the restriction
-                      is removed by the appropriate MatMove process.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-        </section>
+          </section>
+        )}
 
         {/* =========================
-            RIDER WALLET FUNDING
+            DRIVER / MERCHANT NOTICE
+           ========================= */}
+
+        {isReceiver &&
+          !isVerified && (
+          <section className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+            <div className="flex items-start gap-3">
+              <LockKeyhole
+                size={19}
+                className="text-amber-600 mt-0.5 shrink-0"
+              />
+
+              <div>
+                <p className="text-sm font-bold text-amber-900">
+                  Cash withdrawal is locked until verification
+                </p>
+
+                <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                  You still have full access to your MatMove wallet,
+                  including wallet funding and receiving wallet-to-wallet
+                  payments. Admin approval is required only before you can
+                  withdraw funds to Mobile Money.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* =========================
+            RIDER FUNDING
            ========================= */}
 
         {isRider && (
@@ -928,7 +917,7 @@ export function WalletPage({
                 </div>
 
                 <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
-                  Method 01
+                  SLE
                 </div>
 
                 <h3 className="font-bold text-slate-900 mt-1">
@@ -936,13 +925,14 @@ export function WalletPage({
                 </h3>
 
                 <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                  Fund your SLE wallet through secure Monime checkout.
+                  Fund your SLE wallet through a supported secure Mobile
+                  Money checkout.
                 </p>
 
                 <div className="mt-4 text-xs text-slate-600 space-y-2">
                   <Step text="Choose Mobile Money" />
                   <Step text="Enter SLE amount" />
-                  <Step text="Complete secure Monime checkout" />
+                  <Step text="Complete secure provider checkout" />
                   <Step text="MatMove credits after provider confirmation" />
                 </div>
               </div>
@@ -953,7 +943,7 @@ export function WalletPage({
                 </div>
 
                 <div className="text-xs font-bold uppercase tracking-wider text-emerald-600">
-                  Method 02
+                  USD
                 </div>
 
                 <h3 className="font-bold text-slate-900 mt-1">
@@ -961,13 +951,14 @@ export function WalletPage({
                 </h3>
 
                 <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                  Fund your USD wallet through secure Vult checkout.
+                  Fund your USD wallet through secure Visa/Mastercard
+                  checkout.
                 </p>
 
                 <div className="mt-4 text-xs text-slate-600 space-y-2">
                   <Step text="Choose Bank Card" />
                   <Step text="Enter USD amount" />
-                  <Step text="Complete secure Visa/Mastercard checkout" />
+                  <Step text="Complete secure card checkout" />
                   <Step text="MatMove credits after provider confirmation" />
                 </div>
               </div>
@@ -978,23 +969,23 @@ export function WalletPage({
                 </div>
 
                 <div className="text-xs font-bold uppercase tracking-wider text-purple-600">
-                  MatMove Ledger
+                  MatMove
                 </div>
 
                 <h3 className="font-bold text-slate-900 mt-1">
-                  Wallet Settlement
+                  Ledger Settlement
                 </h3>
 
                 <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                  External payment confirmation is reconciled with the
-                  correct currency wallet and MatMove ledger.
+                  Provider confirmation is reconciled with the correct
+                  currency wallet and MatMove ledger.
                 </p>
 
                 <div className="mt-4 text-xs text-slate-600 space-y-2">
                   <Step text="Provider confirms transaction" />
                   <Step text="MatMove verifies the reference" />
                   <Step text="Correct currency ledger is posted" />
-                  <Step text="Customer wallet is updated" />
+                  <Step text="Wallet balance is updated" />
                 </div>
               </div>
             </div>
@@ -1011,11 +1002,10 @@ export function WalletPage({
                 </p>
 
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  MatMove does not store raw bank-card details or rely on
-                  a browser button click to credit a wallet. The payment
-                  provider confirms the transaction first, after which
-                  the secure MatMove backend records the transaction and
-                  updates the correct wallet ledger.
+                  MatMove does not store raw bank-card details or credit
+                  wallet balances from a browser button click. The payment
+                  provider confirms the transaction first, after which the
+                  secure MatMove backend records and settles the transaction.
                 </p>
               </div>
             </div>
@@ -1056,7 +1046,7 @@ export function WalletPage({
                 </div>
 
                 <p className="text-xs text-slate-600 mt-1">
-                  Customer wallet → your wallet
+                  Customer wallet → Driver/Merchant wallet
                 </p>
               </div>
 
@@ -1085,8 +1075,8 @@ export function WalletPage({
 
                 <p className="text-xs text-slate-600 mt-1">
                   {canWithdraw
-                    ? 'Withdrawal is completed only after the Mobile Money payout is confirmed.'
-                    : 'Admin verification and available SLE funds are required before cash withdrawal becomes available.'}
+                    ? 'Withdrawal is completed only after Mobile Money payout confirmation.'
+                    : 'Admin verification is required before cash withdrawal.'}
                 </p>
               </div>
             </div>
@@ -1099,10 +1089,10 @@ export function WalletPage({
                 />
 
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Driver and merchant balances are controlled by the
-                  MatMove transaction ledger. A withdrawal request should
-                  never directly modify the wallet balance from the
-                  browser.
+                  Incoming wallet-to-wallet payments are separate from
+                  cash withdrawal approval. A Driver or Merchant can
+                  receive MatMove wallet payments while verification is
+                  still pending.
                 </p>
               </div>
             </div>
@@ -1126,7 +1116,7 @@ export function WalletPage({
                 </h2>
 
                 <p className="text-sm text-slate-500 mt-1">
-                  Your confirmed wallet transactions will appear here.
+                  Your wallet transaction history will appear here.
                 </p>
               </div>
             </div>
@@ -1145,14 +1135,13 @@ export function WalletPage({
             </h3>
 
             <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
-              Confirmed wallet transactions will be displayed here once
-              the wallet history feed is connected to the live MatMove
-              transaction ledger.
+              Wallet transactions will appear here as the live transaction
+              history feed is connected.
             </p>
 
             <div className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-slate-500 bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg">
               <ReceiptText size={14} />
-              Live ledger integration pending
+              Live ledger history
             </div>
           </div>
         </section>
@@ -1173,7 +1162,7 @@ export function WalletPage({
               </h2>
 
               <p className="text-xs text-slate-500 mt-1">
-                MatMove separates the user interface from the financial
+                MatMove separates the customer interface from the financial
                 ledger and external payment providers.
               </p>
             </div>
@@ -1187,17 +1176,17 @@ export function WalletPage({
 
             <SecurityItem
               title="Central ledger"
-              text="Every wallet movement should have a corresponding MatMove ledger transaction."
+              text="Every wallet movement must have a corresponding MatMove ledger transaction."
             />
 
             <SecurityItem
               title="No raw card storage"
-              text="Card details should be handled by the approved payment provider rather than stored by MatMove."
+              text="Card details are handled by the approved payment provider rather than stored by MatMove."
             />
 
             <SecurityItem
               title="Withdrawal protection"
-              text="Cash-out requests require approved verification, available SLE balance, and provider confirmation before final settlement."
+              text="Driver and merchant cash-out requires Admin verification, available SLE funds, and provider confirmation."
             />
           </div>
         </section>
@@ -1218,25 +1207,35 @@ export function WalletPage({
               </h2>
 
               <p className="text-xs text-slate-500 mt-1">
-                Available wallet operations depend on your MatMove
-                account role and verification status.
+                Verification controls restricted operations, not basic
+                wallet access.
               </p>
             </div>
           </div>
 
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {isRider && (
+
+            {isCustomer && (
               <>
                 <PermissionItem
                   allowed
-                  text="Load SLE wallet through Mobile Money"
+                  text="Access MatMove wallet"
                 />
 
                 <PermissionItem
                   allowed
-                  text="Load USD wallet through supported bank card"
+                  text="Load MatMove wallet"
                 />
 
+                <PermissionItem
+                  allowed
+                  text="View SLE and USD balances"
+                />
+              </>
+            )}
+
+            {isRider && (
+              <>
                 <PermissionItem
                   allowed
                   text="Pay drivers and merchants"
@@ -1263,18 +1262,8 @@ export function WalletPage({
                   text={
                     canWithdraw
                       ? 'Withdraw available SLE funds'
-                      : 'Withdraw available SLE funds — Admin verification required'
+                      : 'Cash withdrawal — Admin verification required'
                   }
-                />
-
-                <PermissionItem
-                  allowed={false}
-                  text="Customer wallet top-up"
-                />
-
-                <PermissionItem
-                  allowed={false}
-                  text="Outgoing wallet payments"
                 />
               </>
             )}

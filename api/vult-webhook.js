@@ -7,7 +7,8 @@ export const config = {
   },
 };
 
-const MAX_BODY_BYTES = 1024 * 1024;
+const MAX_BODY_BYTES =
+  1024 * 1024;
 
 function getHeader(req, name) {
   const value =
@@ -24,15 +25,17 @@ function timingSafeStringEqual(
   left,
   right
 ) {
-  const leftBuffer = Buffer.from(
-    String(left || ''),
-    'utf8'
-  );
+  const leftBuffer =
+    Buffer.from(
+      String(left || ''),
+      'utf8'
+    );
 
-  const rightBuffer = Buffer.from(
-    String(right || ''),
-    'utf8'
-  );
+  const rightBuffer =
+    Buffer.from(
+      String(right || ''),
+      'utf8'
+    );
 
   if (
     leftBuffer.length === 0 ||
@@ -58,52 +61,61 @@ function readRawBody(req) {
 
       req.setEncoding('utf8');
 
-      req.on('data', (chunk) => {
-        if (settled) {
-          return;
-        }
+      req.on(
+        'data',
+        (chunk) => {
+          if (settled) {
+            return;
+          }
 
-        size += Buffer.byteLength(
-          chunk,
-          'utf8'
-        );
-
-        if (
-          size >
-          MAX_BODY_BYTES
-        ) {
-          settled = true;
-
-          reject(
-            new Error(
-              'Webhook payload is too large.'
-            )
+          size += Buffer.byteLength(
+            chunk,
+            'utf8'
           );
 
-          req.destroy();
-          return;
+          if (
+            size >
+            MAX_BODY_BYTES
+          ) {
+            settled = true;
+
+            reject(
+              new Error(
+                'Webhook payload is too large.'
+              )
+            );
+
+            req.destroy();
+            return;
+          }
+
+          body += chunk;
         }
+      );
 
-        body += chunk;
-      });
+      req.on(
+        'end',
+        () => {
+          if (settled) {
+            return;
+          }
 
-      req.on('end', () => {
-        if (settled) {
-          return;
+          settled = true;
+          resolve(body);
         }
+      );
 
-        settled = true;
-        resolve(body);
-      });
+      req.on(
+        'error',
+        (error) => {
+          if (settled) {
+            return;
+          }
 
-      req.on('error', (error) => {
-        if (settled) {
-          return;
+          settled = true;
+          reject(error);
         }
-
-        settled = true;
-        reject(error);
-      });
+      );
     }
   );
 }
@@ -215,6 +227,7 @@ function verifyBasicAuthentication(
     valid:
       usernameValid &&
       passwordValid,
+
     reason:
       usernameValid &&
       passwordValid
@@ -332,8 +345,71 @@ async function findVultPayment(
       .maybeSingle();
 
   return {
-    payment: data || null,
+    payment:
+      data || null,
+
     error,
+  };
+}
+
+function buildNormalizedPayload(
+  payload,
+  paymentTransactionId,
+  paymentTransaction
+) {
+  const orderId =
+    firstString(
+      payload?.orderId,
+      payload?.order_id
+    );
+
+  const vultRequestId =
+    firstString(
+      payload?.vultRequestId,
+      payload?.vult_request_id
+    );
+
+  const status =
+    normalizeStatus(
+      payload?.status
+    );
+
+  return {
+    provider:
+      'vult',
+
+    event_type:
+      `payment.${status}`,
+
+    provider_event_id:
+      vultRequestId,
+
+    order_id:
+      orderId,
+
+    vult_request_id:
+      vultRequestId,
+
+    status,
+
+    success:
+      status === 'completed',
+
+    payment_transaction_id:
+      paymentTransactionId,
+
+    provider_transaction_id:
+      vultRequestId,
+
+    idempotency_key:
+      paymentTransaction?.idempotency_key ||
+      null,
+
+    provider_payload:
+      payload,
+
+    received_at:
+      new Date().toISOString(),
   };
 }
 
@@ -342,29 +418,38 @@ export default async function handler(
   res
 ) {
   /*
-   * ---------------------------------------------------------
+   * =========================================================
    * 1. Method
-   * ---------------------------------------------------------
+   * =========================================================
    */
 
   if (
-    req.method !== 'POST'
+    req.method !==
+    'POST'
   ) {
     res.setHeader(
       'Allow',
       'POST'
     );
 
-    return res.status(405).json({
+    return res.status(
+      405
+    ).json({
       error:
         'Method not allowed.',
     });
   }
 
   /*
-   * ---------------------------------------------------------
-   * 2. Verify Vult Basic Authentication
-   * ---------------------------------------------------------
+   * =========================================================
+   * 2. Authenticate Vult
+   * =========================================================
+   *
+   * Vult's supplied merchant integration contract
+   * protects the webhook with Basic Authentication.
+   *
+   * We validate it before accepting or processing
+   * any provider event.
    */
 
   const authentication =
@@ -372,13 +457,17 @@ export default async function handler(
       req
     );
 
-  if (!authentication.valid) {
+  if (
+    !authentication.valid
+  ) {
     console.error(
       'Rejected Vult webhook:',
       authentication.reason
     );
 
-    return res.status(401).json({
+    return res.status(
+      401
+    ).json({
       error:
         'Unauthorized.',
     });
@@ -386,27 +475,33 @@ export default async function handler(
 
   try {
     /*
-     * ---------------------------------------------------------
+     * =========================================================
      * 3. Read raw body
-     * ---------------------------------------------------------
+     * =========================================================
      */
 
     const rawBody =
-      await readRawBody(req);
+      await readRawBody(
+        req
+      );
 
-    if (!rawBody.trim()) {
-      return res.status(400).json({
+    if (
+      !rawBody.trim()
+    ) {
+      return res.status(
+        400
+      ).json({
         error:
           'Webhook body is empty.',
       });
     }
 
     /*
-     * ---------------------------------------------------------
-     * 4. Parse Vult payload
-     * ---------------------------------------------------------
+     * =========================================================
+     * 4. Parse Vult webhook
+     * =========================================================
      *
-     * Expected Vult structure:
+     * Expected:
      *
      * {
      *   "orderId": "order-123",
@@ -423,7 +518,9 @@ export default async function handler(
           rawBody
         );
     } catch {
-      return res.status(400).json({
+      return res.status(
+        400
+      ).json({
         error:
           'Invalid JSON payload.',
       });
@@ -451,7 +548,9 @@ export default async function handler(
         'Vult webhook missing orderId.'
       );
 
-      return res.status(400).json({
+      return res.status(
+        400
+      ).json({
         error:
           'orderId is required.',
       });
@@ -462,7 +561,9 @@ export default async function handler(
         'Vult webhook missing vultRequestId.'
       );
 
-      return res.status(400).json({
+      return res.status(
+        400
+      ).json({
         error:
           'vultRequestId is required.',
       });
@@ -474,38 +575,42 @@ export default async function handler(
         payload?.status
       );
 
-      return res.status(400).json({
+      return res.status(
+        400
+      ).json({
         error:
           'Unsupported Vult webhook status.',
       });
     }
 
     /*
-     * ---------------------------------------------------------
-     * 5. Trusted Supabase service client
-     * ---------------------------------------------------------
+     * =========================================================
+     * 5. Supabase service client
+     * =========================================================
      */
 
     const supabaseAdmin =
       getSupabaseAdmin();
 
     /*
-     * ---------------------------------------------------------
-     * 6. Find matching MatMove payment
-     * ---------------------------------------------------------
+     * =========================================================
+     * 6. Match provider order to MatMove payment
+     * =========================================================
      *
-     * create-vult-checkout.js stores the generated
-     * Vult order ID inside payment_transactions.metadata.
+     * The orderId is generated by MatMove and stored
+     * inside payment_transactions.metadata.
      */
 
     const {
-      paymentTransaction,
+      payment:
+        paymentTransaction,
       error:
         paymentLookupError,
-    } = await findVultPayment(
-      supabaseAdmin,
-      orderId
-    );
+    } =
+      await findVultPayment(
+        supabaseAdmin,
+        orderId
+      );
 
     if (
       paymentLookupError
@@ -516,11 +621,13 @@ export default async function handler(
       );
 
       /*
-       * We cannot safely register this as linked
-       * to a MatMove payment if the database lookup
-       * itself failed.
+       * We cannot safely register the event as
+       * financially linked while the authoritative
+       * payment lookup is unavailable.
        */
-      return res.status(500).json({
+      return res.status(
+        500
+      ).json({
         error:
           'Unable to reconcile Vult order.',
       });
@@ -531,63 +638,34 @@ export default async function handler(
       null;
 
     /*
-     * ---------------------------------------------------------
-     * 7. Normalize provider event
-     * ---------------------------------------------------------
+     * =========================================================
+     * 7. Build durable provider event
+     * =========================================================
      */
+
+    const normalizedPayload =
+      buildNormalizedPayload(
+        payload,
+        paymentTransactionId,
+        paymentTransaction
+      );
 
     const eventType =
       `payment.${status}`;
 
-    const normalizedPayload = {
-      provider:
-        'vult',
-
-      event_type:
-        eventType,
-
-      provider_event_id:
-        vultRequestId,
-
-      order_id:
-        orderId,
-
-      vult_request_id:
-        vultRequestId,
-
-      status,
-
-      success:
-        status === 'completed',
-
-      payment_transaction_id:
-        paymentTransactionId,
-
-      provider_transaction_id:
-        vultRequestId,
-
-      idempotency_key:
-        paymentTransaction?.idempotency_key ||
-        null,
-
-      provider_payload:
-        payload,
-
-      received_at:
-        new Date().toISOString(),
-    };
-
     /*
-     * ---------------------------------------------------------
+     * =========================================================
      * 8. Register provider event
-     * ---------------------------------------------------------
+     * =========================================================
      *
-     * The database record becomes the durable audit/
-     * reconciliation record for the provider callback.
+     * The provider event is stored before financial settlement.
+     *
+     * This gives MatMove a durable reconciliation trail.
      */
 
     const {
-      data: registration,
+      data:
+        registration,
       error:
         registrationError,
     } =
@@ -629,7 +707,9 @@ export default async function handler(
         registrationError
       );
 
-      return res.status(500).json({
+      return res.status(
+        500
+      ).json({
         error:
           'Failed to register Vult webhook event.',
       });
@@ -643,22 +723,26 @@ export default async function handler(
         registration
       );
 
-      return res.status(500).json({
+      return res.status(
+        500
+      ).json({
         error:
           'Vult webhook registration was unsuccessful.',
       });
     }
 
     /*
-     * ---------------------------------------------------------
-     * 9. Duplicate webhook
-     * ---------------------------------------------------------
+     * =========================================================
+     * 9. Duplicate event
+     * =========================================================
      */
 
     if (
       registration.duplicate
     ) {
-      return res.status(200).json({
+      return res.status(
+        200
+      ).json({
         received:
           true,
 
@@ -679,27 +763,32 @@ export default async function handler(
 
         status,
 
+        payment_transaction_id:
+          paymentTransactionId,
+
         message:
           'Vult webhook was already registered.',
       });
     }
 
     /*
-     * ---------------------------------------------------------
-     * 10. FAILED payment
-     * ---------------------------------------------------------
+     * =========================================================
+     * 10. Vult failed payment
+     * =========================================================
      *
-     * Vult's failed payment state does not create wallet funds.
+     * According to the Vult merchant flow already established
+     * for MatMove, a failed card attempt must not create
+     * wallet funds.
      *
-     * We intentionally leave the MatMove payment pending so
-     * the customer can retry rather than permanently consuming
-     * the order from a failed card attempt.
+     * We deliberately do NOT call settle_wallet_topup().
      */
 
     if (
       status === 'failed'
     ) {
-      return res.status(200).json({
+      return res.status(
+        200
+      ).json({
         received:
           true,
 
@@ -725,33 +814,35 @@ export default async function handler(
           paymentTransactionId,
 
         message:
-          'Vult reported a failed payment. No wallet credit was performed and the MatMove payment remains pending for retry.',
+          'Vult reported a failed payment. No wallet credit was performed. The MatMove payment remains available for retry/reconciliation.',
       });
     }
 
     /*
-     * ---------------------------------------------------------
-     * 11. Completed payment with no matching MatMove record
-     * ---------------------------------------------------------
+     * =========================================================
+     * 11. Completed event without matching payment
+     * =========================================================
      *
-     * SECURITY RULE:
+     * SECURITY BOUNDARY:
      *
-     * Never create money from a provider webhook when
-     * there is no corresponding MatMove payment transaction.
+     * Never create a wallet credit from a provider callback
+     * unless there is a corresponding MatMove payment intent.
      */
 
     if (
       !paymentTransaction
     ) {
       console.error(
-        'Vult completed webhook has no matching MatMove payment transaction.',
+        'Vult completed webhook has no matching MatMove payment transaction:',
         {
           orderId,
           vultRequestId,
         }
       );
 
-      return res.status(200).json({
+      return res.status(
+        200
+      ).json({
         received:
           true,
 
@@ -779,16 +870,121 @@ export default async function handler(
     }
 
     /*
-     * ---------------------------------------------------------
-     * 12. Already completed
-     * ---------------------------------------------------------
+     * =========================================================
+     * 12. Validate provider and payment identity
+     * =========================================================
+     */
+
+    if (
+      paymentTransaction.provider !==
+      'vult'
+    ) {
+      console.error(
+        'Vult webhook matched a non-Vult payment:',
+        {
+          paymentTransactionId,
+          provider:
+            paymentTransaction.provider,
+        }
+      );
+
+      return res.status(
+        200
+      ).json({
+        received:
+          true,
+
+        registered:
+          true,
+
+        processed:
+          false,
+
+        provider:
+          'vult',
+
+        event_id:
+          vultRequestId,
+
+        order_id:
+          orderId,
+
+        message:
+          'Provider mismatch. No wallet credit was performed.',
+      });
+    }
+
+    /*
+     * =========================================================
+     * 13. Validate payment transaction type
+     * =========================================================
+     */
+
+    const transactionType =
+      String(
+        paymentTransaction.transaction_type ||
+          ''
+      )
+        .trim()
+        .toLowerCase();
+
+    if (
+      ![
+        'wallet_topup',
+        'topup',
+      ].includes(
+        transactionType
+      )
+    ) {
+      console.error(
+        'Vult webhook matched an unsupported transaction type:',
+        {
+          paymentTransactionId,
+          transactionType,
+        }
+      );
+
+      return res.status(
+        200
+      ).json({
+        received:
+          true,
+
+        registered:
+          true,
+
+        processed:
+          false,
+
+        provider:
+          'vult',
+
+        event_id:
+          vultRequestId,
+
+        order_id:
+          orderId,
+
+        message:
+          'Transaction is not a MatMove wallet top-up. No wallet credit was performed.',
+      });
+    }
+
+    /*
+     * =========================================================
+     * 14. Already completed
+     * =========================================================
+     *
+     * This is an idempotent success path.
      */
 
     if (
       paymentTransaction.status ===
       'completed'
     ) {
-      return res.status(200).json({
+      return res.status(
+        200
+      ).json({
         received:
           true,
 
@@ -822,9 +1018,9 @@ export default async function handler(
     }
 
     /*
-     * ---------------------------------------------------------
-     * 13. Only pending payments can be settled
-     * ---------------------------------------------------------
+     * =========================================================
+     * 15. Only pending payments may be settled
+     * =========================================================
      */
 
     if (
@@ -832,15 +1028,18 @@ export default async function handler(
       'pending'
     ) {
       console.error(
-        'Vult completed webhook resolved to non-pending payment:',
+        'Vult completed webhook resolved to a non-pending payment:',
         {
           paymentTransactionId,
+
           paymentStatus:
             paymentTransaction.status,
         }
       );
 
-      return res.status(200).json({
+      return res.status(
+        200
+      ).json({
         received:
           true,
 
@@ -871,13 +1070,15 @@ export default async function handler(
     }
 
     /*
-     * ---------------------------------------------------------
-     * 14. Secure financial settlement
-     * ---------------------------------------------------------
+     * =========================================================
+     * 16. Secure financial settlement
+     * =========================================================
      *
-     * The browser never performs this operation.
+     * This is the ONLY point in this webhook where
+     * MatMove wallet funds can be created.
      *
-     * settle_wallet_topup() is responsible for:
+     * settle_wallet_topup() performs the protected
+     * accounting operation and is responsible for:
      *
      * - service-role authorization
      * - payment locking
@@ -894,7 +1095,8 @@ export default async function handler(
      */
 
     const {
-      data: settlement,
+      data:
+        settlement,
       error:
         settlementError,
     } =
@@ -920,23 +1122,26 @@ export default async function handler(
         {
           error:
             settlementError,
+
           paymentTransactionId,
+
           orderId,
+
           vultRequestId,
         }
       );
 
       /*
-       * Vult sends this webhook only once.
+       * Vult's webhook is already durably registered.
        *
-       * The provider event is already stored, so acknowledge
-       * the callback while retaining the event for internal
-       * reconciliation/recovery.
+       * Do not create a second wallet credit here.
+       * Do not fabricate a successful settlement.
        *
-       * Crucially, we do NOT tell the provider that MatMove
-       * successfully settled the wallet.
+       * The event remains available for reconciliation.
        */
-      return res.status(200).json({
+      return res.status(
+        200
+      ).json({
         received:
           true,
 
@@ -967,12 +1172,14 @@ export default async function handler(
     }
 
     /*
-     * ---------------------------------------------------------
-     * 15. Successful settlement
-     * ---------------------------------------------------------
+     * =========================================================
+     * 17. Successful settlement
+     * =========================================================
      */
 
-    return res.status(200).json({
+    return res.status(
+      200
+    ).json({
       received:
         true,
 
@@ -1005,7 +1212,9 @@ export default async function handler(
       error
     );
 
-    return res.status(500).json({
+    return res.status(
+      500
+    ).json({
       error:
         'Internal Server Error.',
     });

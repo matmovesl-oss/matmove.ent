@@ -27,9 +27,7 @@ function getBearerToken(req) {
 
   if (
     typeof authorization !== 'string' ||
-    !authorization.startsWith(
-      'Bearer '
-    )
+    !authorization.startsWith('Bearer ')
   ) {
     return null;
   }
@@ -49,35 +47,21 @@ function getAppUrl(req) {
     '';
 
   if (configuredUrl) {
-    return configuredUrl.startsWith(
-      'http://'
-    ) ||
-      configuredUrl.startsWith(
-        'https://'
-      )
-      ? configuredUrl.replace(
-          /\/$/,
-          ''
-        )
-      : `https://${configuredUrl.replace(
-          /\/$/,
-          ''
-        )}`;
+    return configuredUrl.startsWith('http://') ||
+      configuredUrl.startsWith('https://')
+      ? configuredUrl.replace(/\/$/, '')
+      : `https://${configuredUrl.replace(/\/$/, '')}`;
   }
 
   const forwardedHost =
-    req.headers[
-      'x-forwarded-host'
-    ];
+    req.headers['x-forwarded-host'];
 
   const host =
     forwardedHost ||
     req.headers.host;
 
   const forwardedProto =
-    req.headers[
-      'x-forwarded-proto'
-    ];
+    req.headers['x-forwarded-proto'];
 
   const protocol =
     forwardedProto ||
@@ -93,9 +77,7 @@ function getAppUrl(req) {
 }
 
 function normalizeRole(role) {
-  const value = String(
-    role || ''
-  )
+  const value = String(role || '')
     .trim()
     .toLowerCase();
 
@@ -111,9 +93,7 @@ function parseAmount(value) {
     typeof value === 'number'
       ? value
       : Number(
-          String(
-            value ?? ''
-          ).trim()
+          String(value ?? '').trim()
         );
 
   if (
@@ -123,15 +103,9 @@ function parseAmount(value) {
     return null;
   }
 
-  /*
-   * MatMove wallet balances use major
-   * currency units.
-   */
   const rounded =
     Math.round(
-      (amount +
-        Number.EPSILON) *
-        100
+      (amount + Number.EPSILON) * 100
     ) / 100;
 
   if (
@@ -144,19 +118,13 @@ function parseAmount(value) {
   return rounded;
 }
 
-function toMinorUnits(
-  amount
-) {
+function toMinorUnits(amount) {
   return Math.round(
-    (amount +
-      Number.EPSILON) *
-      100
+    (amount + Number.EPSILON) * 100
   );
 }
 
-function extractSupabaseError(
-  error
-) {
+function extractSupabaseError(error) {
   if (!error) {
     return 'Unknown Supabase error.';
   }
@@ -169,9 +137,7 @@ function extractSupabaseError(
   );
 }
 
-async function readJsonResponse(
-  response
-) {
+async function readJsonResponse(response) {
   const text =
     await response.text();
 
@@ -188,26 +154,21 @@ async function readJsonResponse(
   }
 }
 
-function getCheckoutData(
-  response
-) {
+function getCheckoutData(response) {
   if (
     response &&
-    typeof response ===
-      'object'
+    typeof response === 'object'
   ) {
     if (
       response.result &&
-      typeof response.result ===
-        'object'
+      typeof response.result === 'object'
     ) {
       return response.result;
     }
 
     if (
       response.data &&
-      typeof response.data ===
-        'object'
+      typeof response.data === 'object'
     ) {
       return response.data;
     }
@@ -216,27 +177,97 @@ function getCheckoutData(
   return response || {};
 }
 
-export default async function handler(
-  req,
-  res
+async function resolveCustomerRole(
+  supabaseAdmin,
+  userId,
+  profileRole
 ) {
-  if (req.method !== 'POST') {
-    res.setHeader(
-      'Allow',
-      'POST'
+  /*
+   * profiles.role is the first source because
+   * it is part of the customer's profile.
+   *
+   * However, role governance in MatMove also
+   * maintains public.user_roles. We therefore
+   * use that table as an authoritative fallback
+   * when the profile role is missing/stale.
+   *
+   * This function NEVER grants admin access.
+   */
+
+  const normalizedProfileRole =
+    normalizeRole(profileRole);
+
+  if (
+    ALLOWED_ROLES.has(
+      normalizedProfileRole
+    )
+  ) {
+    return normalizedProfileRole;
+  }
+
+  const {
+    data: roleRows,
+    error: rolesError,
+  } =
+    await supabaseAdmin
+      .from('user_roles')
+      .select('role')
+      .eq('profile_id', userId);
+
+  if (rolesError) {
+    console.error(
+      'Customer role lookup failed:',
+      rolesError
     );
 
+    return null;
+  }
+
+  const normalizedRoles =
+    Array.isArray(roleRows)
+      ? roleRows
+          .map((row) =>
+            normalizeRole(row?.role)
+          )
+          .filter((role) =>
+            ALLOWED_ROLES.has(role)
+          )
+      : [];
+
+  /*
+   * Prefer a real customer role in a stable
+   * order. Admin is deliberately excluded.
+   */
+  const preferredOrder = [
+    'merchant',
+    'driver',
+    'rider',
+  ];
+
+  for (const preferredRole of preferredOrder) {
+    if (
+      normalizedRoles.includes(
+        preferredRole
+      )
+    ) {
+      return preferredRole;
+    }
+  }
+
+  return null;
+}
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+
     return res.status(405).json({
-      error:
-        'Method not allowed',
+      error: 'Method not allowed',
     });
   }
 
-  let paymentTransactionId =
-    null;
-
-  let providerRequestStarted =
-    false;
+  let paymentTransactionId = null;
+  let providerRequestStarted = false;
 
   try {
     /*
@@ -296,10 +327,8 @@ export default async function handler(
         serviceRoleKey,
         {
           auth: {
-            autoRefreshToken:
-              false,
-            persistSession:
-              false,
+            autoRefreshToken: false,
+            persistSession: false,
           },
         }
       );
@@ -333,20 +362,16 @@ export default async function handler(
 
     const body =
       req.body &&
-      typeof req.body ===
-        'object'
+      typeof req.body === 'object'
         ? req.body
         : {};
 
     const amount =
-      parseAmount(
-        body.amount
-      );
+      parseAmount(body.amount);
 
     const currency =
       String(
-        body.currency ||
-          'SLE'
+        body.currency || 'SLE'
       )
         .trim()
         .toUpperCase();
@@ -366,9 +391,7 @@ export default async function handler(
     }
 
     if (
-      !ALLOWED_CURRENCIES.has(
-        currency
-      )
+      !ALLOWED_CURRENCIES.has(currency)
     ) {
       return res.status(400).json({
         error:
@@ -376,10 +399,6 @@ export default async function handler(
       });
     }
 
-    /*
-     * Never trust a client-generated key
-     * beyond the provider's length limit.
-     */
     const idempotencyKey =
       requestedIdempotencyKey
         ? requestedIdempotencyKey.slice(
@@ -403,10 +422,7 @@ export default async function handler(
         .select(
           'id,first_name,last_name,phone,role,kyc_status'
         )
-        .eq(
-          'id',
-          userId
-        )
+        .eq('id', userId)
         .maybeSingle();
 
     if (profileError) {
@@ -428,27 +444,56 @@ export default async function handler(
       });
     }
 
+    /*
+     * =========================================================
+     * 5. Customer role
+     * =========================================================
+     *
+     * IMPORTANT:
+     *
+     * KYC status is intentionally NOT checked here.
+     *
+     * MatMove customer wallet access is available
+     * immediately after account creation for:
+     *
+     *   Rider
+     *   Driver
+     *   Merchant
+     *
+     * KYC approval is a withdrawal-control rule,
+     * not a wallet/top-up access rule.
+     */
+
     const role =
-      normalizeRole(
+      await resolveCustomerRole(
+        supabaseAdmin,
+        userId,
         profile.role
       );
 
-    if (
-      !ALLOWED_ROLES.has(role)
-    ) {
+    if (!role) {
+      console.warn(
+        'Customer wallet role could not be resolved:',
+        {
+          userId,
+          profileRole:
+            profile.role,
+        }
+      );
+
       return res.status(403).json({
         error:
-          'This account is not permitted to use a MatMove customer wallet.',
+          'This account is not registered as a MatMove customer account.',
       });
     }
 
     /*
      * =========================================================
-     * 5. Customer wallet
+     * 6. Customer wallet
      * =========================================================
      */
 
-    const {
+    let {
       data: wallet,
       error: walletError,
     } =
@@ -457,14 +502,8 @@ export default async function handler(
         .select(
           'id,user_id,currency,balance,reserved_balance,is_frozen'
         )
-        .eq(
-          'user_id',
-          userId
-        )
-        .eq(
-          'currency',
-          currency
-        )
+        .eq('user_id', userId)
+        .eq('currency', currency)
         .maybeSingle();
 
     if (walletError) {
@@ -479,10 +518,100 @@ export default async function handler(
       });
     }
 
+    /*
+     * A newly-created eligible customer should
+     * receive both SLE and USD wallets through
+     * the secure backend wallet-creation function.
+     *
+     * If the wallet trigger has not yet materialized
+     * the requested wallet, ask the secure function
+     * to ensure the wallet exists.
+     *
+     * This does NOT credit the wallet.
+     */
+
+    if (!wallet) {
+      const {
+        error: ensureWalletError,
+      } =
+        await supabaseAdmin.rpc(
+          'ensure_matmove_wallets',
+          {
+            p_profile_id: userId,
+          }
+        );
+
+      if (ensureWalletError) {
+        console.error(
+          'Unable to ensure customer wallets:',
+          ensureWalletError
+        );
+
+        return res.status(404).json({
+          error:
+            `Your ${currency} wallet could not be found.`,
+        });
+      }
+
+      const walletRetry =
+        await supabaseAdmin
+          .from('wallets')
+          .select(
+            'id,user_id,currency,balance,reserved_balance,is_frozen'
+          )
+          .eq(
+            'user_id',
+            userId
+          )
+          .eq(
+            'currency',
+            currency
+          )
+          .maybeSingle();
+
+      wallet =
+        walletRetry.data;
+
+      walletError =
+        walletRetry.error;
+
+      if (walletError) {
+        console.error(
+          'Wallet retry lookup failed:',
+          walletError
+        );
+
+        return res.status(500).json({
+          error:
+            'Unable to load customer wallet.',
+        });
+      }
+    }
+
     if (!wallet) {
       return res.status(404).json({
         error:
           `Your ${currency} wallet could not be found.`,
+      });
+    }
+
+    if (
+      wallet.user_id !== userId
+    ) {
+      console.error(
+        'Wallet ownership mismatch:',
+        {
+          userId,
+          walletUserId:
+            wallet.user_id,
+          walletId:
+            wallet.id,
+        }
+      );
+
+      return res.status(403).json({
+        error:
+          'This wallet does not belong to the authenticated account.',
       });
     }
 
@@ -497,7 +626,7 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 6. Idempotency
+     * 7. Idempotency
      * =========================================================
      */
 
@@ -621,13 +750,6 @@ export default async function handler(
           'pending' &&
         !storedCheckoutId
       ) {
-        /*
-         * A pending transaction without a
-         * provider reference is an unresolved
-         * server-side state. Do not create a
-         * second provider checkout using the
-         * same idempotency key.
-         */
         return res.status(409).json({
           error:
             'This payment request is already being processed. Please wait before retrying.',
@@ -639,7 +761,7 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 7. Create MatMove pending payment
+     * 8. Create MatMove pending payment
      * =========================================================
      */
 
@@ -654,6 +776,8 @@ export default async function handler(
         userId,
       wallet_id:
         wallet.id,
+      customer_role:
+        role,
       currency,
       amount,
       idempotency_key:
@@ -689,6 +813,7 @@ export default async function handler(
             'pending',
           customer_phone:
             profile.phone ||
+            authData.user.phone ||
             null,
           metadata,
         })
@@ -700,11 +825,6 @@ export default async function handler(
     if (
       paymentInsertError
     ) {
-      /*
-       * A duplicate-key race on the database
-       * should be resolved by re-reading the
-       * authoritative payment transaction.
-       */
       if (
         paymentInsertError.code ===
         '23505'
@@ -794,7 +914,7 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 8. Build checkout URLs
+     * 9. Build checkout URLs
      * =========================================================
      */
 
@@ -847,18 +967,19 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 9. Monime checkout request
+     * 10. Monime checkout request
      * =========================================================
      *
-     * Wallet credit is NOT performed here.
+     * IMPORTANT:
      *
-     * The provider webhook must subsequently
-     * identify this payment and call the secure
-     * MatMove settlement RPC.
+     * This creates only the provider checkout.
      *
-     * The checkout payload structure follows the
-     * current MatMove/Monime integration contract
-     * already established for this project.
+     * It does NOT credit the MatMove wallet.
+     *
+     * Wallet settlement occurs only after the
+     * authoritative provider webhook reaches
+     * MatMove and the secure settlement RPC
+     * confirms the payment.
      */
 
     const checkoutPayload = {
@@ -904,6 +1025,8 @@ export default async function handler(
           paymentTransactionId,
         idempotency_key:
           idempotencyKey,
+        customer_role:
+          role,
         currency,
         amount:
           String(amount),
@@ -1002,7 +1125,7 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 10. Extract checkout response
+     * 11. Extract checkout response
      * =========================================================
      */
 
@@ -1069,7 +1192,7 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 11. Store provider state
+     * 12. Store provider state
      * =========================================================
      */
 
@@ -1119,15 +1242,9 @@ export default async function handler(
       );
 
       /*
-       * The provider checkout already exists.
-       * Do NOT mark the payment failed here.
-       *
-       * The record is retained so that the
-       * transaction can be reconciled rather
-       * than accidentally creating another
-       * checkout.
+       * Provider checkout already exists.
+       * Do not falsely mark the payment failed.
        */
-
       return res.status(500).json({
         error:
           'Checkout was created but could not be synchronized with MatMove. Please do not retry immediately.',
@@ -1138,7 +1255,7 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 12. Return hosted checkout
+     * 13. Return hosted checkout
      * =========================================================
      */
 
@@ -1158,18 +1275,9 @@ export default async function handler(
     );
 
     /*
-     * IMPORTANT:
-     *
-     * If the provider request was started but the
-     * network response is unknown, we must NOT
-     * blindly mark the payment failed.
-     *
-     * Monime may have created the checkout even
-     * though MatMove did not receive the response.
-     *
-     * The transaction therefore remains pending
-     * and can be reconciled using the provider
-     * reference/idempotency key.
+     * If the provider request has already started,
+     * the result may be unknown. Keep the payment
+     * pending rather than falsely declaring failure.
      */
 
     if (

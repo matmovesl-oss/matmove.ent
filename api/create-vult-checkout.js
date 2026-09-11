@@ -28,29 +28,117 @@ function getBearerToken(req) {
 
   if (
     typeof authorization !== 'string' ||
-    !authorization.startsWith(
-      'Bearer '
-    )
+    !authorization.startsWith('Bearer ')
   ) {
     return null;
   }
 
-  return authorization
-    .slice(7)
-    .trim() || null;
+  return (
+    authorization
+      .slice(7)
+      .trim() || null
+  );
 }
 
 function normalizeRole(role) {
-  if (
-    String(role || '').toLowerCase() ===
-    'vendor'
-  ) {
+  const value = String(
+    role || ''
+  )
+    .trim()
+    .toLowerCase();
+
+  if (value === 'vendor') {
     return 'merchant';
   }
 
-  return String(
-    role || ''
-  ).toLowerCase();
+  return value;
+}
+
+async function resolveCustomerRole(
+  supabaseAdmin,
+  userId,
+  profileRole
+) {
+  /*
+   * profiles.role is preferred when it contains
+   * a valid MatMove customer role.
+   *
+   * user_roles is used as a secure fallback
+   * if profiles.role is missing or stale.
+   *
+   * Admin is never accepted as a customer role.
+   */
+
+  const normalizedProfileRole =
+    normalizeRole(profileRole);
+
+  if (
+    ALLOWED_ROLES.has(
+      normalizedProfileRole
+    )
+  ) {
+    return normalizedProfileRole;
+  }
+
+  const {
+    data: roleRows,
+    error: rolesError,
+  } =
+    await supabaseAdmin
+      .from('user_roles')
+      .select('role')
+      .eq(
+        'profile_id',
+        userId
+      );
+
+  if (rolesError) {
+    console.error(
+      'Customer role lookup failed:',
+      rolesError
+    );
+
+    return null;
+  }
+
+  const normalizedRoles =
+    Array.isArray(roleRows)
+      ? roleRows
+          .map((row) =>
+            normalizeRole(
+              row?.role
+            )
+          )
+          .filter((role) =>
+            ALLOWED_ROLES.has(
+              role
+            )
+          )
+      : [];
+
+  /*
+   * Prefer the strongest applicable customer
+   * role if more than one historical role exists.
+   */
+  const preferredOrder = [
+    'merchant',
+    'driver',
+    'rider',
+  ];
+
+  for (
+    const preferredRole of preferredOrder
+  ) {
+    if (
+      normalizedRoles.includes(
+        preferredRole
+      )
+    ) {
+      return preferredRole;
+    }
+  }
+
+  return null;
 }
 
 function parseAmount(value) {
@@ -78,6 +166,7 @@ function parseAmount(value) {
     ) / 100;
 
   if (
+    !Number.isFinite(rounded) ||
     rounded <= 0
   ) {
     return null;
@@ -176,8 +265,8 @@ function signRequestBody(
     );
 
   /*
-   * The signed bytes must be exactly the
-   * same JSON serialization sent to Vult.
+   * The exact serialized JSON is signed and
+   * the exact same serialization is sent to Vult.
    */
   const serializedBody =
     JSON.stringify(
@@ -228,24 +317,6 @@ async function readJsonResponse(
   }
 }
 
-function getErrorMessage(
-  error,
-  fallback
-) {
-  if (
-    error &&
-    typeof error.message ===
-      'string' &&
-    error.message.trim()
-  ) {
-    return error.message
-      .trim()
-      .slice(0, 500);
-  }
-
-  return fallback;
-}
-
 function getProviderResult(
   response
 ) {
@@ -286,6 +357,7 @@ function extractPaymentLink(
     result?.payment_link,
     result?.link,
     result?.url,
+
     response?.redirectUrl,
     response?.redirect_url,
     response?.paymentLink,
@@ -298,7 +370,8 @@ function extractPaymentLink(
     const value of candidates
   ) {
     if (
-      typeof value === 'string' &&
+      typeof value ===
+        'string' &&
       value.trim()
     ) {
       return value.trim();
@@ -322,6 +395,7 @@ function extractProviderReference(
     result?.payment_link_id,
     result?.vultRequestId,
     result?.vult_request_id,
+
     response?.id,
     response?.paymentLinkId,
     response?.payment_link_id,
@@ -333,7 +407,8 @@ function extractProviderReference(
     const value of candidates
   ) {
     if (
-      typeof value === 'string' &&
+      typeof value ===
+        'string' &&
       value.trim()
     ) {
       return value.trim();
@@ -355,6 +430,7 @@ function extractPaymentCode(
     result?.code,
     result?.paymentCode,
     result?.payment_code,
+
     response?.code,
     response?.paymentCode,
     response?.payment_code,
@@ -364,7 +440,8 @@ function extractPaymentCode(
     const value of candidates
   ) {
     if (
-      typeof value === 'string' &&
+      typeof value ===
+        'string' &&
       value.trim()
     ) {
       return value.trim();
@@ -445,6 +522,24 @@ function buildProviderErrorMessage(
   }
 
   return `Vult rejected the payment-link request (HTTP ${status}).`;
+}
+
+function getErrorMessage(
+  error,
+  fallback
+) {
+  if (
+    error &&
+    typeof error.message ===
+      'string' &&
+    error.message.trim()
+  ) {
+    return error.message
+      .trim()
+      .slice(0, 500);
+  }
+
+  return fallback;
 }
 
 async function markPaymentFailed(
@@ -699,17 +794,13 @@ export default async function handler(
       });
     }
 
-    /*
-     * A caller-provided key is preferred so a browser retry
-     * resolves to the same MatMove payment transaction.
-     */
     const idempotencyKey =
       requestedIdempotencyKey ||
       crypto.randomUUID();
 
     /*
      * =========================================================
-     * 4. Load authoritative profile
+     * 4. Authoritative customer profile
      * =========================================================
      */
 
@@ -723,7 +814,7 @@ export default async function handler(
           'profiles'
         )
         .select(
-          'id, first_name, last_name, phone, role, kyc_status'
+          'id,first_name,last_name,phone,role,kyc_status'
         )
         .eq(
           'id',
@@ -756,31 +847,54 @@ export default async function handler(
       });
     }
 
+    /*
+     * =========================================================
+     * 5. Resolve customer role
+     * =========================================================
+     *
+     * IMPORTANT:
+     *
+     * KYC is intentionally NOT checked here.
+     *
+     * A Rider, Driver, or Merchant can fund the
+     * customer wallet immediately after registration.
+     *
+     * Withdrawal remains the operation that requires
+     * KYC approval.
+     */
+
     const role =
-      normalizeRole(
+      await resolveCustomerRole(
+        supabaseAdmin,
+        userId,
         profile.role
       );
 
-    if (
-      !ALLOWED_ROLES.has(
-        role
-      )
-    ) {
+    if (!role) {
+      console.warn(
+        'Customer wallet role could not be resolved:',
+        {
+          userId,
+          profileRole:
+            profile.role,
+        }
+      );
+
       return res.status(
         403
       ).json({
         error:
-          'This account is not permitted to use a MatMove customer wallet.',
+          'This account is not registered as a MatMove customer account.',
       });
     }
 
     /*
      * =========================================================
-     * 5. Find authoritative USD wallet
+     * 6. Customer USD wallet
      * =========================================================
      */
 
-    const {
+    let {
       data: wallet,
       error:
         walletError,
@@ -790,7 +904,7 @@ export default async function handler(
           'wallets'
         )
         .select(
-          'id, user_id, currency, balance, reserved_balance, is_frozen'
+          'id,user_id,currency,balance,reserved_balance,is_frozen'
         )
         .eq(
           'user_id',
@@ -818,12 +932,116 @@ export default async function handler(
       });
     }
 
+    /*
+     * Newly-created eligible customers should have
+     * their SLE/USD wallets created by the secure
+     * backend wallet function.
+     *
+     * If the wallet has not materialized yet,
+     * safely ensure it exists before proceeding.
+     *
+     * This does NOT add money to the wallet.
+     */
+
+    if (!wallet) {
+      const {
+        error:
+          ensureWalletError,
+      } =
+        await supabaseAdmin.rpc(
+          'ensure_matmove_wallets',
+          {
+            p_profile_id:
+              userId,
+          }
+        );
+
+      if (
+        ensureWalletError
+      ) {
+        console.error(
+          'Unable to ensure customer wallets:',
+          ensureWalletError
+        );
+
+        return res.status(
+          404
+        ).json({
+          error:
+            'Your USD wallet could not be found.',
+        });
+      }
+
+      const walletRetry =
+        await supabaseAdmin
+          .from(
+            'wallets'
+          )
+          .select(
+            'id,user_id,currency,balance,reserved_balance,is_frozen'
+          )
+          .eq(
+            'user_id',
+            userId
+          )
+          .eq(
+            'currency',
+            'USD'
+          )
+          .maybeSingle();
+
+      wallet =
+        walletRetry.data;
+
+      walletError =
+        walletRetry.error;
+
+      if (
+        walletError
+      ) {
+        console.error(
+          'Wallet retry lookup failed:',
+          walletError
+        );
+
+        return res.status(
+          500
+        ).json({
+          error:
+            'Unable to load customer wallet.',
+        });
+      }
+    }
+
     if (!wallet) {
       return res.status(
         404
       ).json({
         error:
           'Your USD wallet could not be found.',
+      });
+    }
+
+    if (
+      wallet.user_id !==
+      userId
+    ) {
+      console.error(
+        'Wallet ownership mismatch:',
+        {
+          userId,
+          walletUserId:
+            wallet.user_id,
+          walletId:
+            wallet.id,
+        }
+      );
+
+      return res.status(
+        403
+      ).json({
+        error:
+          'This wallet does not belong to the authenticated account.',
       });
     }
 
@@ -840,7 +1058,7 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 6. Idempotency lookup
+     * 7. Idempotency lookup
      * =========================================================
      */
 
@@ -895,9 +1113,6 @@ export default async function handler(
     if (
       existingPayment
     ) {
-      /*
-       * Never allow an idempotency key to cross users.
-       */
       if (
         existingPayment.user_id !==
         userId
@@ -910,10 +1125,6 @@ export default async function handler(
         });
       }
 
-      /*
-       * Never allow an idempotency key to target
-       * a different wallet.
-       */
       if (
         existingPayment.wallet_id !==
         wallet.id
@@ -926,10 +1137,6 @@ export default async function handler(
         });
       }
 
-      /*
-       * Only Vult wallet-top-up transactions belong
-       * to this endpoint.
-       */
       if (
         existingPayment.provider !==
           'vult' ||
@@ -951,6 +1158,21 @@ export default async function handler(
         });
       }
 
+      if (
+        Number(
+          existingPayment.amount
+        ) !== amount ||
+        existingPayment.currency !==
+          currency
+      ) {
+        return res.status(
+          409
+        ).json({
+          error:
+            'This idempotency key was already used for a different payment.',
+        });
+      }
+
       const existingMetadata =
         existingPayment.metadata &&
         typeof existingPayment.metadata ===
@@ -965,10 +1187,8 @@ export default async function handler(
         );
 
       /*
-       * Existing pending checkout:
-       *
-       * Return the existing hosted payment link instead
-       * of creating another provider order.
+       * Existing pending checkout with a usable
+       * payment link can safely be resumed.
        */
       if (
         existingPayment.status ===
@@ -1034,9 +1254,9 @@ export default async function handler(
       }
 
       /*
-       * If pending but no payment link exists, do not blindly
-       * create a second provider request. The existing payment
-       * needs reconciliation.
+       * A pending transaction without a known
+       * provider checkout must not create another
+       * provider order using the same idempotency key.
        */
       if (
         existingPayment.status ===
@@ -1056,9 +1276,6 @@ export default async function handler(
         });
       }
 
-      /*
-       * Reusing a final transaction's idempotency key is not safe.
-       */
       return res.status(
         409
       ).json({
@@ -1075,13 +1292,12 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 7. Create pending MatMove payment transaction
+     * 8. Create MatMove pending payment
      * =========================================================
      *
-     * IMPORTANT:
+     * This is an accounting intent.
      *
-     * This creates the accounting intent only.
-     * It does NOT credit the wallet.
+     * No wallet balance is changed here.
      */
 
     const orderId =
@@ -1105,6 +1321,9 @@ export default async function handler(
       wallet_id:
         wallet.id,
 
+      customer_role:
+        role,
+
       payment_type:
         type,
 
@@ -1123,7 +1342,8 @@ export default async function handler(
     };
 
     const {
-      data: paymentTransaction,
+      data:
+        paymentTransaction,
       error:
         paymentInsertError,
     } =
@@ -1156,6 +1376,7 @@ export default async function handler(
 
           customer_phone:
             profile.phone ||
+            authData.user.phone ||
             null,
 
           metadata:
@@ -1180,6 +1401,132 @@ export default async function handler(
     if (
       paymentInsertError
     ) {
+      /*
+       * Handle an idempotency race by re-reading
+       * the existing transaction.
+       */
+      if (
+        paymentInsertError.code ===
+        '23505'
+      ) {
+        const {
+          data:
+            concurrentPayment,
+        } =
+          await supabaseAdmin
+            .from(
+              'payment_transactions'
+            )
+            .select(
+              [
+                'id',
+                'user_id',
+                'wallet_id',
+                'provider_reference',
+                'status',
+                'amount',
+                'currency',
+                'metadata',
+                'provider_response',
+              ].join(', ')
+            )
+            .eq(
+              'idempotency_key',
+              idempotencyKey
+            )
+            .maybeSingle();
+
+        if (
+          concurrentPayment &&
+          concurrentPayment.user_id ===
+            userId &&
+          concurrentPayment.wallet_id ===
+            wallet.id &&
+          concurrentPayment.provider ===
+            'vult' &&
+          Number(
+            concurrentPayment.amount
+          ) === amount &&
+          concurrentPayment.currency ===
+            currency
+        ) {
+          const concurrentMetadata =
+            concurrentPayment.metadata &&
+            typeof concurrentPayment.metadata ===
+              'object'
+              ? concurrentPayment.metadata
+              : {};
+
+          const concurrentPaymentLink =
+            concurrentMetadata.payment_link ||
+            extractPaymentLink(
+              concurrentPayment.provider_response
+            );
+
+          if (
+            concurrentPayment.status ===
+              'pending' &&
+            concurrentPaymentLink
+          ) {
+            return res.status(
+              200
+            ).json({
+              status:
+                'pending',
+
+              paymentTransactionId:
+                concurrentPayment.id,
+
+              orderId:
+                concurrentMetadata.order_id ||
+                concurrentPayment.id,
+
+              redirectUrl:
+                concurrentPaymentLink,
+
+              paymentCode:
+                concurrentMetadata.payment_code ||
+                extractPaymentCode(
+                  concurrentPayment.provider_response
+                ),
+
+              paymentType:
+                concurrentMetadata.payment_type ||
+                type,
+
+              currency:
+                concurrentPayment.currency,
+
+              amount:
+                concurrentPayment.amount,
+
+              providerReference:
+                concurrentPayment.provider_reference ||
+                extractProviderReference(
+                  concurrentPayment.provider_response
+                ),
+
+              idempotent:
+                true,
+            });
+          }
+
+          return res.status(
+            202
+          ).json({
+            status:
+              concurrentPayment.status ||
+              'pending',
+
+            paymentTransactionId:
+              concurrentPayment.id,
+
+            message:
+              'This payment request is already being processed.',
+          });
+        }
+      }
+
       console.error(
         'Payment transaction creation failed:',
         paymentInsertError
@@ -1198,11 +1545,8 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 8. Build exact Vult request body
+     * 9. Build Vult request
      * =========================================================
-     *
-     * The signature is generated from the exact JSON object
-     * that will be sent to Vult.
      */
 
     const requestBody = {
@@ -1232,7 +1576,7 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 9. Submit payment-link request
+     * 10. Submit Vult payment-link request
      * =========================================================
      */
 
@@ -1267,76 +1611,53 @@ export default async function handler(
       providerError
     ) {
       /*
-       * -------------------------------------------------------
-       * UNKNOWN PROVIDER OUTCOME
-       * -------------------------------------------------------
+       * Provider outcome is unknown.
        *
-       * The request may have reached Vult even though MatMove
-       * did not receive a response.
-       *
-       * Therefore:
-       *
-       * - keep payment pending
-       * - do not create another Vult order
-       * - do not mark failed
-       * - wait for reconciliation/webhook
+       * Vult may have received and created
+       * the order even though MatMove received
+       * no HTTP response.
        */
-
       console.error(
         'Vult network request failed after provider request started:',
         {
           error:
             providerError,
+
           paymentTransactionId,
+
           orderId,
         }
       );
 
-      const pendingMetadata = {
-        ...paymentMetadata,
+      await supabaseAdmin
+        .from(
+          'payment_transactions'
+        )
+        .update({
+          metadata: {
+            ...paymentMetadata,
 
-        status:
-          'pending',
+            status:
+              'pending',
 
-        provider_request_state:
-          'unknown',
+            provider_request_state:
+              'unknown',
 
-        provider_request_error:
-          getErrorMessage(
-            providerError,
-            'Vult network request failed.'
-          ),
-      };
-
-      const {
-        error:
-          pendingUpdateError,
-      } =
-        await supabaseAdmin
-          .from(
-            'payment_transactions'
-          )
-          .update({
-            metadata:
-              pendingMetadata,
-          })
-          .eq(
-            'id',
-            paymentTransactionId
-          )
-          .eq(
-            'status',
-            'pending'
-          );
-
-      if (
-        pendingUpdateError
-      ) {
-        console.error(
-          'Failed to preserve Vult pending state:',
-          pendingUpdateError
+            provider_request_error:
+              getErrorMessage(
+                providerError,
+                'Vult network request failed.'
+              ),
+          },
+        })
+        .eq(
+          'id',
+          paymentTransactionId
+        )
+        .eq(
+          'status',
+          'pending'
         );
-      }
 
       return res.status(
         202
@@ -1353,12 +1674,6 @@ export default async function handler(
       });
     }
 
-    /*
-     * =========================================================
-     * 10. Parse provider response
-     * =========================================================
-     */
-
     const vultData =
       await readJsonResponse(
         vultResponse
@@ -1366,13 +1681,8 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 11. Definitive provider rejection
+     * 11. Provider HTTP response
      * =========================================================
-     *
-     * Only a clear 4xx response is treated as definitive
-     * rejection.
-     *
-     * A 5xx response is potentially ambiguous.
      */
 
     if (
@@ -1393,6 +1703,9 @@ export default async function handler(
         }
       );
 
+      /*
+       * 4xx = definitive request rejection.
+       */
       if (
         isDefinitiveClientRejection(
           vultResponse.status
@@ -1432,11 +1745,10 @@ export default async function handler(
       }
 
       /*
-       * -------------------------------------------------------
-       * Vult 5xx / ambiguous provider outcome
-       * -------------------------------------------------------
+       * 5xx = ambiguous provider outcome.
+       *
+       * Keep pending.
        */
-
       await supabaseAdmin
         .from(
           'payment_transactions'
@@ -1484,7 +1796,7 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 12. Extract provider result
+     * 12. Extract Vult checkout
      * =========================================================
      */
 
@@ -1509,14 +1821,10 @@ export default async function handler(
       );
 
     /*
-     * =========================================================
-     * 13. Validate usable checkout response
-     * =========================================================
-     *
-     * For the hosted Vult checkout flow, MatMove needs a usable
-     * payment link.
+     * A successful HTTP response without a usable
+     * hosted payment link cannot be presented as
+     * a usable checkout.
      */
-
     if (
       !paymentLink
     ) {
@@ -1561,17 +1869,19 @@ export default async function handler(
       ).json({
         error:
           'Vult returned an invalid payment response.',
+
+        paymentTransactionId,
       });
     }
 
     /*
      * =========================================================
-     * 14. Store provider information
+     * 13. Store provider state
      * =========================================================
      *
-     * Keep the payment pending.
+     * Keep status pending.
      *
-     * The Vult webhook is the authoritative payment confirmation.
+     * Vult webhook is authoritative.
      */
 
     const finalMetadata = {
@@ -1630,19 +1940,20 @@ export default async function handler(
         .eq(
           'id',
           paymentTransactionId
+        )
+        .eq(
+          'status',
+          'pending'
         );
 
     if (
       updatePaymentError
     ) {
       /*
-       * IMPORTANT:
+       * Vult accepted the request.
        *
-       * Vult has already accepted the request.
-       * We must not mark the payment failed simply because
-       * MatMove failed to save its provider response.
-       *
-       * The payment remains pending and can be reconciled.
+       * Do not falsely fail the payment because
+       * MatMove failed to save the provider response.
        */
       console.error(
         'Failed to store Vult payment response:',
@@ -1666,18 +1977,22 @@ export default async function handler(
 
     /*
      * =========================================================
-     * 15. Return hosted checkout
+     * 14. Return hosted checkout
      * =========================================================
      *
      * NO wallet balance is changed here.
      *
-     * Final wallet credit occurs only through:
+     * Final flow:
      *
+     * Vult checkout
+     *      ↓
      * Vult webhook
-     *       ↓
+     *      ↓
      * register_provider_webhook_event()
-     *       ↓
+     *      ↓
      * settle_wallet_topup()
+     *      ↓
+     * MatMove wallet + ledger
      */
 
     return res.status(
@@ -1723,10 +2038,8 @@ export default async function handler(
     );
 
     /*
-     * If provider communication has already started,
-     * the result is potentially ambiguous.
-     *
-     * NEVER mark the payment failed in this case.
+     * If Vult communication has started, the outcome
+     * may be unknown. Preserve pending state.
      */
     if (
       providerRequestStarted &&
@@ -1810,8 +2123,8 @@ export default async function handler(
     }
 
     /*
-     * If the exception occurred before reaching Vult,
-     * a pending MatMove transaction can safely be failed.
+     * Exception occurred before provider communication.
+     * It is safe to fail the MatMove pending transaction.
      */
     if (
       paymentTransactionId
@@ -1887,6 +2200,7 @@ export default async function handler(
     ).json({
       error:
         'Unable to start the Vult wallet top-up.',
+
       ...(paymentTransactionId
         ? {
             paymentTransactionId,
