@@ -186,12 +186,10 @@ async function resolveCustomerRole(
    * profiles.role is the first source because
    * it is part of the customer's profile.
    *
-   * However, role governance in MatMove also
-   * maintains public.user_roles. We therefore
-   * use that table as an authoritative fallback
-   * when the profile role is missing/stale.
+   * user_roles is the secure fallback when
+   * profiles.role is missing or stale.
    *
-   * This function NEVER grants admin access.
+   * Admin is never accepted as a customer role.
    */
 
   const normalizedProfileRole =
@@ -212,7 +210,10 @@ async function resolveCustomerRole(
     await supabaseAdmin
       .from('user_roles')
       .select('role')
-      .eq('profile_id', userId);
+      .eq(
+        'profile_id',
+        userId
+      );
 
   if (rolesError) {
     console.error(
@@ -227,24 +228,26 @@ async function resolveCustomerRole(
     Array.isArray(roleRows)
       ? roleRows
           .map((row) =>
-            normalizeRole(row?.role)
+            normalizeRole(
+              row?.role
+            )
           )
           .filter((role) =>
-            ALLOWED_ROLES.has(role)
+            ALLOWED_ROLES.has(
+              role
+            )
           )
       : [];
 
-  /*
-   * Prefer a real customer role in a stable
-   * order. Admin is deliberately excluded.
-   */
   const preferredOrder = [
     'merchant',
     'driver',
     'rider',
   ];
 
-  for (const preferredRole of preferredOrder) {
+  for (
+    const preferredRole of preferredOrder
+  ) {
     if (
       normalizedRoles.includes(
         preferredRole
@@ -257,22 +260,37 @@ async function resolveCustomerRole(
   return null;
 }
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
+export default async function handler(
+  req,
+  res
+) {
+  if (
+    req.method !==
+    'POST'
+  ) {
+    res.setHeader(
+      'Allow',
+      'POST'
+    );
 
-    return res.status(405).json({
-      error: 'Method not allowed',
+    return res.status(
+      405
+    ).json({
+      error:
+        'Method not allowed',
     });
   }
 
-  let paymentTransactionId = null;
-  let providerRequestStarted = false;
+  let paymentTransactionId =
+    null;
+
+  let providerRequestStarted =
+    false;
 
   try {
     /*
      * =========================================================
-     * 1. Server configuration
+     * 1. SERVER CONFIGURATION
      * =========================================================
      */
 
@@ -299,7 +317,9 @@ export default async function handler(req, res) {
         'Missing required payment environment variables.'
       );
 
-      return res.status(500).json({
+      return res.status(
+        500
+      ).json({
         error:
           'Payment service is not configured.',
       });
@@ -307,15 +327,19 @@ export default async function handler(req, res) {
 
     /*
      * =========================================================
-     * 2. Authenticate customer
+     * 2. AUTHENTICATE CUSTOMER
      * =========================================================
      */
 
     const accessToken =
-      getBearerToken(req);
+      getBearerToken(
+        req
+      );
 
     if (!accessToken) {
-      return res.status(401).json({
+      return res.status(
+        401
+      ).json({
         error:
           'Authentication required.',
       });
@@ -327,15 +351,18 @@ export default async function handler(req, res) {
         serviceRoleKey,
         {
           auth: {
-            autoRefreshToken: false,
-            persistSession: false,
+            autoRefreshToken:
+              false,
+            persistSession:
+              false,
           },
         }
       );
 
     const {
       data: authData,
-      error: authError,
+      error:
+        authError,
     } =
       await supabaseAdmin.auth.getUser(
         accessToken
@@ -345,7 +372,9 @@ export default async function handler(req, res) {
       authError ||
       !authData?.user
     ) {
-      return res.status(401).json({
+      return res.status(
+        401
+      ).json({
         error:
           'Invalid or expired session.',
       });
@@ -356,8 +385,20 @@ export default async function handler(req, res) {
 
     /*
      * =========================================================
-     * 3. Validate request
+     * 3. VALIDATE REQUEST
      * =========================================================
+     *
+     * Mobile Money top-ups intentionally accept ONLY:
+     *
+     *   amount
+     *   currency
+     *   idempotencyKey
+     *
+     * There is no phone-number or provider-selection
+     * requirement in MatMove.
+     *
+     * Monime Hosted Checkout handles the actual
+     * Mobile Money payment-selection and authentication.
      */
 
     const body =
@@ -367,11 +408,14 @@ export default async function handler(req, res) {
         : {};
 
     const amount =
-      parseAmount(body.amount);
+      parseAmount(
+        body.amount
+      );
 
     const currency =
       String(
-        body.currency || 'SLE'
+        body.currency ||
+          'SLE'
       )
         .trim()
         .toUpperCase();
@@ -383,66 +427,26 @@ export default async function handler(req, res) {
           ''
       ).trim();
 
-    const requestedNetwork =
-      String(
-        body.network || ''
-      )
-        .trim()
-        .toLowerCase();
-
-    const requestedPhone =
-      String(
-        body.phone || ''
-      ).trim();
-
-    const providerIdByNetwork = {
-      orange: 'm17',
-      afrimoney: 'm18',
-    };
-
     if (!amount) {
-      return res.status(400).json({
+      return res.status(
+        400
+      ).json({
         error:
           'A valid top-up amount is required.',
       });
     }
 
     if (
-      !ALLOWED_CURRENCIES.has(currency)
+      !ALLOWED_CURRENCIES.has(
+        currency
+      )
     ) {
-      return res.status(400).json({
+      return res.status(
+        400
+      ).json({
         error:
           'Only SLE and USD wallets are supported.',
       });
-    }
-
-    if (currency === 'SLE') {
-      if (
-        !providerIdByNetwork[requestedNetwork]
-      ) {
-        return res.status(400).json({
-          error:
-            'Select Orange Money or Afrimoney for an SLE Mobile Money top-up.',
-        });
-      }
-
-      const normalizedPhone =
-        requestedPhone
-          .replace(/[\s-]/g, '');
-
-      if (
-        !/^0?7\d{7}$/.test(
-          normalizedPhone.replace(
-            /^\+232/,
-            ''
-          )
-        )
-      ) {
-        return res.status(400).json({
-          error:
-            'Enter a valid Sierra Leone Mobile Money phone number.',
-        });
-      }
     }
 
     const idempotencyKey =
@@ -455,36 +459,48 @@ export default async function handler(req, res) {
 
     /*
      * =========================================================
-     * 4. Authoritative customer profile
+     * 4. AUTHORITATIVE CUSTOMER PROFILE
      * =========================================================
      */
 
     const {
       data: profile,
-      error: profileError,
+      error:
+        profileError,
     } =
       await supabaseAdmin
-        .from('profiles')
+        .from(
+          'profiles'
+        )
         .select(
           'id,first_name,last_name,phone,role,kyc_status'
         )
-        .eq('id', userId)
+        .eq(
+          'id',
+          userId
+        )
         .maybeSingle();
 
-    if (profileError) {
+    if (
+      profileError
+    ) {
       console.error(
         'Profile lookup failed:',
         profileError
       );
 
-      return res.status(500).json({
+      return res.status(
+        500
+      ).json({
         error:
           'Unable to verify customer profile.',
       });
     }
 
     if (!profile) {
-      return res.status(404).json({
+      return res.status(
+        404
+      ).json({
         error:
           'Customer profile not found.',
       });
@@ -492,22 +508,8 @@ export default async function handler(req, res) {
 
     /*
      * =========================================================
-     * 5. Customer role
+     * 5. CUSTOMER ROLE
      * =========================================================
-     *
-     * IMPORTANT:
-     *
-     * KYC status is intentionally NOT checked here.
-     *
-     * MatMove customer wallet access is available
-     * immediately after account creation for:
-     *
-     *   Rider
-     *   Driver
-     *   Merchant
-     *
-     * KYC approval is a withdrawal-control rule,
-     * not a wallet/top-up access rule.
      */
 
     const role =
@@ -527,7 +529,9 @@ export default async function handler(req, res) {
         }
       );
 
-      return res.status(403).json({
+      return res.status(
+        403
+      ).json({
         error:
           'This account is not registered as a MatMove customer account.',
       });
@@ -535,65 +539,77 @@ export default async function handler(req, res) {
 
     /*
      * =========================================================
-     * 6. Customer wallet
+     * 6. CUSTOMER WALLET
      * =========================================================
      */
 
     let {
       data: wallet,
-      error: walletError,
+      error:
+        walletError,
     } =
       await supabaseAdmin
-        .from('wallets')
+        .from(
+          'wallets'
+        )
         .select(
           'id,user_id,currency,balance,reserved_balance,is_frozen'
         )
-        .eq('user_id', userId)
-        .eq('currency', currency)
+        .eq(
+          'user_id',
+          userId
+        )
+        .eq(
+          'currency',
+          currency
+        )
         .maybeSingle();
 
-    if (walletError) {
+    if (
+      walletError
+    ) {
       console.error(
         'Wallet lookup failed:',
         walletError
       );
 
-      return res.status(500).json({
+      return res.status(
+        500
+      ).json({
         error:
           'Unable to load customer wallet.',
       });
     }
 
     /*
-     * A newly-created eligible customer should
-     * receive both SLE and USD wallets through
-     * the secure backend wallet-creation function.
-     *
-     * If the wallet trigger has not yet materialized
-     * the requested wallet, ask the secure function
-     * to ensure the wallet exists.
-     *
-     * This does NOT credit the wallet.
+     * Safely ensure a missing customer wallet exists.
+     * This does NOT add money.
      */
 
     if (!wallet) {
       const {
-        error: ensureWalletError,
+        error:
+          ensureWalletError,
       } =
         await supabaseAdmin.rpc(
           'ensure_matmove_wallets',
           {
-            p_profile_id: userId,
+            p_profile_id:
+              userId,
           }
         );
 
-      if (ensureWalletError) {
+      if (
+        ensureWalletError
+      ) {
         console.error(
           'Unable to ensure customer wallets:',
           ensureWalletError
         );
 
-        return res.status(404).json({
+        return res.status(
+          404
+        ).json({
           error:
             `Your ${currency} wallet could not be found.`,
         });
@@ -601,7 +617,9 @@ export default async function handler(req, res) {
 
       const walletRetry =
         await supabaseAdmin
-          .from('wallets')
+          .from(
+            'wallets'
+          )
           .select(
             'id,user_id,currency,balance,reserved_balance,is_frozen'
           )
@@ -621,13 +639,17 @@ export default async function handler(req, res) {
       walletError =
         walletRetry.error;
 
-      if (walletError) {
+      if (
+        walletError
+      ) {
         console.error(
           'Wallet retry lookup failed:',
           walletError
         );
 
-        return res.status(500).json({
+        return res.status(
+          500
+        ).json({
           error:
             'Unable to load customer wallet.',
         });
@@ -635,14 +657,17 @@ export default async function handler(req, res) {
     }
 
     if (!wallet) {
-      return res.status(404).json({
+      return res.status(
+        404
+      ).json({
         error:
           `Your ${currency} wallet could not be found.`,
       });
     }
 
     if (
-      wallet.user_id !== userId
+      wallet.user_id !==
+      userId
     ) {
       console.error(
         'Wallet ownership mismatch:',
@@ -655,7 +680,9 @@ export default async function handler(req, res) {
         }
       );
 
-      return res.status(403).json({
+      return res.status(
+        403
+      ).json({
         error:
           'This wallet does not belong to the authenticated account.',
       });
@@ -664,7 +691,9 @@ export default async function handler(req, res) {
     if (
       wallet.is_frozen
     ) {
-      return res.status(403).json({
+      return res.status(
+        403
+      ).json({
         error:
           'This wallet is currently frozen.',
       });
@@ -672,7 +701,7 @@ export default async function handler(req, res) {
 
     /*
      * =========================================================
-     * 7. Idempotency
+     * 7. IDEMPOTENCY
      * =========================================================
      */
 
@@ -682,7 +711,9 @@ export default async function handler(req, res) {
         existingPaymentError,
     } =
       await supabaseAdmin
-        .from('payment_transactions')
+        .from(
+          'payment_transactions'
+        )
         .select(
           'id,user_id,wallet_id,transaction_type,provider,provider_reference,idempotency_key,amount,currency,status,metadata,created_at'
         )
@@ -700,18 +731,24 @@ export default async function handler(req, res) {
         existingPaymentError
       );
 
-      return res.status(500).json({
+      return res.status(
+        500
+      ).json({
         error:
           'Unable to verify payment request.',
       });
     }
 
-    if (existingPayment) {
+    if (
+      existingPayment
+    ) {
       if (
         existingPayment.user_id !==
         userId
       ) {
-        return res.status(409).json({
+        return res.status(
+          409
+        ).json({
           error:
             'This payment request belongs to another account.',
         });
@@ -721,9 +758,23 @@ export default async function handler(req, res) {
         existingPayment.wallet_id !==
         wallet.id
       ) {
-        return res.status(409).json({
+        return res.status(
+          409
+        ).json({
           error:
             'This payment request does not match the selected wallet.',
+        });
+      }
+
+      if (
+        existingPayment.provider !==
+        'monime'
+      ) {
+        return res.status(
+          409
+        ).json({
+          error:
+            'This idempotency key is already associated with another payment provider.',
         });
       }
 
@@ -734,7 +785,9 @@ export default async function handler(req, res) {
         existingPayment.currency !==
           currency
       ) {
-        return res.status(409).json({
+        return res.status(
+          409
+        ).json({
           error:
             'This idempotency key was already used for a different payment.',
         });
@@ -755,14 +808,28 @@ export default async function handler(req, res) {
         existingMetadata.checkout_session_id;
 
       if (
-        existingPayment.provider ===
-          'monime' &&
+        existingPayment.status ===
+          'completed'
+      ) {
+        return res.status(
+          409
+        ).json({
+          error:
+            'This payment request has already been completed.',
+          paymentTransactionId:
+            existingPayment.id,
+        });
+      }
+
+      if (
         storedCheckoutId &&
         typeof storedRedirectUrl ===
           'string' &&
         storedRedirectUrl
       ) {
-        return res.status(200).json({
+        return res.status(
+          200
+        ).json({
           status:
             existingPayment.status ||
             'pending',
@@ -781,67 +848,65 @@ export default async function handler(req, res) {
 
       if (
         existingPayment.status ===
-        'completed'
+        'pending'
       ) {
-        return res.status(409).json({
-          error:
-            'This payment request has already been completed.',
-          paymentTransactionId:
-            existingPayment.id,
-        });
-      }
-
-      if (
-        existingPayment.status ===
-          'pending' &&
-        !storedCheckoutId
-      ) {
-        return res.status(409).json({
+        return res.status(
+          409
+        ).json({
           error:
             'This payment request is already being processed. Please wait before retrying.',
           paymentTransactionId:
             existingPayment.id,
         });
       }
+
+      return res.status(
+        409
+      ).json({
+        error:
+          'This payment request has already reached a final state.',
+        paymentTransactionId:
+          existingPayment.id,
+        status:
+          existingPayment.status,
+      });
     }
 
     /*
      * =========================================================
-     * 8. Create MatMove pending payment
+     * 8. CREATE MATMOVE PENDING PAYMENT
      * =========================================================
      */
 
     const metadata = {
       provider:
         'monime',
+
+      processor:
+        'monime',
+
       payment_method:
-        'checkout',
+        'mobile_money',
+
       purpose:
         'wallet_topup',
+
       matmove_user_id:
         userId,
+
       wallet_id:
         wallet.id,
+
       customer_role:
         role,
+
       currency,
+
       amount,
+
       idempotency_key:
         idempotencyKey,
-      mobile_money_network:
-        currency === 'SLE'
-          ? requestedNetwork
-          : null,
-      mobile_money_provider:
-        currency === 'SLE'
-          ? providerIdByNetwork[
-              requestedNetwork
-            ]
-          : null,
-      mobile_money_phone:
-        currency === 'SLE'
-          ? requestedPhone
-          : null,
+
       status:
         'pending',
     };
@@ -859,24 +924,31 @@ export default async function handler(req, res) {
         .insert({
           user_id:
             userId,
+
           wallet_id:
             wallet.id,
+
           transaction_type:
             'wallet_topup',
+
           provider:
             'monime',
+
           idempotency_key:
             idempotencyKey,
+
           amount,
+
           currency,
+
           status:
             'pending',
+
           customer_phone:
-            currency === 'SLE'
-              ? requestedPhone
-              : profile.phone ||
-                authData.user.phone ||
-                null,
+            profile.phone ||
+            authData.user.phone ||
+            null,
+
           metadata,
         })
         .select(
@@ -900,7 +972,7 @@ export default async function handler(req, res) {
               'payment_transactions'
             )
             .select(
-              'id,wallet_id,provider,provider_reference,status,amount,currency,metadata'
+              'id,user_id,wallet_id,transaction_type,provider,provider_reference,status,amount,currency,metadata'
             )
             .eq(
               'idempotency_key',
@@ -910,15 +982,17 @@ export default async function handler(req, res) {
 
         if (
           concurrentPayment &&
+          concurrentPayment.user_id ===
+            userId &&
           concurrentPayment.wallet_id ===
             wallet.id &&
+          concurrentPayment.provider ===
+            'monime' &&
           Number(
             concurrentPayment.amount
           ) === amount &&
           concurrentPayment.currency ===
-            currency &&
-          concurrentPayment.provider ===
-            'monime'
+            currency
         ) {
           const concurrentMetadata =
             concurrentPayment.metadata &&
@@ -927,29 +1001,47 @@ export default async function handler(req, res) {
               ? concurrentPayment.metadata
               : {};
 
+          const concurrentRedirectUrl =
+            concurrentMetadata.redirect_url;
+
+          const concurrentCheckoutId =
+            concurrentPayment.provider_reference ||
+            concurrentMetadata.checkout_session_id;
+
           if (
-            concurrentPayment.provider_reference &&
-            typeof concurrentMetadata.redirect_url ===
-              'string'
+            concurrentCheckoutId &&
+            typeof concurrentRedirectUrl ===
+              'string' &&
+            concurrentRedirectUrl
           ) {
-            return res.status(200).json({
+            return res.status(
+              200
+            ).json({
               status:
                 concurrentPayment.status ||
                 'pending',
+
               paymentTransactionId:
                 concurrentPayment.id,
+
               checkoutSessionId:
-                concurrentPayment.provider_reference,
+                concurrentCheckoutId,
+
               redirectUrl:
-                concurrentMetadata.redirect_url,
+                concurrentRedirectUrl,
+
               currency,
+
               amount,
+
               idempotent:
                 true,
             });
           }
 
-          return res.status(409).json({
+          return res.status(
+            409
+          ).json({
             error:
               'This payment request is already being processed.',
             paymentTransactionId:
@@ -963,7 +1055,9 @@ export default async function handler(req, res) {
         paymentInsertError
       );
 
-      return res.status(500).json({
+      return res.status(
+        500
+      ).json({
         error:
           'Unable to create the payment transaction.',
         details:
@@ -978,7 +1072,7 @@ export default async function handler(req, res) {
 
     /*
      * =========================================================
-     * 9. Build checkout URLs
+     * 9. BUILD RETURN URLS
      * =========================================================
      */
 
@@ -993,14 +1087,19 @@ export default async function handler(req, res) {
         .update({
           status:
             'failed',
+
           failure_code:
             'missing_app_url',
+
           failure_message:
             'MatMove application URL is not configured.',
+
           failed_at:
             new Date().toISOString(),
+
           metadata: {
             ...metadata,
+
             status:
               'failed',
           },
@@ -1010,7 +1109,9 @@ export default async function handler(req, res) {
           paymentTransactionId
         );
 
-      return res.status(500).json({
+      return res.status(
+        500
+      ).json({
         error:
           'Payment return URL is not configured.',
       });
@@ -1031,109 +1132,99 @@ export default async function handler(req, res) {
 
     /*
      * =========================================================
-     * 10. Monime checkout request
+     * 10. MONIME HOSTED CHECKOUT
      * =========================================================
      *
-     * IMPORTANT:
+     * For SLE Mobile Money:
      *
-     * This creates only the provider checkout.
+     * - MatMove does NOT collect the customer's phone.
+     * - MatMove does NOT force Orange/Afrimoney selection.
+     * - Monime owns the hosted payment experience.
      *
-     * It does NOT credit the MatMove wallet.
+     * For USD:
      *
-     * Wallet settlement occurs only after the
-     * authoritative provider webhook reaches
-     * MatMove and the secure settlement RPC
-     * confirms the payment.
+     * This endpoint can also create a generic Monime
+     * checkout if used by another backend flow.
      */
 
     const checkoutPayload = {
       name:
         `MatMove ${currency} Wallet Top-up`,
+
       reference:
         checkoutReference,
+
       description:
         `Top up MatMove ${currency} wallet`,
+
       lineItems: [
         {
           name:
             `MatMove ${currency} Wallet`,
+
           type:
             'custom',
+
           price: {
             currency,
+
             value:
               toMinorUnits(
                 amount
               ),
           },
+
           quantity:
             1,
+
           reference:
             paymentTransactionId,
+
           description:
             `Wallet top-up of ${amount.toFixed(
               2
             )} ${currency}`,
         },
       ],
+
       successUrl,
+
       cancelUrl,
+
       callbackState:
         paymentTransactionId,
+
       metadata: {
         matmove_user_id:
           userId,
+
         wallet_id:
           wallet.id,
+
         payment_transaction_id:
           paymentTransactionId,
+
         idempotency_key:
           idempotencyKey,
+
         customer_role:
           role,
+
         currency,
+
         amount:
           String(amount),
+
         purpose:
           'wallet_topup',
-        mobile_money_network:
-          currency === 'SLE'
-            ? requestedNetwork
-            : null,
-        mobile_money_provider:
-          currency === 'SLE'
-            ? providerIdByNetwork[
-                requestedNetwork
-              ]
-            : null,
-        mobile_money_phone:
-          currency === 'SLE'
-            ? requestedPhone
-            : null,
+
+        provider:
+          'monime',
+
+        processor:
+          'monime',
       },
     };
-
-    if (currency === 'SLE') {
-      checkoutPayload.paymentOptions = {
-        card: {
-          disable: true,
-        },
-        bank: {
-          disable: true,
-        },
-        wallet: {
-          disable: true,
-        },
-        momo: {
-          disable: false,
-          enabledProviders: [
-            providerIdByNetwork[
-              requestedNetwork
-            ],
-          ],
-        },
-      };
-    }
 
     providerRequestStarted =
       true;
@@ -1144,18 +1235,24 @@ export default async function handler(req, res) {
         {
           method:
             'POST',
+
           headers: {
             Authorization:
               `Bearer ${monimeApiKey}`,
+
             'Content-Type':
               'application/json',
+
             'Idempotency-Key':
               idempotencyKey,
+
             'Monime-Space-Id':
               monimeSpaceId,
+
             'Monime-Version':
               MONIME_API_VERSION,
           },
+
           body:
             JSON.stringify(
               checkoutPayload
@@ -1176,8 +1273,10 @@ export default async function handler(req, res) {
         {
           status:
             monimeResponse.status,
+
           response:
             monimeData,
+
           paymentTransactionId,
         }
       );
@@ -1189,21 +1288,28 @@ export default async function handler(req, res) {
         .update({
           status:
             'failed',
+
           failure_code:
             `monime_http_${monimeResponse.status}`,
+
           failure_message:
             typeof monimeData?.message ===
             'string'
               ? monimeData.message
               : 'Monime checkout creation failed.',
+
           provider_response:
             monimeData,
+
           failed_at:
             new Date().toISOString(),
+
           metadata: {
             ...metadata,
+
             status:
               'failed',
+
             provider_response:
               monimeData,
           },
@@ -1213,19 +1319,22 @@ export default async function handler(req, res) {
           paymentTransactionId
         );
 
-      return res.status(502).json({
+      return res.status(
+        502
+      ).json({
         error:
           typeof monimeData?.message ===
           'string'
             ? monimeData.message
             : 'Unable to create Monime checkout.',
+
         paymentTransactionId,
       });
     }
 
     /*
      * =========================================================
-     * 11. Extract checkout response
+     * 11. EXTRACT CHECKOUT RESPONSE
      * =========================================================
      */
 
@@ -1264,16 +1373,22 @@ export default async function handler(req, res) {
         .update({
           status:
             'failed',
+
           failure_code:
             'invalid_monime_response',
+
           failure_message:
             'Monime did not return a valid checkout session.',
+
           provider_response:
             monimeData,
+
           failed_at:
             new Date().toISOString(),
+
           metadata: {
             ...metadata,
+
             status:
               'failed',
           },
@@ -1283,29 +1398,37 @@ export default async function handler(req, res) {
           paymentTransactionId
         );
 
-      return res.status(502).json({
+      return res.status(
+        502
+      ).json({
         error:
           'Monime returned an invalid checkout response.',
+
         paymentTransactionId,
       });
     }
 
     /*
      * =========================================================
-     * 12. Store provider state
+     * 12. STORE PROVIDER STATE
      * =========================================================
      */
 
     const finalMetadata = {
       ...metadata,
+
       status:
         'pending',
+
       checkout_session_id:
         checkoutSessionId,
+
       redirect_url:
         redirectUrl,
+
       checkout_reference:
         checkoutReference,
+
       provider_response:
         monimeData,
     };
@@ -1321,16 +1444,23 @@ export default async function handler(req, res) {
         .update({
           provider_reference:
             checkoutSessionId,
+
           provider_response:
             monimeData,
+
           metadata:
             finalMetadata,
+
           status:
             'pending',
         })
         .eq(
           'id',
           paymentTransactionId
+        )
+        .eq(
+          'status',
+          'pending'
         );
 
     if (
@@ -1343,41 +1473,64 @@ export default async function handler(req, res) {
 
       /*
        * Provider checkout already exists.
-       * Do not falsely mark the payment failed.
+       * Do not falsely fail the payment.
        */
-      return res.status(500).json({
+      return res.status(
+        500
+      ).json({
         error:
           'Checkout was created but could not be synchronized with MatMove. Please do not retry immediately.',
+
         paymentTransactionId,
+
         checkoutSessionId,
       });
     }
 
     /*
      * =========================================================
-     * 13. Return hosted checkout
+     * 13. RETURN HOSTED CHECKOUT
      * =========================================================
      */
 
-    return res.status(200).json({
+    return res.status(
+      200
+    ).json({
       status:
         'pending',
+
       paymentTransactionId,
+
       checkoutSessionId,
+
       redirectUrl,
+
       currency,
+
       amount,
     });
-  } catch (error) {
+  } catch (
+    error
+  ) {
     console.error(
       'Monime checkout API exception:',
-      error
+      {
+        error,
+
+        paymentTransactionId,
+
+        providerRequestStarted,
+      }
     );
 
     /*
-     * If the provider request has already started,
-     * the result may be unknown. Keep the payment
-     * pending rather than falsely declaring failure.
+     * If the provider request has NOT started,
+     * the MatMove pending record can safely be
+     * marked failed.
+     *
+     * If provider communication has already started,
+     * keep the payment pending because the provider
+     * outcome may be unknown.
      */
 
     if (
@@ -1404,6 +1557,7 @@ export default async function handler(req, res) {
                 auth: {
                   autoRefreshToken:
                     false,
+
                   persistSession:
                     false,
                 },
@@ -1417,11 +1571,14 @@ export default async function handler(req, res) {
             .update({
               status:
                 'failed',
+
               failure_code:
                 'checkout_preparation_exception',
+
               failure_message:
                 error?.message ||
                 'Checkout preparation failed.',
+
               failed_at:
                 new Date().toISOString(),
             })
@@ -1444,9 +1601,12 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(500).json({
+    return res.status(
+      500
+    ).json({
       error:
         'Unable to start the wallet top-up.',
+
       paymentTransactionId:
         paymentTransactionId ||
         undefined,

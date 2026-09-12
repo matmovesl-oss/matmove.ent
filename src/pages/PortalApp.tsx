@@ -210,9 +210,6 @@ export function PortalApp() {
   const [withdrawalPhone, setWithdrawalPhone] =
     useState('');
 
-  const [mobileMoneyPhone, setMobileMoneyPhone] =
-    useState('');
-
   const [isBookingOpen, setIsBookingOpen] =
     useState(false);
 
@@ -391,11 +388,10 @@ export function PortalApp() {
          * PHONE RESOLUTION
          * =====================================================
          *
-         * Priority:
-         * 1. profiles.phone
-         * 2. auth.users.phone
-         * 3. auth user metadata phone
-         * 4. auth user metadata phone_number
+         * Phone remains available for account display and
+         * withdrawal operations.
+         *
+         * Mobile Money TOP-UP does not use this value anymore.
          */
         const profilePhone =
           normalizePhone(
@@ -432,13 +428,6 @@ export function PortalApp() {
          * =====================================================
          * LIVE KYC SUBMISSION
          * =====================================================
-         *
-         * KYC remains a live operational record for Admin and
-         * restricted financial operations.
-         *
-         * IMPORTANT:
-         * KYC does NOT prevent the customer from entering the
-         * dashboard or using the wallet.
          */
         const {
           data: kycSubmission,
@@ -488,14 +477,6 @@ export function PortalApp() {
          * =====================================================
          * CUSTOMER WALLETS
          * =====================================================
-         *
-         * Wallet visibility is NOT dependent on KYC.
-         *
-         * All legitimate customer roles can access their wallet
-         * immediately after account creation.
-         *
-         * Backend financial functions remain authoritative for
-         * actual balance-changing operations.
          */
         const {
           data: walletData,
@@ -1000,22 +981,13 @@ export function PortalApp() {
    * CUSTOMER WALLET TOP-UP
    * ==========================================================
    *
-   * IMPORTANT:
-   *
-   * All customer roles can access wallet funding.
-   *
-   * KYC is intentionally NOT checked here.
-   *
-   * The backend/provider settlement layer remains responsible
-   * for validating the authenticated customer and safely
-   * applying the resulting wallet credit.
-   *
-   * Current methods:
-   *
    * Mobile Money -> Monime -> SLE wallet
    * Card         -> Vult   -> USD wallet
    *
-   * Flote will be added after its API documentation is reviewed.
+   * Mobile Money top-up intentionally does NOT collect a phone
+   * number or network in the MatMove portal. Monime hosted
+   * checkout is responsible for the payment method selection
+   * and authentication.
    */
   const openWalletTopUp =
     () => {
@@ -1048,10 +1020,6 @@ export function PortalApp() {
 
       setWithdrawalPhone('');
 
-      setMobileMoneyPhone(
-        normalizePhone(profile?.phone)
-      );
-
       setAmount('');
 
       setSuccessMsg('');
@@ -1079,17 +1047,6 @@ export function PortalApp() {
         return;
       }
 
-      /*
-       * KYC is intentionally enforced ONLY for withdrawal.
-       *
-       * Drivers and merchants may:
-       * - access dashboard
-       * - access wallet
-       * - fund wallet
-       * - receive wallet-to-wallet funds
-       *
-       * Admin approval is required before cash withdrawal.
-       */
       const kycStatus =
         normalizeKycStatus(
           profile?.kyc_status ||
@@ -1274,13 +1231,7 @@ export function PortalApp() {
         role === 'merchant';
 
       /*
-       * ======================================================
        * TOP-UP ACCESS
-       * ======================================================
-       *
-       * All customer roles can fund their wallet.
-       *
-       * There is intentionally NO KYC requirement here.
        */
       if (
         walletAction ===
@@ -1294,13 +1245,7 @@ export function PortalApp() {
       }
 
       /*
-       * ======================================================
        * WITHDRAWAL ACCESS
-       * ======================================================
-       *
-       * Only drivers and merchants can withdraw.
-       *
-       * Admin approval is required.
        */
       if (
         walletAction ===
@@ -1354,67 +1299,26 @@ export function PortalApp() {
         return;
       }
 
-      if (
-        walletAction ===
-          'topup' &&
-        topUpMethod === 'mobile_money' &&
-        !mobileMoneyPhone.trim()
-      ) {
-        alert(
-          'Please enter the Mobile Money phone number.'
-        );
-        return;
-      }
-
-      if (
-        walletAction ===
-          'topup' &&
-        topUpMethod === 'mobile_money' &&
-        !/^((\+232|00232)\s?)?0?7\d{7}$/.test(
-          mobileMoneyPhone.replace(/[\s-]/g, '')
-        ) &&
-        !/^\+2327\d{7}$/.test(
-          mobileMoneyPhone.replace(/[\s-]/g, '')
-        )
-      ) {
-        alert(
-          'Please enter a valid Sierra Leone Mobile Money number, for example 076123456 or +23276123456.'
-        );
-        return;
-      }
-
+      /*
+       * =====================================================
+       * SECURE CUSTOMER WALLET TRANSACTION
+       * =====================================================
+       *
+       * Top-up:
+       *
+       * Browser
+       *   -> MatMove backend
+       *   -> Provider hosted checkout
+       *   -> Provider webhook
+       *   -> secure settlement RPC
+       *   -> customer wallet
+       *
+       * No wallet balance is changed by this browser code.
+       */
       setProcessing(true);
       setSuccessMsg('');
 
       try {
-        /*
-         * =====================================================
-         * SECURE CUSTOMER WALLET TOP-UP
-         * =====================================================
-         *
-         * SLE Mobile Money:
-         *
-         * Browser
-         *   -> /api/create-monime-checkout
-         *   -> Monime hosted checkout
-         *   -> Monime webhook
-         *   -> secure Supabase settlement RPC
-         *   -> customer SLE wallet
-         *
-         * USD Card:
-         *
-         * Browser
-         *   -> /api/create-vult-checkout
-         *   -> Vult hosted checkout
-         *   -> Vult webhook
-         *   -> secure Supabase settlement RPC
-         *   -> customer USD wallet
-         *
-         * No wallet balance is changed by this browser code.
-         *
-         * IMPORTANT:
-         * KYC is NOT checked here.
-         */
         if (
           walletAction ===
           'topup'
@@ -1462,10 +1366,6 @@ export function PortalApp() {
                     numAmount,
                   currency:
                     'SLE',
-                  network:
-                    mobileMoneyNetwork,
-                  phone:
-                    mobileMoneyPhone.trim(),
                   idempotencyKey,
                 }
               : {
@@ -1551,8 +1451,8 @@ export function PortalApp() {
           /*
            * Provider-owned checkout.
            *
-           * MatMove does not collect raw card credentials or
-           * Mobile Money authentication information.
+           * MatMove does not collect raw card credentials
+           * or Mobile Money authentication information.
            */
           window.location.assign(
             redirectUrl
@@ -1565,19 +1465,6 @@ export function PortalApp() {
          * =====================================================
          * SECURE CUSTOMER WALLET WITHDRAWAL
          * =====================================================
-         *
-         * Browser
-         *   -> /api/monime-payout
-         *   -> secure initiate_wallet_withdrawal()
-         *   -> Monime payout
-         *   -> Monime webhook
-         *   -> process_provider_webhook_event()
-         *   -> settle_wallet_withdrawal()
-         *   -> wallet debit + ledger settlement
-         *
-         * A successful API response means the request entered
-         * the secure payout workflow. It does NOT necessarily
-         * mean Mobile Money has already completed.
          */
         const {
           data: sessionData,
@@ -1891,12 +1778,6 @@ export function PortalApp() {
             }
             setWithdrawalPhone={
               setWithdrawalPhone
-            }
-            mobileMoneyPhone={
-              mobileMoneyPhone
-            }
-            setMobileMoneyPhone={
-              setMobileMoneyPhone
             }
             amount={amount}
             setAmount={
@@ -2261,8 +2142,6 @@ function WalletTransactionModal({
   setMobileMoneyNetwork,
   withdrawalPhone,
   setWithdrawalPhone,
-  mobileMoneyPhone,
-  setMobileMoneyPhone,
   amount,
   setAmount,
   processing,
@@ -2286,10 +2165,6 @@ function WalletTransactionModal({
   ) => void;
   withdrawalPhone: string;
   setWithdrawalPhone: (
-    value: string
-  ) => void;
-  mobileMoneyPhone: string;
-  setMobileMoneyPhone: (
     value: string
   ) => void;
   amount: string;
@@ -2324,7 +2199,6 @@ function WalletTransactionModal({
               'orange'
             );
             setWithdrawalPhone('');
-            setMobileMoneyPhone('');
           }}
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full"
           aria-label="Close wallet transaction"
@@ -2413,80 +2287,6 @@ function WalletTransactionModal({
                     iconClass="bg-emerald-50 text-emerald-600"
                     activeClass="border-emerald-600 bg-emerald-50"
                   />
-                </div>
-              </div>
-            )}
-
-            {walletAction ===
-              'topup' &&
-              topUpMethod === 'mobile_money' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
-                    Mobile Money Network
-                  </label>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setMobileMoneyNetwork('orange')
-                      }
-                      className={`p-3 rounded-xl border-2 text-left transition ${
-                        mobileMoneyNetwork === 'orange'
-                          ? 'border-orange-500 bg-orange-50'
-                          : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="font-bold text-slate-900">
-                        Orange Money
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1">
-                        Sierra Leone
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setMobileMoneyNetwork('afrimoney')
-                      }
-                      className={`p-3 rounded-xl border-2 text-left transition ${
-                        mobileMoneyNetwork === 'afrimoney'
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="font-bold text-slate-900">
-                        Afrimoney
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1">
-                        Sierra Leone
-                      </div>
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">
-                    Mobile Money Number
-                  </label>
-
-                  <input
-                    type="tel"
-                    required
-                    value={mobileMoneyPhone}
-                    onChange={(e) =>
-                      setMobileMoneyPhone(e.target.value)
-                    }
-                    className="w-full border border-slate-300 p-3 rounded-xl text-base font-medium focus:ring-2 focus:ring-blue-600 outline-none"
-                    placeholder="e.g. 076123456 or +23276123456"
-                    autoComplete="tel"
-                  />
-
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    This number is recorded with the MatMove payment request. Monime's hosted checkout remains responsible for the actual Mobile Money authentication.
-                  </p>
                 </div>
               </div>
             )}
@@ -2617,7 +2417,7 @@ function WalletTransactionModal({
                   <div className="text-sm font-bold text-slate-900 mt-1">
                     {topUpMethod ===
                     'mobile_money'
-                      ? `Mobile Money — Monime — ${mobileMoneyNetwork === 'orange' ? 'Orange Money' : 'Afrimoney'} — SLE`
+                      ? 'Mobile Money — Monime — SLE'
                       : 'Bank Card — Vult — USD'}
                   </div>
                 </div>
