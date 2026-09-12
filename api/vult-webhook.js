@@ -322,6 +322,7 @@ async function findVultPayment(
           'id',
           'user_id',
           'wallet_id',
+          'transaction_type',
           'provider',
           'provider_reference',
           'idempotency_key',

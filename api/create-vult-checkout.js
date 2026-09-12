@@ -1422,6 +1422,7 @@ export default async function handler(
                 'id',
                 'user_id',
                 'wallet_id',
+                'provider',
                 'provider_reference',
                 'status',
                 'amount',

@@ -383,6 +383,23 @@ export default async function handler(req, res) {
           ''
       ).trim();
 
+    const requestedNetwork =
+      String(
+        body.network || ''
+      )
+        .trim()
+        .toLowerCase();
+
+    const requestedPhone =
+      String(
+        body.phone || ''
+      ).trim();
+
+    const providerIdByNetwork = {
+      orange: 'm17',
+      afrimoney: 'm18',
+    };
+
     if (!amount) {
       return res.status(400).json({
         error:
@@ -397,6 +414,35 @@ export default async function handler(req, res) {
         error:
           'Only SLE and USD wallets are supported.',
       });
+    }
+
+    if (currency === 'SLE') {
+      if (
+        !providerIdByNetwork[requestedNetwork]
+      ) {
+        return res.status(400).json({
+          error:
+            'Select Orange Money or Afrimoney for an SLE Mobile Money top-up.',
+        });
+      }
+
+      const normalizedPhone =
+        requestedPhone
+          .replace(/[\s-]/g, '');
+
+      if (
+        !/^0?7\d{7}$/.test(
+          normalizedPhone.replace(
+            /^\+232/,
+            ''
+          )
+        )
+      ) {
+        return res.status(400).json({
+          error:
+            'Enter a valid Sierra Leone Mobile Money phone number.',
+        });
+      }
     }
 
     const idempotencyKey =
@@ -782,6 +828,20 @@ export default async function handler(req, res) {
       amount,
       idempotency_key:
         idempotencyKey,
+      mobile_money_network:
+        currency === 'SLE'
+          ? requestedNetwork
+          : null,
+      mobile_money_provider:
+        currency === 'SLE'
+          ? providerIdByNetwork[
+              requestedNetwork
+            ]
+          : null,
+      mobile_money_phone:
+        currency === 'SLE'
+          ? requestedPhone
+          : null,
       status:
         'pending',
     };
@@ -812,9 +872,11 @@ export default async function handler(req, res) {
           status:
             'pending',
           customer_phone:
-            profile.phone ||
-            authData.user.phone ||
-            null,
+            currency === 'SLE'
+              ? requestedPhone
+              : profile.phone ||
+                authData.user.phone ||
+                null,
           metadata,
         })
         .select(
@@ -838,7 +900,7 @@ export default async function handler(req, res) {
               'payment_transactions'
             )
             .select(
-              'id,wallet_id,provider_reference,status,amount,currency,metadata'
+              'id,wallet_id,provider,provider_reference,status,amount,currency,metadata'
             )
             .eq(
               'idempotency_key',
@@ -854,7 +916,9 @@ export default async function handler(req, res) {
             concurrentPayment.amount
           ) === amount &&
           concurrentPayment.currency ===
-            currency
+            currency &&
+          concurrentPayment.provider ===
+            'monime'
         ) {
           const concurrentMetadata =
             concurrentPayment.metadata &&
@@ -1032,8 +1096,44 @@ export default async function handler(req, res) {
           String(amount),
         purpose:
           'wallet_topup',
+        mobile_money_network:
+          currency === 'SLE'
+            ? requestedNetwork
+            : null,
+        mobile_money_provider:
+          currency === 'SLE'
+            ? providerIdByNetwork[
+                requestedNetwork
+              ]
+            : null,
+        mobile_money_phone:
+          currency === 'SLE'
+            ? requestedPhone
+            : null,
       },
     };
+
+    if (currency === 'SLE') {
+      checkoutPayload.paymentOptions = {
+        card: {
+          disable: true,
+        },
+        bank: {
+          disable: true,
+        },
+        wallet: {
+          disable: true,
+        },
+        momo: {
+          disable: false,
+          enabledProviders: [
+            providerIdByNetwork[
+              requestedNetwork
+            ],
+          ],
+        },
+      };
+    }
 
     providerRequestStarted =
       true;
