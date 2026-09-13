@@ -99,19 +99,28 @@ function parseSignatureHeader(header) {
   }
 
   /*
-   * Supports:
+   * Monime documents the webhook signature as a
+   * cryptographic signature that includes a timestamp.
    *
-   * t=...,v1=...
-   * timestamp=...,signature=...
-   * ts=...,sig=...
+   * Accept the common key names used by webhook
+   * signature headers:
    *
-   * Also supports a bare sha256=<digest>
-   * or a bare digest.
+   *   t=...,v1=...
+   *   timestamp=...,signature=...
+   *   ts=...,sig=...
+   *
+   * Both comma and semicolon separators are accepted
+   * so the parser is tolerant of equivalent header
+   * serialization.
+   *
+   * A bare sha256=<digest> or bare digest is also
+   * accepted only when a timestamp is supplied elsewhere
+   * in the same header.
    */
   const parts = {};
 
   for (
-    const part of value.split(',')
+    const part of value.split(/[;,]/)
   ) {
     const separatorIndex =
       part.indexOf('=');
@@ -128,7 +137,8 @@ function parseSignatureHeader(header) {
           0,
           separatorIndex
         )
-        .trim();
+        .trim()
+        .toLowerCase();
 
     const val =
       part
@@ -141,6 +151,12 @@ function parseSignatureHeader(header) {
       parts[key] = val;
     }
   }
+
+  const timestamp =
+    parts.t ||
+    parts.timestamp ||
+    parts.ts ||
+    null;
 
   const signatures = [
     parts.v1,
@@ -156,22 +172,29 @@ function parseSignatureHeader(header) {
     signatures.length === 0 &&
     value
   ) {
-    signatures.push(
+    const bareSignature =
       value.startsWith(
         'sha256='
       )
-        ? value.slice(7)
-        : value
-    );
+        ? value.slice(7).trim()
+        : value;
+
+    /*
+     * Do not treat a structured timestamp header
+     * as a signature value.
+     */
+    if (
+      bareSignature &&
+      !bareSignature.includes('=')
+    ) {
+      signatures.push(
+        bareSignature
+      );
+    }
   }
 
   return {
-    timestamp:
-      parts.t ||
-      parts.timestamp ||
-      parts.ts ||
-      null,
-
+    timestamp,
     signatures,
   };
 }
@@ -216,7 +239,7 @@ function signatureMatches(
     )
   ) {
     received =
-      received.slice(7);
+      received.slice(7).trim();
   }
 
   /*
@@ -243,11 +266,21 @@ function signatureMatches(
    * Base64 HMAC-SHA256.
    */
   try {
+    /*
+     * Base64 HMAC-SHA256 is exactly 32 bytes
+     * when decoded.
+     */
     const receivedBuffer =
       Buffer.from(
         received,
         'base64'
       );
+
+    if (
+      receivedBuffer.length !== 32
+    ) {
+      return false;
+    }
 
     const expectedBuffer =
       Buffer.from(
@@ -282,12 +315,17 @@ function buildHmac(
 function timestampIsValid(
   timestamp
 ) {
+  /*
+   * Monime webhook signatures include a timestamp.
+   * A missing timestamp is therefore rejected rather
+   * than treated as valid.
+   */
   if (
     timestamp === null ||
     timestamp === undefined ||
     timestamp === ''
   ) {
-    return true;
+    return false;
   }
 
   const timestampNumber =
@@ -336,16 +374,13 @@ function timestampIsValid(
  * The production webhook secret must never be exposed to the
  * browser.
  *
- * We support the timestamped construction already used by the
- * MatMove integration:
+ * Monime describes Monime-Signature as a cryptographic
+ * signature containing a timestamp.
  *
- *     timestamp + "." + rawBody
+ * The verifier requires that timestamp and enforces a
+ * five-minute replay window.
  *
- * We also support raw-body HMAC because the currently available
- * provider material does not establish that every Monime webhook
- * configuration uses the timestamped construction.
- *
- * MONIME_WEBHOOK_SIGNATURE_MODE may optionally be set to:
+ * During integration testing we support:
  *
  *   timestamp
  *   raw
@@ -355,12 +390,16 @@ function timestampIsValid(
  *
  *   auto
  *
- * In auto mode, the timestamped construction is checked first,
- * then raw-body HMAC is checked.
+ * In auto mode the timestamped construction is checked first,
+ * followed by raw-body HMAC.
  *
- * Once Monime confirms the exact production webhook signing
- * contract for this merchant, set the environment variable to
- * the exact required mode.
+ * The timestamp is mandatory in all modes.
+ *
+ * IMPORTANT:
+ *
+ * The exact HMAC signing-string construction supplied by
+ * Monime should be confirmed against Monime's HMAC verification
+ * documentation before locking this integration to one mode.
  * -------------------------------------------------------------
  */
 function verifyMonimeSignature(
@@ -392,6 +431,20 @@ function verifyMonimeSignature(
       signatureHeader
     );
 
+  /*
+   * The timestamp is required because Monime describes
+   * Monime-Signature as a timestamped cryptographic
+   * signature. This also prevents accepting an unsigned
+   * bare digest as a valid webhook.
+   */
+  if (!timestamp) {
+    return {
+      valid: false,
+      reason:
+        'Monime-Signature timestamp is missing.',
+    };
+  }
+
   if (
     signatures.length === 0
   ) {
@@ -414,7 +467,7 @@ function verifyMonimeSignature(
     };
   }
 
-  const mode =
+  const configuredMode =
     String(
       process.env
         .MONIME_WEBHOOK_SIGNATURE_MODE ||
@@ -423,44 +476,21 @@ function verifyMonimeSignature(
       .trim()
       .toLowerCase();
 
-  const candidates = [];
-
   /*
-   * Timestamp + body construction.
+   * Supported modes:
+   *
+   *   timestamp
+   *   raw
+   *   auto
    */
   if (
-    timestamp &&
-    (
-      mode ===
-        'timestamp' ||
-      mode === 'auto'
+    ![
+      'timestamp',
+      'raw',
+      'auto',
+    ].includes(
+      configuredMode
     )
-  ) {
-    candidates.push(
-      buildHmac(
-        secret,
-        `${timestamp}.${rawBody}`
-      )
-    );
-  }
-
-  /*
-   * Raw body construction.
-   */
-  if (
-    mode === 'raw' ||
-    mode === 'auto'
-  ) {
-    candidates.push(
-      buildHmac(
-        secret,
-        rawBody
-      )
-    );
-  }
-
-  if (
-    candidates.length === 0
   ) {
     return {
       valid: false,
@@ -469,20 +499,69 @@ function verifyMonimeSignature(
     };
   }
 
-  for (
-    const hmac of candidates
-  ) {
-    const expectedHex =
-      hmac.digest('hex');
+  const candidates = [];
 
-    const expectedBase64 =
+  /*
+   * Timestamp + "." + raw body.
+   *
+   * This is the timestamped construction used by the
+   * MatMove integration and is checked first.
+   */
+  if (
+    configuredMode ===
+      'timestamp' ||
+    configuredMode === 'auto'
+  ) {
+    candidates.push({
+      mode:
+        'timestamp',
+
+      payload:
+        `${timestamp}.${rawBody}`,
+    });
+  }
+
+  /*
+   * Raw body HMAC.
+   *
+   * This remains available for compatibility while the
+   * provider's exact signing construction is being
+   * confirmed.
+   *
+   * The timestamp is still mandatory and must be inside
+   * the replay window.
+   */
+  if (
+    configuredMode === 'raw' ||
+    configuredMode === 'auto'
+  ) {
+    candidates.push({
+      mode:
+        'raw',
+
+      payload:
+        rawBody,
+    });
+  }
+
+  for (
+    const candidate of candidates
+  ) {
+    const digest =
       buildHmac(
         secret,
-        mode ===
-          'timestamp'
-          ? `${timestamp}.${rawBody}`
-          : rawBody
-      ).digest('base64');
+        candidate.payload
+      ).digest();
+
+    const expectedHex =
+      digest.toString(
+        'hex'
+      );
+
+    const expectedBase64 =
+      digest.toString(
+        'base64'
+      );
 
     for (
       const signature of signatures
@@ -497,9 +576,12 @@ function verifyMonimeSignature(
         return {
           valid: true,
           reason: null,
-          mode,
+
+          mode:
+            candidate.mode,
+
           timestamp:
-            timestamp || null,
+            timestamp,
         };
       }
     }
@@ -1161,6 +1243,17 @@ export default async function handler(
         req
       );
 
+    if (
+      !rawBody.trim()
+    ) {
+      return res.status(
+        400
+      ).json({
+        error:
+          'Webhook body is empty.',
+      });
+    }
+
     /*
      * =========================================================
      * 2. Verify webhook signature BEFORE JSON parsing
@@ -1345,6 +1438,11 @@ export default async function handler(
     if (
       !registration?.success
     ) {
+      console.error(
+        'Monime webhook registration was unsuccessful:',
+        registration
+      );
+
       return res.status(
         500
       ).json({
@@ -1371,6 +1469,15 @@ export default async function handler(
      * =========================================================
      * 6. Completed wallet top-up
      * =========================================================
+     *
+     * This is the only Monime event path that can settle
+     * a MatMove wallet top-up.
+     *
+     * The webhook itself does NOT directly update wallet
+     * balances.
+     *
+     * The secure settle_wallet_topup() RPC is the financial
+     * authority.
      */
 
     if (
@@ -1402,14 +1509,19 @@ export default async function handler(
         ).json({
           received:
             true,
+
           registered:
             true,
+
           processed:
             false,
+
           event_id:
             eventId,
+
           event_type:
             eventType,
+
           reason:
             'Payment lookup failed after webhook registration. Event retained for reconciliation.',
         });
@@ -1437,14 +1549,19 @@ export default async function handler(
         ).json({
           received:
             true,
+
           registered:
             true,
+
           processed:
             false,
+
           event_id:
             eventId,
+
           event_type:
             eventType,
+
           reason:
             'No matching MatMove payment transaction found. No wallet credit performed.',
         });
@@ -1462,18 +1579,25 @@ export default async function handler(
         ).json({
           received:
             true,
+
           registered:
             true,
+
           processed:
             true,
+
           duplicate:
             true,
+
           event_id:
             eventId,
+
           event_type:
             eventType,
+
           payment_transaction_id:
             payment.id,
+
           reason:
             'Wallet top-up was already settled.',
         });
@@ -1491,16 +1615,22 @@ export default async function handler(
         ).json({
           received:
             true,
+
           registered:
             true,
+
           processed:
             false,
+
           event_id:
             eventId,
+
           event_type:
             eventType,
+
           payment_transaction_id:
             payment.id,
+
           reason:
             'Payment is not pending. No wallet credit performed.',
         });
@@ -1549,7 +1679,9 @@ export default async function handler(
           {
             error:
               settlementError,
+
             eventId,
+
             paymentTransactionId:
               payment.id,
           }
@@ -1564,16 +1696,22 @@ export default async function handler(
         ).json({
           received:
             true,
+
           registered:
             true,
+
           processed:
             false,
+
           event_id:
             eventId,
+
           event_type:
             eventType,
+
           payment_transaction_id:
             payment.id,
+
           reason:
             'Provider payment was confirmed, but wallet settlement failed. Event retained for reconciliation.',
         });
@@ -1584,16 +1722,22 @@ export default async function handler(
       ).json({
         received:
           true,
+
         registered:
           true,
+
         processed:
           true,
+
         event_id:
           eventId,
+
         event_type:
           eventType,
+
         payment_transaction_id:
           payment.id,
+
         settlement,
       });
     }
@@ -1623,14 +1767,19 @@ export default async function handler(
       ).json({
         received:
           true,
+
         registered:
           true,
+
         processed:
           false,
+
         event_id:
           eventId,
+
         event_type:
           eventType,
+
         reason:
           'Checkout ended without successful completion. No wallet credit performed.',
       });
@@ -1652,14 +1801,19 @@ export default async function handler(
       ).json({
         received:
           true,
+
         registered:
           true,
+
         processed:
           false,
+
         event_id:
           eventId,
+
         event_type:
           eventType,
+
         reason:
           'Monime event registered. No MatMove financial settlement was required.',
       });
@@ -1681,14 +1835,19 @@ export default async function handler(
       ).json({
         received:
           true,
+
         registered:
           true,
+
         processed:
           false,
+
         event_id:
           eventId,
+
         event_type:
           eventType,
+
         reason:
           'Payout event is not terminal.',
       });
@@ -1717,14 +1876,19 @@ export default async function handler(
       ).json({
         received:
           true,
+
         registered:
           true,
+
         processed:
           false,
+
         event_id:
           eventId,
+
         event_type:
           eventType,
+
         reason:
           'Terminal payout event has no MatMove withdrawal ID.',
       });
@@ -1760,7 +1924,9 @@ export default async function handler(
         {
           error:
             processingError,
+
           eventId,
+
           withdrawalId,
         }
       );
@@ -1773,14 +1939,19 @@ export default async function handler(
       ).json({
         received:
           true,
+
         registered:
           true,
+
         processed:
           false,
+
         event_id:
           eventId,
+
         event_type:
           eventType,
+
         reason:
           'Payout financial processing failed. Event retained for reconciliation.',
       });
@@ -1791,14 +1962,19 @@ export default async function handler(
     ).json({
       received:
         true,
+
       registered:
         true,
+
       processed:
         true,
+
       event_id:
         eventId,
+
       event_type:
         eventType,
+
       settlement:
         processingResult,
     });
