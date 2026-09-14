@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Car, Package, Truck, Navigation, MapPin, ShieldCheck, CreditCard, Smartphone, X, Wallet, Bell, Loader2 } from 'lucide-react';
+import { Car, Package, Truck, Navigation, MapPin, ShieldCheck, X, Wallet, Bell, Loader2, Lock, Smartphone, CreditCard } from 'lucide-react';
 
 type VehicleType = 'car' | 'keke' | 'bike' | 'truck';
 
@@ -10,15 +10,12 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
   const [destination, setDestination] = useState('');
   const [fareEstimate, setFareEstimate] = useState<number | null>(null);
 
-  // Booking States
   const [isRequesting, setIsRequesting] = useState(false);
   const [activeBooking, setActiveBooking] = useState<any>(null);
 
-  // Top-up States
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
-  const [provider, setProvider] = useState<'orange' | 'africell' | 'flot' | 'vult'>('orange');
   const [topUpAmount, setTopUpAmount] = useState('');
-  const [phone, setPhone] = useState('');
+  const [provider, setProvider] = useState<'mobile_money' | 'card' | 'flot' | 'vult'>('mobile_money');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const vehicleOptions = [
@@ -28,34 +25,25 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
     { id: 'truck', name: 'Haulage Truck', icon: Truck, base: 80, perKm: 20 },
   ];
 
-  // Calculate Fare
   useEffect(() => {
     if (!pickup || !destination) {
       setFareEstimate(null);
       return;
     }
     const activeVehicle = vehicleOptions.find((v) => v.id === selectedVehicle);
-    const simulatedDistanceKm = 6.5; // In production, replace with Google Maps Distance Matrix API
+    const simulatedDistanceKm = 6.5; 
     const calculated = (activeVehicle?.base || 15) + simulatedDistanceKm * (activeVehicle?.perKm || 7);
     setFareEstimate(Math.round(calculated));
   }, [pickup, destination, selectedVehicle]);
 
-  // Listen for Driver Acceptance via Supabase WebSockets
   useEffect(() => {
     if (!activeBooking) return;
-
     const channel = supabase
       .channel(`booking-${activeBooking.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `id=eq.${activeBooking.id}` }, 
-        (payload) => {
-          setActiveBooking(payload.new);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+        (payload) => setActiveBooking(payload.new)
+      ).subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [activeBooking]);
 
   const requestTrip = async () => {
@@ -66,7 +54,6 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
 
     setIsRequesting(true);
     try {
-      // Write the trip request to the live database
       const { data, error } = await supabase
         .from('bookings')
         .insert({
@@ -77,13 +64,11 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
           fare_amount: fareEstimate,
           status: 'pending'
         })
-        .select()
-        .single();
+        .select().single();
 
       if (error) throw error;
       setActiveBooking(data);
     } catch (err: any) {
-      console.error(err);
       alert(err.message || 'Failed to request trip.');
     } finally {
       setIsRequesting(false);
@@ -95,27 +80,27 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
     try {
       await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', activeBooking.id);
       setActiveBooking(null);
-    } catch (err) {
-      console.error('Failed to cancel trip', err);
-    }
+    } catch (err) { console.error('Failed to cancel trip', err); }
   };
 
   const executeTopUp = async () => {
     if (!topUpAmount || Number(topUpAmount) <= 0) return alert('Enter a valid amount');
     setIsProcessing(true);
+    
     try {
-      const currentBalance = Number(wallet?.balance || 0);
-      const newBalance = currentBalance + Number(topUpAmount);
-
+      // 1. Pre-fund Wallet in DB for Admin testing
+      const newBalance = Number(wallet?.balance || 0) + Number(topUpAmount);
       const { error } = await supabase.from('wallets').update({ balance: newBalance }).eq('user_id', profile.id);
       if (error) throw error;
 
-      alert(`Success! SLE ${topUpAmount} added to your wallet via ${provider.toUpperCase()}.`);
-      setIsTopUpModalOpen(false);
-      window.location.reload(); 
+      // 2. Smart Routing Logic
+      const flotUrl = "https://pay.flotme.ai/matmove";
+      const vultUrl = "https://pay.vult.app/matmove"; // Replace with your actual Vult merchant link
+      
+      window.location.href = provider === 'vult' ? vultUrl : flotUrl;
+      
     } catch (err: any) {
-      alert(err.message || 'Failed to update wallet balance.');
-    } finally {
+      alert(err.message || 'Failed to initialize payment.');
       setIsProcessing(false);
     }
   };
@@ -162,7 +147,6 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
         </div>
 
         <div className="grid grid-cols-3 gap-8 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-          {/* Active Booking State View */}
           {activeBooking ? (
             <div className="col-span-1 space-y-6 flex flex-col items-center justify-center text-center py-8">
               {activeBooking.status === 'pending' && (
@@ -196,7 +180,6 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
               )}
             </div>
           ) : (
-            /* Standard Request Form */
             <div className="col-span-1 space-y-4">
               <h3 className="font-bold text-slate-900 text-lg">Request a Trip</h3>
               <div>
@@ -249,21 +232,21 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
         </div>
       </div>
 
-      {/* Wallet Top-Up Modal */}
       {isTopUpModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative">
+          <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl relative">
             <button onClick={() => setIsTopUpModalOpen(false)} className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full"><X size={20} /></button>
-            <h2 className="text-2xl font-bold text-slate-900 mb-1">Top-Up MatMove Wallet</h2>
-            <p className="text-xs text-slate-500 mb-6">Select your payment merchant partner to load funds.</p>
+            
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Secure Top-Up</h2>
+            <p className="text-sm text-slate-500 mb-6">How would you like to load your wallet?</p>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { id: 'orange', name: 'Orange Money', icon: Smartphone, color: 'text-orange-600', bg: 'bg-orange-50' },
-                  { id: 'africell', name: 'Afrimoney', icon: Smartphone, color: 'text-purple-600', bg: 'bg-purple-50' },
-                  { id: 'flot', name: 'Flot Pay', icon: CreditCard, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                  { id: 'vult', name: 'Vult Pay', icon: ShieldCheck, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                  { id: 'mobile_money', name: 'Mobile Money', icon: Smartphone, color: 'text-orange-600', bg: 'bg-orange-50' },
+                  { id: 'card', name: 'Bank Card', icon: CreditCard, color: 'text-blue-600', bg: 'bg-blue-50' },
+                  { id: 'flot', name: 'Flot Wallet', icon: Wallet, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                  { id: 'vult', name: 'Vult Wallet', icon: ShieldCheck, color: 'text-indigo-600', bg: 'bg-indigo-50' },
                 ].map((p) => {
                   const ProviderIcon = p.icon;
                   return (
@@ -276,13 +259,23 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mt-4 mb-1">Amount (SLE)</label>
-                <input type="number" min="1" placeholder="e.g. 200" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="w-full border border-slate-300 p-3 rounded-xl text-lg font-bold outline-none focus:ring-2 focus:ring-blue-600" />
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Amount to Load (SLE)</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">SLE</span>
+                  <input type="number" min="1" placeholder="0.00" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="w-full border border-slate-300 py-4 pl-14 pr-4 rounded-xl text-2xl font-bold outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                </div>
               </div>
 
-              <button type="button" onClick={executeTopUp} disabled={isProcessing} className="w-full bg-blue-600 text-white font-bold p-3.5 rounded-xl hover:bg-blue-700 transition mt-4 disabled:opacity-50">
-                {isProcessing ? 'Processing Payment...' : `Pay via ${provider.toUpperCase()}`}
+              <button type="button" onClick={executeTopUp} disabled={isProcessing || !topUpAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl hover:bg-slate-800 transition flex items-center justify-center gap-2 disabled:opacity-50">
+                {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />}
+                {isProcessing ? 'Securing Connection...' : `Pay via ${provider === 'vult' ? 'VULT' : 'FLOT'}`}
               </button>
+            </div>
+            
+            <div className="mt-6 text-center">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2">
+                <Lock size={12} /> Encrypted Gateway
+              </span>
             </div>
           </div>
         </div>
