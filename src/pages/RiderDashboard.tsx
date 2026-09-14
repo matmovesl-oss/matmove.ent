@@ -93,10 +93,17 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
       const { error } = await supabase.from('wallets').update({ balance: newBalance }).eq('user_id', profile.id);
       if (error) throw error;
 
-      // 2. Smart Routing Logic
-      const flotUrl = "https://pay.flotme.ai/matmove";
-      const vultUrl = "https://pay.vult.app/matmove"; // Replace with your actual Vult merchant link
+      // 2. Smart Routing Logic & Return URL Injection
+      const returnUrl = encodeURIComponent(window.location.origin + '/customer/rider');
+      const flotUrl = `https://pay.flotme.ai/matmove?amount=${topUpAmount}&return_url=${returnUrl}`;
       
+      // Note: pay.vult.app is currently returning a DNS error (NXDOMAIN). Ensure this is your correct Vult link.
+      const vultUrl = `https://pay.vult.app/matmove?amount=${topUpAmount}&return_url=${returnUrl}`;
+      
+      // 3. Turn off spinning state BEFORE redirecting to prevent the "Infinite Spin" bug on Back button
+      setIsProcessing(false);
+      setIsTopUpModalOpen(false);
+
       window.location.href = provider === 'vult' ? vultUrl : flotUrl;
       
     } catch (err: any) {
@@ -232,6 +239,7 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
         </div>
       </div>
 
+      {/* Unified Flot/Vult Secure Checkout Modal */}
       {isTopUpModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl relative">
