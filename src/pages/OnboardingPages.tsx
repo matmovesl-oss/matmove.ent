@@ -35,6 +35,12 @@ type OnboardingPersonalInfo = Partial<PersonalInfo> & {
   phone?: string;
 };
 
+type VehicleState = {
+  type: string;
+  plateNumber: string;
+  region: string;
+};
+
 function useOnboardingState<T>(
   key: string,
   initialValue: T
@@ -86,6 +92,10 @@ function normalizePhone(value: string): string {
     .replace(/[^\d+]/g, '');
 }
 
+/* =========================================================
+   ROLE SELECTION
+========================================================= */
+
 export function RoleSelectionPage() {
   const navigate = useNavigate();
 
@@ -94,11 +104,15 @@ export function RoleSelectionPage() {
       const stored =
         sessionStorage.getItem('ob_role');
 
-      return stored === 'rider' ||
+      if (
+        stored === 'rider' ||
         stored === 'driver' ||
         stored === 'merchant'
-        ? stored
-        : null;
+      ) {
+        return stored;
+      }
+
+      return null;
     });
 
   const [isProcessing, setIsProcessing] =
@@ -127,7 +141,9 @@ export function RoleSelectionPage() {
   ];
 
   const handleContinue = async () => {
-    if (!selected) return;
+    if (!selected) {
+      return;
+    }
 
     setIsProcessing(true);
 
@@ -139,6 +155,11 @@ export function RoleSelectionPage() {
 
       navigate('/onboarding/personal');
     } catch (error) {
+      console.error(
+        'Failed to save account type:',
+        error
+      );
+
       alert(
         'Failed to save your account type. Please try again.'
       );
@@ -159,43 +180,52 @@ export function RoleSelectionPage() {
         </p>
 
         <div className="role-choice-grid">
-          {roles.map(
-            ({ key, icon, tone }) => (
+          {roles.map((roleOption) => {
+            const isSelected =
+              selected === roleOption.key;
+
+            return (
               <button
-                key={key}
+                key={roleOption.key}
                 type="button"
-                className={`role-choice-card ${
-                  selected === key
-                    ? 'selected'
-                    : ''
-                }`}
+                className={
+                  isSelected
+                    ? 'role-choice-card selected'
+                    : 'role-choice-card'
+                }
                 onClick={() =>
-                  setSelected(key)
+                  setSelected(roleOption.key)
                 }
                 disabled={isProcessing}
               >
                 <div
-                  className={`icon-box tone-${tone} icon-lg`}
+                  className={
+                    'icon-box tone-' +
+                    roleOption.tone +
+                    ' icon-lg'
+                  }
                 >
-                  {icon}
+                  {roleOption.icon}
                 </div>
 
                 <strong>
-                  {roleLabels[key]}
+                  {roleLabels[roleOption.key]}
                 </strong>
 
                 <span>
-                  {roleDescriptions[key]}
+                  {roleDescriptions[
+                    roleOption.key
+                  ]}
                 </span>
 
-                {selected === key && (
+                {isSelected && (
                   <div className="selected-check">
                     <Check size={13} />
                   </div>
                 )}
               </button>
-            )
-          )}
+            );
+          })}
         </div>
 
         <div className="ob-actions">
@@ -228,6 +258,10 @@ export function RoleSelectionPage() {
   );
 }
 
+/* =========================================================
+   PERSONAL INFORMATION
+========================================================= */
+
 export function PersonalInfoPage() {
   const navigate = useNavigate();
 
@@ -250,11 +284,12 @@ export function PersonalInfoPage() {
   const update = (
     field: keyof OnboardingPersonalInfo,
     value: string
-  ) =>
+  ) => {
     setInfo({
       ...info,
       [field]: value,
     });
+  };
 
   const normalizedPhone =
     normalizePhone(info.phone ?? '');
@@ -449,6 +484,10 @@ export function PersonalInfoPage() {
   );
 }
 
+/* =========================================================
+   IDENTITY
+========================================================= */
+
 export function IdentityPage() {
   const navigate = useNavigate();
   const role = getActiveRole();
@@ -493,29 +532,32 @@ export function IdentityPage() {
   const updateId = (
     field: keyof IdentityInfo,
     value: string
-  ) =>
+  ) => {
     setIdentity({
       ...identity,
       [field]: value,
     });
+  };
 
   const updateDriver = (
     field: keyof DriverInfo,
     value: string
-  ) =>
+  ) => {
     setDriver({
       ...driver,
       [field]: value,
     });
+  };
 
   const updateMerchant = (
     field: string,
     value: string
-  ) =>
+  ) => {
     setMerchant({
       ...merchant,
       [field]: value,
     });
+  };
 
   const idTypes =
     role === 'driver'
@@ -726,6 +768,7 @@ export function IdentityPage() {
                   <option>
                     Physical Shop / Location
                   </option>
+
                   <option>
                     Digital / Online Only
                   </option>
@@ -804,6 +847,10 @@ export function IdentityPage() {
   );
 }
 
+/* =========================================================
+   DOCUMENTS
+========================================================= */
+
 export function DocumentsPage() {
   const navigate = useNavigate();
   const role = getActiveRole();
@@ -816,17 +863,6 @@ export function DocumentsPage() {
   const currentIdType =
     identity.idType || 'National ID';
 
-  /*
-   * Driver accounts use the driver's license
-   * as their required document.
-   *
-   * Riders and merchants continue to use
-   * National ID (Front).
-   *
-   * The internal document key remains
-   * "id_front" so the existing upload/storage
-   * flow is not broken.
-   */
   const displayDocs: {
     id: DocumentType;
     label: string;
@@ -837,6 +873,11 @@ export function DocumentsPage() {
       label:
         role === 'driver'
           ? "Driver's License"
+          : currentIdType === 'Passport'
+          ? 'Passport'
+          : currentIdType ===
+            'Business Registration'
+          ? 'Business Registration'
           : 'National ID (Front)',
       required: true,
     },
@@ -872,13 +913,19 @@ export function DocumentsPage() {
   const allUploaded =
     displayDocs
       .filter(
-        (d) => d.required
+        (doc) => doc.required
       )
       .every(
-        (d) =>
-          docs[d.id]?.status ===
+        (doc) =>
+          docs[doc.id]?.status ===
             'uploaded' ||
-          docs[d.id]?.url
+          Boolean(docs[doc.id]?.url) ||
+          Boolean(
+            docs[doc.id]?.storagePath
+          ) ||
+          Boolean(
+            docs[doc.id]?.storage_path
+          )
       );
 
   return (
@@ -894,6 +941,11 @@ export function DocumentsPage() {
             transition: all 0.2s ease-in-out;
             margin-bottom: 1.5rem;
           }
+
+          .premium-dropzones [data-doc-type]:hover {
+            border-color: #184f9a;
+            background: #f8fbff;
+          }
         `}
       </style>
 
@@ -901,6 +953,11 @@ export function DocumentsPage() {
         <h2 className="ob-title">
           Upload your documents
         </h2>
+
+        <p className="ob-subtitle">
+          Upload clear and readable documents
+          for verification.
+        </p>
 
         <div className="doc-upload-list grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
           {displayDocs.map(
@@ -990,6 +1047,10 @@ export function DocumentsPage() {
   );
 }
 
+/* =========================================================
+   SELFIE
+========================================================= */
+
 export function SelfiePage() {
   const navigate = useNavigate();
   const role = getActiveRole();
@@ -1037,6 +1098,12 @@ export function SelfiePage() {
         status:
           document.status,
         url: document.url,
+        storagePath:
+          (document as any).storagePath,
+        storage_path:
+          (document as any).storage_path,
+        path:
+          (document as any).path,
       })
     );
   };
@@ -1044,6 +1111,7 @@ export function SelfiePage() {
   const handleSelfieRemove =
     () => {
       setSelfie(undefined);
+
       sessionStorage.removeItem(
         'ob_selfie'
       );
@@ -1055,6 +1123,11 @@ export function SelfiePage() {
         <h2 className="ob-title">
           Selfie verification
         </h2>
+
+        <p className="ob-subtitle">
+          Take a clear selfie so we can
+          verify your identity.
+        </p>
 
         <div className="flex flex-col md:flex-row gap-8 items-start mt-8">
           <div className="flex-1 w-full bg-slate-50 p-8 rounded-3xl border-2 border-dashed border-slate-200 text-center relative">
@@ -1112,19 +1185,53 @@ export function SelfiePage() {
   );
 }
 
+/* =========================================================
+   VEHICLE SELECTION
+========================================================= */
+
 export function VehicleSelectionPage() {
   const navigate = useNavigate();
 
   const [vehicle, setVehicle] =
-    useOnboardingState<{
-      type: string;
-      plateNumber: string;
-      region: string;
-    }>('ob_vehicle', {
-      type: 'Car',
-      plateNumber: '',
-      region: 'West (Freetown)',
-    });
+    useOnboardingState<VehicleState>(
+      'ob_vehicle',
+      {
+        type: '',
+        plateNumber: '',
+        region: 'West (Freetown)',
+      }
+    );
+
+  const vehicleTypes = [
+    {
+      value: 'Bike',
+      label: 'Bike',
+      description:
+        'Motorbike / Okada',
+      image: '/bike.jpg',
+    },
+    {
+      value: 'Car',
+      label: 'Car',
+      description:
+        'Saloon / Sedan / SUV',
+      image: '/car.jpg',
+    },
+    {
+      value: 'Van',
+      label: 'Van',
+      description:
+        'Minivan / Delivery Van',
+      image: '/van.jpg',
+    },
+    {
+      value: 'Keke',
+      label: 'Keke',
+      description:
+        'Three-wheel commercial vehicle',
+      image: '/keke.jpg',
+    },
+  ];
 
   const isValid = Boolean(
     vehicle.type &&
@@ -1141,7 +1248,76 @@ export function VehicleSelectionPage() {
           Vehicle details
         </h2>
 
+        <p className="ob-subtitle">
+          Tell us about the vehicle you
+          will use with MatMove.
+        </p>
+
         <div className="ob-form-grid mt-8 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+          <Field
+            label="Vehicle Type"
+            full
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
+              {vehicleTypes.map(
+                (item) => {
+                  const selected =
+                    vehicle.type ===
+                    item.value;
+
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() =>
+                        setVehicle({
+                          ...vehicle,
+                          type: item.value,
+                        })
+                      }
+                      className={
+                        selected
+                          ? 'relative text-left overflow-hidden rounded-2xl border-2 border-[#184f9a] bg-blue-50 shadow-lg transition-all'
+                          : 'relative text-left overflow-hidden rounded-2xl border-2 border-slate-200 bg-white hover:border-blue-300 hover:shadow-md transition-all'
+                      }
+                    >
+                      {selected && (
+                        <div className="absolute top-3 right-3 z-10 w-7 h-7 rounded-full bg-[#184f9a] text-white flex items-center justify-center shadow-md">
+                          <Check
+                            size={15}
+                          />
+                        </div>
+                      )}
+
+                      <div className="w-full h-36 bg-white flex items-center justify-center overflow-hidden">
+                        <img
+                          src={item.image}
+                          alt={
+                            item.label +
+                            ' vehicle'
+                          }
+                          className="w-full h-full object-contain p-4"
+                        />
+                      </div>
+
+                      <div className="p-5">
+                        <div className="font-extrabold text-slate-900 text-lg">
+                          {item.label}
+                        </div>
+
+                        <div className="text-sm text-slate-500 mt-1">
+                          {
+                            item.description
+                          }
+                        </div>
+                      </div>
+                    </button>
+                  );
+                }
+              )}
+            </div>
+          </Field>
+
           <Field label="License Plate Number">
             <input
               className="ob-input uppercase font-bold"
@@ -1153,7 +1329,7 @@ export function VehicleSelectionPage() {
                 setVehicle({
                   ...vehicle,
                   plateNumber:
-                    e.target.value,
+                    e.target.value.toUpperCase(),
                 })
               }
             />
@@ -1163,7 +1339,9 @@ export function VehicleSelectionPage() {
             <div className="ob-select-wrap">
               <select
                 className="ob-input font-medium"
-                value={vehicle.region}
+                value={
+                  vehicle.region
+                }
                 onChange={(e) =>
                   setVehicle({
                     ...vehicle,
@@ -1172,16 +1350,19 @@ export function VehicleSelectionPage() {
                   })
                 }
               >
-                <option>
+                <option value="West (Freetown)">
                   West (Freetown)
                 </option>
-                <option>
+
+                <option value="East (Kenema, Kono)">
                   East (Kenema, Kono)
                 </option>
-                <option>
+
+                <option value="South (Bo)">
                   South (Bo)
                 </option>
-                <option>
+
+                <option value="North (Makeni)">
                   North (Makeni)
                 </option>
               </select>
@@ -1222,6 +1403,10 @@ export function VehicleSelectionPage() {
   );
 }
 
+/* =========================================================
+   REVIEW / FINAL KYC SUBMISSION
+========================================================= */
+
 export function ReviewPage() {
   const { session, loading } =
     useAuth();
@@ -1243,6 +1428,11 @@ export function ReviewPage() {
       Partial<IdentityInfo>
     >('ob_identity', {});
 
+  const [driver] =
+    useOnboardingState<
+      Partial<DriverInfo>
+    >('ob_driver', {});
+
   const [merchant] =
     useOnboardingState<
       Partial<MerchantInfo> & {
@@ -1251,30 +1441,42 @@ export function ReviewPage() {
     >('ob_merchant', {});
 
   const [vehicle] =
-    useOnboardingState<{
-      type: string;
-      plateNumber: string;
-      region: string;
-    }>('ob_vehicle', {
-      type: '',
-      plateNumber: '',
-      region: '',
-    });
+    useOnboardingState<VehicleState>(
+      'ob_vehicle',
+      {
+        type: '',
+        plateNumber: '',
+        region: '',
+      }
+    );
 
   const [docs] =
     useOnboardingState<
       Record<string, any>
     >('ob_docs', {});
 
-  const selfieRaw =
-    sessionStorage.getItem(
-      'ob_selfie'
-    );
+  const [selfieData, setSelfieData] =
+    useState<any>(null);
 
-  const selfieData =
-    selfieRaw
-      ? JSON.parse(selfieRaw)
-      : null;
+  useEffect(() => {
+    const selfieRaw =
+      sessionStorage.getItem(
+        'ob_selfie'
+      );
+
+    if (!selfieRaw) {
+      setSelfieData(null);
+      return;
+    }
+
+    try {
+      setSelfieData(
+        JSON.parse(selfieRaw)
+      );
+    } catch {
+      setSelfieData(null);
+    }
+  }, []);
 
   const displayPhone =
     normalizePhone(
@@ -1296,6 +1498,7 @@ export function ReviewPage() {
         alert(
           'Session expired. Please sign in again.'
         );
+
         navigate('/login');
         return;
       }
@@ -1304,147 +1507,238 @@ export function ReviewPage() {
         alert(
           'Phone number is missing. Please go back and enter your phone number.'
         );
+
         navigate(
           '/onboarding/personal'
         );
+
+        return;
+      }
+
+      if (
+        role === 'driver' &&
+        !vehicle.type
+      ) {
+        alert(
+          'Please select your vehicle type.'
+        );
+
+        navigate(
+          '/onboarding/vehicle'
+        );
+
+        return;
+      }
+
+      if (
+        role === 'driver' &&
+        !vehicle.plateNumber?.trim()
+      ) {
+        alert(
+          'Please enter your vehicle license plate number.'
+        );
+
+        navigate(
+          '/onboarding/vehicle'
+        );
+
+        return;
+      }
+
+      if (
+        role === 'driver' &&
+        !vehicle.region
+      ) {
+        alert(
+          'Please select your operating region.'
+        );
+
+        navigate(
+          '/onboarding/vehicle'
+        );
+
+        return;
+      }
+
+      if (
+        role === 'driver' &&
+        !driver.licenseNumber?.trim()
+      ) {
+        alert(
+          'Please enter your driver license number.'
+        );
+
+        navigate(
+          '/onboarding/identity'
+        );
+
+        return;
+      }
+
+      if (
+        role === 'driver' &&
+        !driver.licenseClass?.trim()
+      ) {
+        alert(
+          'Please enter your driver license class.'
+        );
+
+        navigate(
+          '/onboarding/identity'
+        );
+
         return;
       }
 
       setIsSubmitting(true);
 
       try {
-        const userId =
-          session.user.id;
-
-        const userEmail =
-          session.user.email;
-
-        const fullName =
-          `${info.firstName || ''} ${
-            info.middleName || ''
-          } ${
-            info.lastName || ''
-          }`
-            .replace(
-              /\s+/g,
-              ' '
+        const documentEntries =
+          Object.entries(docs)
+            .filter(
+              ([, document]) =>
+                document &&
+                (
+                  document.status ===
+                    'uploaded' ||
+                  document.url ||
+                  document.storagePath ||
+                  document.storage_path
+                )
             )
-            .trim() ||
-          'New User';
+            .map(
+              ([type, document]) => ({
+                document_type:
+                  type,
 
-        // Riders are currently auto-approved.
-        // Drivers and merchants remain pending.
-        const userStatus =
-          role === 'rider'
-            ? 'approved'
-            : 'pending';
+                storage_path:
+                  document.storagePath ||
+                  document.storage_path ||
+                  document.path ||
+                  document.url ||
+                  '',
 
-        const documentUrl =
-          docs['id_front']?.url ||
-          docs['id_front']
-            ?.fileName ||
-          null;
+                file_name:
+                  document.fileName ||
+                  document.file_name ||
+                  null,
 
-        const selfieUrl =
-          selfieData?.url ||
-          selfieData?.fileName ||
-          null;
+                file_size_bytes:
+                  document.fileSize ||
+                  document.file_size_bytes ||
+                  null,
+              })
+            );
+
+        if (
+          selfieData &&
+          (
+            selfieData.storagePath ||
+            selfieData.storage_path ||
+            selfieData.path ||
+            selfieData.url
+          )
+        ) {
+          documentEntries.push({
+            document_type:
+              'selfie',
+
+            storage_path:
+              selfieData.storagePath ||
+              selfieData.storage_path ||
+              selfieData.path ||
+              selfieData.url ||
+              '',
+
+            file_name:
+              selfieData.fileName ||
+              selfieData.file_name ||
+              null,
+
+            file_size_bytes:
+              selfieData.fileSize ||
+              selfieData.file_size_bytes ||
+              null,
+          });
+        }
+
+        if (
+          documentEntries.length ===
+          0
+        ) {
+          throw new Error(
+            'Please upload the required verification document before submitting.'
+          );
+        }
 
         const {
-          error: profileError,
-        } = await supabase
-          .from('profiles')
-          .upsert({
-            id: userId,
-            email: userEmail,
-            full_name:
-              fullName,
-            first_name:
-              info.firstName ||
-              null,
-            last_name:
-              info.lastName ||
-              null,
-            date_of_birth:
-              info.dateOfBirth ||
-              null,
-            nationality:
-              info.nationality ||
-              null,
-            country:
-              info.country ||
-              null,
-            residential_address:
-              info.residentialAddress ||
-              null,
-            city:
-              info.city ||
-              null,
-            address:
-              info.residentialAddress ||
-              null,
-            phone:
-              displayPhone ||
-              null,
-            phone_number:
-              displayPhone ||
-              null,
-            vehicle_type:
-              vehicle.type ||
-              null,
-            plate_number:
-              vehicle.plateNumber ||
-              null,
-            business_name:
-              merchant.businessName ||
-              null,
-            business_type:
-              merchant.infrastructure ||
-              null,
-            tax_id:
-              merchant.businessRegNumber ||
-              identity.idNumber ||
-              null,
-            driver_license_no:
-              identity.idNumber ||
-              null,
-            id_card_url:
-              documentUrl,
-            license_doc_url:
-              role === 'driver'
-                ? documentUrl
-                : null,
-            business_doc_url:
-              role === 'merchant'
-                ? documentUrl
-                : null,
-            selfie_url:
-              selfieUrl,
-            role:
-              role,
-            kyc_status:
-              userStatus,
-            updated_at:
-              new Date().toISOString(),
-          });
+          data,
+          error,
+        } = await supabase.rpc(
+          'submit_customer_kyc_v2',
+          {
+            p_role: role,
 
-        if (profileError) {
-          /*
-           * PostgreSQL unique violation.
-           * We keep the database constraint
-           * but give the customer a clear
-           * message instead of exposing the
-           * raw database error.
-           */
+            p_first_name:
+              info.firstName?.trim() ||
+              '',
+
+            p_last_name:
+              info.lastName?.trim() ||
+              '',
+
+            p_phone:
+              displayPhone,
+
+            p_address:
+              info.residentialAddress?.trim() ||
+              '',
+
+            p_documents:
+              documentEntries,
+
+            p_vehicle_type:
+              role === 'driver'
+                ? vehicle.type ||
+                  null
+                : null,
+
+            p_plate_number:
+              role === 'driver'
+                ? vehicle.plateNumber?.trim() ||
+                  null
+                : null,
+
+            p_operating_region:
+              role === 'driver'
+                ? vehicle.region ||
+                  null
+                : null,
+
+            p_driver_license_no:
+              role === 'driver'
+                ? driver.licenseNumber?.trim() ||
+                  null
+                : null,
+
+            p_license_class:
+              role === 'driver'
+                ? driver.licenseClass?.trim() ||
+                  null
+                : null,
+          }
+        );
+
+        if (error) {
           if (
-            profileError.code ===
+            error.code ===
               '23505' ||
-            profileError.message
+            error.message
               ?.toLowerCase()
               .includes(
                 'profiles_phone_key'
               ) ||
-            profileError.message
+            error.message
               ?.toLowerCase()
               .includes(
                 'duplicate key value'
@@ -1455,16 +1749,20 @@ export function ReviewPage() {
             );
           }
 
-          throw profileError;
+          throw error;
         }
 
-        await supabase
-          .from('wallets')
-          .upsert({
-            user_id: userId,
-            balance: 0,
-            currency: 'SLE',
-          });
+        console.log(
+          'KYC submission successful:',
+          data
+        );
+
+        sessionStorage.setItem(
+          'ob_submission_result',
+          JSON.stringify(
+            data ?? {}
+          )
+        );
 
         navigate(
           '/onboarding/submitted'
@@ -1507,6 +1805,9 @@ export function ReviewPage() {
 
                 <strong className="text-slate-900">
                   {info.firstName}{' '}
+                  {info.middleName
+                    ? `${info.middleName} `
+                    : ''}
                   {info.lastName}
                 </strong>
               </div>
@@ -1520,6 +1821,247 @@ export function ReviewPage() {
                   {displayPhone}
                 </strong>
               </div>
+
+              <div>
+                <small className="block text-slate-500">
+                  Date of birth
+                </small>
+
+                <strong className="text-slate-900">
+                  {info.dateOfBirth ||
+                    'Not provided'}
+                </strong>
+              </div>
+
+              <div>
+                <small className="block text-slate-500">
+                  Nationality
+                </small>
+
+                <strong className="text-slate-900">
+                  {info.nationality ||
+                    'Not provided'}
+                </strong>
+              </div>
+
+              <div>
+                <small className="block text-slate-500">
+                  City
+                </small>
+
+                <strong className="text-slate-900">
+                  {info.city ||
+                    'Not provided'}
+                </strong>
+              </div>
+
+              <div>
+                <small className="block text-slate-500">
+                  Country
+                </small>
+
+                <strong className="text-slate-900">
+                  {info.country ||
+                    'Not provided'}
+                </strong>
+              </div>
+
+              <div className="md:col-span-2">
+                <small className="block text-slate-500">
+                  Residential address
+                </small>
+
+                <strong className="text-slate-900">
+                  {info.residentialAddress ||
+                    'Not provided'}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          {role === 'driver' && (
+            <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100">
+              <h3 className="font-extrabold text-slate-900 mb-5">
+                Vehicle information
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-y-5 gap-x-8">
+                <div>
+                  <small className="block text-slate-500">
+                    Vehicle type
+                  </small>
+
+                  <strong className="text-slate-900">
+                    {vehicle.type ||
+                      'Not selected'}
+                  </strong>
+                </div>
+
+                <div>
+                  <small className="block text-slate-500">
+                    License plate
+                  </small>
+
+                  <strong className="text-slate-900 uppercase">
+                    {vehicle.plateNumber ||
+                      'Not provided'}
+                  </strong>
+                </div>
+
+                <div>
+                  <small className="block text-slate-500">
+                    Operating region
+                  </small>
+
+                  <strong className="text-slate-900">
+                    {vehicle.region ||
+                      'Not selected'}
+                  </strong>
+                </div>
+
+                <div>
+                  <small className="block text-slate-500">
+                    Driver license
+                  </small>
+
+                  <strong className="text-slate-900">
+                    {driver.licenseNumber ||
+                      'Not provided'}
+                  </strong>
+                </div>
+
+                <div>
+                  <small className="block text-slate-500">
+                    License class
+                  </small>
+
+                  <strong className="text-slate-900">
+                    {driver.licenseClass ||
+                      'Not provided'}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {role === 'merchant' && (
+            <div className="bg-orange-50 p-6 rounded-2xl border border-orange-100">
+              <h3 className="font-extrabold text-slate-900 mb-5">
+                Business information
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-y-5 gap-x-8">
+                <div>
+                  <small className="block text-slate-500">
+                    Business name
+                  </small>
+
+                  <strong className="text-slate-900">
+                    {merchant.businessName ||
+                      'Not provided'}
+                  </strong>
+                </div>
+
+                <div>
+                  <small className="block text-slate-500">
+                    Infrastructure
+                  </small>
+
+                  <strong className="text-slate-900">
+                    {merchant.infrastructure ||
+                      'Not provided'}
+                  </strong>
+                </div>
+
+                <div>
+                  <small className="block text-slate-500">
+                    Business registration
+                  </small>
+
+                  <strong className="text-slate-900">
+                    {merchant.businessRegNumber ||
+                      'Not provided'}
+                  </strong>
+                </div>
+
+                <div className="md:col-span-2">
+                  <small className="block text-slate-500">
+                    Business address
+                  </small>
+
+                  <strong className="text-slate-900">
+                    {merchant.businessAddress ||
+                      'Not provided'}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+            <h3 className="font-extrabold text-slate-900 mb-4">
+              Verification documents
+            </h3>
+
+            <div className="space-y-3">
+              {Object.entries(docs)
+                .filter(
+                  ([, document]) =>
+                    Boolean(document)
+                )
+                .map(
+                  ([type, document]) => (
+                    <div
+                      key={type}
+                      className="flex items-center justify-between bg-white rounded-xl p-4 border border-slate-200"
+                    >
+                      <div>
+                        <div className="font-bold text-slate-900">
+                          {type ===
+                          'id_front'
+                            ? role ===
+                              'driver'
+                              ? "Driver's License"
+                              : 'Identity Document'
+                            : type}
+                        </div>
+
+                        <div className="text-xs text-slate-500 mt-1">
+                          {document.fileName ||
+                            document.file_name ||
+                            'Uploaded document'}
+                        </div>
+                      </div>
+
+                      <div className="text-green-600">
+                        <Check
+                          size={20}
+                        />
+                      </div>
+                    </div>
+                  )
+                )}
+
+              {selfieData && (
+                <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-slate-200">
+                  <div>
+                    <div className="font-bold text-slate-900">
+                      Selfie
+                    </div>
+
+                    <div className="text-xs text-slate-500 mt-1">
+                      {selfieData.fileName ||
+                        'Selfie uploaded'}
+                    </div>
+                  </div>
+
+                  <div className="text-green-600">
+                    <Check
+                      size={20}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1530,9 +2072,12 @@ export function ReviewPage() {
             className="back-button"
             onClick={() =>
               navigate(
-                '/onboarding/personal'
+                role === 'driver'
+                  ? '/onboarding/vehicle'
+                  : '/onboarding/selfie'
               )
             }
+            disabled={isSubmitting}
           >
             <ArrowLeft size={16} />
             Back
@@ -1541,9 +2086,7 @@ export function ReviewPage() {
           <button
             type="button"
             className="primary-button"
-            onClick={
-              handleFinalSubmit
-            }
+            onClick={handleFinalSubmit}
             disabled={
               isSubmitting ||
               loading
@@ -1560,7 +2103,12 @@ export function ReviewPage() {
   );
 }
 
+/* =========================================================
+   SUBMITTED
+========================================================= */
+
 export function SubmittedPage() {
+  const navigate = useNavigate();
   const role = getActiveRole();
 
   const portalPath =
@@ -1592,10 +2140,9 @@ export function SubmittedPage() {
         <button
           type="button"
           className="primary-button w-full py-4"
-          onClick={() => {
-            window.location.href =
-              portalPath;
-          }}
+          onClick={() =>
+            navigate(portalPath)
+          }
         >
           Access dashboard
         </button>
@@ -1604,9 +2151,17 @@ export function SubmittedPage() {
   );
 }
 
+/* =========================================================
+   VERIFICATION
+========================================================= */
+
 export function VerificationPage() {
   return <SubmittedPage />;
 }
+
+/* =========================================================
+   FIELD
+========================================================= */
 
 function Field({
   label,
@@ -1619,9 +2174,11 @@ function Field({
 }) {
   return (
     <label
-      className={`field ${
-        full ? 'field-full' : ''
-      }`}
+      className={
+        full
+          ? 'field field-full'
+          : 'field'
+      }
     >
       <span>{label}</span>
       {children}
