@@ -298,14 +298,41 @@ export function SelfiePage() {
 
 export function VehicleSelectionPage() {
   const navigate = useNavigate();
-  const [vehicle, setVehicle] = useOnboardingState<{ type: string; plateNumber: string; region: string }>('ob_vehicle', { type: 'Car', plateNumber: '', region: 'West (Freetown)' });
+  const [vehicle, setVehicle] = useOnboardingState<{ type: string; plateNumber: string; region: string }>('ob_vehicle', { type: '', plateNumber: '', region: 'West (Freetown)' });
   const isValid = Boolean(vehicle.type && vehicle.plateNumber?.trim() && vehicle.region);
+
+  const vehicleTypes = [
+    { name: 'Motorbike (Okada)' },
+    { name: 'Tricycle (Keke)' },
+    { name: 'Car' },
+    { name: 'Van / Truck' },
+  ];
 
   return (
     <OnboardingShell step={6.5 as any}>
       <div className="ob-page animate-in">
         <h2 className="ob-title font-extrabold tracking-tight">Vehicle details</h2>
-        <div className="ob-form-grid mt-8 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+        <p className="ob-subtitle mb-6">Provide details about the vehicle you will be driving.</p>
+        
+        {/* RESTORED VEHICLE GRID */}
+        <div className="grid grid-cols-2 gap-3 mb-8">
+          {vehicleTypes.map((v) => (
+            <button
+              key={v.name}
+              type="button"
+              onClick={() => setVehicle({ ...vehicle, type: v.name })}
+              className={`p-4 rounded-2xl border-2 text-center transition-all ${
+                vehicle.type === v.name
+                  ? 'border-[#184f9a] bg-[#eff6ff] text-[#184f9a] font-bold'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              {v.name}
+            </button>
+          ))}
+        </div>
+
+        <div className="ob-form-grid bg-slate-50 p-6 rounded-3xl border border-slate-100">
           <Field label="License Plate Number">
             <input className="ob-input uppercase font-bold" placeholder="e.g. AB 1234" value={vehicle.plateNumber} onChange={(e) => setVehicle({ ...vehicle, plateNumber: e.target.value })} />
           </Field>
