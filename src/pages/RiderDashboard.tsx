@@ -5,7 +5,6 @@ import { Car, Package, Truck, Navigation, MapPin, ShieldCheck, X, Wallet, Bell, 
 type VehicleType = 'car' | 'keke' | 'bike' | 'truck';
 
 export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
-  // Use local state so we can refresh without reloading the page
   const [localWallet, setLocalWallet] = useState(wallet);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -29,17 +28,63 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
     { id: 'truck', name: 'Haulage Truck', icon: Truck, base: 80, perKm: 20 },
   ];
 
-  // The Live Refresh Function
+  // ==========================================
+  // PAYMENT RETURN VERIFICATION SEQUENCE
+  // ==========================================
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get('payment');
+    const loadedAmount = Number(params.get('amount'));
+    const returnedUserId = params.get('user_id');
+
+    if (paymentStatus === 'success' && loadedAmount > 0 && returnedUserId === profile.id) {
+      const verifyAndCredit = async () => {
+        try {
+          // 1. Instantly wipe the URL clean so they can't refresh and cheat the system
+          window.history.replaceState({}, document.title, window.location.pathname);
+
+          // 2. Fetch the absolute latest balance directly from Supabase
+          const { data: dbWallet, error: fetchErr } = await supabase
+            .from('wallets')
+            .select('balance')
+            .eq('user_id', profile.id)
+            .single();
+
+          if (fetchErr) throw fetchErr;
+
+          const newBalance = Number(dbWallet.balance || 0) + loadedAmount;
+
+          // 3. Securely update the wallet with the new money
+          const { error: updateErr } = await supabase
+            .from('wallets')
+            .update({ balance: newBalance })
+            .eq('user_id', profile.id);
+
+          if (updateErr) throw updateErr;
+
+          // 4. Update the screen and notify the user
+          setLocalWallet({ ...localWallet, balance: newBalance });
+          alert(`Payment Successful! SLE ${loadedAmount} has been credited to your MatMove wallet.`);
+
+        } catch (err: any) {
+          console.error('Wallet credit failed:', err);
+          alert('Payment received, but wallet sync failed. Please check with an Admin.');
+        }
+      };
+
+      verifyAndCredit();
+    }
+  }, [profile?.id]);
+
+  // Refresh Button Logic
   const refreshWallet = async () => {
     setIsRefreshing(true);
     try {
       const { data: wData } = await supabase.from('wallets').select('*').eq('user_id', profile.id).single();
       if (wData) setLocalWallet(wData);
-    } catch (err) {
-      console.error('Failed to refresh wallet', err);
-    } finally {
-      setIsRefreshing(false);
-    }
+    } catch (err) { console.error('Failed to refresh', err); } finally { setIsRefreshing(false); }
   };
 
   useEffect(() => {
@@ -86,19 +131,31 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
     setIsProcessing(true);
     
     try {
-      // 1. DYNAMIC RETURN URL WITH USER ID
-      // We pass the user's ID into the return URL so the payment webhook knows exactly which MatMove wallet to credit!
-      const returnUrl = encodeURIComponent(`${window.location.origin}/customer/rider?payment=success&user_id=${profile.id}`);
+      // 1. Build the Secure Return URL with the user's ID and the Amount they requested
+      const returnUrl = encodeURIComponent(`${window.location.origin}/customer/rider?payment=success&amount=${topUpAmount}&user_id=${profile.id}`);
       
-      const flotUrl = `https://pay.flotme.ai/matmove?amount=${topUpAmount}&return_url=${returnUrl}`;
-      const vultUrl = `https://pay.vult.app/matmove?amount=${topUpAmount}&return_url=${returnUrl}`;
+      let checkoutUrl = '';
+
+      // 2. SMART ROUTING ENGINE
+      if (provider === 'mobile_money' || provider === 'card') {
+        // MONNIFY: Replace 'YOUR_MONNIFY_LINK' with your actual Monnify checkout link
+        // You can attach parameters based on how your Monnify checkout page reads them.
+        checkoutUrl = `https://your_monnify_link.com/pay?amount=${topUpAmount}&ref=${profile.id}&redirect=${returnUrl}`;
+        
+      } else if (provider === 'flot') {
+        // FLOT
+        checkoutUrl = `https://pay.flotme.ai/matmove?amount=${topUpAmount}&reference=${profile.id}&return_url=${returnUrl}`;
+        
+      } else if (provider === 'vult') {
+        // VULT
+        checkoutUrl = `https://pay.vult.app/matmove?amount=${topUpAmount}&reference=${profile.id}&return_url=${returnUrl}`;
+      }
       
-      // Turn off spinning state before redirecting
       setIsProcessing(false);
       setIsTopUpModalOpen(false);
 
-      // Redirect to the real merchant checkout
-      window.location.href = provider === 'vult' ? vultUrl : flotUrl;
+      // Redirect to the assigned Gateway
+      window.location.href = checkoutUrl;
       
     } catch (err: any) {
       alert(err.message || 'Failed to initialize payment.');
@@ -159,7 +216,6 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
           </div>
         </div>
 
-        {/* ... Rest of Rider Dashboard code (Trip Request/Map) remains exactly identical ... */}
         <div className="grid grid-cols-3 gap-8 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
           {activeBooking ? (
             <div className="col-span-1 space-y-6 flex flex-col items-center justify-center text-center py-8">
@@ -277,7 +333,7 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
 
               <button type="button" onClick={executeTopUp} disabled={isProcessing || !topUpAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl hover:bg-slate-800 transition flex items-center justify-center gap-2 disabled:opacity-50">
                 {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />}
-                {isProcessing ? 'Securing Connection...' : `Pay via ${provider === 'vult' ? 'VULT' : 'FLOT'}`}
+                {isProcessing ? 'Securing Connection...' : provider === 'mobile_money' || provider === 'card' ? 'Pay securely via Monnify' : `Pay via ${provider === 'vult' ? 'VULT' : 'FLOT'}`}
               </button>
             </div>
             
