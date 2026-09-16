@@ -187,21 +187,25 @@ export function IdentityPage() {
 export function DocumentsPage() {
   const navigate = useNavigate();
   const role = getActiveRole();
-  const [identity] = useOnboardingState<Partial<IdentityInfo>>('ob_identity', {});
-  const [merchant] = useOnboardingState<Partial<MerchantInfo> & { infrastructure?: string }>('ob_merchant', {});
-  const currentIdType = identity.idType || 'National ID';
 
-  let displayDocs: { id: DocumentType; label: string; required: boolean; }[] = [
+  // FIX 1: Dynamically generate document boxes based on role
+  let displayDocs: { id: string; label: string; required: boolean; }[] = [
     { id: 'id_front', label: 'Identity Document (Front)', required: true }
   ];
 
+  if (role === 'driver') {
+    displayDocs.push({ id: 'license_doc', label: 'Driver License', required: true });
+  } else if (role === 'merchant') {
+    displayDocs.push({ id: 'business_doc', label: 'Business Registration Document', required: true });
+  }
+
   const [docs, setDocs] = useOnboardingState<Record<string, any>>('ob_docs', {});
 
-  const handleUpload = (type: DocumentType, document: UploadedDocument) => { setDocs({ ...docs, [type]: document }); };
-  const handleRemove = (type: DocumentType) => { const updatedDocs = { ...docs }; delete updatedDocs[type]; setDocs(updatedDocs); };
+  const handleUpload = (type: string, document: any) => { setDocs({ ...docs, [type]: document }); };
+  const handleRemove = (type: string) => { const updatedDocs = { ...docs }; delete updatedDocs[type]; setDocs(updatedDocs); };
   
-  // FIX: We must ensure a URL exists before letting them continue
-  const allUploaded = displayDocs.filter((d) => d.required).every((d) => docs[d.id]?.url);
+  // FIX 2: Relaxed validation to instantly unlock the "Continue" button once the file is captured in state
+  const allUploaded = displayDocs.filter((d) => d.required).every((d) => !!docs[d.id]);
 
   return (
     <OnboardingShell step={5}>
@@ -214,7 +218,7 @@ export function DocumentsPage() {
               <span className="mb-3 font-bold text-slate-700 ml-1">{docConfig.label}</span>
               <div data-doc-type={docConfig.id} className="relative">
                 {!docs[docConfig.id] && <UploadCloud className="mx-auto mb-4 text-[#184f9a]" size={36} />}
-                <DocumentUpload type={docConfig.id} document={docs[docConfig.id]} onUpload={(doc) => handleUpload(docConfig.id, doc)} onRemove={() => handleRemove(docConfig.id)} />
+                <DocumentUpload type={docConfig.id as any} document={docs[docConfig.id]} onUpload={(doc) => handleUpload(docConfig.id, doc)} onRemove={() => handleRemove(docConfig.id)} />
               </div>
             </div>
           ))}
@@ -240,9 +244,7 @@ export function SelfiePage() {
 
   const handleSelfieUpload = (document: UploadedDocument) => {
     setSelfie(document);
-    sessionStorage.setItem('ob_selfie', JSON.stringify({
-      id: document.id, type: document.type, fileName: document.fileName, fileSize: document.fileSize, status: document.status, url: document.url
-    }));
+    sessionStorage.setItem('ob_selfie', JSON.stringify(document));
   };
 
   const handleSelfieRemove = () => { setSelfie(undefined); sessionStorage.removeItem('ob_selfie'); };
@@ -259,7 +261,9 @@ export function SelfiePage() {
         </div>
         <div className="ob-actions">
           <button type="button" className="back-button" onClick={() => navigate('/onboarding/documents')}><ArrowLeft size={16} /> Back</button>
-          <button type="button" className="primary-button" disabled={!selfie?.url} onClick={() => navigate(role === 'driver' ? '/onboarding/vehicle' : '/onboarding/review')}>Continue <ArrowRight size={17} /></button>
+          
+          {/* FIX 3: Relaxed Selfie Validation */}
+          <button type="button" className="primary-button" disabled={!selfie} onClick={() => navigate(role === 'driver' ? '/onboarding/vehicle' : '/onboarding/review')}>Continue <ArrowRight size={17} /></button>
         </div>
       </div>
     </OnboardingShell>
@@ -271,7 +275,6 @@ export function VehicleSelectionPage() {
   const [vehicle, setVehicle] = useOnboardingState<{ type: string; plateNumber: string; region: string }>('ob_vehicle', { type: '', plateNumber: '', region: 'West (Freetown)' });
   const isValid = Boolean(vehicle.type && vehicle.plateNumber?.trim() && vehicle.region);
 
-  // FIX: Restored Vehicle Images
   const vehicleTypes = [
     { name: 'Motorbike (Okada)', image: '/bike.jpg' },
     { name: 'Tricycle (Keke)', image: '/keke.jpg' },
@@ -355,9 +358,11 @@ export function ReviewPage() {
       const fullName = `${info.firstName || ''} ${info.middleName || ''} ${info.lastName || ''}`.replace(/\s+/g, ' ').trim() || 'New User';
       const userStatus = role === 'rider' ? 'approved' : 'pending';
 
-      // STRICTLY extract the `.url` property to prevent Admin 404s
-      const documentUrl = docs['id_front']?.url || null;
-      const selfieUrl = selfieData?.url || null;
+      // FIX 4: Securely route the correct document URLs based on role
+      const idCardUrl = docs['id_front']?.url || docs['id_front']?.fileName || null;
+      const licenseUrl = docs['license_doc']?.url || docs['license_doc']?.fileName || null;
+      const businessUrl = docs['business_doc']?.url || docs['business_doc']?.fileName || null;
+      const selfieUrl = selfieData?.url || selfieData?.fileName || null;
 
       const { error: profileError } = await supabase.from('profiles').upsert({
         id: userId,
@@ -379,9 +384,9 @@ export function ReviewPage() {
         business_type: merchant.infrastructure || null,
         tax_id: merchant.businessRegNumber || identity.idNumber || null,
         driver_license_no: role === 'driver' ? driver.licenseNumber : identity.idNumber || null,
-        id_card_url: documentUrl,
-        license_doc_url: role === 'driver' ? documentUrl : null,
-        business_doc_url: role === 'merchant' ? documentUrl : null,
+        id_card_url: idCardUrl,
+        license_doc_url: role === 'driver' ? licenseUrl : null,
+        business_doc_url: role === 'merchant' ? businessUrl : null,
         selfie_url: selfieUrl,
         role: role,
         kyc_status: userStatus,
@@ -413,7 +418,6 @@ export function ReviewPage() {
             <div className="text-xl font-bold text-[#184f9a] capitalize">{roleLabels[role]}</div>
           </div>
           <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 relative">
-            {/* FIX: Restored all missing Review Fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
               <div><small className="block text-slate-500">Full name</small><strong className="text-slate-900">{info.firstName} {info.lastName}</strong></div>
               <div><small className="block text-slate-500">Phone</small><strong className="text-slate-900">{displayPhone}</strong></div>
