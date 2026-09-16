@@ -20,24 +20,19 @@ export default async function handler(req, res) {
 
   try {
     const { amount, userId, type } = req.body;
-
-    if (!amount || Number(amount) <= 0 || !userId) {
-      return res.status(400).json({ error: 'Missing required parameters.' });
-    }
-
     const merchantId = process.env.VULT_MERCHANT_ID;
     const rawPrivateKey = process.env.VULT_PRIVATE_KEY;
 
     if (!merchantId || !rawPrivateKey) {
-      return res.status(500).json({ error: 'VULT_MERCHANT_ID or VULT_PRIVATE_KEY missing in Vercel environment.' });
+      console.error('Missing Vult Env Vars:', { hasMerchantId: !!merchantId, hasPrivateKey: !!rawPrivateKey });
+      return res.status(500).json({ error: 'Vult environment configuration missing.' });
     }
 
-    const formattedPrivateKey = formatPemPrivateKey(rawPrivateKey);
+    const privateKey = formatPemPrivateKey(rawPrivateKey);
 
-    // Map top-up method to Vult API enum: 'momo', 'card', or 'vult'
-    let vultType = 'vult';
-    if (type === 'card') vultType = 'card';
+    let vultType = 'card';
     if (type === 'momo') vultType = 'momo';
+    if (type === 'vult' || type === 'in-app') vultType = 'vult';
 
     const orderId = `MM_${userId}_${Date.now()}`;
     const requestBody = {
@@ -52,16 +47,18 @@ export default async function handler(req, res) {
 
     const bodyString = JSON.stringify(requestBody);
 
-    // Generate strict RSA-SHA512 signature required by Vult
+    // Compute signature using exact Node spec[cite: 1]
     const signer = crypto.createSign('RSA-SHA512');
     signer.update(bodyString);
     const signature = signer.sign({
-      key: formattedPrivateKey,
+      key: privateKey,
       padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
       saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
     }, 'base64');
 
-    // Call Vult Payment Link Endpoint
+    console.log('Sending Body to Vult:', bodyString);
+    console.log('Generated Signature (first 30 chars):', signature.substring(0, 30));
+
     const vultRes = await fetch('https://wallet.vultme.io/api/merchants/private/v1/payment-links', {
       method: 'POST',
       headers: {
@@ -71,37 +68,18 @@ export default async function handler(req, res) {
       body: bodyString
     });
 
-    const rawText = await vultRes.text();
-    let data = {};
-    try {
-      data = JSON.parse(rawText);
-    } catch (e) {
-      console.error('Vult returned non-JSON response:', rawText);
-      return res.status(vultRes.status || 500).json({ error: `Vult Gateway Error (${vultRes.status}): ${rawText}` });
-    }
+    const resText = await vultRes.text();
+    console.log(`Vult HTTP Response Code: ${vultRes.status}, Body:`, resText);
+
+    let data;
+    try { data = JSON.parse(resText); } catch { data = { raw: resText }; }
 
     if (!vultRes.ok) {
-      return res.status(vultRes.status).json({ error: data?.message || data?.error || 'Vult link generation failed.' });
-    }
-
-    // Save pending intent in Supabase
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (supabaseUrl && serviceKey) {
-      const supabase = createClient(supabaseUrl, serviceKey);
-      await supabase.from('payment_transactions').insert({
-        user_id: userId,
-        transaction_type: 'wallet_topup',
-        provider: 'vult',
-        amount: Number(amount),
-        currency: 'SLE',
-        status: 'pending',
-        metadata: { order_id: orderId, vult_type: vultType }
+      return res.status(vultRes.status).json({
+        error: `Vult Gateway Error (${vultRes.status}): ${data?.message || data?.error || resText || 'Forbidden'}`
       });
     }
 
-    // Return URL link for Card/Vult, or USSD code for MoMo
     return res.status(200).json({
       link: data?.data?.link || data?.link || null,
       code: data?.data?.code || data?.code || null
@@ -109,6 +87,6 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error('Checkout Exception:', err);
-    return res.status(500).json({ error: err.message || 'Internal Server Error' });
+    return res.status(500).json({ error: err.message });
   }
 }
