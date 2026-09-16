@@ -1,12 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { CarFront, Truck, Store, ArrowRight, ArrowLeft, Check, ShieldCheck, FileText, UploadCloud, Camera } from 'lucide-react';
+import { CarFront, Truck, Store, ArrowRight, ArrowLeft, Check, ShieldCheck, UploadCloud, Camera } from 'lucide-react';
 import { OnboardingShell } from '@/components/AuthShell';
 import { DocumentUpload, SelfieUpload } from '@/components/DocumentUpload';
 import { useAuth } from '@/context/AuthContext';
 import { roleLabels, roleDescriptions } from '@/services/roleService';
-import type { UserRole, PersonalInfo, IdentityInfo, DriverInfo, MerchantInfo, UploadedDocument, DocumentType } from '@/types';
+import type { UserRole, PersonalInfo, IdentityInfo, DriverInfo, MerchantInfo, UploadedDocument } from '@/types';
 
 type OnboardingPersonalInfo = Partial<PersonalInfo> & { phone?: string; };
 
@@ -54,7 +54,7 @@ export function RoleSelectionPage() {
     try {
       sessionStorage.setItem('ob_role', selected);
       navigate('/onboarding/personal');
-    } catch (error) { alert('Failed to save your account type. Please try again.'); } finally { setIsProcessing(false); }
+    } catch (error) { alert('Failed to save your account type.'); } finally { setIsProcessing(false); }
   };
 
   return (
@@ -95,7 +95,7 @@ export function PersonalInfoPage() {
         <p className="ob-subtitle">Tell us about yourself. This information is kept private and secure.</p>
         <div className="ob-form-grid">
           <Field label="First name"><input className="ob-input" value={info.firstName ?? ''} onChange={(e) => update('firstName', e.target.value)} placeholder="Aisha" /></Field>
-          <Field label="Middle name"><input className="ob-input" value={info.middleName ?? ''} onChange={(e) => update('middleName', e.target.value)} placeholder="Mariama" /></Field>
+          <Field label="Middle name (Optional)"><input className="ob-input" value={info.middleName ?? ''} onChange={(e) => update('middleName', e.target.value)} placeholder="Mariama" /></Field>
           <Field label="Last name"><input className="ob-input" value={info.lastName ?? ''} onChange={(e) => update('lastName', e.target.value)} placeholder="Kamara" /></Field>
           <Field label="Phone number"><input className="ob-input" value={info.phone ?? ''} onChange={(e) => update('phone', e.target.value)} placeholder="+232 76 123 456" inputMode="tel" /></Field>
           <Field label="Date of birth"><input className="ob-input" type="date" value={info.dateOfBirth ?? ''} onChange={(e) => update('dateOfBirth', e.target.value)} /></Field>
@@ -187,16 +187,33 @@ export function IdentityPage() {
 export function DocumentsPage() {
   const navigate = useNavigate();
   const role = getActiveRole();
+  const [merchant] = useOnboardingState<Partial<MerchantInfo> & { infrastructure?: string }>('ob_merchant', {});
 
-  // FIX 1: Dynamically generate document boxes based on role
-  let displayDocs: { id: string; label: string; required: boolean; }[] = [
-    { id: 'id_front', label: 'Identity Document (Front)', required: true }
-  ];
-
+  // DYNAMIC DOCUMENT REQUIREMENTS
+  let displayDocs: { id: string; label: string; required: boolean; }[] = [];
+  
   if (role === 'driver') {
-    displayDocs.push({ id: 'license_doc', label: 'Driver License', required: true });
+    displayDocs = [
+      { id: 'license_doc', label: "Driver's License", required: true }
+    ];
   } else if (role === 'merchant') {
-    displayDocs.push({ id: 'business_doc', label: 'Business Registration Document', required: true });
+    if (merchant.infrastructure === 'Digital / Online Only') {
+      displayDocs = [
+        { id: 'id_front', label: 'Identity Card (Front)', required: true },
+        { id: 'id_back', label: 'Identity Card (Back)', required: true }
+      ];
+    } else {
+      displayDocs = [
+        { id: 'business_doc', label: 'Business Registration Document', required: true },
+        { id: 'business_doc_2', label: 'Additional Document (Optional)', required: false }
+      ];
+    }
+  } else {
+    // Default Rider
+    displayDocs = [
+      { id: 'id_front', label: 'National ID (Front)', required: true },
+      { id: 'id_back', label: 'National ID (Back)', required: true }
+    ];
   }
 
   const [docs, setDocs] = useOnboardingState<Record<string, any>>('ob_docs', {});
@@ -204,7 +221,6 @@ export function DocumentsPage() {
   const handleUpload = (type: string, document: any) => { setDocs({ ...docs, [type]: document }); };
   const handleRemove = (type: string) => { const updatedDocs = { ...docs }; delete updatedDocs[type]; setDocs(updatedDocs); };
   
-  // FIX 2: Relaxed validation to instantly unlock the "Continue" button once the file is captured in state
   const allUploaded = displayDocs.filter((d) => d.required).every((d) => !!docs[d.id]);
 
   return (
@@ -261,8 +277,6 @@ export function SelfiePage() {
         </div>
         <div className="ob-actions">
           <button type="button" className="back-button" onClick={() => navigate('/onboarding/documents')}><ArrowLeft size={16} /> Back</button>
-          
-          {/* FIX 3: Relaxed Selfie Validation */}
           <button type="button" className="primary-button" disabled={!selfie} onClick={() => navigate(role === 'driver' ? '/onboarding/vehicle' : '/onboarding/review')}>Continue <ArrowRight size={17} /></button>
         </div>
       </div>
@@ -358,8 +372,8 @@ export function ReviewPage() {
       const fullName = `${info.firstName || ''} ${info.middleName || ''} ${info.lastName || ''}`.replace(/\s+/g, ' ').trim() || 'New User';
       const userStatus = role === 'rider' ? 'approved' : 'pending';
 
-      // FIX 4: Securely route the correct document URLs based on role
       const idCardUrl = docs['id_front']?.url || docs['id_front']?.fileName || null;
+      const idCardBackUrl = docs['id_back']?.url || docs['id_back']?.fileName || null;
       const licenseUrl = docs['license_doc']?.url || docs['license_doc']?.fileName || null;
       const businessUrl = docs['business_doc']?.url || docs['business_doc']?.fileName || null;
       const selfieUrl = selfieData?.url || selfieData?.fileName || null;
@@ -385,8 +399,9 @@ export function ReviewPage() {
         tax_id: merchant.businessRegNumber || identity.idNumber || null,
         driver_license_no: role === 'driver' ? driver.licenseNumber : identity.idNumber || null,
         id_card_url: idCardUrl,
-        license_doc_url: role === 'driver' ? licenseUrl : null,
-        business_doc_url: role === 'merchant' ? businessUrl : null,
+        id_card_back_url: idCardBackUrl,
+        license_doc_url: licenseUrl,
+        business_doc_url: businessUrl,
         selfie_url: selfieUrl,
         role: role,
         kyc_status: userStatus,
@@ -394,7 +409,11 @@ export function ReviewPage() {
       });
 
       if (profileError) {
-        alert(`Database Error: ${profileError.message}`);
+        if (profileError.message.includes('profiles_phone_key') || profileError.code === '23505') {
+          alert('This phone number is already registered to another account. Please use a different number or log in.');
+        } else {
+          alert(`Database Error: ${profileError.message}`);
+        }
         throw profileError;
       }
 
@@ -403,8 +422,6 @@ export function ReviewPage() {
       navigate('/onboarding/submitted');
     } catch (error: any) {
       console.error(error);
-      alert(error?.message || 'Failed to submit verification.');
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -417,19 +434,34 @@ export function ReviewPage() {
           <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 relative">
             <div className="text-xl font-bold text-[#184f9a] capitalize">{roleLabels[role]}</div>
           </div>
+          
           <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 relative">
+            {/* FULL DATA DISPLAY GRID */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
-              <div><small className="block text-slate-500">Full name</small><strong className="text-slate-900">{info.firstName} {info.lastName}</strong></div>
+              <div><small className="block text-slate-500">Full name</small><strong className="text-slate-900">{info.firstName} {info.middleName} {info.lastName}</strong></div>
               <div><small className="block text-slate-500">Phone</small><strong className="text-slate-900">{displayPhone}</strong></div>
+              <div><small className="block text-slate-500">Email</small><strong className="text-slate-900">{session?.user?.email || '—'}</strong></div>
               <div><small className="block text-slate-500">Date of Birth</small><strong className="text-slate-900">{info.dateOfBirth || '—'}</strong></div>
               <div><small className="block text-slate-500">Nationality</small><strong className="text-slate-900">{info.nationality || '—'}</strong></div>
-              <div><small className="block text-slate-500">Address</small><strong className="text-slate-900">{info.residentialAddress || '—'}, {info.city}</strong></div>
+              <div><small className="block text-slate-500">Address</small><strong className="text-slate-900">{info.residentialAddress || '—'}, {info.city}, {info.country}</strong></div>
               
               {role === 'driver' && (
-                 <div><small className="block text-slate-500">Driver License Number</small><strong className="text-slate-900">{driver.licenseNumber || '—'}</strong></div>
+                 <>
+                   <div><small className="block text-slate-500">Driver License Number</small><strong className="text-slate-900">{driver.licenseNumber || '—'}</strong></div>
+                   <div><small className="block text-slate-500">License Class</small><strong className="text-slate-900">{driver.licenseClass || '—'}</strong></div>
+                   <div><small className="block text-slate-500">Vehicle Info</small><strong className="text-slate-900">{vehicle.type || '—'} ({vehicle.plateNumber || '—'})</strong></div>
+                   <div><small className="block text-slate-500">Operating Region</small><strong className="text-slate-900">{vehicle.region || '—'}</strong></div>
+                 </>
               )}
               {role === 'merchant' && (
-                 <div><small className="block text-slate-500">Business Name</small><strong className="text-slate-900">{merchant.businessName || '—'}</strong></div>
+                 <>
+                   <div><small className="block text-slate-500">Business Name</small><strong className="text-slate-900">{merchant.businessName || '—'}</strong></div>
+                   <div><small className="block text-slate-500">Infrastructure</small><strong className="text-slate-900">{merchant.infrastructure || '—'}</strong></div>
+                   <div><small className="block text-slate-500">Business Address</small><strong className="text-slate-900">{merchant.businessAddress || '—'}</strong></div>
+                   {merchant.infrastructure !== 'Digital / Online Only' && (
+                     <div><small className="block text-slate-500">Business Reg. Number</small><strong className="text-slate-900">{merchant.businessRegNumber || '—'}</strong></div>
+                   )}
+                 </>
               )}
             </div>
           </div>
@@ -446,22 +478,50 @@ export function ReviewPage() {
 }
 
 export function SubmittedPage() {
+  const { session } = useAuth();
   const role = getActiveRole();
   const portalPath = role === 'driver' ? '/customer/driver' : role === 'merchant' ? '/customer/merchant' : '/customer/rider';
+
+  // Live Auto-Redirect to dashboard the exact second the Admin approves the user
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    
+    const channel = supabase
+      .channel('kyc-status-watch')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${session.user.id}` }, 
+        (payload) => {
+          if (payload.new.kyc_status === 'approved') {
+            window.location.href = portalPath;
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [session?.user?.id, portalPath]);
 
   return (
     <OnboardingShell step={7}>
       <div className="ob-page animate-in text-center">
-        <div className="w-20 h-20 bg-green-100 text-[#32a84a] rounded-full flex items-center justify-center mx-auto mb-6"><Check size={40} /></div>
-        <h2 className="text-3xl font-bold mb-3">
-          {role === 'rider' ? 'Account Approved!' : 'Submission received!'}
-        </h2>
-        <p className="text-slate-500 mb-10">
-          {role === 'rider' 
-            ? 'Your account is ready. You can now request trips and load your wallet.' 
-            : 'Your verification is under review.'}
-        </p>
-        <button type="button" className="primary-button w-full py-4" onClick={() => { window.location.href = portalPath; }}>Access dashboard</button>
+        {role === 'rider' ? (
+          <>
+            <div className="w-20 h-20 bg-green-100 text-[#32a84a] rounded-full flex items-center justify-center mx-auto mb-6"><Check size={40} /></div>
+            <h2 className="text-3xl font-bold mb-3">Account Approved!</h2>
+            <p className="text-slate-500 mb-10">Your account is ready. You can now request trips and load your wallet.</p>
+            <button type="button" className="primary-button w-full py-4" onClick={() => { window.location.href = portalPath; }}>Access dashboard</button>
+          </>
+        ) : (
+          <>
+            <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <ShieldCheck size={40} />
+            </div>
+            <h2 className="text-3xl font-bold mb-3">Submission received!</h2>
+            <p className="text-slate-500 mb-2">Your verification is currently under review by our team.</p>
+            <p className="text-sm font-bold text-blue-600 bg-blue-50 px-4 py-2 rounded-lg inline-block mb-10 animate-pulse">
+              Please wait... you will be automatically redirected when approved.
+            </p>
+          </>
+        )}
       </div>
     </OnboardingShell>
   );
