@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { CarFront, Truck, Store, ArrowRight, ArrowLeft, Check, ShieldCheck, FileText, AlertCircle, UploadCloud, Camera } from 'lucide-react';
+import { CarFront, Truck, Store, ArrowRight, ArrowLeft, Check, ShieldCheck, FileText, UploadCloud, Camera } from 'lucide-react';
 import { OnboardingShell } from '@/components/AuthShell';
 import { DocumentUpload, SelfieUpload } from '@/components/DocumentUpload';
 import { useAuth } from '@/context/AuthContext';
@@ -14,12 +14,7 @@ function useOnboardingState<T>(key: string, initialValue: T) {
   const [state, setState] = useState<T>(() => {
     const stored = sessionStorage.getItem(key);
     if (!stored) return initialValue;
-    try {
-      return JSON.parse(stored) as T;
-    } catch {
-      sessionStorage.removeItem(key);
-      return initialValue;
-    }
+    try { return JSON.parse(stored) as T; } catch { sessionStorage.removeItem(key); return initialValue; }
   });
 
   const setPersistentState = (value: T) => {
@@ -59,11 +54,7 @@ export function RoleSelectionPage() {
     try {
       sessionStorage.setItem('ob_role', selected);
       navigate('/onboarding/personal');
-    } catch (error) {
-      alert('Failed to save your account type. Please try again.');
-    } finally {
-      setIsProcessing(false);
-    }
+    } catch (error) { alert('Failed to save your account type. Please try again.'); } finally { setIsProcessing(false); }
   };
 
   return (
@@ -83,9 +74,7 @@ export function RoleSelectionPage() {
         </div>
         <div className="ob-actions">
           <button type="button" className="back-button" onClick={() => navigate('/')} disabled={isProcessing}><ArrowLeft size={16} /> Back</button>
-          <button type="button" className="primary-button" disabled={!selected || isProcessing} onClick={handleContinue}>
-            {isProcessing ? 'Saving...' : 'Continue'} <ArrowRight size={17} />
-          </button>
+          <button type="button" className="primary-button" disabled={!selected || isProcessing} onClick={handleContinue}>{isProcessing ? 'Saving...' : 'Continue'} <ArrowRight size={17} /></button>
         </div>
       </div>
     </OnboardingShell>
@@ -94,10 +83,7 @@ export function RoleSelectionPage() {
 
 export function PersonalInfoPage() {
   const navigate = useNavigate();
-  const [info, setInfo] = useOnboardingState<OnboardingPersonalInfo>('ob_personal', {
-    firstName: '', middleName: '', lastName: '', phone: '', dateOfBirth: '', nationality: 'Sierra Leonean', country: 'Sierra Leone', residentialAddress: '', city: '',
-  });
-
+  const [info, setInfo] = useOnboardingState<OnboardingPersonalInfo>('ob_personal', { firstName: '', middleName: '', lastName: '', phone: '', dateOfBirth: '', nationality: 'Sierra Leonean', country: 'Sierra Leone', residentialAddress: '', city: '' });
   const update = (field: keyof OnboardingPersonalInfo, value: string) => setInfo({ ...info, [field]: value });
   const normalizedPhone = normalizePhone(info.phone ?? '');
   const isValid = Boolean(info.firstName?.trim() && info.lastName?.trim() && normalizedPhone && info.dateOfBirth && info.residentialAddress?.trim() && info.city?.trim());
@@ -111,9 +97,7 @@ export function PersonalInfoPage() {
           <Field label="First name"><input className="ob-input" value={info.firstName ?? ''} onChange={(e) => update('firstName', e.target.value)} placeholder="Aisha" /></Field>
           <Field label="Middle name"><input className="ob-input" value={info.middleName ?? ''} onChange={(e) => update('middleName', e.target.value)} placeholder="Mariama" /></Field>
           <Field label="Last name"><input className="ob-input" value={info.lastName ?? ''} onChange={(e) => update('lastName', e.target.value)} placeholder="Kamara" /></Field>
-          <Field label="Phone number">
-            <input className="ob-input" value={info.phone ?? ''} onChange={(e) => update('phone', e.target.value)} placeholder="+232 76 123 456" inputMode="tel" />
-          </Field>
+          <Field label="Phone number"><input className="ob-input" value={info.phone ?? ''} onChange={(e) => update('phone', e.target.value)} placeholder="+232 76 123 456" inputMode="tel" /></Field>
           <Field label="Date of birth"><input className="ob-input" type="date" value={info.dateOfBirth ?? ''} onChange={(e) => update('dateOfBirth', e.target.value)} /></Field>
           <Field label="Nationality"><input className="ob-input" value={info.nationality ?? ''} onChange={(e) => update('nationality', e.target.value)} /></Field>
           <Field label="Country"><input className="ob-input" value={info.country ?? ''} onChange={(e) => update('country', e.target.value)} /></Field>
@@ -146,9 +130,7 @@ export function IdentityPage() {
   const isDigitalMerchant = role === 'merchant' && merchant.infrastructure === 'Digital / Online Only';
   const hideStandardIdFields = (role === 'driver' && currentIdType === "Driver's License") || (role === 'merchant' && currentIdType === 'Business Registration');
 
-  useEffect(() => {
-    if (identity.idType !== currentIdType) updateId('idType', currentIdType);
-  }, [identity.idType, currentIdType]);
+  useEffect(() => { if (identity.idType !== currentIdType) updateId('idType', currentIdType); }, [identity.idType, currentIdType]);
 
   return (
     <OnboardingShell step={4}>
@@ -173,7 +155,7 @@ export function IdentityPage() {
 
         {role === 'driver' && (
           <div className="ob-form-grid mt-6">
-            <Field label="License number"><input className="ob-input" value={driver.licenseNumber ?? ''} onChange={(e) => updateDriver('licenseNumber', e.target.value)} /></Field>
+            <Field label="Driver License Number"><input className="ob-input" value={driver.licenseNumber ?? ''} onChange={(e) => updateDriver('licenseNumber', e.target.value)} /></Field>
             <Field label="License class"><input className="ob-input" value={driver.licenseClass ?? ''} onChange={(e) => updateDriver('licenseClass', e.target.value)} /></Field>
           </div>
         )}
@@ -184,8 +166,7 @@ export function IdentityPage() {
             <Field label="Infrastructure">
               <div className="ob-select-wrap">
                 <select className="ob-input" value={merchant.infrastructure ?? ''} onChange={(e) => updateMerchant('infrastructure', e.target.value)}>
-                  <option>Physical Shop / Location</option>
-                  <option>Digital / Online Only</option>
+                  <option>Physical Shop / Location</option><option>Digital / Online Only</option>
                 </select>
               </div>
             </Field>
@@ -211,22 +192,16 @@ export function DocumentsPage() {
   const currentIdType = identity.idType || 'National ID';
 
   let displayDocs: { id: DocumentType; label: string; required: boolean; }[] = [
-    { id: 'id_front', label: 'National ID (Front)', required: true }
+    { id: 'id_front', label: 'Identity Document (Front)', required: true }
   ];
 
   const [docs, setDocs] = useOnboardingState<Record<string, any>>('ob_docs', {});
 
-  const handleUpload = (type: DocumentType, document: UploadedDocument) => {
-    setDocs({ ...docs, [type]: document });
-  };
+  const handleUpload = (type: DocumentType, document: UploadedDocument) => { setDocs({ ...docs, [type]: document }); };
+  const handleRemove = (type: DocumentType) => { const updatedDocs = { ...docs }; delete updatedDocs[type]; setDocs(updatedDocs); };
   
-  const handleRemove = (type: DocumentType) => {
-    const updatedDocs = { ...docs };
-    delete updatedDocs[type];
-    setDocs(updatedDocs);
-  };
-  
-  const allUploaded = displayDocs.filter((d) => d.required).every((d) => docs[d.id]?.status === 'uploaded' || docs[d.id]?.url);
+  // FIX: We must ensure a URL exists before letting them continue
+  const allUploaded = displayDocs.filter((d) => d.required).every((d) => docs[d.id]?.url);
 
   return (
     <OnboardingShell step={5}>
@@ -260,9 +235,7 @@ export function SelfiePage() {
 
   useEffect(() => {
     const stored = sessionStorage.getItem('ob_selfie');
-    if (stored) {
-      try { setSelfie(JSON.parse(stored) as UploadedDocument); } catch { sessionStorage.removeItem('ob_selfie'); }
-    }
+    if (stored) { try { setSelfie(JSON.parse(stored) as UploadedDocument); } catch { sessionStorage.removeItem('ob_selfie'); } }
   }, []);
 
   const handleSelfieUpload = (document: UploadedDocument) => {
@@ -272,10 +245,7 @@ export function SelfiePage() {
     }));
   };
 
-  const handleSelfieRemove = () => {
-    setSelfie(undefined);
-    sessionStorage.removeItem('ob_selfie');
-  };
+  const handleSelfieRemove = () => { setSelfie(undefined); sessionStorage.removeItem('ob_selfie'); };
 
   return (
     <OnboardingShell step={6}>
@@ -289,7 +259,7 @@ export function SelfiePage() {
         </div>
         <div className="ob-actions">
           <button type="button" className="back-button" onClick={() => navigate('/onboarding/documents')}><ArrowLeft size={16} /> Back</button>
-          <button type="button" className="primary-button" disabled={!selfie} onClick={() => navigate(role === 'driver' ? '/onboarding/vehicle' : '/onboarding/review')}>Continue <ArrowRight size={17} /></button>
+          <button type="button" className="primary-button" disabled={!selfie?.url} onClick={() => navigate(role === 'driver' ? '/onboarding/vehicle' : '/onboarding/review')}>Continue <ArrowRight size={17} /></button>
         </div>
       </div>
     </OnboardingShell>
@@ -301,11 +271,12 @@ export function VehicleSelectionPage() {
   const [vehicle, setVehicle] = useOnboardingState<{ type: string; plateNumber: string; region: string }>('ob_vehicle', { type: '', plateNumber: '', region: 'West (Freetown)' });
   const isValid = Boolean(vehicle.type && vehicle.plateNumber?.trim() && vehicle.region);
 
+  // FIX: Restored Vehicle Images
   const vehicleTypes = [
-    { name: 'Motorbike (Okada)' },
-    { name: 'Tricycle (Keke)' },
-    { name: 'Car' },
-    { name: 'Van / Truck' },
+    { name: 'Motorbike (Okada)', image: '/bike.jpg' },
+    { name: 'Tricycle (Keke)', image: '/keke.jpg' },
+    { name: 'Car', image: '/car.jpg' },
+    { name: 'Van / Truck', image: '/van.jpg' },
   ];
 
   return (
@@ -314,19 +285,17 @@ export function VehicleSelectionPage() {
         <h2 className="ob-title font-extrabold tracking-tight">Vehicle details</h2>
         <p className="ob-subtitle mb-6">Provide details about the vehicle you will be driving.</p>
         
-        {/* RESTORED VEHICLE GRID */}
         <div className="grid grid-cols-2 gap-3 mb-8">
           {vehicleTypes.map((v) => (
             <button
               key={v.name}
               type="button"
               onClick={() => setVehicle({ ...vehicle, type: v.name })}
-              className={`p-4 rounded-2xl border-2 text-center transition-all ${
-                vehicle.type === v.name
-                  ? 'border-[#184f9a] bg-[#eff6ff] text-[#184f9a] font-bold'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+              className={`p-4 rounded-2xl border-2 text-center transition-all flex flex-col items-center gap-2 ${
+                vehicle.type === v.name ? 'border-[#184f9a] bg-[#eff6ff] text-[#184f9a] font-bold' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
               }`}
             >
+              {v.image && <img src={v.image} alt={v.name} className="h-16 object-contain mix-blend-multiply" />}
               {v.name}
             </button>
           ))}
@@ -365,6 +334,7 @@ export function ReviewPage() {
   const [info] = useOnboardingState<OnboardingPersonalInfo>('ob_personal', {});
   const [identity] = useOnboardingState<Partial<IdentityInfo>>('ob_identity', {});
   const [merchant] = useOnboardingState<Partial<MerchantInfo> & { infrastructure?: string }>('ob_merchant', {});
+  const [driver] = useOnboardingState<Partial<DriverInfo>>('ob_driver', {});
   const [vehicle] = useOnboardingState<{ type: string; plateNumber: string; region: string }>('ob_vehicle', { type: '', plateNumber: '', region: '' });
   
   const [docs] = useOnboardingState<Record<string, any>>('ob_docs', {});
@@ -383,11 +353,11 @@ export function ReviewPage() {
       const userId = session.user.id;
       const userEmail = session.user.email;
       const fullName = `${info.firstName || ''} ${info.middleName || ''} ${info.lastName || ''}`.replace(/\s+/g, ' ').trim() || 'New User';
-      
       const userStatus = role === 'rider' ? 'approved' : 'pending';
 
-      const documentUrl = docs['id_front']?.url || docs['id_front']?.fileName || null;
-      const selfieUrl = selfieData?.url || selfieData?.fileName || null;
+      // STRICTLY extract the `.url` property to prevent Admin 404s
+      const documentUrl = docs['id_front']?.url || null;
+      const selfieUrl = selfieData?.url || null;
 
       const { error: profileError } = await supabase.from('profiles').upsert({
         id: userId,
@@ -408,7 +378,7 @@ export function ReviewPage() {
         business_name: merchant.businessName || null,
         business_type: merchant.infrastructure || null,
         tax_id: merchant.businessRegNumber || identity.idNumber || null,
-        driver_license_no: identity.idNumber || null,
+        driver_license_no: role === 'driver' ? driver.licenseNumber : identity.idNumber || null,
         id_card_url: documentUrl,
         license_doc_url: role === 'driver' ? documentUrl : null,
         business_doc_url: role === 'merchant' ? documentUrl : null,
@@ -418,7 +388,10 @@ export function ReviewPage() {
         updated_at: new Date().toISOString()
       });
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        alert(`Database Error: ${profileError.message}`);
+        throw profileError;
+      }
 
       await supabase.from('wallets').upsert({ user_id: userId, balance: 0, currency: 'SLE' });
 
@@ -437,12 +410,23 @@ export function ReviewPage() {
         <h2 className="ob-title">Review your submission</h2>
         <div className="space-y-6 mt-8">
           <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 relative">
-            <div className="text-xl font-bold text-[#184f9a]">{roleLabels[role]}</div>
+            <div className="text-xl font-bold text-[#184f9a] capitalize">{roleLabels[role]}</div>
           </div>
           <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 relative">
+            {/* FIX: Restored all missing Review Fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
               <div><small className="block text-slate-500">Full name</small><strong className="text-slate-900">{info.firstName} {info.lastName}</strong></div>
               <div><small className="block text-slate-500">Phone</small><strong className="text-slate-900">{displayPhone}</strong></div>
+              <div><small className="block text-slate-500">Date of Birth</small><strong className="text-slate-900">{info.dateOfBirth || '—'}</strong></div>
+              <div><small className="block text-slate-500">Nationality</small><strong className="text-slate-900">{info.nationality || '—'}</strong></div>
+              <div><small className="block text-slate-500">Address</small><strong className="text-slate-900">{info.residentialAddress || '—'}, {info.city}</strong></div>
+              
+              {role === 'driver' && (
+                 <div><small className="block text-slate-500">Driver License Number</small><strong className="text-slate-900">{driver.licenseNumber || '—'}</strong></div>
+              )}
+              {role === 'merchant' && (
+                 <div><small className="block text-slate-500">Business Name</small><strong className="text-slate-900">{merchant.businessName || '—'}</strong></div>
+              )}
             </div>
           </div>
         </div>
