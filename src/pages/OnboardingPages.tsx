@@ -6,7 +6,7 @@ import { OnboardingShell } from '@/components/AuthShell';
 import { DocumentUpload, SelfieUpload } from '@/components/DocumentUpload';
 import { useAuth } from '@/context/AuthContext';
 import { roleLabels, roleDescriptions } from '@/services/roleService';
-import type { UserRole, PersonalInfo, IdentityInfo, DriverInfo, MerchantInfo, UploadedDocument } from '@/types';
+import type { UserRole, PersonalInfo, IdentityInfo, DriverInfo, MerchantInfo, UploadedDocument, DocumentType } from '@/types';
 
 type OnboardingPersonalInfo = Partial<PersonalInfo> & { phone?: string; };
 
@@ -189,7 +189,6 @@ export function DocumentsPage() {
   const role = getActiveRole();
   const [merchant] = useOnboardingState<Partial<MerchantInfo> & { infrastructure?: string }>('ob_merchant', {});
 
-  // DYNAMIC DOCUMENT REQUIREMENTS
   let displayDocs: { id: string; label: string; required: boolean; }[] = [];
   
   if (role === 'driver') {
@@ -209,7 +208,6 @@ export function DocumentsPage() {
       ];
     }
   } else {
-    // Default Rider
     displayDocs = [
       { id: 'id_front', label: 'National ID (Front)', required: true },
       { id: 'id_back', label: 'National ID (Back)', required: true }
@@ -370,6 +368,8 @@ export function ReviewPage() {
       const userId = session.user.id;
       const userEmail = session.user.email;
       const fullName = `${info.firstName || ''} ${info.middleName || ''} ${info.lastName || ''}`.replace(/\s+/g, ' ').trim() || 'New User';
+      
+      // Drivers/Merchants are tracked as 'pending' for withdrawals, but still get let into the dashboard instantly.
       const userStatus = role === 'rider' ? 'approved' : 'pending';
 
       const idCardUrl = docs['id_front']?.url || docs['id_front']?.fileName || null;
@@ -436,7 +436,6 @@ export function ReviewPage() {
           </div>
           
           <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 relative">
-            {/* FULL DATA DISPLAY GRID */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
               <div><small className="block text-slate-500">Full name</small><strong className="text-slate-900">{info.firstName} {info.middleName} {info.lastName}</strong></div>
               <div><small className="block text-slate-500">Phone</small><strong className="text-slate-900">{displayPhone}</strong></div>
@@ -477,51 +476,21 @@ export function ReviewPage() {
   );
 }
 
+// FIX: Everyone gets an instant "Access dashboard" button, no waiting required.
 export function SubmittedPage() {
-  const { session } = useAuth();
   const role = getActiveRole();
   const portalPath = role === 'driver' ? '/customer/driver' : role === 'merchant' ? '/customer/merchant' : '/customer/rider';
-
-  // Live Auto-Redirect to dashboard the exact second the Admin approves the user
-  useEffect(() => {
-    if (!session?.user?.id) return;
-    
-    const channel = supabase
-      .channel('kyc-status-watch')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${session.user.id}` }, 
-        (payload) => {
-          if (payload.new.kyc_status === 'approved') {
-            window.location.href = portalPath;
-          }
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [session?.user?.id, portalPath]);
 
   return (
     <OnboardingShell step={7}>
       <div className="ob-page animate-in text-center">
-        {role === 'rider' ? (
-          <>
-            <div className="w-20 h-20 bg-green-100 text-[#32a84a] rounded-full flex items-center justify-center mx-auto mb-6"><Check size={40} /></div>
-            <h2 className="text-3xl font-bold mb-3">Account Approved!</h2>
-            <p className="text-slate-500 mb-10">Your account is ready. You can now request trips and load your wallet.</p>
-            <button type="button" className="primary-button w-full py-4" onClick={() => { window.location.href = portalPath; }}>Access dashboard</button>
-          </>
-        ) : (
-          <>
-            <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
-              <ShieldCheck size={40} />
-            </div>
-            <h2 className="text-3xl font-bold mb-3">Submission received!</h2>
-            <p className="text-slate-500 mb-2">Your verification is currently under review by our team.</p>
-            <p className="text-sm font-bold text-blue-600 bg-blue-50 px-4 py-2 rounded-lg inline-block mb-10 animate-pulse">
-              Please wait... you will be automatically redirected when approved.
-            </p>
-          </>
-        )}
+        <div className="w-20 h-20 bg-green-100 text-[#32a84a] rounded-full flex items-center justify-center mx-auto mb-6"><Check size={40} /></div>
+        <h2 className="text-3xl font-bold mb-3">Welcome to MatMove!</h2>
+        <p className="text-slate-500 mb-10">
+          Your account has been created. You can now access your dashboard.
+          {role !== 'rider' && " Note: Some features like withdrawals require document verification."}
+        </p>
+        <button type="button" className="primary-button w-full py-4" onClick={() => { window.location.href = portalPath; }}>Access dashboard</button>
       </div>
     </OnboardingShell>
   );
