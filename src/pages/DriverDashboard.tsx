@@ -1,98 +1,76 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Power, MapPin, Navigation, Wallet, Clock, ShieldCheck, Bell, Radio } from 'lucide-react';
+import { Power, MapPin, Navigation, Wallet, Clock, ShieldCheck, Bell, Radio, RefreshCw, AlertCircle } from 'lucide-react';
 
 export function DriverDashboard({ profile, wallet, onOpenWithdraw }: any) {
+  // Use local state so we can refresh without reloading the page
+  const [localProfile, setLocalProfile] = useState(profile);
+  const [localWallet, setLocalWallet] = useState(wallet);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const [isOnline, setIsOnline] = useState(false);
   const [maxRadius, setMaxRadius] = useState<number>(5);
   const [activeRequests, setActiveRequests] = useState<any[]>([]);
 
-  // Listen for live trip requests
-  useEffect(() => {
-    if (!isOnline) {
-      setActiveRequests([]);
-      return;
-    }
+  const isApproved = localProfile?.kyc_status === 'approved';
 
-    // Fetch initial pending/accepted requests
+  // The Live Refresh Function
+  const refreshData = async () => {
+    setIsRefreshing(true);
+    try {
+      // 1. Refresh Wallet
+      const { data: wData } = await supabase.from('wallets').select('*').eq('user_id', profile.id).single();
+      if (wData) setLocalWallet(wData);
+
+      // 2. Refresh Profile (Checks if Admin approved them!)
+      const { data: pData } = await supabase.from('profiles').select('*').eq('id', profile.id).single();
+      if (pData) setLocalProfile(pData);
+    } catch (err) {
+      console.error('Failed to refresh', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOnline) { setActiveRequests([]); return; }
     const fetchInitialRequests = async () => {
-      const { data } = await supabase
-        .from('bookings')
-        .select('*')
-        .or(`status.eq.pending,driver_id.eq.${profile.id}`)
-        .neq('status', 'cancelled')
-        .order('created_at', { ascending: false });
-      
+      const { data } = await supabase.from('bookings').select('*').or(`status.eq.pending,driver_id.eq.${profile.id}`).neq('status', 'cancelled').order('created_at', { ascending: false });
       if (data) setActiveRequests(data);
     };
-
     fetchInitialRequests();
 
-    // Subscribe to real-time new bookings and updates
-    const channel = supabase
-      .channel('public:bookings')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, 
-        (payload) => {
-          fetchInitialRequests(); // Refresh list automatically on any change
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    const channel = supabase.channel('public:bookings').on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => { fetchInitialRequests(); }).subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [isOnline, profile.id]);
 
   const handleAcceptBooking = async (bookingId: string) => {
+    if (!isApproved) return alert('You must be KYC Approved by an Admin to accept trips.');
     try {
-      const { error } = await supabase
-        .from('bookings')
-        .update({ 
-          status: 'accepted',
-          driver_id: profile.id 
-        })
-        .eq('id', bookingId);
-
+      const { error } = await supabase.from('bookings').update({ status: 'accepted', driver_id: profile.id }).eq('id', bookingId);
       if (error) throw error;
-    } catch (err: any) {
-      alert('Failed to accept trip: ' + err.message);
-    }
+    } catch (err: any) { alert('Failed to accept trip: ' + err.message); }
   };
 
   const handleCompleteBooking = async (booking: any) => {
     try {
-      // 1. Mark trip as completed
-      const { error: bookingError } = await supabase
-        .from('bookings')
-        .update({ status: 'completed' })
-        .eq('id', booking.id);
-
+      const { error: bookingError } = await supabase.from('bookings').update({ status: 'completed' }).eq('id', booking.id);
       if (bookingError) throw bookingError;
 
-      // 2. Transfer fare to Driver's wallet (Simulated Settlement)
-      const currentBalance = Number(wallet?.balance || 0);
+      const currentBalance = Number(localWallet?.balance || 0);
       const newBalance = currentBalance + Number(booking.fare_amount);
-
-      await supabase
-        .from('wallets')
-        .update({ balance: newBalance })
-        .eq('user_id', profile.id);
+      await supabase.from('wallets').update({ balance: newBalance }).eq('user_id', profile.id);
 
       alert(`Trip completed! SLE ${booking.fare_amount} added to your wallet.`);
-      window.location.reload(); // Refresh to update wallet UI
-    } catch (err: any) {
-      alert('Failed to complete trip: ' + err.message);
-    }
+      refreshData(); // Live update UI instead of page reload
+    } catch (err: any) { alert('Failed to complete trip: ' + err.message); }
   };
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setIsOnline(!isOnline)}
-            className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}
-          >
+          <button onClick={() => setIsOnline(!isOnline)} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}>
             <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${isOnline ? 'translate-x-7' : 'translate-x-1'}`} />
           </button>
           <div>
@@ -105,59 +83,67 @@ export function DriverDashboard({ profile, wallet, onOpenWithdraw }: any) {
           <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
             <Radio size={14} className="text-blue-600" />
             <span className="text-xs font-bold text-slate-700">Radius:</span>
-            <select 
-              value={maxRadius} 
-              onChange={(e) => setMaxRadius(Number(e.target.value))}
-              className="bg-transparent text-xs font-bold text-blue-700 outline-none cursor-pointer"
-            >
-              <option value={2}>2 km</option>
-              <option value={5}>5 km</option>
-              <option value={10}>10 km</option>
+            <select value={maxRadius} onChange={(e) => setMaxRadius(Number(e.target.value))} className="bg-transparent text-xs font-bold text-blue-700 outline-none cursor-pointer">
+              <option value={2}>2 km</option><option value={5}>5 km</option><option value={10}>10 km</option>
             </select>
           </div>
-
           <div className="text-right hidden sm:block ml-4">
             <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Driver Earnings</div>
-            <div className="text-lg font-bold text-slate-900">SLE {Number(wallet?.balance || 0).toLocaleString()}</div>
+            <div className="text-lg font-bold text-slate-900">SLE {Number(localWallet?.balance || 0).toLocaleString()}</div>
           </div>
-          <button className="p-2 text-slate-400 hover:text-slate-600 bg-slate-100 rounded-full relative ml-2">
-            <Bell size={20} />
-          </button>
         </div>
       </header>
 
       <div className="flex-1 flex flex-col lg:flex-row">
         <div className="w-full lg:w-96 bg-white border-r border-slate-200 flex flex-col p-6 space-y-6 overflow-y-auto">
           
-          {profile?.kyc_status === 'pending' && (
+          {/* KYC Status Banner */}
+          {!isApproved && (
             <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-start gap-3">
-              <Clock className="text-amber-500 mt-0.5" size={20} />
+              <AlertCircle className="text-amber-500 mt-0.5" size={20} />
               <div>
                 <h4 className="font-bold text-amber-900 text-sm">Account Under Review</h4>
-                <p className="text-xs text-amber-700 mt-1">Live dispatch restricted until documents are verified.</p>
+                <p className="text-xs text-amber-700 mt-1">Withdrawals and live dispatch are restricted until an Admin approves your documents.</p>
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
+          {/* Live Wallet Section */}
+          <div className="grid grid-cols-2 gap-3 relative">
+            <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl relative">
+              <button 
+                onClick={refreshData} 
+                disabled={isRefreshing}
+                className="absolute top-3 right-3 p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600 transition"
+                title="Refresh Wallet Balance"
+              >
+                <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+              </button>
               <div className="text-slate-500 mb-1"><Wallet size={20} /></div>
-              <div className="text-xl font-bold text-slate-900">SLE {Number(wallet?.balance || 0).toFixed(2)}</div>
+              <div className="text-xl font-bold text-slate-900">SLE {Number(localWallet?.balance || 0).toFixed(2)}</div>
               <div className="text-xs font-semibold text-slate-500 uppercase">Wallet Balance</div>
             </div>
             <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
               <div className="text-slate-500 mb-1"><Navigation size={20} /></div>
-              <div className="text-xl font-bold text-slate-900">
-                {activeRequests.filter(r => r.status === 'completed' && r.driver_id === profile.id).length}
-              </div>
+              <div className="text-xl font-bold text-slate-900">{activeRequests.filter(r => r.status === 'completed' && r.driver_id === profile.id).length}</div>
               <div className="text-xs font-semibold text-slate-500 uppercase">Trips Finished</div>
             </div>
           </div>
 
-          <button onClick={onOpenWithdraw} className="w-full bg-emerald-600 text-white font-bold p-3 rounded-xl hover:bg-emerald-700 transition">
-            Withdraw Earnings
+          {/* KYC Locked Withdrawal Button */}
+          <button 
+            onClick={onOpenWithdraw} 
+            disabled={!isApproved}
+            className={`w-full font-bold p-3.5 rounded-xl transition shadow-sm ${
+              isApproved 
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
+                : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+            }`}
+          >
+            {isApproved ? 'Withdraw Earnings' : 'Withdrawals Locked (Pending KYC)'}
           </button>
 
+          {/* Dispatch Radar */}
           <div className="flex-1">
             <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
               <MapPin size={18} className="text-blue-600" /> Dispatch Radar
@@ -206,18 +192,7 @@ export function DriverDashboard({ profile, wallet, onOpenWithdraw }: any) {
         </div>
 
         <div className="flex-1 bg-slate-200 relative min-h-[400px]">
-          <iframe
-            title="Driver Radar Map"
-            width="100%"
-            height="100%"
-            className="absolute inset-0 border-0"
-            src="https://maps.google.com/maps?q=Freetown,Sierra%20Leone&t=&z=14&ie=UTF8&iwloc=&output=embed"
-          ></iframe>
-          
-          <div className="absolute bottom-6 right-6 bg-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 border border-slate-200">
-            <ShieldCheck className="text-emerald-600" size={18} />
-            <span className="text-xs font-bold text-slate-700">MatMove GPS Protected</span>
-          </div>
+          <iframe title="Driver Radar Map" width="100%" height="100%" className="absolute inset-0 border-0" src="https://maps.google.com/maps?q=Freetown,Sierra%20Leone&t=&z=14&ie=UTF8&iwloc=&output=embed" />
         </div>
       </div>
     </div>
