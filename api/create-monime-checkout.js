@@ -14,35 +14,43 @@ export default async function handler(req, res) {
     const spaceId = process.env.MONIME_SPACE_ID;
 
     if (!apiKey || !spaceId) {
-      return res.status(500).json({ error: 'Monime API credentials missing in Vercel.' });
+      return res.status(401).json({ error: 'Monime API credentials missing in Vercel.' });
     }
 
     // 1. Generate unique reference for this transaction
     const reference = `MM_MOMO_${userId}_${Date.now()}`;
 
-    // 2. Call Monime API to create checkout session
-    // (Ensure this URL matches the endpoint provided in your Monime Docs)
-    const monimeRes = await fetch('https://api.monime.sl/v1/checkout', {
+    // 2. Call Monime API exactly to their specifications
+    const monimeRes = await fetch('https://api.monime.io/v1/checkout-sessions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'Authorization': `Bearer ${apiKey}`,
+        'Monime-Space-Id': spaceId
       },
       body: JSON.stringify({
-        space_id: spaceId,
-        amount: Number(amount),
-        currency: 'SLE',
+        name: 'MatMove Wallet Top Up',
         reference: reference,
-        description: 'MatMove Wallet Top Up',
-        // Update this URL to where you want the user to return after paying
-        return_url: 'https://matmoveent.vercel.app/rider-dashboard' 
+        successUrl: 'https://matmoveent.vercel.app/rider-dashboard',
+        cancelUrl: 'https://matmoveent.vercel.app/rider-dashboard',
+        lineItems: [
+          {
+            name: 'Wallet Top Up',
+            price: {
+              currency: 'SLE',
+              value: Number(amount)
+            },
+            quantity: 1
+          }
+        ]
       })
     });
 
     const data = await monimeRes.json();
 
     if (!monimeRes.ok) {
-      throw new Error(data.message || 'Failed to initialize Monime checkout');
+      console.error("Monime API Rejected:", data);
+      throw new Error(data.message || data.error || 'Unauthorized: Check Monime API Keys');
     }
 
     // 3. Save pending transaction to Supabase
@@ -58,11 +66,12 @@ export default async function handler(req, res) {
       amount: Number(amount),
       currency: 'SLE',
       status: 'pending',
-      metadata: { reference: reference }
+      metadata: { reference: reference, session_id: data.id }
     });
 
     // 4. Send the Monime secure checkout URL back to the frontend
-    return res.status(200).json({ link: data.checkout_url });
+    // Monime returns the URL inside data.redirectUrl
+    return res.status(200).json({ link: data.redirectUrl || data.checkout_url });
 
   } catch (error) {
     console.error('Monime Checkout Error:', error);
