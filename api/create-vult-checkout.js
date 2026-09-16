@@ -1,6 +1,25 @@
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
+function formatPemPrivateKey(keyString) {
+  if (!keyString) return '';
+  let cleaned = keyString.trim();
+
+  // Replace escaped line breaks if pasted into Vercel UI as single-line string
+  if (cleaned.includes('\\n')) {
+    cleaned = cleaned.replace(/\\n/g, '\n');
+  }
+
+  // Ensure valid PEM header wrapping if missing
+  if (!cleaned.includes('-----BEGIN PRIVATE KEY-----') && !cleaned.includes('-----BEGIN RSA PRIVATE KEY-----')) {
+    const rawBody = cleaned.replace(/[\r\n\s]/g, '');
+    const chunked = rawBody.match(/.{1,64}/g)?.join('\n') || rawBody;
+    cleaned = `-----BEGIN PRIVATE KEY-----\n${chunked}\n-----END PRIVATE KEY-----`;
+  }
+
+  return cleaned;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
@@ -12,15 +31,15 @@ export default async function handler(req, res) {
     }
 
     const merchantId = process.env.VULT_MERCHANT_ID;
-    let privateKey = process.env.VULT_PRIVATE_KEY;
+    const rawPrivateKey = process.env.VULT_PRIVATE_KEY;
 
-    if (!merchantId || !privateKey) {
-      return res.status(500).json({ error: 'Vult API credentials (MERCHANT_ID or PRIVATE_KEY) are missing in Vercel.' });
+    if (!merchantId || !rawPrivateKey) {
+      return res.status(500).json({ 
+        error: 'Vult API configuration missing: VULT_MERCHANT_ID or VULT_PRIVATE_KEY is unassigned in Vercel.' 
+      });
     }
 
-    if (privateKey.includes('\\n')) {
-      privateKey = privateKey.replace(/\\n/g, '\n');
-    }
+    const formattedPrivateKey = formatPemPrivateKey(rawPrivateKey);
 
     // Map top-up method to Vult's strict schema enum: 'momo', 'card', or 'in-app'
     let vultType = 'in-app';
@@ -41,19 +60,28 @@ export default async function handler(req, res) {
       }
     };
 
-    // Serialize payload once to ensure identical bytes for signature and request body
+    // Serialize payload once to ensure identical string for signature generation and HTTP body
     const bodyString = JSON.stringify(requestBody);
 
-    // Generate RSA-SHA512 Signature with PSS Padding (matching Vult's official Node snippet)
+    // Generate RSA-SHA512 Signature with PSS Padding (matching Vult's official spec)[cite: 1]
     const signer = crypto.createSign('RSA-SHA512');
     signer.update(bodyString);
-    const signature = signer.sign({
-      key: privateKey,
-      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-      saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
-    }, 'base64');
+    
+    let signature;
+    try {
+      signature = signer.sign({
+        key: formattedPrivateKey,
+        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+        saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+      }, 'base64');
+    } catch (pemError) {
+      console.error('RSA Signing Error:', pemError);
+      return res.status(500).json({ 
+        error: 'Failed to generate Vult cryptographic signature. Check VULT_PRIVATE_KEY PEM format.' 
+      });
+    }
 
-    // Call Vult PROD API
+    // Call Vult PROD API endpoint[cite: 1]
     const vultRes = await fetch('https://wallet.vultme.io/api/merchants/private/v1/payment-links', {
       method: 'POST',
       headers: {
@@ -65,19 +93,24 @@ export default async function handler(req, res) {
 
     const resText = await vultRes.text();
     let data;
-    try {
-      data = JSON.parse(resText);
-    } catch {
-      data = { raw: resText };
-    }
+    try { data = JSON.parse(resText); } catch { data = { raw: resText }; }
 
     if (!vultRes.ok) {
-      console.error('Vult API Error:', resText);
-      const detailMsg = data?.message || data?.error || resText || 'Failed to generate payment link';
-      return res.status(vultRes.status).json({ error: `Vult Error (${vultRes.status}): ${detailMsg}` });
+      console.error(`Vult API Rejected Request (${vultRes.status}):`, resText);
+      
+      // If 403, output specific signature troubleshooting step
+      if (vultRes.status === 403) {
+        return res.status(403).json({ 
+          error: `Vult 403 Forbidden: Signature or Merchant ID mismatch. Verify VULT_MERCHANT_ID matches the RSA key registered with Vult.` 
+        });
+      }
+
+      return res.status(vultRes.status).json({ 
+        error: `Vult Error (${vultRes.status}): ${data?.message || data?.error || resText}` 
+      });
     }
 
-    // Record pending transaction in Supabase
+    // Store pending payment record in Supabase
     const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -100,7 +133,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('Vult Checkout Exception:', error);
+    console.error('Vult Checkout Route Exception:', error);
     return res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 }
