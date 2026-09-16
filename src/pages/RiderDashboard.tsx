@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Car, Package, Truck, Navigation, MapPin, ShieldCheck, X, Wallet, Bell, Loader2, Lock, RefreshCw } from 'lucide-react';
+import { Car, Package, Truck, Navigation, MapPin, ShieldCheck, X, Wallet, Bell, Loader2, Lock, RefreshCw, Smartphone, CreditCard, ArrowUpRight } from 'lucide-react';
 
 type VehicleType = 'car' | 'keke' | 'bike' | 'truck';
 
@@ -16,9 +16,17 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
   const [isRequesting, setIsRequesting] = useState(false);
   const [activeBooking, setActiveBooking] = useState<any>(null);
 
+  // Top-Up Modal State
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
+  const [fundingMethod, setFundingMethod] = useState<'momo' | 'card'>('momo');
   const [topUpAmount, setTopUpAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Withdrawal Modal State
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawPhone, setWithdrawPhone] = useState(profile?.phone || '');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   const vehicleOptions = [
     { id: 'car', name: 'MatMove Comfort', icon: Car, base: 15, perKm: 7 },
@@ -97,7 +105,7 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
         body: JSON.stringify({
           amount: topUpAmount,
           userId: profile.id,
-          type: 'in-app'
+          type: fundingMethod
         })
       });
 
@@ -109,12 +117,44 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
 
       if (data.link) {
         window.location.href = data.link;
-      } else {
-        alert('Payment link generation failed.');
+      } else if (data.code) {
+        alert(`Dial USSD code to authorize payment: ${data.code}`);
       }
     } catch (err: any) {
       alert(err.message || 'Payment failed');
       setIsProcessing(false);
+    }
+  };
+
+  // Vult Cashout Execution
+  const executeWithdrawal = async () => {
+    const amt = Number(withdrawAmount);
+    if (!amt || amt <= 0) return alert('Enter a valid withdrawal amount');
+    if (amt > Number(localWallet?.balance || 0)) return alert('Insufficient wallet balance');
+    if (!withdrawPhone.trim()) return alert('Enter a valid Mobile Money number');
+
+    setIsWithdrawing(true);
+    try {
+      const res = await fetch('/api/create-vult-payout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amt,
+          userId: profile.id,
+          destinationPhone: withdrawPhone
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Withdrawal failed');
+
+      alert(`Cashout of SLE ${amt} requested! Funds will be transferred to ${withdrawPhone} via Vult.`);
+      setIsWithdrawing(false);
+      setIsWithdrawModalOpen(false);
+      refreshWallet();
+    } catch (err: any) {
+      alert(err.message || 'Cashout request failed');
+      setIsWithdrawing(false);
     }
   };
 
@@ -141,7 +181,10 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
             <h1 className="text-3xl font-bold text-slate-900">Where to, {firstName}? 👋</h1>
             <p className="text-slate-500 mt-1">Book a ride or delivery across Sierra Leone</p>
           </div>
-          <button onClick={() => setIsTopUpModalOpen(true)} className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-emerald-700 transition shadow-sm">+ Load Wallet</button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setIsTopUpModalOpen(true)} className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-emerald-700 transition shadow-sm">+ Load Wallet</button>
+            <button onClick={() => setIsWithdrawModalOpen(true)} className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-800 transition shadow-sm">Withdraw</button>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-6">
@@ -244,23 +287,62 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
         </div>
       </div>
 
-      {/* Vult Top-Up Modal */}
+      {/* Vult Dual Top-Up Modal */}
       {isTopUpModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full relative shadow-2xl">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={() => setIsTopUpModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
-            <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center">
-                <ShieldCheck size={32} />
+            <h2 className="text-2xl font-bold mb-1">Top Up Wallet</h2>
+            <p className="text-sm text-slate-500 mb-6">Choose how you want to fund your rider wallet via Vult.</p>
+
+            <div className="space-y-3 mb-6">
+              <button type="button" onClick={() => setFundingMethod('momo')} className={`w-full p-4 rounded-2xl border-2 flex items-center gap-4 text-left transition ${fundingMethod === 'momo' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200'}`}>
+                <div className="p-3 rounded-xl bg-blue-100 text-blue-600"><Smartphone size={22} /></div>
+                <div>
+                  <div className="font-bold text-slate-900 text-sm">Mobile Money</div>
+                  <div className="text-xs text-slate-500">Instant MoMo checkout via Vult</div>
+                </div>
+              </button>
+
+              <button type="button" onClick={() => setFundingMethod('card')} className={`w-full p-4 rounded-2xl border-2 flex items-center gap-4 text-left transition ${fundingMethod === 'card' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200'}`}>
+                <div className="p-3 rounded-xl bg-emerald-100 text-emerald-600"><CreditCard size={22} /></div>
+                <div>
+                  <div className="font-bold text-slate-900 text-sm">Bank Card</div>
+                  <div className="text-xs text-slate-500">Visa / Mastercard checkout via Vult</div>
+                </div>
+              </button>
+            </div>
+
+            <input type="number" placeholder="Amount (SLE)" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 focus:ring-2 focus:ring-blue-600 outline-none" />
+            
+            <button onClick={executeTopUp} disabled={isProcessing || !topUpAmount} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />} Proceed to Vult Checkout
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Vult Cashout Modal */}
+      {isWithdrawModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Withdraw Rider Balance</h2>
+            <p className="text-sm text-slate-500 mb-6">Transfer rider funds to Mobile Money via Vult.</p>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Withdrawal Amount (SLE)</label>
+                <input type="number" placeholder="0.00" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:ring-2 focus:ring-emerald-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Mobile Money Phone Number</label>
+                <input type="tel" placeholder="+232..." value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none focus:ring-2 focus:ring-emerald-500" />
               </div>
             </div>
-            <h2 className="text-2xl font-bold mb-2 text-center">Top Up via Vult</h2>
-            <p className="text-sm text-slate-500 text-center mb-6">Enter the amount of SLE you want to load into your rider wallet.</p>
 
-            <input type="number" placeholder="Amount (SLE)" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 focus:ring-2 focus:ring-indigo-500 outline-none" />
-            
-            <button onClick={executeTopUp} disabled={isProcessing || !topUpAmount} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition">
-              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />} Proceed to Vult Checkout
+            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Vult Cashout
             </button>
           </div>
         </div>

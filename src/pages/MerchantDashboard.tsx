@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Store, Wallet, RefreshCw, AlertCircle, ShieldCheck, X, Loader2, Lock, Plus, Package } from 'lucide-react';
+import { Store, Wallet, RefreshCw, AlertCircle, ShieldCheck, X, Loader2, Lock, Plus, Package, Smartphone, CreditCard, ArrowUpRight } from 'lucide-react';
 
 export function MerchantDashboard({ profile, wallet, onOpenWithdraw }: any) {
   const [localProfile, setLocalProfile] = useState(profile);
@@ -9,8 +9,15 @@ export function MerchantDashboard({ profile, wallet, onOpenWithdraw }: any) {
 
   // Top-Up Modal State
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
+  const [fundingMethod, setFundingMethod] = useState<'momo' | 'card'>('momo');
   const [topUpAmount, setTopUpAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Withdrawal Modal State
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawPhone, setWithdrawPhone] = useState(profile?.phone || '');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   const isApproved = localProfile?.kyc_status === 'approved';
 
@@ -54,7 +61,7 @@ export function MerchantDashboard({ profile, wallet, onOpenWithdraw }: any) {
         body: JSON.stringify({
           amount: topUpAmount,
           userId: profile.id,
-          type: 'in-app'
+          type: fundingMethod
         })
       });
 
@@ -66,12 +73,44 @@ export function MerchantDashboard({ profile, wallet, onOpenWithdraw }: any) {
 
       if (data.link) {
         window.location.href = data.link;
-      } else {
-        alert('Payment link generation failed.');
+      } else if (data.code) {
+        alert(`Dial USSD code to authorize payment: ${data.code}`);
       }
     } catch (err: any) {
       alert(err.message || 'Payment failed');
       setIsProcessing(false);
+    }
+  };
+
+  // Vult Cashout Execution
+  const executeWithdrawal = async () => {
+    const amt = Number(withdrawAmount);
+    if (!amt || amt <= 0) return alert('Enter a valid withdrawal amount');
+    if (amt > Number(localWallet?.balance || 0)) return alert('Insufficient wallet balance');
+    if (!withdrawPhone.trim()) return alert('Enter a valid Mobile Money number');
+
+    setIsWithdrawing(true);
+    try {
+      const res = await fetch('/api/create-vult-payout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amt,
+          userId: profile.id,
+          destinationPhone: withdrawPhone
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Withdrawal failed');
+
+      alert(`Cashout of SLE ${amt} requested! Funds will be transferred to ${withdrawPhone} via Vult.`);
+      setIsWithdrawing(false);
+      setIsWithdrawModalOpen(false);
+      refreshData();
+    } catch (err: any) {
+      alert(err.message || 'Cashout request failed');
+      setIsWithdrawing(false);
     }
   };
 
@@ -126,9 +165,9 @@ export function MerchantDashboard({ profile, wallet, onOpenWithdraw }: any) {
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
             <div>
               <h3 className="font-bold text-slate-900 text-sm">Payout Access</h3>
-              <p className="text-slate-500 text-xs mt-1">Withdraw funds to your connected Sierra Leone bank or mobile wallet.</p>
+              <p className="text-slate-500 text-xs mt-1">Withdraw store funds to Mobile Money via Vult.</p>
             </div>
-            <button onClick={onOpenWithdraw} disabled={!isApproved} className={`w-full font-bold p-3 rounded-xl transition text-xs shadow-sm ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'}`}>
+            <button onClick={() => setIsWithdrawModalOpen(true)} disabled={!isApproved} className={`w-full font-bold p-3 rounded-xl transition text-xs shadow-sm ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'}`}>
               {isApproved ? 'Withdraw Funds' : 'Withdrawals Locked (Pending KYC)'}
             </button>
           </div>
@@ -151,23 +190,62 @@ export function MerchantDashboard({ profile, wallet, onOpenWithdraw }: any) {
         </div>
       </div>
 
-      {/* Vult Top-Up Modal */}
+      {/* Vult Dual Top-Up Modal */}
       {isTopUpModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full relative shadow-2xl">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={() => setIsTopUpModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
-            <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center">
-                <ShieldCheck size={32} />
+            <h2 className="text-2xl font-bold mb-1">Top Up Wallet</h2>
+            <p className="text-sm text-slate-500 mb-6">Choose how you want to fund your merchant wallet via Vult.</p>
+
+            <div className="space-y-3 mb-6">
+              <button type="button" onClick={() => setFundingMethod('momo')} className={`w-full p-4 rounded-2xl border-2 flex items-center gap-4 text-left transition ${fundingMethod === 'momo' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200'}`}>
+                <div className="p-3 rounded-xl bg-blue-100 text-blue-600"><Smartphone size={22} /></div>
+                <div>
+                  <div className="font-bold text-slate-900 text-sm">Mobile Money</div>
+                  <div className="text-xs text-slate-500">Instant MoMo checkout via Vult</div>
+                </div>
+              </button>
+
+              <button type="button" onClick={() => setFundingMethod('card')} className={`w-full p-4 rounded-2xl border-2 flex items-center gap-4 text-left transition ${fundingMethod === 'card' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200'}`}>
+                <div className="p-3 rounded-xl bg-emerald-100 text-emerald-600"><CreditCard size={22} /></div>
+                <div>
+                  <div className="font-bold text-slate-900 text-sm">Bank Card</div>
+                  <div className="text-xs text-slate-500">Visa / Mastercard checkout via Vult</div>
+                </div>
+              </button>
+            </div>
+
+            <input type="number" placeholder="Amount (SLE)" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 focus:ring-2 focus:ring-blue-600 outline-none" />
+            
+            <button onClick={executeTopUp} disabled={isProcessing || !topUpAmount} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />} Proceed to Vult Checkout
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Vult Cashout Modal */}
+      {isWithdrawModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Withdraw Store Earnings</h2>
+            <p className="text-sm text-slate-500 mb-6">Transfer store funds to Mobile Money via Vult.</p>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Withdrawal Amount (SLE)</label>
+                <input type="number" placeholder="0.00" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:ring-2 focus:ring-emerald-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Mobile Money Phone Number</label>
+                <input type="tel" placeholder="+232..." value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none focus:ring-2 focus:ring-emerald-500" />
               </div>
             </div>
-            <h2 className="text-2xl font-bold mb-2 text-center">Top Up via Vult</h2>
-            <p className="text-sm text-slate-500 text-center mb-6">Enter the amount of SLE you want to load into your merchant wallet.</p>
 
-            <input type="number" placeholder="Amount (SLE)" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 focus:ring-2 focus:ring-indigo-500 outline-none" />
-            
-            <button onClick={executeTopUp} disabled={isProcessing || !topUpAmount} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition">
-              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />} Proceed to Vult Checkout
+            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Vult Cashout
             </button>
           </div>
         </div>
