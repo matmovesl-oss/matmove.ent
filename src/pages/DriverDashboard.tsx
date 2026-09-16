@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Power, MapPin, Navigation, Wallet, Clock, ShieldCheck, Bell, Radio, RefreshCw, AlertCircle } from 'lucide-react';
+import { Power, MapPin, Navigation, Wallet, ShieldCheck, Radio, RefreshCw, AlertCircle, Loader2, Lock, X } from 'lucide-react';
 
 export function DriverDashboard({ profile, wallet, onOpenWithdraw }: any) {
-  // Use local state so we can refresh without reloading the page
   const [localProfile, setLocalProfile] = useState(profile);
   const [localWallet, setLocalWallet] = useState(wallet);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -12,17 +11,33 @@ export function DriverDashboard({ profile, wallet, onOpenWithdraw }: any) {
   const [maxRadius, setMaxRadius] = useState<number>(5);
   const [activeRequests, setActiveRequests] = useState<any[]>([]);
 
+  // Top-Up Modal State
+  const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+
   const isApproved = localProfile?.kyc_status === 'approved';
 
-  // The Live Refresh Function
+  // Live Wallet Real-Time Listener
+  useEffect(() => {
+    if (!profile?.id) return;
+    const channel = supabase.channel(`driver-wallet-${profile.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'wallets', filter: `user_id=eq.${profile.id}` }, 
+        (payload) => {
+          setLocalWallet(payload.new);
+          alert('Wallet balance updated successfully!');
+        }
+      ).subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [profile?.id]);
+
   const refreshData = async () => {
     setIsRefreshing(true);
     try {
-      // 1. Refresh Wallet
       const { data: wData } = await supabase.from('wallets').select('*').eq('user_id', profile.id).single();
       if (wData) setLocalWallet(wData);
 
-      // 2. Refresh Profile (Checks if Admin approved them!)
       const { data: pData } = await supabase.from('profiles').select('*').eq('id', profile.id).single();
       if (pData) setLocalProfile(pData);
     } catch (err) {
@@ -62,8 +77,40 @@ export function DriverDashboard({ profile, wallet, onOpenWithdraw }: any) {
       await supabase.from('wallets').update({ balance: newBalance }).eq('user_id', profile.id);
 
       alert(`Trip completed! SLE ${booking.fare_amount} added to your wallet.`);
-      refreshData(); // Live update UI instead of page reload
+      refreshData();
     } catch (err: any) { alert('Failed to complete trip: ' + err.message); }
+  };
+
+  // Cryptographic Vult Checkout Request
+  const executeTopUp = async () => {
+    if (!topUpAmount || Number(topUpAmount) <= 0) return alert('Enter a valid amount');
+    setIsProcessing(true);
+    try {
+      const res = await fetch('/api/create-vult-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: topUpAmount,
+          userId: profile.id,
+          type: 'in-app'
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gateway initialization failed');
+
+      setIsProcessing(false);
+      setIsTopUpModalOpen(false);
+
+      if (data.link) {
+        window.location.href = data.link;
+      } else {
+        alert('Payment link generation failed.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Payment failed');
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -80,6 +127,9 @@ export function DriverDashboard({ profile, wallet, onOpenWithdraw }: any) {
         </div>
         
         <div className="flex items-center gap-4">
+          <button onClick={() => setIsTopUpModalOpen(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition">
+            + Load Wallet
+          </button>
           <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
             <Radio size={14} className="text-blue-600" />
             <span className="text-xs font-bold text-slate-700">Radius:</span>
@@ -96,8 +146,6 @@ export function DriverDashboard({ profile, wallet, onOpenWithdraw }: any) {
 
       <div className="flex-1 flex flex-col lg:flex-row">
         <div className="w-full lg:w-96 bg-white border-r border-slate-200 flex flex-col p-6 space-y-6 overflow-y-auto">
-          
-          {/* KYC Status Banner */}
           {!isApproved && (
             <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-start gap-3">
               <AlertCircle className="text-amber-500 mt-0.5" size={20} />
@@ -108,15 +156,9 @@ export function DriverDashboard({ profile, wallet, onOpenWithdraw }: any) {
             </div>
           )}
 
-          {/* Live Wallet Section */}
           <div className="grid grid-cols-2 gap-3 relative">
             <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl relative">
-              <button 
-                onClick={refreshData} 
-                disabled={isRefreshing}
-                className="absolute top-3 right-3 p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600 transition"
-                title="Refresh Wallet Balance"
-              >
+              <button onClick={refreshData} disabled={isRefreshing} className="absolute top-3 right-3 p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600 transition" title="Refresh Wallet Balance">
                 <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
               </button>
               <div className="text-slate-500 mb-1"><Wallet size={20} /></div>
@@ -130,20 +172,10 @@ export function DriverDashboard({ profile, wallet, onOpenWithdraw }: any) {
             </div>
           </div>
 
-          {/* KYC Locked Withdrawal Button */}
-          <button 
-            onClick={onOpenWithdraw} 
-            disabled={!isApproved}
-            className={`w-full font-bold p-3.5 rounded-xl transition shadow-sm ${
-              isApproved 
-                ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
-                : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-            }`}
-          >
+          <button onClick={onOpenWithdraw} disabled={!isApproved} className={`w-full font-bold p-3.5 rounded-xl transition shadow-sm ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'}`}>
             {isApproved ? 'Withdraw Earnings' : 'Withdrawals Locked (Pending KYC)'}
           </button>
 
-          {/* Dispatch Radar */}
           <div className="flex-1">
             <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
               <MapPin size={18} className="text-blue-600" /> Dispatch Radar
@@ -195,6 +227,28 @@ export function DriverDashboard({ profile, wallet, onOpenWithdraw }: any) {
           <iframe title="Driver Radar Map" width="100%" height="100%" className="absolute inset-0 border-0" src="https://maps.google.com/maps?q=Freetown,Sierra%20Leone&t=&z=14&ie=UTF8&iwloc=&output=embed" />
         </div>
       </div>
+
+      {/* Vult Top-Up Modal */}
+      {isTopUpModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full relative shadow-2xl">
+            <button onClick={() => setIsTopUpModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center">
+                <ShieldCheck size={32} />
+              </div>
+            </div>
+            <h2 className="text-2xl font-bold mb-2 text-center">Top Up via Vult</h2>
+            <p className="text-sm text-slate-500 text-center mb-6">Enter the amount of SLE you want to load into your driver wallet.</p>
+
+            <input type="number" placeholder="Amount (SLE)" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 focus:ring-2 focus:ring-indigo-500 outline-none" />
+            
+            <button onClick={executeTopUp} disabled={isProcessing || !topUpAmount} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition">
+              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />} Proceed to Vult Checkout
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Car, Package, Truck, Navigation, MapPin, ShieldCheck, X, Wallet, Bell, Loader2, Lock, Smartphone, CreditCard, RefreshCw } from 'lucide-react';
+import { Car, Package, Truck, Navigation, MapPin, ShieldCheck, X, Wallet, Bell, Loader2, Lock, RefreshCw } from 'lucide-react';
 
 type VehicleType = 'car' | 'keke' | 'bike' | 'truck';
 
@@ -18,7 +18,6 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
 
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState('');
-  const [provider, setProvider] = useState<'mobile_money' | 'card' | 'flot' | 'vult'>('mobile_money');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const vehicleOptions = [
@@ -28,70 +27,36 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
     { id: 'truck', name: 'Haulage Truck', icon: Truck, base: 80, perKm: 20 },
   ];
 
-  // ==========================================
-  // PAYMENT RETURN VERIFICATION SEQUENCE
-  // ==========================================
+  // Live Wallet Real-Time Listener
   useEffect(() => {
     if (!profile?.id) return;
-
-    const params = new URLSearchParams(window.location.search);
-    const paymentStatus = params.get('payment');
-    const loadedAmount = Number(params.get('amount'));
-    const returnedUserId = params.get('user_id');
-
-    if (paymentStatus === 'success' && loadedAmount > 0 && returnedUserId === profile.id) {
-      const verifyAndCredit = async () => {
-        try {
-          // 1. Instantly wipe the URL clean so they can't refresh and cheat the system
-          window.history.replaceState({}, document.title, window.location.pathname);
-
-          // 2. Fetch the absolute latest balance directly from Supabase
-          const { data: dbWallet, error: fetchErr } = await supabase
-            .from('wallets')
-            .select('balance')
-            .eq('user_id', profile.id)
-            .single();
-
-          if (fetchErr) throw fetchErr;
-
-          const newBalance = Number(dbWallet.balance || 0) + loadedAmount;
-
-          // 3. Securely update the wallet with the new money
-          const { error: updateErr } = await supabase
-            .from('wallets')
-            .update({ balance: newBalance })
-            .eq('user_id', profile.id);
-
-          if (updateErr) throw updateErr;
-
-          // 4. Update the screen and notify the user
-          setLocalWallet({ ...localWallet, balance: newBalance });
-          alert(`Payment Successful! SLE ${loadedAmount} has been credited to your MatMove wallet.`);
-
-        } catch (err: any) {
-          console.error('Wallet credit failed:', err);
-          alert('Payment received, but wallet sync failed. Please check with an Admin.');
+    const channel = supabase.channel(`rider-wallet-${profile.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'wallets', filter: `user_id=eq.${profile.id}` }, 
+        (payload) => {
+          setLocalWallet(payload.new);
+          alert('Vult Payment Processed! Wallet balance updated.');
         }
-      };
+      ).subscribe();
 
-      verifyAndCredit();
-    }
+    return () => { supabase.removeChannel(channel); };
   }, [profile?.id]);
 
-  // Refresh Button Logic
   const refreshWallet = async () => {
     setIsRefreshing(true);
     try {
       const { data: wData } = await supabase.from('wallets').select('*').eq('user_id', profile.id).single();
       if (wData) setLocalWallet(wData);
-    } catch (err) { console.error('Failed to refresh', err); } finally { setIsRefreshing(false); }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   useEffect(() => {
     if (!pickup || !destination) { setFareEstimate(null); return; }
     const activeVehicle = vehicleOptions.find((v) => v.id === selectedVehicle);
-    const calculated = (activeVehicle?.base || 15) + 6.5 * (activeVehicle?.perKm || 7);
-    setFareEstimate(Math.round(calculated));
+    setFareEstimate(Math.round((activeVehicle?.base || 15) + 6.5 * (activeVehicle?.perKm || 7)));
   }, [pickup, destination, selectedVehicle]);
 
   useEffect(() => {
@@ -103,10 +68,8 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
   }, [activeBooking]);
 
   const requestTrip = async () => {
-    if (!pickup || !destination || !fareEstimate) return alert('Please enter pickup and destination.');
-    if (Number(localWallet?.balance || 0) < fareEstimate) {
-      return alert(`Insufficient funds. Please top up your wallet by at least SLE ${fareEstimate - Number(localWallet?.balance)}.`);
-    }
+    if (!pickup || !destination || !fareEstimate) return alert('Enter pickup and destination.');
+    if (Number(localWallet?.balance || 0) < fareEstimate) return alert(`Insufficient funds. Please top up your wallet.`);
 
     setIsRequesting(true);
     try {
@@ -120,45 +83,37 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
 
   const cancelTrip = async () => {
     if (!activeBooking) return;
-    try {
-      await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', activeBooking.id);
-      setActiveBooking(null);
-    } catch (err) { console.error('Failed to cancel trip', err); }
+    try { await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', activeBooking.id); setActiveBooking(null); } catch (err) {}
   };
 
+  // Cryptographic Vult Checkout Request
   const executeTopUp = async () => {
     if (!topUpAmount || Number(topUpAmount) <= 0) return alert('Enter a valid amount');
     setIsProcessing(true);
-    
     try {
-      // 1. Build the Secure Return URL with the user's ID and the Amount they requested
-      const returnUrl = encodeURIComponent(`${window.location.origin}/customer/rider?payment=success&amount=${topUpAmount}&user_id=${profile.id}`);
-      
-      let checkoutUrl = '';
+      const res = await fetch('/api/create-vult-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: topUpAmount,
+          userId: profile.id,
+          type: 'in-app'
+        })
+      });
 
-      // 2. SMART ROUTING ENGINE
-      if (provider === 'mobile_money' || provider === 'card') {
-        // MONNIFY: Replace 'YOUR_MONNIFY_LINK' with your actual Monnify checkout link
-        // You can attach parameters based on how your Monnify checkout page reads them.
-        checkoutUrl = `https://your_monnify_link.com/pay?amount=${topUpAmount}&ref=${profile.id}&redirect=${returnUrl}`;
-        
-      } else if (provider === 'flot') {
-        // FLOT
-        checkoutUrl = `https://pay.flotme.ai/matmove?amount=${topUpAmount}&reference=${profile.id}&return_url=${returnUrl}`;
-        
-      } else if (provider === 'vult') {
-        // VULT
-        checkoutUrl = `https://pay.vult.app/matmove?amount=${topUpAmount}&reference=${profile.id}&return_url=${returnUrl}`;
-      }
-      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gateway initialization failed');
+
       setIsProcessing(false);
       setIsTopUpModalOpen(false);
 
-      // Redirect to the assigned Gateway
-      window.location.href = checkoutUrl;
-      
+      if (data.link) {
+        window.location.href = data.link;
+      } else {
+        alert('Payment link generation failed.');
+      }
     } catch (err: any) {
-      alert(err.message || 'Failed to initialize payment.');
+      alert(err.message || 'Payment failed');
       setIsProcessing(false);
     }
   };
@@ -169,7 +124,7 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
     <div className="flex-1 bg-slate-50 min-h-screen">
       <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center sticky top-0 z-10">
         <div className="w-1/2">
-          <input type="text" placeholder="Search rides, destinations..." className="w-full bg-slate-100 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 outline-none" />
+          <input type="text" placeholder="Search rides, destinations..." className="w-full bg-slate-100 border-none rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-600" />
         </div>
         <div className="flex items-center gap-6">
           <button className="relative text-slate-400 hover:text-slate-600"><Bell size={20} /></button>
@@ -191,17 +146,10 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
 
         <div className="grid grid-cols-3 gap-6">
           <div className="col-span-2 bg-blue-700 rounded-3xl p-6 text-white relative overflow-hidden shadow-lg flex justify-between items-center">
-            
-            {/* Live Refresh Button */}
-            <button 
-              onClick={refreshWallet} 
-              disabled={isRefreshing}
-              className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-xl text-white transition flex items-center gap-2 text-xs font-bold"
-            >
+            <button onClick={refreshWallet} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-xl text-white transition flex items-center gap-2 text-xs font-bold">
               <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
               {isRefreshing ? 'Syncing...' : 'Refresh Balance'}
             </button>
-
             <div>
               <span className="text-blue-200 text-xs font-bold uppercase tracking-wider">Available Rider Wallet</span>
               <div className="text-4xl font-bold mt-1">SLE {Number(localWallet?.balance || 0).toLocaleString()}</div>
@@ -296,52 +244,24 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
         </div>
       </div>
 
-      {/* Unified Secure Checkout Modal */}
+      {/* Vult Top-Up Modal */}
       {isTopUpModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl relative">
-            <button onClick={() => setIsTopUpModalOpen(false)} className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full"><X size={20} /></button>
-            
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">Secure Top-Up</h2>
-            <p className="text-sm text-slate-500 mb-6">How would you like to load your wallet?</p>
-
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { id: 'mobile_money', name: 'Mobile Money', icon: Smartphone, color: 'text-orange-600', bg: 'bg-orange-50' },
-                  { id: 'card', name: 'Bank Card', icon: CreditCard, color: 'text-blue-600', bg: 'bg-blue-50' },
-                  { id: 'flot', name: 'Flot Wallet', icon: Wallet, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                  { id: 'vult', name: 'Vult Wallet', icon: ShieldCheck, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-                ].map((p) => {
-                  const ProviderIcon = p.icon;
-                  return (
-                    <button key={p.id} type="button" onClick={() => setProvider(p.id as any)} className={`p-3 border rounded-xl cursor-pointer transition flex items-center gap-3 ${provider === p.id ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-600/20' : 'border-slate-200 hover:border-slate-300'}`}>
-                      <div className={`p-2 rounded-lg ${p.bg} ${p.color}`}><ProviderIcon size={18} /></div>
-                      <span className="text-xs font-bold text-slate-900">{p.name}</span>
-                    </button>
-                  );
-                })}
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full relative shadow-2xl">
+            <button onClick={() => setIsTopUpModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center">
+                <ShieldCheck size={32} />
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Amount to Load (SLE)</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">SLE</span>
-                  <input type="number" min="1" placeholder="0.00" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="w-full border border-slate-300 py-4 pl-14 pr-4 rounded-xl text-2xl font-bold outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
-                </div>
-              </div>
-
-              <button type="button" onClick={executeTopUp} disabled={isProcessing || !topUpAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl hover:bg-slate-800 transition flex items-center justify-center gap-2 disabled:opacity-50">
-                {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />}
-                {isProcessing ? 'Securing Connection...' : provider === 'mobile_money' || provider === 'card' ? 'Pay securely via Monnify' : `Pay via ${provider === 'vult' ? 'VULT' : 'FLOT'}`}
-              </button>
             </div>
+            <h2 className="text-2xl font-bold mb-2 text-center">Top Up via Vult</h2>
+            <p className="text-sm text-slate-500 text-center mb-6">Enter the amount of SLE you want to load into your rider wallet.</p>
+
+            <input type="number" placeholder="Amount (SLE)" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 focus:ring-2 focus:ring-indigo-500 outline-none" />
             
-            <div className="mt-6 text-center">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2">
-                <Lock size={12} /> Encrypted Gateway
-              </span>
-            </div>
+            <button onClick={executeTopUp} disabled={isProcessing || !topUpAmount} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition">
+              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />} Proceed to Vult Checkout
+            </button>
           </div>
         </div>
       )}
