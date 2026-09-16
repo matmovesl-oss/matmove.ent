@@ -185,12 +185,12 @@ export function WalletPage({
     : 'MatMove Wallet';
 
   const roleDescription = isRider
-    ? 'Fund your wallet via Vult or withdraw available balances once verified.'
+    ? 'Fund your wallet securely or withdraw available balances once verified.'
     : isDriver
-    ? 'Receive MatMove payments, load your wallet via Vult, and withdraw available earnings.'
+    ? 'Receive MatMove payments, load your wallet securely, and withdraw available earnings.'
     : isMerchant
-    ? 'Receive store payments, load your wallet via Vult, and withdraw available earnings.'
-    : 'Manage your MatMove wallet and permitted Vult transactions.';
+    ? 'Receive store payments, load your wallet securely, and withdraw available earnings.'
+    : 'Manage your MatMove wallet and permitted transactions.';
 
   const withdrawalStatusLabel = !isVerified
     ? 'Verification Required'
@@ -198,7 +198,7 @@ export function WalletPage({
     ? 'Wallet Frozen'
     : !hasAvailableSleBalance
     ? 'No Available SLE Funds'
-    : 'Withdraw via Vult MoMo';
+    : 'Withdraw via Mobile Money';
 
   const withdrawalStatusDescription = !isVerified
     ? 'Cash withdrawal becomes available after MatMove Admin approves your account verification.'
@@ -208,7 +208,7 @@ export function WalletPage({
     ? sleReserved > 0
       ? `${formatMoney(sleReserved, 'SLE')} is reserved for a pending operation. Remaining funds can be withdrawn once released.`
       : 'There are currently no SLE funds available for withdrawal.'
-    : 'Withdraw your available SLE balance directly to your Mobile Money account powered by Vult.';
+    : 'Withdraw your available SLE balance directly to your Mobile Money account powered by Monime/Vult.';
 
   const handleWithdraw = () => {
     if (!canWithdraw) return;
@@ -231,7 +231,7 @@ export function WalletPage({
                 <Wallet size={19} />
               </div>
               <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
-                MatMove Wallet • Vult Gateway
+                MatMove Wallet • Secure Gateway
               </p>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-3">
@@ -263,7 +263,7 @@ export function WalletPage({
             reserved={sleReserved}
             frozen={sleFrozen}
             label="Operating Wallet"
-            description="Receive MatMove payments, fund via MoMo, and cash out via Vult."
+            description="Receive MatMove payments, fund via MoMo, and cash out securely."
             icon={<Banknote size={21} />}
           />
 
@@ -273,7 +273,7 @@ export function WalletPage({
             reserved={usdReserved}
             frozen={usdFrozen}
             label="USD Card Wallet"
-            description="Available for supported USD card top-ups via Vult Gateway."
+            description="Available for supported USD card top-ups via Secure Gateway."
             icon={<CreditCard size={21} />}
           />
         </section>
@@ -318,11 +318,11 @@ export function WalletPage({
             <div className="mt-7 pt-5 border-t border-white/10 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-300">
               <span className="flex items-center gap-2">
                 <ShieldCheck size={14} className="text-emerald-400" />
-                Protected by Vult API
+                Protected by Monime API
               </span>
               <span className="flex items-center gap-2">
                 <ReceiptText size={14} />
-                Signed RSA-4096 Ledger
+                Secure Encrypted Ledger
               </span>
               <span className="flex items-center gap-2">
                 <CheckCircle2 size={14} className="text-emerald-400" />
@@ -340,7 +340,7 @@ export function WalletPage({
                 Wallet Actions
               </h2>
               <p className="text-sm text-slate-500 mt-1">
-                Fund your account or withdraw earnings securely through Vult.
+                Fund your account or withdraw earnings securely through Monime.
               </p>
             </div>
 
@@ -359,23 +359,23 @@ export function WalletPage({
                 </h3>
 
                 <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                  Top up SLE or USD using Vult Mobile Money or Bank Card checkout.
+                  Top up SLE or USD using Mobile Money or Bank Card checkout.
                 </p>
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg">
                     <Smartphone size={13} />
-                    Vult MoMo (SLE)
+                    Mobile Money (SLE)
                   </span>
 
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg">
                     <CreditCard size={13} />
-                    Vult Card (USD)
+                    Bank Card (USD)
                   </span>
                 </div>
 
                 <div className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-blue-600">
-                  Start Vult top-up
+                  Start top-up
                   <span aria-hidden="true">→</span>
                 </div>
               </button>
@@ -424,7 +424,7 @@ export function WalletPage({
                   }`}
                 >
                   {canWithdraw ? (
-                    <ArrowUpUpFromLine size={22} />
+                    <ArrowUpFromLine size={22} />
                   ) : (
                     <LockKeyhole size={22} />
                   )}
@@ -484,14 +484,14 @@ export function WalletPage({
                   Cash withdrawal requires identity approval
                 </p>
                 <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                  You can still access your dashboard, load funds via Vult, and make/receive internal payments. Admin approval is required before you can perform external cash withdrawals to Mobile Money.
+                  You can still access your dashboard, load funds, and make/receive internal payments. Admin approval is required before you can perform external cash withdrawals to Mobile Money.
                 </p>
               </div>
             </div>
           </section>
         )}
 
-        {/* VULT SECURITY SUMMARY */}
+        {/* PAYMENT SECURITY SUMMARY */}
         <section className="bg-slate-100 border border-slate-200 rounded-3xl p-6">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-600 shrink-0">
@@ -499,22 +499,22 @@ export function WalletPage({
             </div>
             <div>
               <h2 className="font-bold text-slate-900">
-                Vult Payment Security
+                Payment Security
               </h2>
               <p className="text-xs text-slate-500 mt-1">
-                MatMove processes financial transactions through encrypted Vult API integrations[cite: 1].
+                MatMove processes financial transactions through secure, encrypted API integrations.
               </p>
             </div>
           </div>
 
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SecurityItem
-              title="RSA-4096 Signatures"
-              text="Payment requests are signed on the backend using RSA-4096 cryptographic signatures[cite: 1]."
+              title="Secure Sessions"
+              text="Payment requests are securely handled via authenticated backend requests."
             />
             <SecurityItem
-              title="Basic Auth Webhooks"
-              text="Provider notifications are protected with Basic Auth to prevent unauthorized manipulation[cite: 1]."
+              title="Automated Webhooks"
+              text="Provider notifications securely update your wallet balance in real-time."
             />
             <SecurityItem
               title="Protected Cashouts"
@@ -522,7 +522,7 @@ export function WalletPage({
             />
             <SecurityItem
               title="No Raw Card Storage"
-              text="Credit and debit cards are processed securely by Vult without touching MatMove servers."
+              text="Credit and debit cards are processed securely without touching MatMove servers."
             />
           </div>
         </section>
