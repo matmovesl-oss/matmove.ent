@@ -11,40 +11,40 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing amount or user ID.' });
     }
 
-    // Load Vult credentials
     const merchantId = process.env.VULT_MERCHANT_ID;
     let privateKey = process.env.VULT_PRIVATE_KEY;
 
     if (!merchantId || !privateKey) {
-      console.error('Missing VULT_MERCHANT_ID or VULT_PRIVATE_KEY in Vercel Environment Variables.');
-      return res.status(500).json({ error: 'Vult payment gateway credentials not configured.' });
+      return res.status(500).json({ error: 'Vult API credentials (MERCHANT_ID or PRIVATE_KEY) are missing in Vercel.' });
     }
 
     if (privateKey.includes('\\n')) {
       privateKey = privateKey.replace(/\\n/g, '\n');
     }
 
-    // Generate unique order ID for reconciliation
-    const orderId = `MM_${userId}_${Date.now()}`;
-
-    // Map payment type to Vult specs
+    // Map top-up method to Vult's strict schema enum: 'momo', 'card', or 'in-app'
     let vultType = 'in-app';
     if (type === 'card') vultType = 'card';
     if (type === 'momo') vultType = 'momo';
 
+    const orderId = `MM_${userId}_${Date.now()}`;
+    const formattedAmount = String(Number(amount));
+
+    // Payload structured strictly according to Vult API spec
     const requestBody = {
       merchantId: merchantId,
       type: vultType,
       payload: {
         orderId: orderId,
         currency: 'SLE',
-        amount: String(amount)
+        amount: formattedAmount
       }
     };
 
+    // Serialize payload once to ensure identical bytes for signature and request body
     const bodyString = JSON.stringify(requestBody);
 
-    // Cryptographic RSA-SHA512 Signature
+    // Generate RSA-SHA512 Signature with PSS Padding (matching Vult's official Node snippet)
     const signer = crypto.createSign('RSA-SHA512');
     signer.update(bodyString);
     const signature = signer.sign({
@@ -63,15 +63,21 @@ export default async function handler(req, res) {
       body: bodyString
     });
 
-    if (!vultRes.ok) {
-      const errText = await vultRes.text();
-      console.error('Vult Gateway Error Response:', errText);
-      return res.status(vultRes.status).json({ error: `Vult Error: ${errText || 'Failed to generate payment link'}` });
+    const resText = await vultRes.text();
+    let data;
+    try {
+      data = JSON.parse(resText);
+    } catch {
+      data = { raw: resText };
     }
 
-    const data = await vultRes.json();
+    if (!vultRes.ok) {
+      console.error('Vult API Error:', resText);
+      const detailMsg = data?.message || data?.error || resText || 'Failed to generate payment link';
+      return res.status(vultRes.status).json({ error: `Vult Error (${vultRes.status}): ${detailMsg}` });
+    }
 
-    // Register pending transaction in Supabase
+    // Record pending transaction in Supabase
     const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -84,14 +90,17 @@ export default async function handler(req, res) {
         amount: Number(amount),
         currency: 'SLE',
         status: 'pending',
-        metadata: { order_id: orderId }
+        metadata: { order_id: orderId, vult_type: vultType }
       });
     }
 
-    return res.status(200).json({ link: data?.data?.link, code: data?.data?.code });
+    return res.status(200).json({ 
+      link: data?.data?.link || data?.link || null, 
+      code: data?.data?.code || data?.code || null 
+    });
 
   } catch (error) {
-    console.error('Create Vult Checkout Exception:', error);
+    console.error('Vult Checkout Exception:', error);
     return res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 }
