@@ -41,8 +41,8 @@ export default async function handler(req, res) {
 
     const formattedPrivateKey = formatPemPrivateKey(rawPrivateKey);
 
-    // Map top-up method to Vult's strict schema enum: 'momo', 'card', or 'in-app'
-    let vultType = 'in-app';
+    // Vult API enum mapping: 'vult', 'card', or 'momo'
+    let vultType = 'vult';
     if (type === 'card') vultType = 'card';
     if (type === 'momo') vultType = 'momo';
 
@@ -63,7 +63,7 @@ export default async function handler(req, res) {
     // Serialize payload once to ensure identical string for signature generation and HTTP body
     const bodyString = JSON.stringify(requestBody);
 
-    // Generate RSA-SHA512 Signature with PSS Padding (matching Vult's official spec)[cite: 1]
+    // Generate RSA-SHA512 Signature with PSS Padding (matching Vult's official spec)
     const signer = crypto.createSign('RSA-SHA512');
     signer.update(bodyString);
     
@@ -81,7 +81,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Call Vult PROD API endpoint[cite: 1]
+    // Call Vult PROD API endpoint
     const vultRes = await fetch('https://wallet.vultme.io/api/merchants/private/v1/payment-links', {
       method: 'POST',
       headers: {
@@ -98,10 +98,9 @@ export default async function handler(req, res) {
     if (!vultRes.ok) {
       console.error(`Vult API Rejected Request (${vultRes.status}):`, resText);
       
-      // If 403, output specific signature troubleshooting step
       if (vultRes.status === 403) {
         return res.status(403).json({ 
-          error: `Vult 403 Forbidden: Signature or Merchant ID mismatch. Verify VULT_MERCHANT_ID matches the RSA key registered with Vult.` 
+          error: `Vult 403 Forbidden: Signature mismatch. Ensure VULT_PRIVATE_KEY in Vercel matches the public key registered with Vult.` 
         });
       }
 
