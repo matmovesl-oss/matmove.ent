@@ -27,25 +27,44 @@ export default async function handler(req, res) {
 
     const rawData = await monimeRes.json();
     if (!monimeRes.ok || rawData.success === false) {
+      console.error("Monime Gateway Rejected:", rawData);
       throw new Error(`Monime rejected wallet creation: ${JSON.stringify(rawData)}`);
     }
 
     const monimeAccountId = rawData.data?.id || rawData.result?.id;
+    console.log("Successfully generated Monime Account ID:", monimeAccountId);
 
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // 2. Upsert the wallet in Supabase to store the Monime Account ID
-    const { error: dbError } = await supabase.from('wallets').upsert({
-      user_id: userId,
-      balance: 0,
-      currency: 'SLE',
-      metadata: { monime_account_id: monimeAccountId }
-    }, { onConflict: 'user_id' });
+    // 2. Safe Database Sync (Bypasses Upsert Constraints)
+    const { data: existingWallet } = await supabase
+      .from('wallets')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle();
 
-    if (dbError) throw dbError;
+    if (existingWallet) {
+      // Wallet already exists (created by frontend or trigger), update it safely
+      const { error: updateError } = await supabase
+        .from('wallets')
+        .update({ metadata: { monime_account_id: monimeAccountId } })
+        .eq('user_id', userId);
+      if (updateError) throw updateError;
+    } else {
+      // Create new wallet row safely
+      const { error: insertError } = await supabase
+        .from('wallets')
+        .insert({
+          user_id: userId,
+          balance: 0,
+          currency: 'SLE',
+          metadata: { monime_account_id: monimeAccountId }
+        });
+      if (insertError) throw insertError;
+    }
 
     return res.status(200).json({ success: true, monime_account_id: monimeAccountId });
   } catch (error) {
