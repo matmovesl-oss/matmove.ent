@@ -1,23 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-  // Monime sends webhooks as POST requests
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   try {
     const payload = req.body;
+    console.log("Incoming Monime Webhook:", JSON.stringify(payload));
     
-    // Optional: Verify Webhook Secret if Monime requires it
-    const webhookSecret = process.env.MONIME_WEBHOOK_SECRET;
-    const incomingSignature = req.headers['x-monime-signature'];
+    // Aggressively extract the session data regardless of where Monime nested it
+    const session = payload.result || payload.data || payload.checkoutSession || payload;
     
-    // Check if the payment was successful
-    if (payload.status !== 'successful') {
-      return res.status(200).json({ message: 'Ignored: Payment not successful' });
-    }
+    // Extract the reference ID needed to find the transaction
+    const reference = session.reference || payload.reference || (session.metadata && session.metadata.reference);
 
-    const reference = payload.reference;
-    const amountPaid = Number(payload.amount);
+    if (!reference) {
+      console.error('Webhook missing reference id. Payload:', JSON.stringify(payload));
+      return res.status(400).json({ error: 'Missing reference' });
+    }
 
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
@@ -34,10 +33,11 @@ export default async function handler(req, res) {
 
     if (txError || !transaction) {
       console.error('Transaction not found or already processed:', reference);
-      return res.status(404).json({ error: 'Transaction not found' });
+      return res.status(200).json({ message: 'Transaction already processed or not found' });
     }
 
     const userId = transaction.user_id;
+    const amountPaid = Number(transaction.amount); 
 
     // 2. Fetch the user's current wallet balance
     const { data: wallet } = await supabase
@@ -46,15 +46,14 @@ export default async function handler(req, res) {
       .eq('user_id', userId)
       .single();
 
-    if (!wallet) throw new Error('Wallet not found');
+    if (!wallet) throw new Error('Wallet not found for user');
 
     const newBalance = Number(wallet.balance) + amountPaid;
 
-    // 3. Update the Wallet and mark Transaction as Completed (Atomic-like operation)
+    // 3. Update the Wallet and mark Transaction as Completed
     await supabase.from('wallets').update({ balance: newBalance }).eq('id', wallet.id);
     await supabase.from('payment_transactions').update({ status: 'completed' }).eq('id', transaction.id);
 
-    // Tell Monime we received the webhook successfully
     return res.status(200).json({ success: true, message: 'Wallet credited successfully' });
 
   } catch (error) {
