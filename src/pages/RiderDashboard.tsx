@@ -104,7 +104,8 @@ export function RiderDashboard({ profile, wallet, onOpenTopUp }: any) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: topUpAmount,
-          userId: profile.id
+          userId: profile.id,
+          role: 'rider' // Dynamically route this specific user role
         })
       });
 
