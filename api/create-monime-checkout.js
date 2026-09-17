@@ -17,14 +17,17 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Monime API credentials missing in Vercel.' });
     }
 
+    // 1. Generate unique reference for this transaction (This acts as our Idempotency Key)
     const reference = `MM_MOMO_${userId}_${Date.now()}`;
 
+    // 2. Call Monime API with the required Idempotency-Key header
     const monimeRes = await fetch('https://api.monime.io/v1/checkout-sessions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
-        'Monime-Space-Id': spaceId
+        'Monime-Space-Id': spaceId,
+        'Idempotency-Key': reference
       },
       body: JSON.stringify({
         name: 'MatMove Wallet Top Up',
@@ -49,7 +52,6 @@ export default async function handler(req, res) {
     if (!monimeRes.ok) {
       console.error("Monime API Rejected:", data);
       
-      // Fixes the [object Object] issue by forcing the error into a readable string
       let errorMessage = 'Unauthorized: Check Monime API Keys';
       if (typeof data.message === 'string') errorMessage = data.message;
       else if (typeof data.error === 'string') errorMessage = data.error;
@@ -58,6 +60,7 @@ export default async function handler(req, res) {
       throw new Error(errorMessage);
     }
 
+    // 3. Save pending transaction to Supabase
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -77,7 +80,6 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Monime Checkout Error:', error);
-    // Ensure we are passing a clean string back to the frontend
     return res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 }
