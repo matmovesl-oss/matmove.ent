@@ -8,7 +8,6 @@ export default function handler(req, res) {
     path = '/merchant-dashboard';
   }
 
-  // 303 forces a standard GET request, bypassing the 405 error
   res.writeHead(303, { Location: path });
   res.end();
 }

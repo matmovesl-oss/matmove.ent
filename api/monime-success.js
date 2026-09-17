@@ -1,5 +1,7 @@
 export default function handler(req, res) {
   const role = req.query.role || 'rider';
+  
+  // Routes directly to the user's dashboard
   let path = '/rider-dashboard';
 
   if (role === 'driver') {
