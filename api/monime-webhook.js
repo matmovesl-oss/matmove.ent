@@ -17,27 +17,38 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // 1. Find the exact transaction using the Reference ID
-    const { data: transaction, error: txError } = await supabase
+    // 1. EXTRACT USER ID FROM THE REFERENCE (Format: MM_MOMO_UserID_Timestamp)
+    const referenceParts = reference.split('_');
+    const userId = referenceParts[2]; // Grabs the user's Supabase UUID directly
+
+    if (!userId) return res.status(400).json({ error: 'Invalid reference format' });
+
+    // 2. Fetch all pending transactions for this specific user (Bypasses JSON search issues)
+    const { data: pendingTxs, error: txError } = await supabase
       .from('payment_transactions')
       .select('*')
-      .eq('metadata->>reference', reference)
-      .eq('status', 'pending')
-      .single();
+      .eq('user_id', userId)
+      .eq('status', 'pending');
 
-    if (txError || !transaction) return res.status(200).json({ message: 'Transaction already processed or not found' });
+    if (txError || !pendingTxs || pendingTxs.length === 0) {
+      return res.status(200).json({ message: 'No pending transactions found for user' });
+    }
 
-    const userId = transaction.user_id;
+    // 3. Find the exact transaction matching this reference
+    const transaction = pendingTxs.find(tx => tx.metadata && tx.metadata.reference === reference);
+    
+    if (!transaction) return res.status(200).json({ message: 'Transaction reference mismatch' });
+
     const amountPaid = Number(transaction.amount); 
 
-    // 2. Fetch the user's current wallet
+    // 4. Fetch the user's current wallet
     let { data: wallet } = await supabase
       .from('wallets')
       .select('id, balance')
       .eq('user_id', userId)
       .single();
 
-    // 3. Auto-Create wallet if missing, otherwise update balance
+    // 5. Auto-Create wallet if missing, otherwise update balance
     if (!wallet) {
       await supabase.from('wallets').insert({
         user_id: userId,
@@ -48,7 +59,7 @@ export default async function handler(req, res) {
       await supabase.from('wallets').update({ balance: newBalance }).eq('id', wallet.id);
     }
 
-    // 4. Mark transaction as completed
+    // 6. Mark transaction as completed
     await supabase.from('payment_transactions').update({ status: 'completed' }).eq('id', transaction.id);
 
     return res.status(200).json({ success: true, message: 'Wallet credited successfully' });
