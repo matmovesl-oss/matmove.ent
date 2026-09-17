@@ -17,10 +17,8 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Monime API credentials missing in Vercel.' });
     }
 
-    // 1. Generate unique reference for this transaction (Idempotency Key)
     const reference = `MM_MOMO_${userId}_${Date.now()}`;
 
-    // 2. Call Monime API
     const monimeRes = await fetch('https://api.monime.io/v1/checkout-sessions', {
       method: 'POST',
       headers: {
@@ -50,23 +48,30 @@ export default async function handler(req, res) {
     const rawData = await monimeRes.json();
 
     if (!monimeRes.ok) {
-      console.error("Monime API Rejected:", rawData);
-      let errorMessage = 'Unauthorized: Check Monime API Keys';
+      let errorMessage = 'Gateway Error';
       if (typeof rawData.message === 'string') errorMessage = rawData.message;
       else if (typeof rawData.error === 'string') errorMessage = rawData.error;
-      else if (rawData.message || rawData.error) errorMessage = JSON.stringify(rawData.message || rawData.error);
-      throw new Error(errorMessage);
+      else errorMessage = JSON.stringify(rawData);
+      throw new Error(`Monime rejected: ${errorMessage}`);
     }
 
-    // Unwrap Monime's response to get the URL
+    // AGGRESSIVE URL EXTRACTION - Stop guessing property names
     const session = rawData.data || rawData;
-    const checkoutLink = session.redirectUrl || session.url;
+    const checkoutLink = session.checkoutUrl || 
+                         session.checkout_url || 
+                         session.redirectUrl || 
+                         session.redirect_url || 
+                         session.url || 
+                         session.link || 
+                         session.paymentUrl ||
+                         rawData.checkoutUrl || 
+                         rawData.checkout_url;
 
+    // IF WE STILL CAN'T FIND IT, DUMP THE RAW JSON TO THE SCREEN
     if (!checkoutLink) {
-      throw new Error("Checkout link not found in Monime response");
+      throw new Error(`DEBUG RAW PAYLOAD: ${JSON.stringify(rawData)}`);
     }
 
-    // 3. Save pending transaction to Supabase
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -79,14 +84,13 @@ export default async function handler(req, res) {
       amount: Number(amount),
       currency: 'SLE',
       status: 'pending',
-      metadata: { reference: reference, session_id: session.id }
+      metadata: { reference: reference, session_id: session.id || reference }
     });
 
-    // 4. Send the correct link to the frontend
     return res.status(200).json({ link: checkoutLink });
 
   } catch (error) {
     console.error('Monime Checkout Error:', error);
-    return res.status(500).json({ error: error.message || 'Internal Server Error' });
+    return res.status(500).json({ error: error.message });
   }
 }
