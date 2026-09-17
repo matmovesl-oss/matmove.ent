@@ -98,7 +98,8 @@ export function DriverDashboard({ profile, wallet, onOpenWithdraw }: any) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: topUpAmount,
-          userId: profile.id
+          userId: profile.id,
+          role: 'driver' // Dynamically route this specific user role
         })
       });
 

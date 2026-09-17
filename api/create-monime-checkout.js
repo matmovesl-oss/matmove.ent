@@ -4,7 +4,8 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   try {
-    const { amount, userId } = req.body;
+    // 1. We now accept 'role' from the frontend
+    const { amount, userId, role } = req.body;
 
     if (!amount || !userId) {
       return res.status(400).json({ error: 'Missing amount or user ID.' });
@@ -18,6 +19,9 @@ export default async function handler(req, res) {
     }
 
     const reference = `MM_MOMO_${userId}_${Date.now()}`;
+    
+    // Default to rider if a role somehow wasn't passed
+    const safeRole = role || 'rider'; 
 
     const monimeRes = await fetch('https://api.monime.io/v1/checkout-sessions', {
       method: 'POST',
@@ -30,16 +34,15 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         name: 'MatMove Wallet Top Up',
         reference: reference,
-        // Routing Monime to our backend safety nets first
-        successUrl: 'https://matmoveent.vercel.app/api/monime-success',
-        cancelUrl: 'https://matmoveent.vercel.app/api/monime-cancel',
+        // 2. Attach the role securely to the return URLs
+        successUrl: `https://matmoveent.vercel.app/api/monime-success?role=${safeRole}`,
+        cancelUrl: `https://matmoveent.vercel.app/api/monime-cancel?role=${safeRole}`,
         lineItems: [
           {
             name: 'Wallet Top Up',
             price: {
               currency: 'SLE',
-              // FIX: Monime requires minor units (cents). 100 SLE * 100 = 10000 minor units
-              value: Math.round(Number(amount) * 100)
+              value: Math.round(Number(amount) * 100) // Minor units format
             },
             quantity: 1
           }
