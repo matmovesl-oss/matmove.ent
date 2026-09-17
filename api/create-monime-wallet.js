@@ -10,7 +10,7 @@ export default async function handler(req, res) {
     const apiKey = process.env.MONIME_API_KEY;
     const spaceId = process.env.MONIME_SPACE_ID;
     
-    // Generate a unique Idempotency-Key for wallet creation
+    // Generate a unique Idempotency-Key
     const idempotencyKey = `MM_WALLET_${userId}_${Date.now()}`;
 
     // 1. Call Monime to create the Financial Account
@@ -20,12 +20,12 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
         'Monime-Space-Id': spaceId,
-        'Idempotency-Key': idempotencyKey // <-- FIX: Added required header
+        'Idempotency-Key': idempotencyKey
       },
       body: JSON.stringify({
         name: `MatMove ${String(role).toUpperCase()} - ${fullName}`,
         currency: 'SLE',
-        reference: userId // Permanently links this Monime ledger to your Supabase User ID
+        reference: userId 
       })
     });
 
@@ -43,30 +43,15 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // 2. Safe Database Sync (Bypasses Upsert Constraints)
-    const { data: existingWallet } = await supabase
+    // 2. Safe Database Sync (Only Update)
+    // The frontend already created the row, so we just cleanly inject the Monime ID into it.
+    const { error: dbError } = await supabase
       .from('wallets')
-      .select('id')
+      .update({ metadata: { monime_account_id: monimeAccountId } })
       .eq('user_id', userId)
-      .maybeSingle();
+      .eq('currency', 'SLE');
 
-    if (existingWallet) {
-      const { error: updateError } = await supabase
-        .from('wallets')
-        .update({ metadata: { monime_account_id: monimeAccountId } })
-        .eq('user_id', userId);
-      if (updateError) throw updateError;
-    } else {
-      const { error: insertError } = await supabase
-        .from('wallets')
-        .insert({
-          user_id: userId,
-          balance: 0,
-          currency: 'SLE',
-          metadata: { monime_account_id: monimeAccountId }
-        });
-      if (insertError) throw insertError;
-    }
+    if (dbError) throw dbError;
 
     return res.status(200).json({ success: true, monime_account_id: monimeAccountId });
   } catch (error) {
