@@ -17,10 +17,8 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Monime API credentials missing in Vercel.' });
     }
 
-    // 1. Generate unique reference for this transaction
     const reference = `MM_MOMO_${userId}_${Date.now()}`;
 
-    // 2. Call Monime API exactly to their specifications
     const monimeRes = await fetch('https://api.monime.io/v1/checkout-sessions', {
       method: 'POST',
       headers: {
@@ -50,10 +48,16 @@ export default async function handler(req, res) {
 
     if (!monimeRes.ok) {
       console.error("Monime API Rejected:", data);
-      throw new Error(data.message || data.error || 'Unauthorized: Check Monime API Keys');
+      
+      // Fixes the [object Object] issue by forcing the error into a readable string
+      let errorMessage = 'Unauthorized: Check Monime API Keys';
+      if (typeof data.message === 'string') errorMessage = data.message;
+      else if (typeof data.error === 'string') errorMessage = data.error;
+      else if (data.message || data.error) errorMessage = JSON.stringify(data.message || data.error);
+      
+      throw new Error(errorMessage);
     }
 
-    // 3. Save pending transaction to Supabase
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -69,12 +73,11 @@ export default async function handler(req, res) {
       metadata: { reference: reference, session_id: data.id }
     });
 
-    // 4. Send the Monime secure checkout URL back to the frontend
-    // Monime returns the URL inside data.redirectUrl
     return res.status(200).json({ link: data.redirectUrl || data.checkout_url });
 
   } catch (error) {
     console.error('Monime Checkout Error:', error);
+    // Ensure we are passing a clean string back to the frontend
     return res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 }
