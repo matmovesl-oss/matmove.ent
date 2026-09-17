@@ -47,7 +47,7 @@ export default async function handler(req, res) {
 
     const rawData = await monimeRes.json();
 
-    if (!monimeRes.ok) {
+    if (!monimeRes.ok || rawData.success === false) {
       let errorMessage = 'Gateway Error';
       if (typeof rawData.message === 'string') errorMessage = rawData.message;
       else if (typeof rawData.error === 'string') errorMessage = rawData.error;
@@ -55,21 +55,12 @@ export default async function handler(req, res) {
       throw new Error(`Monime rejected: ${errorMessage}`);
     }
 
-    // AGGRESSIVE URL EXTRACTION - Stop guessing property names
-    const session = rawData.data || rawData;
-    const checkoutLink = session.checkoutUrl || 
-                         session.checkout_url || 
-                         session.redirectUrl || 
-                         session.redirect_url || 
-                         session.url || 
-                         session.link || 
-                         session.paymentUrl ||
-                         rawData.checkoutUrl || 
-                         rawData.checkout_url;
+    // TARGETING THE EXACT 'RESULT' OBJECT FOUND IN YOUR SCREENSHOT
+    const session = rawData.result || rawData.data || rawData;
+    const checkoutLink = session.redirectUrl;
 
-    // IF WE STILL CAN'T FIND IT, DUMP THE RAW JSON TO THE SCREEN
     if (!checkoutLink) {
-      throw new Error(`DEBUG RAW PAYLOAD: ${JSON.stringify(rawData)}`);
+      throw new Error(`Checkout link missing from payload: ${JSON.stringify(rawData)}`);
     }
 
     const supabase = createClient(
@@ -84,7 +75,7 @@ export default async function handler(req, res) {
       amount: Number(amount),
       currency: 'SLE',
       status: 'pending',
-      metadata: { reference: reference, session_id: session.id || reference }
+      metadata: { reference: reference, session_id: session.id }
     });
 
     return res.status(200).json({ link: checkoutLink });
