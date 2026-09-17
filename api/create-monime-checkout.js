@@ -30,14 +30,16 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         name: 'MatMove Wallet Top Up',
         reference: reference,
-        successUrl: 'https://matmoveent.vercel.app/rider-dashboard',
-        cancelUrl: 'https://matmoveent.vercel.app/rider-dashboard',
+        // Routing Monime to our backend safety nets first
+        successUrl: 'https://matmoveent.vercel.app/api/monime-success',
+        cancelUrl: 'https://matmoveent.vercel.app/api/monime-cancel',
         lineItems: [
           {
             name: 'Wallet Top Up',
             price: {
               currency: 'SLE',
-              value: Number(amount)
+              // FIX: Monime requires minor units (cents). 100 SLE * 100 = 10000 minor units
+              value: Math.round(Number(amount) * 100)
             },
             quantity: 1
           }
@@ -55,7 +57,6 @@ export default async function handler(req, res) {
       throw new Error(`Monime rejected: ${errorMessage}`);
     }
 
-    // TARGETING THE EXACT 'RESULT' OBJECT FOUND IN YOUR SCREENSHOT
     const session = rawData.result || rawData.data || rawData;
     const checkoutLink = session.redirectUrl;
 
