@@ -9,6 +9,9 @@ export default async function handler(req, res) {
 
     const apiKey = process.env.MONIME_API_KEY;
     const spaceId = process.env.MONIME_SPACE_ID;
+    
+    // Generate a unique Idempotency-Key for wallet creation
+    const idempotencyKey = `MM_WALLET_${userId}_${Date.now()}`;
 
     // 1. Call Monime to create the Financial Account
     const monimeRes = await fetch('https://api.monime.io/v1/financial-accounts', {
@@ -16,7 +19,8 @@ export default async function handler(req, res) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
-        'Monime-Space-Id': spaceId
+        'Monime-Space-Id': spaceId,
+        'Idempotency-Key': idempotencyKey // <-- FIX: Added required header
       },
       body: JSON.stringify({
         name: `MatMove ${String(role).toUpperCase()} - ${fullName}`,
@@ -47,14 +51,12 @@ export default async function handler(req, res) {
       .maybeSingle();
 
     if (existingWallet) {
-      // Wallet already exists (created by frontend or trigger), update it safely
       const { error: updateError } = await supabase
         .from('wallets')
         .update({ metadata: { monime_account_id: monimeAccountId } })
         .eq('user_id', userId);
       if (updateError) throw updateError;
     } else {
-      // Create new wallet row safely
       const { error: insertError } = await supabase
         .from('wallets')
         .insert({
