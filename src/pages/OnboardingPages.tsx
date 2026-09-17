@@ -417,7 +417,21 @@ export function ReviewPage() {
         throw profileError;
       }
 
-      await supabase.from('wallets').upsert({ user_id: userId, balance: 0, currency: 'SLE' });
+      // --- Create Monime Wallet & Sync to Supabase ---
+      try {
+        await fetch('/api/create-monime-wallet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: userId,
+            role: role,
+            fullName: fullName
+          })
+        });
+      } catch (monimeErr) {
+        console.error("Monime wallet creation silent fail:", monimeErr);
+      }
+      // ----------------------------------------------------
 
       navigate('/onboarding/submitted');
     } catch (error: any) {
@@ -476,7 +490,6 @@ export function ReviewPage() {
   );
 }
 
-// FIX: Everyone gets an instant "Access dashboard" button, no waiting required.
 export function SubmittedPage() {
   const role = getActiveRole();
   const portalPath = role === 'driver' ? '/customer/driver' : role === 'merchant' ? '/customer/merchant' : '/customer/rider';
