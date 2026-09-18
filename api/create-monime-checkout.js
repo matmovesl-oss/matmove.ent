@@ -66,12 +66,21 @@ export default async function handler(req, res) {
       throw new Error(`Monime checkout failed: ${JSON.stringify(rawData)}`);
     }
 
-    // 4. Extract the redirect URL based on Monime's response schema
-    const checkoutUrl = rawData.data?.redirectUrl || rawData.result?.redirectUrl || rawData.redirectUrl || rawData.data?.url;
+    // 4. BULLETPROOF URL EXTRACTION
+    // Checks every possible property Monime might use to return the link
+    const checkoutUrl = 
+      rawData?.url ||
+      rawData?.redirectUrl || 
+      rawData?.data?.url ||
+      rawData?.data?.redirectUrl || 
+      rawData?.result?.url ||
+      rawData?.result?.redirectUrl || 
+      rawData?.checkoutUrl ||
+      rawData?.data?.checkoutUrl;
 
+    // If the URL is still somehow missing, push the exact Monime response to the frontend alert
     if (!checkoutUrl) {
-      console.error("Monime API returned session without a URL:", JSON.stringify(rawData));
-      throw new Error("Could not find the checkout URL in Monime's response.");
+      throw new Error(`MISSING URL. Monime responded with: ${JSON.stringify(rawData)}`);
     }
 
     return res.status(200).json({ checkoutUrl });
