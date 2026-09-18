@@ -12,18 +12,21 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // 1. Get the mapping ID from Supabase
-    const { data: wallet, error } = await supabase
+    // FIX: Removed .single() so it doesn't crash on users with both SLE and USD wallets
+    const { data: wallets, error } = await supabase
       .from('wallets')
       .select('metadata')
-      .eq('user_id', userId)
-      .single();
+      .eq('user_id', userId);
 
-    if (error || !wallet?.metadata?.monime_account_id) {
-      return res.status(404).json({ 
-        error: 'User does not have a linked Monime account.',
-        supabase_error: error 
-      });
+    if (error) {
+      return res.status(500).json({ error: 'Database error', supabase_error: error });
+    }
+
+    // Find the specific wallet row that actually has the Monime ID
+    const wallet = wallets?.find(w => w.metadata?.monime_account_id);
+
+    if (!wallet) {
+      return res.status(404).json({ error: 'No Monime account ID found in any of this user\'s wallets.' });
     }
 
     const facId = wallet.metadata.monime_account_id;
@@ -48,7 +51,7 @@ export default async function handler(req, res) {
       });
     }
     
-    // 3. Bulletproof nested extraction (checks every possible Monime path)
+    // 3. Bulletproof nested extraction
     const rawBalance = 
       accountData?.balance?.available?.value ?? 
       accountData?.data?.balance?.available?.value ?? 
@@ -63,7 +66,7 @@ export default async function handler(req, res) {
       accountId: facId,
       balance: liveBalance,
       currency: 'SLE',
-      raw_debug_data: accountData // This will show us EXACTLY where the money is
+      raw_debug_data: accountData 
     });
 
   } catch (error) {
