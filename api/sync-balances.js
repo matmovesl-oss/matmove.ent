@@ -20,7 +20,6 @@ export default async function handler(req, res) {
 
     let syncedCount = 0;
     const errors = [];
-    let sampleMonimeData = null; // We will use this to peek at Monime's secret structure
 
     // 2. Loop through every wallet and sync
     for (const wallet of wallets) {
@@ -28,7 +27,8 @@ export default async function handler(req, res) {
       if (!facId) continue;
 
       try {
-        const accountRes = await fetch(`https://api.monime.io/v1/financial-accounts/${facId}`, {
+        // Fetch with ?withBalance=true parameter
+        const accountRes = await fetch(`https://api.monime.io/v1/financial-accounts/${facId}?withBalance=true`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
@@ -40,19 +40,12 @@ export default async function handler(req, res) {
 
         const accountData = await accountRes.json();
         
-        // Save the first successful fetch to show you the exact structure on the screen
-        if (!sampleMonimeData) {
-          sampleMonimeData = accountData;
-        }
-        
-        // Expanded search for Monime's balance variable
+        // Extract balance mapping to Monime's deeply nested schema
         let rawBalance = 
+          accountData?.data?.balance?.available?.value || 
+          accountData?.result?.balance?.available?.value ||
           accountData?.data?.balance?.value || 
-          accountData?.data?.balance || 
-          accountData?.balance?.value || 
-          accountData?.balance || 
-          accountData?.data?.availableBalance ||
-          accountData?.availableBalance ||
+          accountData?.balance?.available?.value || 
           0;
 
         const trueBalance = Number(rawBalance) / 100;
@@ -69,11 +62,9 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3. Return the exact JSON from Monime so we can map it permanently
     return res.status(200).json({ 
       success: true, 
-      message: `Processed ${syncedCount} wallets. Check the diagnostic_data below!`,
-      diagnostic_data: sampleMonimeData,
+      message: `Successfully synced ${syncedCount} wallets with true balances!`,
       errors: errors.length > 0 ? errors : undefined
     });
 

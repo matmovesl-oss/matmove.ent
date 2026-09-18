@@ -46,11 +46,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // 4. Query Monime for the TRUE ledger balance of this specific sub-account
+    // 4. Query Monime for the TRUE ledger balance (?withBalance=true is required)
     const apiKey = process.env.MONIME_API_KEY;
     const spaceId = process.env.MONIME_SPACE_ID;
     
-    const accountRes = await fetch(`https://api.monime.io/v1/financial-accounts/${financialAccountId}`, {
+    const accountRes = await fetch(`https://api.monime.io/v1/financial-accounts/${financialAccountId}?withBalance=true`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -65,12 +65,13 @@ export default async function handler(req, res) {
 
     const accountData = await accountRes.json();
     
-    // 5. Extract balance. Monime stores balances in minor units (cents)
+    // 5. Extract balance securely checking all of Monime's possible nested paths
     let rawBalance = 
+      accountData?.data?.balance?.available?.value || 
+      accountData?.result?.balance?.available?.value ||
       accountData?.data?.balance?.value || 
-      accountData?.data?.balance || 
-      accountData?.balance?.value || 
-      accountData?.balance || 0;
+      accountData?.balance?.available?.value || 
+      0;
 
     // Convert minor units (cents) back to standard SLE format (e.g., 198 -> 1.98)
     const trueBalance = Number(rawBalance) / 100;
