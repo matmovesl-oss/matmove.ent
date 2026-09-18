@@ -30,7 +30,8 @@ export default async function handler(req, res) {
     const spaceId = process.env.MONIME_SPACE_ID;
 
     // 2. Create the Checkout session and explicitly route it to the user's sub-account
-    const monimeRes = await fetch('https://api.monime.io/v1/checkouts', {
+    // FIX: Updated the endpoint to /v1/payments
+    const monimeRes = await fetch('https://api.monime.io/v1/payments', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
