@@ -29,7 +29,27 @@ export default async function handler(req, res) {
     const apiKey = process.env.MONIME_API_KEY;
     const spaceId = process.env.MONIME_SPACE_ID;
 
-    // 2. Create the Checkout session using the EXACT fields Monime requires
+    // 2. Format the payload EXACTLY as Monime documentation requires
+    const payload = {
+      name: "MatMove Wallet Load",
+      reference: transactionRef,
+      financialAccountId: monimeAccountId,
+      successUrl: `https://matmoveent.vercel.app/api/monime-success?ref=${transactionRef}`,
+      cancelUrl: `https://matmoveent.vercel.app/api/monime-cancel?ref=${transactionRef}`,
+      lineItems: [
+        {
+          type: "custom",
+          name: "Wallet Top-up",
+          quantity: 1,
+          price: {
+            currency: "SLE",
+            value: Math.round(Number(amount) * 100) // MUST be in minor units (cents)
+          }
+        }
+      ]
+    };
+
+    // 3. Create the Checkout session
     const monimeRes = await fetch('https://api.monime.io/v1/checkout-sessions', {
       method: 'POST',
       headers: {
@@ -38,14 +58,7 @@ export default async function handler(req, res) {
         'Monime-Space-Id': spaceId,
         'Idempotency-Key': transactionRef
       },
-      body: JSON.stringify({
-        amount: Number(amount),
-        currency: 'SLE',
-        reference: transactionRef,
-        financialAccountId: monimeAccountId, // <-- Routes the money directly to the user
-        success_url: `https://matmoveent.vercel.app/api/monime-success?ref=${transactionRef}`,
-        cancel_url: `https://matmoveent.vercel.app/api/monime-cancel?ref=${transactionRef}`
-      })
+      body: JSON.stringify(payload)
     });
 
     const rawData = await monimeRes.json();
@@ -53,8 +66,8 @@ export default async function handler(req, res) {
       throw new Error(`Monime checkout failed: ${JSON.stringify(rawData)}`);
     }
 
-    // 3. Extract the URL safely. Monime returns it in either rawData.url or rawData.data.url
-    const checkoutUrl = rawData.url || rawData.data?.url || rawData.checkout_url || rawData.data?.checkout_url;
+    // 4. Extract the redirect URL based on Monime's response schema
+    const checkoutUrl = rawData.data?.redirectUrl || rawData.result?.redirectUrl || rawData.redirectUrl || rawData.data?.url;
 
     if (!checkoutUrl) {
       console.error("Monime API returned session without a URL:", JSON.stringify(rawData));
