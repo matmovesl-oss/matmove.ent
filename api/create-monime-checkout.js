@@ -83,9 +83,10 @@ export default async function handler(req, res) {
       throw new Error(`MISSING URL. Monime responded with: ${JSON.stringify(rawData)}`);
     }
 
-    return res.status(200).json({ checkoutUrl });
-  } catch (error) {
-    console.error('Checkout Error:', error);
-    return res.status(500).json({ error: error.message });
-  }
-}
+   // Send the URL using multiple common labels so the frontend catches it
+    return res.status(200).json({ 
+      checkoutUrl: checkoutUrl, 
+      url: checkoutUrl, 
+      redirectUrl: checkoutUrl,
+      link: checkoutUrl
+    });
