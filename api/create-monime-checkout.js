@@ -67,7 +67,6 @@ export default async function handler(req, res) {
     }
 
     // 4. BULLETPROOF URL EXTRACTION
-    // Checks every possible property Monime might use to return the link
     const checkoutUrl = 
       rawData?.url ||
       rawData?.redirectUrl || 
@@ -78,15 +77,19 @@ export default async function handler(req, res) {
       rawData?.checkoutUrl ||
       rawData?.data?.checkoutUrl;
 
-    // If the URL is still somehow missing, push the exact Monime response to the frontend alert
     if (!checkoutUrl) {
       throw new Error(`MISSING URL. Monime responded with: ${JSON.stringify(rawData)}`);
     }
 
-   // Send the URL using multiple common labels so the frontend catches it
+    // 5. Send the URL using multiple common labels so the frontend catches it perfectly
     return res.status(200).json({ 
       checkoutUrl: checkoutUrl, 
       url: checkoutUrl, 
       redirectUrl: checkoutUrl,
       link: checkoutUrl
     });
+  } catch (error) {
+    console.error('Checkout Error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
