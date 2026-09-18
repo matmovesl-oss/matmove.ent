@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     const apiKey = process.env.MONIME_API_KEY;
     const spaceId = process.env.MONIME_SPACE_ID;
 
-    // 2. Create the Checkout session and route it to the user's sub-account
+    // 2. Create the Checkout session using the EXACT fields Monime requires
     const monimeRes = await fetch('https://api.monime.io/v1/checkout-sessions', {
       method: 'POST',
       headers: {
@@ -39,22 +39,12 @@ export default async function handler(req, res) {
         'Idempotency-Key': transactionRef
       },
       body: JSON.stringify({
-        name: 'MatMove Wallet Load',
+        amount: Number(amount),
+        currency: 'SLE',
         reference: transactionRef,
-        financialAccountId: monimeAccountId, // <-- THIS ROUTES THE MONEY DIRECTLY TO THE USER
-        successUrl: `https://matmoveent.vercel.app/api/monime-success?ref=${transactionRef}`,
-        cancelUrl: `https://matmoveent.vercel.app/api/monime-cancel?ref=${transactionRef}`,
-        lineItems: [
-          {
-            name: 'Wallet Top-up',
-            type: 'custom',
-            quantity: 1,
-            price: {
-              currency: 'SLE',
-              value: Number(amount)
-            }
-          }
-        ]
+        financialAccountId: monimeAccountId, // <-- Routes the money directly to the user
+        success_url: `https://matmoveent.vercel.app/api/monime-success?ref=${transactionRef}`,
+        cancel_url: `https://matmoveent.vercel.app/api/monime-cancel?ref=${transactionRef}`
       })
     });
 
@@ -63,8 +53,13 @@ export default async function handler(req, res) {
       throw new Error(`Monime checkout failed: ${JSON.stringify(rawData)}`);
     }
 
-    // Monime returns the checkout URL in data.url or data.checkout_url
-    const checkoutUrl = rawData.data?.url || rawData.result?.url || rawData.data?.checkout_url;
+    // 3. Extract the URL safely. Monime returns it in either rawData.url or rawData.data.url
+    const checkoutUrl = rawData.url || rawData.data?.url || rawData.checkout_url || rawData.data?.checkout_url;
+
+    if (!checkoutUrl) {
+      console.error("Monime API returned session without a URL:", JSON.stringify(rawData));
+      throw new Error("Could not find the checkout URL in Monime's response.");
+    }
 
     return res.status(200).json({ checkoutUrl });
   } catch (error) {
