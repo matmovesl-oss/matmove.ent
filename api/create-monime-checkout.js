@@ -29,15 +29,18 @@ export default async function handler(req, res) {
     const apiKey = process.env.MONIME_API_KEY;
     const spaceId = process.env.MONIME_SPACE_ID;
 
-    // 2. Define the exact redirect path using returnUrl
-    const redirectUrl = returnUrl || `${req.headers.origin}/customer/${role}`;
+    // 2. Define the exact dashboard destination using returnUrl
+    const destinationDashboard = returnUrl || `${req.headers.origin}/customer/${role}`;
+    
+    // 3. Set the Safe Callback URL so Monime POSTs to the backend, not the frontend
+    const safeCallbackUrl = `${req.headers.origin}/api/monime-callback?returnUrl=${encodeURIComponent(destinationDashboard)}`;
 
     const payload = {
       name: "MatMove Wallet Load",
       reference: transactionRef,
       financialAccountId: monimeAccountId,
-      successUrl: redirectUrl, // Dynamic return
-      cancelUrl: redirectUrl,  // Dynamic return
+      successUrl: safeCallbackUrl, // Using the backend bouncer
+      cancelUrl: safeCallbackUrl,  // Using the backend bouncer
       lineItems: [
         {
           type: "custom",
