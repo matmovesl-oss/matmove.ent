@@ -29,9 +29,8 @@ export default async function handler(req, res) {
     const apiKey = process.env.MONIME_API_KEY;
     const spaceId = process.env.MONIME_SPACE_ID;
 
-    // 2. Create the Checkout session and explicitly route it to the user's sub-account
-    // FIX: Updated the endpoint to /v1/payments
-    const monimeRes = await fetch('https://api.monime.io/v1/payments', {
+    // 2. Create the Checkout session and route it to the user's sub-account
+    const monimeRes = await fetch('https://api.monime.io/v1/checkout-sessions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -40,13 +39,22 @@ export default async function handler(req, res) {
         'Idempotency-Key': transactionRef
       },
       body: JSON.stringify({
-        amount: Number(amount),
-        currency: 'SLE',
+        name: 'MatMove Wallet Load',
         reference: transactionRef,
-        description: 'MatMove Wallet Load',
-        account: monimeAccountId, // <-- THIS IS THE MAGIC KEY: Routes money directly to their specific ledger
-        success_url: `https://matmoveent.vercel.app/api/monime-success?ref=${transactionRef}`,
-        cancel_url: `https://matmoveent.vercel.app/api/monime-cancel?ref=${transactionRef}`
+        financialAccountId: monimeAccountId, // <-- THIS ROUTES THE MONEY DIRECTLY TO THE USER
+        successUrl: `https://matmoveent.vercel.app/api/monime-success?ref=${transactionRef}`,
+        cancelUrl: `https://matmoveent.vercel.app/api/monime-cancel?ref=${transactionRef}`,
+        lineItems: [
+          {
+            name: 'Wallet Top-up',
+            type: 'custom',
+            quantity: 1,
+            price: {
+              currency: 'SLE',
+              value: Number(amount)
+            }
+          }
+        ]
       })
     });
 
@@ -55,7 +63,7 @@ export default async function handler(req, res) {
       throw new Error(`Monime checkout failed: ${JSON.stringify(rawData)}`);
     }
 
-    // Monime typically returns the checkout URL in data.url or data.checkout_url
+    // Monime returns the checkout URL in data.url or data.checkout_url
     const checkoutUrl = rawData.data?.url || rawData.result?.url || rawData.data?.checkout_url;
 
     return res.status(200).json({ checkoutUrl });
