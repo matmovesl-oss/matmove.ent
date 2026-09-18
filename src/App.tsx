@@ -15,13 +15,26 @@ import {
   VerificationPage,
 } from '@/pages/OnboardingPages';
 import { ForgotPasswordPage } from '@/pages/PasswordPages';
-import { UpdatePassword } from '@/pages/UpdatePassword'; // Correctly import your new component
+import { UpdatePassword } from '@/pages/UpdatePassword';
 
 function CustomerPortal() {
-  const { session } = useAuth();
+  const { session, loading } = useAuth();
+
+  // 1. Wait for Supabase to finish checking the session BEFORE panicking
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // 2. If it finishes loading and there truly is no session, then kick to login
   if (!session) {
     return <Navigate to="/login" replace />;
   }
+
+  // 3. Otherwise, enter the Portal and let the Smart PIN Tracker do its job!
   return <PortalApp />;
 }
 
