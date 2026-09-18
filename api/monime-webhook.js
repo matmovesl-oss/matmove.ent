@@ -7,62 +7,84 @@ export default async function handler(req, res) {
     const payload = req.body;
     console.log("🚨 INCOMING MONIME WEBHOOK PAYLOAD:", JSON.stringify(payload));
     
-    const session = payload.result || payload.data || payload.checkoutSession || payload;
-    const reference = session.reference || payload.reference || (session.metadata && session.metadata.reference);
+    // 1. Verify this is a completed checkout event
+    const eventName = payload?.event?.name;
+    if (eventName !== 'checkout_session.completed') {
+      return res.status(200).json({ message: 'Event ignored - Not a completed checkout' });
+    }
 
-    if (!reference) return res.status(400).json({ error: 'Missing reference' });
+    const data = payload?.data || {};
+    const financialAccountId = data.financialAccountId;
+    const reference = data.reference;
+
+    if (!financialAccountId || !reference) {
+      return res.status(400).json({ error: 'Missing account or reference data in payload' });
+    }
 
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // 1. EXTRACT USER ID FROM THE REFERENCE (Format: MM_MOMO_UserID_Timestamp)
+    // 2. EXTRACT USER ID FROM THE REFERENCE (Format: MM_MOMO_UserID_Timestamp)
     const referenceParts = reference.split('_');
-    const userId = referenceParts[2]; // Grabs the user's Supabase UUID directly
+    const userId = referenceParts[2];
 
     if (!userId) return res.status(400).json({ error: 'Invalid reference format' });
 
-    // 2. Fetch all pending transactions for this specific user (Bypasses JSON search issues)
+    // 3. Mark the pending transaction as completed in history
     const { data: pendingTxs, error: txError } = await supabase
       .from('payment_transactions')
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'pending');
 
-    if (txError || !pendingTxs || pendingTxs.length === 0) {
-      return res.status(200).json({ message: 'No pending transactions found for user' });
+    if (!txError && pendingTxs && pendingTxs.length > 0) {
+      const transaction = pendingTxs.find(tx => tx.metadata && tx.metadata.reference === reference);
+      if (transaction) {
+        await supabase.from('payment_transactions').update({ status: 'completed' }).eq('id', transaction.id);
+      }
     }
 
-    // 3. Find the exact transaction matching this reference
-    const transaction = pendingTxs.find(tx => tx.metadata && tx.metadata.reference === reference);
+    // 4. Query Monime for the TRUE ledger balance of this specific sub-account
+    const apiKey = process.env.MONIME_API_KEY;
+    const spaceId = process.env.MONIME_SPACE_ID;
     
-    if (!transaction) return res.status(200).json({ message: 'Transaction reference mismatch' });
+    const accountRes = await fetch(`https://api.monime.io/v1/financial-accounts/${financialAccountId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Monime-Space-Id': spaceId
+      }
+    });
 
-    const amountPaid = Number(transaction.amount); 
-
-    // 4. Fetch the user's current wallet
-    let { data: wallet } = await supabase
-      .from('wallets')
-      .select('id, balance')
-      .eq('user_id', userId)
-      .single();
-
-    // 5. Auto-Create wallet if missing, otherwise update balance
-    if (!wallet) {
-      await supabase.from('wallets').insert({
-        user_id: userId,
-        balance: amountPaid
-      });
-    } else {
-      const newBalance = Number(wallet.balance) + amountPaid;
-      await supabase.from('wallets').update({ balance: newBalance }).eq('id', wallet.id);
+    if (!accountRes.ok) {
+      console.error("Failed to fetch Monime Account:", await accountRes.text());
+      throw new Error('Failed to fetch true account balance from Monime');
     }
 
-    // 6. Mark transaction as completed
-    await supabase.from('payment_transactions').update({ status: 'completed' }).eq('id', transaction.id);
+    const accountData = await accountRes.json();
+    
+    // 5. Extract balance. Monime stores balances in minor units (cents)
+    let rawBalance = 
+      accountData?.data?.balance?.value || 
+      accountData?.data?.balance || 
+      accountData?.balance?.value || 
+      accountData?.balance || 0;
 
-    return res.status(200).json({ success: true, message: 'Wallet credited successfully' });
+    // Convert minor units (cents) back to standard SLE format (e.g., 198 -> 1.98)
+    const trueBalance = Number(rawBalance) / 100;
+
+    // 6. Force Supabase wallet to mirror Monime's true balance perfectly
+    const { error: updateError } = await supabase
+      .from('wallets')
+      .update({ balance: trueBalance })
+      .eq('user_id', userId)
+      .eq('currency', 'SLE');
+
+    if (updateError) throw updateError;
+
+    return res.status(200).json({ success: true, message: `Wallet synced perfectly. True balance: ${trueBalance}` });
 
   } catch (error) {
     console.error('FATAL Webhook Error:', error);
