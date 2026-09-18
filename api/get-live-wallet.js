@@ -20,7 +20,10 @@ export default async function handler(req, res) {
       .single();
 
     if (error || !wallet?.metadata?.monime_account_id) {
-      return res.status(404).json({ error: 'User does not have a linked Monime account.' });
+      return res.status(404).json({ 
+        error: 'User does not have a linked Monime account.',
+        supabase_error: error 
+      });
     }
 
     const facId = wallet.metadata.monime_account_id;
@@ -36,20 +39,31 @@ export default async function handler(req, res) {
       }
     });
 
-    if (!accountRes.ok) throw new Error('Failed to reach Monime API');
-
     const accountData = await accountRes.json();
+
+    if (!accountRes.ok) {
+      return res.status(accountRes.status).json({ 
+        error: 'Monime API rejected the request', 
+        details: accountData 
+      });
+    }
     
-    // Monime docs define balance inside result.balance.available.value
-    const rawBalance = accountData?.result?.balance?.available?.value || 0;
+    // 3. Bulletproof nested extraction (checks every possible Monime path)
+    const rawBalance = 
+      accountData?.balance?.available?.value ?? 
+      accountData?.data?.balance?.available?.value ?? 
+      accountData?.result?.balance?.available?.value ?? 
+      accountData?.availableBalance ?? 
+      0;
+
     const liveBalance = Number(rawBalance) / 100;
 
-    // 3. Return everything the frontend needs to render the UI
+    // 4. Return everything, including the raw data for debugging
     return res.status(200).json({ 
       accountId: facId,
       balance: liveBalance,
       currency: 'SLE',
-      accountName: accountData?.result?.name || 'MatMove Wallet'
+      raw_debug_data: accountData // This will show us EXACTLY where the money is
     });
 
   } catch (error) {
