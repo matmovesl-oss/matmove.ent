@@ -14,131 +14,48 @@ import {
   SubmittedPage,
   VerificationPage,
 } from '@/pages/OnboardingPages';
-import {
-  ForgotPasswordPage,
-  UpdatePasswordPage,
-} from '@/pages/PasswordPages';
+import { ForgotPasswordPage } from '@/pages/PasswordPages';
+import { UpdatePassword } from '@/pages/UpdatePassword'; // Correctly import your new component
 
 function CustomerPortal() {
   const { session } = useAuth();
-
   if (!session) {
     return <Navigate to="/login" replace />;
   }
-
   return <PortalApp />;
 }
 
 export default function App() {
   return (
     <Routes>
-      {/* =========================================================
-          PUBLIC ROUTES
-      ========================================================= */}
       <Route path="/" element={<LandingPage />} />
-
       <Route path="/login" element={<LoginPage />} />
-
       <Route path="/signup" element={<SignupPage />} />
 
-      {/* =========================================================
-          PASSWORD ROUTES
-      ========================================================= */}
-      <Route
-        path="/forgot-password"
-        element={<ForgotPasswordPage />}
-      />
+      {/* SECURE PASSWORD ROUTES */}
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      {/* This MUST match the path you configure in Supabase Email Templates */}
+      <Route path="/reset-password" element={<UpdatePassword />} /> 
 
-      <Route
-        path="/reset-password"
-        element={<UpdatePasswordPage />}
-      />
+      {/* ONBOARDING ROUTES */}
+      <Route path="/select-role" element={<RoleSelectionPage />} />
+      <Route path="/onboarding/personal" element={<PersonalInfoPage />} />
+      <Route path="/onboarding/identity" element={<IdentityPage />} />
+      <Route path="/onboarding/documents" element={<DocumentsPage />} />
+      <Route path="/onboarding/selfie" element={<SelfiePage />} />
+      <Route path="/onboarding/vehicle" element={<VehicleSelectionPage />} />
+      <Route path="/onboarding/review" element={<ReviewPage />} />
+      <Route path="/onboarding/submitted" element={<SubmittedPage />} />
+      <Route path="/verification" element={<VerificationPage />} />
 
-      {/* =========================================================
-          ONBOARDING ROUTES
-      ========================================================= */}
-      <Route
-        path="/select-role"
-        element={<RoleSelectionPage />}
-      />
+      {/* CUSTOMER PORTAL */}
+      <Route path="/customer/*" element={<CustomerPortal />} />
+      <Route path="/customer/rider/*" element={<CustomerPortal />} />
+      <Route path="/customer/driver/*" element={<CustomerPortal />} />
+      <Route path="/customer/merchant/*" element={<CustomerPortal />} />
 
-      <Route
-        path="/onboarding/personal"
-        element={<PersonalInfoPage />}
-      />
-
-      <Route
-        path="/onboarding/identity"
-        element={<IdentityPage />}
-      />
-
-      <Route
-        path="/onboarding/documents"
-        element={<DocumentsPage />}
-      />
-
-      <Route
-        path="/onboarding/selfie"
-        element={<SelfiePage />}
-      />
-
-      <Route
-        path="/onboarding/vehicle"
-        element={<VehicleSelectionPage />}
-      />
-
-      <Route
-        path="/onboarding/review"
-        element={<ReviewPage />}
-      />
-
-      <Route
-        path="/onboarding/submitted"
-        element={<SubmittedPage />}
-      />
-
-      <Route
-        path="/verification"
-        element={<VerificationPage />}
-      />
-
-      {/* =========================================================
-          CUSTOMER PORTAL
-          
-          All three customer roles currently enter through the
-          same protected portal. PortalApp is responsible for
-          displaying the correct role experience.
-      ========================================================= */}
-      <Route
-        path="/customer/*"
-        element={<CustomerPortal />}
-      />
-
-      {/* Explicit role entry points.
-          These make the routing structure ready for the
-          dedicated Rider / Driver / Merchant experiences. */}
-      <Route
-        path="/customer/rider/*"
-        element={<CustomerPortal />}
-      />
-
-      <Route
-        path="/customer/driver/*"
-        element={<CustomerPortal />}
-      />
-
-      <Route
-        path="/customer/merchant/*"
-        element={<CustomerPortal />}
-      />
-
-      {/* =========================================================
-          FALLBACK
-      ========================================================= */}
-      <Route
-        path="*"
-        element={<Navigate to="/" replace />}
-      />
+      {/* FALLBACK */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
