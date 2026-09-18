@@ -10,24 +10,22 @@ export default async function handler(req, res) {
     const apiKey = process.env.MONIME_API_KEY;
     const spaceId = process.env.MONIME_SPACE_ID;
 
-    // 1. Fetch all wallets that have a Monime Account ID
+    // 1. Fetch all wallets
     const { data: wallets, error: fetchError } = await supabase
       .from('wallets')
-      .select('id, user_id, metadata')
+      .select('*')
       .not('metadata', 'is', null);
 
     if (fetchError) throw fetchError;
 
     let syncedCount = 0;
-    const errors = [];
 
-    // 2. Loop through every wallet and sync
+    // 2. Loop and mirror
     for (const wallet of wallets) {
       const facId = wallet.metadata?.monime_account_id;
       if (!facId) continue;
 
       try {
-        // Fetch with ?withBalance=true parameter
         const accountRes = await fetch(`https://api.monime.io/v1/financial-accounts/${facId}?withBalance=true`, {
           method: 'GET',
           headers: {
@@ -36,40 +34,33 @@ export default async function handler(req, res) {
           }
         });
 
-        if (!accountRes.ok) throw new Error(`Failed to fetch from Monime: ${accountRes.status}`);
+        if (!accountRes.ok) continue;
 
-        const accountData = await accountRes.json();
+        const rawMonimeData = await accountRes.json();
         
-        // Extract balance mapping to Monime's deeply nested schema
-        let rawBalance = 
-          accountData?.data?.balance?.available?.value || 
-          accountData?.result?.balance?.available?.value ||
-          accountData?.data?.balance?.value || 
-          accountData?.balance?.available?.value || 
-          0;
+        // 3. RESTRUCTURE: Dump the entire Monime object into the Supabase wallet metadata
+        const updatedMetadata = {
+          ...wallet.metadata,
+          monime_raw_data: rawMonimeData
+        };
 
-        const trueBalance = Number(rawBalance) / 100;
-
-        // Force the update into Supabase
         await supabase
           .from('wallets')
-          .update({ balance: trueBalance })
+          .update({ metadata: updatedMetadata })
           .eq('id', wallet.id);
 
         syncedCount++;
       } catch (err) {
-        errors.push({ userId: wallet.user_id, error: err.message });
+        console.error(err);
       }
     }
 
     return res.status(200).json({ 
       success: true, 
-      message: `Successfully synced ${syncedCount} wallets with true balances!`,
-      errors: errors.length > 0 ? errors : undefined
+      message: `Restructured ${syncedCount} wallets. Open your Supabase Table Editor and look inside the metadata column!`
     });
 
   } catch (error) {
-    console.error('Master Sync Error:', error);
     return res.status(500).json({ error: error.message });
   }
 }
