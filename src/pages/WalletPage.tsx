@@ -1,253 +1,55 @@
-import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  Banknote,
-  CheckCircle2,
-  CreditCard,
-  History,
-  Landmark,
-  LockKeyhole,
-  ReceiptText,
-  Send,
-  ShieldCheck,
-  Smartphone,
-  Wallet,
-  X,
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ArrowDownToLine, ArrowUpFromLine, Banknote, CheckCircle2, CreditCard, LockKeyhole, ReceiptText, Send, ShieldCheck, Smartphone, Wallet, X } from 'lucide-react';
 
-type WalletRole =
-  | 'rider'
-  | 'client'
-  | 'driver'
-  | 'merchant'
-  | 'vendor'
-  | string;
+export function WalletPage({ profile, wallet, onClose, onTopUp, onWithdraw, onSendMoney }: any) {
+  const [liveSleBalance, setLiveSleBalance] = useState<number>(0);
+  const [isSyncing, setIsSyncing] = useState(true);
 
-type WalletCurrency = 'SLE' | 'USD';
+  // Live Mirror: Fetch true balance directly from Monime on load
+  useEffect(() => {
+    if (!profile?.id) return;
+    const fetchBalance = async () => {
+      try {
+        const res = await fetch(`/api/get-live-wallet?userId=${profile.id}`);
+        const data = await res.json();
+        if (data.balance !== undefined) setLiveSleBalance(data.balance);
+      } catch (err) {
+        console.error("Failed to fetch true balance", err);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+    fetchBalance();
+  }, [profile?.id]);
 
-interface WalletRecord {
-  id?: string;
-  user_id?: string;
-  balance?: number | string;
-  reserved_balance?: number | string;
-  currency?: string;
-  is_frozen?: boolean;
-  frozen?: boolean;
-  isFrozen?: boolean;
-}
-
-interface WalletPageProps {
-  profile?: any;
-  wallet?: WalletRecord & {
-    wallets?: WalletRecord[];
-  };
-  onClose?: () => void;
-  onTopUp?: () => void;
-  onWithdraw?: () => void;
-  onSendMoney?: () => void;
-}
-
-function normalizeCurrency(value: unknown): WalletCurrency {
-  return String(value || '').toUpperCase() === 'USD' ? 'USD' : 'SLE';
-}
-
-function formatMoney(value: number, currency: WalletCurrency) {
-  return `${currency} ${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function getWalletBalance(wallet?: WalletRecord) {
-  const value = Number(wallet?.balance || 0);
-  return Number.isFinite(value) ? Math.max(0, value) : 0;
-}
-
-function getReservedBalance(wallet?: WalletRecord) {
-  const value = Number(wallet?.reserved_balance || 0);
-  return Number.isFinite(value) ? Math.max(0, value) : 0;
-}
-
-function getAvailableBalance(wallet?: WalletRecord) {
-  const balance = getWalletBalance(wallet);
-  const reserved = getReservedBalance(wallet);
-  return Math.max(0, balance - reserved);
-}
-
-function isWalletFrozen(wallet?: WalletRecord) {
-  return (
-    wallet?.frozen === true ||
-    wallet?.is_frozen === true ||
-    wallet?.isFrozen === true
-  );
-}
-
-export function WalletPage({
-  profile,
-  wallet,
-  onClose,
-  onTopUp,
-  onWithdraw,
-  onSendMoney,
-}: WalletPageProps) {
-  const role: WalletRole = String(
-    profile?.role || profile?.customer_role || profile?.customerRole || ''
-  ).toLowerCase();
-
+  const role = String(profile?.role || profile?.customer_role || '').toLowerCase();
   const isRider = role === 'rider' || role === 'client';
   const isDriver = role === 'driver';
   const isMerchant = role === 'merchant' || role === 'vendor';
   const isCustomer = isRider || isDriver || isMerchant;
 
-  const walletList = Array.isArray(wallet?.wallets)
-    ? wallet.wallets
-    : wallet
-    ? [wallet]
-    : [];
+  const isVerified = String(profile?.kyc_status || profile?.verification_status).trim().toLowerCase() === 'approved';
+  const canWithdraw = isVerified && liveSleBalance > 0;
+  const firstName = profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'User';
 
-  const sleWallet = walletList.find(
-    (item) => normalizeCurrency(item.currency) === 'SLE'
-  );
-
-  const usdWallet = walletList.find(
-    (item) => normalizeCurrency(item.currency) === 'USD'
-  );
-
-  const resolvedSleWallet =
-    sleWallet ||
-    (normalizeCurrency(wallet?.currency) === 'SLE' ? wallet : undefined);
-
-  const resolvedUsdWallet =
-    usdWallet ||
-    (normalizeCurrency(wallet?.currency) === 'USD' ? wallet : undefined);
-
-  /* =========================================================
-   * SLE BALANCES
-   * ========================================================= */
-  const sleBalance = getWalletBalance(resolvedSleWallet);
-  const sleReserved = getReservedBalance(resolvedSleWallet);
-  const sleAvailable = getAvailableBalance(resolvedSleWallet);
-  const sleFrozen = isWalletFrozen(resolvedSleWallet);
-
-  /* =========================================================
-   * USD BALANCES
-   * ========================================================= */
-  const usdBalance = getWalletBalance(resolvedUsdWallet);
-  const usdReserved = getReservedBalance(resolvedUsdWallet);
-  const usdAvailable = getAvailableBalance(resolvedUsdWallet);
-  const usdFrozen = isWalletFrozen(resolvedUsdWallet);
-
-  /* =========================================================
-   * PRIMARY BALANCE
-   * ========================================================= */
-  const primaryCurrency: WalletCurrency =
-    !resolvedSleWallet && !!resolvedUsdWallet ? 'USD' : 'SLE';
-
-  const primaryBalance =
-    primaryCurrency === 'USD' ? usdAvailable : sleAvailable;
-
-  const primaryReserved =
-    primaryCurrency === 'USD' ? usdReserved : sleReserved;
-
-  const primaryFrozen = primaryCurrency === 'USD' ? usdFrozen : sleFrozen;
-
-  /* =========================================================
-   * KYC & WITHDRAWAL PERMISSIONS (ALL ROLES)
-   * ========================================================= */
-  const verificationStatus = String(
-    profile?.kyc_status ||
-      profile?.kycStatus ||
-      profile?.verification_status ||
-      profile?.verificationStatus ||
-      ''
-  )
-    .trim()
-    .toLowerCase();
-
-  const isVerified = verificationStatus === 'approved';
-  const hasAvailableSleBalance = sleAvailable > 0;
-
-  // ALL customer roles (Riders, Drivers, Merchants) can withdraw when verified!
-  const canWithdraw = isVerified && !sleFrozen && hasAvailableSleBalance;
-
-  const firstName =
-    profile?.first_name ||
-    profile?.firstName ||
-    profile?.full_name?.split(' ')?.filter(Boolean)?.[0] ||
-    'User';
-
-  const roleLabel = isRider
-    ? 'Rider Wallet'
-    : isDriver
-    ? 'Driver Wallet'
-    : isMerchant
-    ? 'Merchant Wallet'
-    : 'MatMove Wallet';
-
-  const roleDescription = isRider
-    ? 'Fund your wallet securely or withdraw available balances once verified.'
-    : isDriver
-    ? 'Receive MatMove payments, load your wallet securely, and withdraw available earnings.'
-    : isMerchant
-    ? 'Receive store payments, load your wallet securely, and withdraw available earnings.'
-    : 'Manage your MatMove wallet and permitted transactions.';
-
-  const withdrawalStatusLabel = !isVerified
-    ? 'Verification Required'
-    : sleFrozen
-    ? 'Wallet Frozen'
-    : !hasAvailableSleBalance
-    ? 'No Available SLE Funds'
-    : 'Withdraw via Mobile Money';
-
-  const withdrawalStatusDescription = !isVerified
-    ? 'Cash withdrawal becomes available after MatMove Admin approves your account verification.'
-    : sleFrozen
-    ? 'Your SLE wallet is currently restricted and cannot process withdrawals.'
-    : !hasAvailableSleBalance
-    ? sleReserved > 0
-      ? `${formatMoney(sleReserved, 'SLE')} is reserved for a pending operation. Remaining funds can be withdrawn once released.`
-      : 'There are currently no SLE funds available for withdrawal.'
-    : 'Withdraw your available SLE balance directly to your Mobile Money account powered by Monime/Vult.';
-
-  const handleWithdraw = () => {
-    if (!canWithdraw) return;
-    onWithdraw?.();
-  };
-
-  const handleTopUp = () => {
-    if (!isCustomer) return;
-    onTopUp?.();
-  };
+  const roleLabel = isRider ? 'Rider Wallet' : isDriver ? 'Driver Wallet' : isMerchant ? 'Merchant Wallet' : 'MatMove Wallet';
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 md:pb-10">
-      {/* HEADER */}
       <header className="bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 py-5 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
-          <div className="min-w-0">
+          <div>
             <div className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                 <Wallet size={19} />
               </div>
-              <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
-                MatMove Wallet • Secure Gateway
-              </p>
+              <p className="text-xs font-bold uppercase tracking-wider text-blue-600">MatMove Wallet • Secure Gateway</p>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-3">
-              {roleLabel}
-            </h1>
-            <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-              Hello, {firstName}. {roleDescription}
-            </p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-3">{roleLabel}</h1>
+            <p className="text-sm text-slate-500 mt-1 max-w-2xl">Hello, {firstName}. Manage your active funds directly from the Monime ledger.</p>
           </div>
-
           {onClose && (
-            <button
-              onClick={onClose}
-              className="p-2.5 rounded-full bg-slate-100 text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition shrink-0"
-              aria-label="Close wallet"
-            >
+            <button onClick={onClose} className="p-2.5 rounded-full bg-slate-100 text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition">
               <X size={20} />
             </button>
           )}
@@ -255,30 +57,6 @@ export function WalletPage({
       </header>
 
       <main className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        {/* CURRENCY BALANCES */}
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <CurrencyBalanceCard
-            currency="SLE"
-            balance={sleAvailable}
-            reserved={sleReserved}
-            frozen={sleFrozen}
-            label="Operating Wallet"
-            description="Receive MatMove payments, fund via MoMo, and cash out securely."
-            icon={<Banknote size={21} />}
-          />
-
-          <CurrencyBalanceCard
-            currency="USD"
-            balance={usdAvailable}
-            reserved={usdReserved}
-            frozen={usdFrozen}
-            label="USD Card Wallet"
-            description="Available for supported USD card top-ups via Secure Gateway."
-            icon={<CreditCard size={21} />}
-          />
-        </section>
-
-        {/* PRIMARY BALANCE */}
         <section className="bg-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-lg overflow-hidden relative">
           <div className="absolute -right-20 -top-20 w-56 h-56 rounded-full bg-blue-500/10" />
           <div className="absolute -right-10 -bottom-24 w-48 h-48 rounded-full bg-emerald-500/10" />
@@ -287,317 +65,59 @@ export function WalletPage({
             <div className="flex items-start justify-between gap-5">
               <div>
                 <div className="flex items-center gap-2 text-slate-300 text-sm font-medium">
-                  <Wallet size={18} />
-                  Available {primaryCurrency} Balance
+                  <Wallet size={18} /> Available SLE Balance
                 </div>
-
-                <div className="text-4xl sm:text-5xl font-bold mt-3 tracking-tight">
-                  {formatMoney(primaryBalance, primaryCurrency)}
+                <div className="text-4xl sm:text-5xl font-bold mt-3 tracking-tight flex items-center gap-3">
+                  SLE {liveSleBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {isSyncing && <span className="text-sm text-blue-400 font-normal animate-pulse">Syncing...</span>}
                 </div>
-
-                <p className="text-xs text-slate-400 mt-3">
-                  Your active MatMove wallet balance.
-                </p>
-
-                {primaryReserved > 0 && (
-                  <p className="text-xs text-amber-300 mt-2">
-                    {formatMoney(primaryReserved, primaryCurrency)} currently reserved for a pending transaction.
-                  </p>
-                )}
+                <p className="text-xs text-slate-400 mt-3">Your true active balance mirrored from Monime.</p>
               </div>
-
-              <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center shrink-0">
-                {primaryFrozen ? (
-                  <LockKeyhole size={22} />
-                ) : (
-                  <ShieldCheck size={22} />
-                )}
+              <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center">
+                <ShieldCheck size={22} />
               </div>
             </div>
 
             <div className="mt-7 pt-5 border-t border-white/10 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-300">
-              <span className="flex items-center gap-2">
-                <ShieldCheck size={14} className="text-emerald-400" />
-                Protected by Monime API
-              </span>
-              <span className="flex items-center gap-2">
-                <ReceiptText size={14} />
-                Secure Encrypted Ledger
-              </span>
-              <span className="flex items-center gap-2">
-                <CheckCircle2 size={14} className="text-emerald-400" />
-                Live Webhook Sync
-              </span>
+              <span className="flex items-center gap-2"><ShieldCheck size={14} className="text-emerald-400" /> Protected by Monime API</span>
+              <span className="flex items-center gap-2"><CheckCircle2 size={14} className="text-emerald-400" /> Live Webhook Sync</span>
             </div>
           </div>
         </section>
 
-        {/* WALLET ACTIONS */}
         {isCustomer && (
           <section>
             <div className="mb-4">
-              <h2 className="text-lg font-bold text-slate-900">
-                Wallet Actions
-              </h2>
-              <p className="text-sm text-slate-500 mt-1">
-                Fund your account or withdraw earnings securely through Monime.
-              </p>
+              <h2 className="text-lg font-bold text-slate-900">Wallet Actions</h2>
             </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* LOAD WALLET */}
-              <button
-                onClick={handleTopUp}
-                className="group bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm hover:border-blue-300 hover:shadow-md transition"
-              >
-                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-100 transition">
-                  <ArrowDownToLine size={22} />
-                </div>
-
-                <h3 className="font-bold text-slate-900">
-                  Load Wallet
-                </h3>
-
-                <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                  Top up SLE or USD using Mobile Money or Bank Card checkout.
-                </p>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg">
-                    <Smartphone size={13} />
-                    Mobile Money (SLE)
-                  </span>
-
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg">
-                    <CreditCard size={13} />
-                    Bank Card (USD)
-                  </span>
-                </div>
-
-                <div className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-blue-600">
-                  Start top-up
-                  <span aria-hidden="true">→</span>
-                </div>
+              <button onClick={onTopUp} className="group bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm hover:border-blue-300 transition">
+                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4"><ArrowDownToLine size={22} /></div>
+                <h3 className="font-bold text-slate-900">Load Wallet</h3>
+                <p className="text-sm text-slate-500 mt-1">Top up using Mobile Money checkout.</p>
               </button>
 
-              {/* RIDER PAYMENT */}
               {isRider && (
-                <button
-                  onClick={onSendMoney}
-                  className="group bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm hover:border-emerald-300 hover:shadow-md transition"
-                >
-                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-100 transition">
-                    <Send size={22} />
-                  </div>
-
-                  <h3 className="font-bold text-slate-900">
-                    Pay / Send Money
-                  </h3>
-
-                  <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                    Pay MatMove drivers or merchants directly from your wallet balance.
-                  </p>
-
-                  <div className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-emerald-600">
-                    Wallet-to-wallet payment
-                    <span aria-hidden="true">→</span>
-                  </div>
+                <button onClick={onSendMoney} className="group bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm hover:border-emerald-300 transition">
+                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4"><Send size={22} /></div>
+                  <h3 className="font-bold text-slate-900">Pay / Send Money</h3>
+                  <p className="text-sm text-slate-500 mt-1">Pay drivers directly from your balance.</p>
                 </button>
               )}
 
-              {/* WITHDRAWAL — AVAILABLE FOR ALL ROLES WHEN APPROVED */}
-              <button
-                onClick={handleWithdraw}
-                disabled={!canWithdraw}
-                aria-disabled={!canWithdraw}
-                className={`group rounded-2xl p-5 text-left shadow-sm transition border ${
-                  canWithdraw
-                    ? 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md cursor-pointer'
-                    : 'bg-slate-100 border-slate-200 cursor-not-allowed'
-                }`}
-              >
-                <div
-                  className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${
-                    canWithdraw
-                      ? 'bg-blue-50 text-blue-600 group-hover:bg-blue-100'
-                      : 'bg-slate-200 text-slate-400'
-                  }`}
-                >
-                  {canWithdraw ? (
-                    <ArrowUpFromLine size={22} />
-                  ) : (
-                    <LockKeyhole size={22} />
-                  )}
+              <button onClick={onWithdraw} disabled={!canWithdraw} className={`group rounded-2xl p-5 text-left shadow-sm transition border ${canWithdraw ? 'bg-white border-slate-200 hover:border-blue-300' : 'bg-slate-100 border-slate-200 cursor-not-allowed'}`}>
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${canWithdraw ? 'bg-blue-50 text-blue-600' : 'bg-slate-200 text-slate-400'}`}>
+                  {canWithdraw ? <ArrowUpFromLine size={22} /> : <LockKeyhole size={22} />}
                 </div>
-
-                <div className="flex items-start justify-between gap-3">
-                  <h3
-                    className={`font-bold ${
-                      canWithdraw ? 'text-slate-900' : 'text-slate-500'
-                    }`}
-                  >
-                    Withdraw SLE
-                  </h3>
-
-                  <span
-                    className={`text-[10px] uppercase tracking-wide font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${
-                      canWithdraw
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-amber-50 text-amber-700'
-                    }`}
-                  >
-                    {canWithdraw ? 'Available' : 'Locked'}
-                  </span>
-                </div>
-
-                <p
-                  className={`text-sm mt-1 leading-relaxed ${
-                    canWithdraw ? 'text-slate-500' : 'text-slate-400'
-                  }`}
-                >
-                  {withdrawalStatusDescription}
+                <h3 className={`font-bold ${canWithdraw ? 'text-slate-900' : 'text-slate-500'}`}>Withdraw SLE</h3>
+                <p className={`text-sm mt-1 ${canWithdraw ? 'text-slate-500' : 'text-slate-400'}`}>
+                  {canWithdraw ? 'Withdraw your balance to Mobile Money.' : 'Verification required to withdraw funds.'}
                 </p>
-
-                <div
-                  className={`mt-4 inline-flex items-center gap-2 text-xs font-bold ${
-                    canWithdraw ? 'text-blue-600' : 'text-slate-400'
-                  }`}
-                >
-                  {withdrawalStatusLabel}
-                  {canWithdraw && <span aria-hidden="true">→</span>}
-                </div>
               </button>
             </div>
           </section>
         )}
-
-        {/* VERIFICATION WARNING IF NOT APPROVED */}
-        {!isVerified && (
-          <section className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
-            <div className="flex items-start gap-3">
-              <LockKeyhole
-                size={19}
-                className="text-amber-600 mt-0.5 shrink-0"
-              />
-              <div>
-                <p className="text-sm font-bold text-amber-900">
-                  Cash withdrawal requires identity approval
-                </p>
-                <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                  You can still access your dashboard, load funds, and make/receive internal payments. Admin approval is required before you can perform external cash withdrawals to Mobile Money.
-                </p>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* PAYMENT SECURITY SUMMARY */}
-        <section className="bg-slate-100 border border-slate-200 rounded-3xl p-6">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-600 shrink-0">
-              <ShieldCheck size={20} />
-            </div>
-            <div>
-              <h2 className="font-bold text-slate-900">
-                Payment Security
-              </h2>
-              <p className="text-xs text-slate-500 mt-1">
-                MatMove processes financial transactions through secure, encrypted API integrations.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <SecurityItem
-              title="Secure Sessions"
-              text="Payment requests are securely handled via authenticated backend requests."
-            />
-            <SecurityItem
-              title="Automated Webhooks"
-              text="Provider notifications securely update your wallet balance in real-time."
-            />
-            <SecurityItem
-              title="Protected Cashouts"
-              text="Withdrawals require KYC approval and real-time backend ledger reconciliation."
-            />
-            <SecurityItem
-              title="No Raw Card Storage"
-              text="Credit and debit cards are processed securely without touching MatMove servers."
-            />
-          </div>
-        </section>
       </main>
-    </div>
-  );
-}
-
-function CurrencyBalanceCard({
-  currency,
-  balance,
-  reserved,
-  frozen,
-  label,
-  description,
-  icon,
-}: {
-  currency: WalletCurrency;
-  balance: number;
-  reserved: number;
-  frozen: boolean;
-  label: string;
-  description: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center">
-            {icon}
-          </div>
-          <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              {currency}
-            </div>
-            <div className="font-bold text-slate-900">{label}</div>
-          </div>
-        </div>
-
-        {frozen && (
-          <span className="text-[10px] uppercase tracking-wide font-bold bg-red-50 text-red-700 px-2 py-1 rounded-full">
-            Frozen
-          </span>
-        )}
-      </div>
-
-      <div className="text-2xl font-bold text-slate-900 mt-5">
-        {formatMoney(balance, currency)}
-      </div>
-
-      <p className="text-xs text-slate-500 mt-1">{description}</p>
-
-      {reserved > 0 && (
-        <div className="mt-4 bg-amber-50 border border-amber-100 rounded-xl p-3">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-amber-700">
-            Reserved
-          </div>
-          <div className="text-sm font-bold text-amber-900 mt-1">
-            {formatMoney(reserved, currency)}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SecurityItem({ title, text }: { title: string; text: string }) {
-  return (
-    <div className="bg-white rounded-2xl p-4">
-      <div className="flex items-center gap-2">
-        <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-        <h3 className="font-bold text-sm text-slate-900">{title}</h3>
-      </div>
-      <p className="text-xs text-slate-500 mt-2 leading-relaxed">{text}</p>
     </div>
   );
 }
