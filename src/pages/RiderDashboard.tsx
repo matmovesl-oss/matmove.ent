@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, Package, MapPin, Navigation, ShieldCheck, Wallet, Loader2, Bell, RefreshCw, X, Lock, ArrowUpRight, CalendarClock, Plus, Minus } from 'lucide-react';
+import { Car, Package, MapPin, Navigation, ShieldCheck, Wallet, Loader2, Bell, RefreshCw, X, Map, Lock, ArrowUpRight, CalendarClock, Plus, Minus } from 'lucide-react';
 
 type ServiceType = 'ride' | 'delivery' | 'scheduled';
 type VehicleType = 'keke' | 'bike' | 'car' | 'van';
@@ -79,8 +79,13 @@ export function RiderDashboard({ profile }: any) {
 
   // --- LIVE AUTOCOMPLETE LOGIC ---
   const searchPlaces = async (query: string, type: 'pickup' | 'destination') => {
-    if (type === 'pickup') setPickup(query);
-    else setDestination(query);
+    if (type === 'pickup') {
+       setPickup(query);
+       setPickupCoords(null);
+    } else {
+       setDestination(query);
+       setDestinationCoords(null);
+    }
 
     if (query.length < 3) {
       if (type === 'pickup') setPickupSuggestions([]);
@@ -88,11 +93,9 @@ export function RiderDashboard({ profile }: any) {
       return;
     }
 
-    const token = import.meta.env.VITE_MAPBOX_TOKEN;
-    // Restrict search strongly to Sierra Leone & proximity to Freetown
-    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&country=sl&proximity=-13.234,8.484&autocomplete=true&limit=4`;
-    
     try {
+      const token = import.meta.env.VITE_MAPBOX_TOKEN;
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&country=sl&autocomplete=true&fuzzyMatch=true&limit=5`;
       const res = await fetch(url);
       const data = await res.json();
       if (type === 'pickup') setPickupSuggestions(data.features || []);
@@ -108,36 +111,47 @@ export function RiderDashboard({ profile }: any) {
       setPickup(placeName);
       setPickupCoords(coords);
       setPickupSuggestions([]);
-      dropSinglePin(coords, '#10B981'); // Green
+      dropSinglePin(coords);
     } else {
       setDestination(placeName);
       setDestinationCoords(coords);
       setDestinationSuggestions([]);
-      dropSinglePin(coords, '#3B82F6'); // Blue
+      dropSinglePin(coords);
     }
     setActiveInput(null);
   };
 
-  const dropSinglePin = (coords: [number, number], color: string) => {
+  const dropSinglePin = (coords: [number, number]) => {
     if (!map.current) return;
-    // If we only have one point so far, fly to it
-    if ((!pickupCoords || !destinationCoords)) {
-      map.current.flyTo({ center: coords, zoom: 14 });
+    map.current.flyTo({ center: coords, zoom: 14 });
+  };
+
+  const fetchFallbackCoords = async (placeName: string) => {
+    try {
+      const token = import.meta.env.VITE_MAPBOX_TOKEN;
+      const safeQuery = encodeURIComponent(`${placeName}, Freetown, Sierra Leone`);
+      const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${safeQuery}.json?access_token=${token}&limit=1`);
+      const data = await res.json();
+      return data.features?.[0]?.center || null;
+    } catch (err) {
+      return null;
     }
   };
 
-  // --- AUTO ROUTING ---
-  // When BOTH coordinates are set, automatically draw the route and price it
-  useEffect(() => {
-    if (pickupCoords && destinationCoords) {
-      drawRoute(pickupCoords, destinationCoords);
-    }
-  }, [pickupCoords, destinationCoords]);
-
-  const drawRoute = async (start: [number, number], end: [number, number]) => {
-    if (!map.current) return;
+  const previewRoute = async () => {
+    if (!pickup || !destination || !map.current) return alert('Enter both pickup and destination locations.');
     setIsRouting(true);
+    setActiveInput(null);
+
     try {
+      const pCoords = pickupCoords || await fetchFallbackCoords(pickup);
+      const dCoords = destinationCoords || await fetchFallbackCoords(destination);
+
+      if (!pCoords || !dCoords) throw new Error('Could not pinpoint locations. Try adding a landmark.');
+
+      setPickupCoords(pCoords);
+      setDestinationCoords(dCoords);
+
       const token = import.meta.env.VITE_MAPBOX_TOKEN;
       
       markers.current.forEach(m => m.remove());
@@ -147,10 +161,10 @@ export function RiderDashboard({ profile }: any) {
         map.current.removeSource('route');
       }
 
-      markers.current.push(new mapboxgl.Marker({ color: '#10B981' }).setLngLat(start).addTo(map.current));
-      markers.current.push(new mapboxgl.Marker({ color: '#3B82F6' }).setLngLat(end).addTo(map.current));
+      markers.current.push(new mapboxgl.Marker({ color: '#10B981' }).setLngLat(pCoords).addTo(map.current));
+      markers.current.push(new mapboxgl.Marker({ color: '#3B82F6' }).setLngLat(dCoords).addTo(map.current));
 
-      const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?geometries=geojson&access_token=${token}`);
+      const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${pCoords[0]},${pCoords[1]};${dCoords[0]},${dCoords[1]}?geometries=geojson&access_token=${token}`);
       const dirData = await dirRes.json();
       const route = dirData.routes?.[0];
 
@@ -206,12 +220,12 @@ export function RiderDashboard({ profile }: any) {
   }, [activeBooking]);
 
   const handleRequest = async () => {
-    if (!pickupCoords || !destinationCoords) return alert('Please select pickup and destination from the dropdown suggestions.');
+    if (!pickup || !destination) return alert('Please enter pickup and destination.');
     if (serviceType === 'scheduled' && !scheduledTime) return alert('Select a date and time for your scheduled ride.');
     
     const amt = Number(offerAmount);
     if (serviceType !== 'scheduled') {
-      if (!amt || amt <= 0) return alert('Enter a valid offer amount.');
+      if (!amt || amt <= 0) return alert('Please preview route to calculate offer amount.');
       const typeKey = serviceType === 'ride' ? vehicleType : 'delivery';
       const minPrice = typeKey === 'delivery' ? PRICING_RATES.delivery.min : PRICING_RATES[typeKey as VehicleType].min;
       
@@ -225,11 +239,11 @@ export function RiderDashboard({ profile }: any) {
         rider_id: profile.id,
         service_type: serviceType,
         vehicle_type: serviceType === 'ride' ? vehicleType : null,
-        pickup_location: pickup, // Save string name for UI
+        pickup_location: pickup,
         destination_location: destination,
         fare_amount: serviceType === 'scheduled' ? 0 : amt,
         scheduled_time: serviceType === 'scheduled' ? scheduledTime : null,
-        status: 'pending' // Broadcasts directly to drivers
+        status: 'pending'
       }).select().single();
       
       if (error) throw error;
@@ -333,7 +347,6 @@ export function RiderDashboard({ profile }: any) {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* REQUEST FORM */}
           <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit">
             <h3 className="font-bold text-lg">Request Service</h3>
             
@@ -356,7 +369,6 @@ export function RiderDashboard({ profile }: any) {
                     </div>
                   )}
 
-                  {/* AUTOCOMPLETE PICKUP */}
                   <div className="relative" onClick={e => e.stopPropagation()}>
                     <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'pickup' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
                       <MapPin size={16} className="text-emerald-600 shrink-0" />
@@ -381,7 +393,6 @@ export function RiderDashboard({ profile }: any) {
                     )}
                   </div>
 
-                  {/* AUTOCOMPLETE DESTINATION */}
                   <div className="relative" onClick={e => e.stopPropagation()}>
                     <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'destination' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
                       <Navigation size={16} className="text-blue-600 shrink-0" />
@@ -406,9 +417,11 @@ export function RiderDashboard({ profile }: any) {
                     )}
                   </div>
                   
-                  <div className="flex justify-between items-center px-1">
+                  <div className="flex justify-between items-center px-1 mt-1">
                     <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Route: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
-                    {isRouting && <span className="text-xs font-bold text-blue-600 flex items-center gap-1"><Loader2 size={12} className="animate-spin"/> Routing...</span>}
+                    <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
+                      {isRouting ? <Loader2 size={12} className="animate-spin"/> : <Map size={12} />} Preview Route
+                    </button>
                   </div>
 
                   {serviceType !== 'scheduled' && (
@@ -447,14 +460,12 @@ export function RiderDashboard({ profile }: any) {
             )}
           </div>
 
-          {/* MAPBOX CONTAINER */}
           <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] border border-slate-200 shadow-inner">
             <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
           </div>
         </div>
       </div>
 
-      {/* TOP UP MODAL */}
       {isTopUpModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
@@ -469,7 +480,6 @@ export function RiderDashboard({ profile }: any) {
         </div>
       )}
 
-      {/* WITHDRAW MODAL */}
       {isWithdrawModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
