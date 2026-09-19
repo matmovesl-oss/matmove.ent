@@ -69,11 +69,19 @@ export function DriverDashboard({ profile }: any) {
     return () => { supabase.removeChannel(channel); };
   }, [isOnline, profile.id]);
 
-  const handleAcceptBooking = async (bookingId: string) => {
+  const handleAcceptBooking = async (booking: any) => {
     if (!isApproved) return alert('You must be KYC Approved by an Admin to accept trips.');
+    
+    // 15% AUTOMATED COMMISSION CHECK
+    const commission = Number((booking.fare_amount * 0.15).toFixed(2));
+    if (liveBalance < commission) {
+        return alert(`Insufficient funds. You need at least SLE ${commission} in your wallet to cover the 15% platform commission and accept this trip. Please load your wallet.`);
+    }
+
     try {
-      const { error } = await supabase.from('bookings').update({ status: 'accepted', driver_id: profile.id }).eq('id', bookingId);
+      const { error } = await supabase.from('bookings').update({ status: 'accepted', driver_id: profile.id }).eq('id', booking.id);
       if (error) throw error;
+      fetchLiveBalance(); 
     } catch (err: any) { alert('Failed to accept trip: ' + err.message); }
   };
 
@@ -155,10 +163,11 @@ export function DriverDashboard({ profile }: any) {
                       <div className="flex items-center gap-2 mb-2">
                         {b.service_type === 'delivery' ? <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1"><Package size={10}/> Delivery</span>
                         : b.service_type === 'scheduled' ? <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1"><CalendarClock size={10}/> Scheduled</span>
-                        : <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1"><Car size={10}/> Ride</span>}
+                        : <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1"><Car size={10}/> {b.vehicle_type || 'Ride'}</span>}
                       </div>
                       
                       <span className="text-sm font-bold text-slate-900">SLE {b.fare_amount}</span>
+                      <span className="text-[10px] text-slate-500 ml-2 font-bold uppercase">(Fee: SLE {(b.fare_amount * 0.15).toFixed(2)})</span>
                       {b.scheduled_time && <div className="text-xs font-bold text-emerald-600 mt-1">For: {new Date(b.scheduled_time).toLocaleString()}</div>}
                       
                       <div className="text-xs text-slate-600 mt-2 flex flex-col gap-1.5">
@@ -167,7 +176,7 @@ export function DriverDashboard({ profile }: any) {
                       </div>
                     </div>
                     {b.status === 'pending' && (
-                      <button onClick={() => handleAcceptBooking(b.id)} className="w-full bg-slate-900 text-white py-2.5 rounded-lg font-bold text-xs hover:bg-slate-800 transition">
+                      <button onClick={() => handleAcceptBooking(b)} className="w-full bg-slate-900 text-white py-2.5 rounded-lg font-bold text-xs hover:bg-slate-800 transition">
                         Accept Request
                       </button>
                     )}
