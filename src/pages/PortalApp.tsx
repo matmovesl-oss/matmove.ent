@@ -78,7 +78,7 @@ export function PortalApp() {
   const location = useLocation();
 
   // PASSCODE & SESSION STATE
-  const [pinStatus, setPinStatus] = useState<'checking' | 'create' | 'locked' | 'unlocked'>('checking');
+  const [pinStatus, setPinStatus] = useState<'checking' | 'create' | 'locked' | 'unlocked' | 'forgot_auth' | 'forgot_pin'>('checking');
   const [pinError, setPinError] = useState('');
 
   const [profile, setProfile] = useState<any>(null);
@@ -103,35 +103,40 @@ export function PortalApp() {
   const [loggingOut, setLoggingOut] = useState(false);
 
   // ==========================================
-  // SMART SESSION & PIN TRACKER
+  // SMART SESSION & BACKEND PIN TRACKER
   // ==========================================
   useEffect(() => {
+    // Skip idle checks if user is currently resetting their PIN
+    if (pinStatus === 'forgot_auth' || pinStatus === 'forgot_pin') return;
+
     const checkIdleState = () => {
-      const savedPin = localStorage.getItem('matmove_pin');
+      if (!profile) return;
+
+      const backendPin = profile.passcode;
       const lastActiveStr = localStorage.getItem('matmove_last_active');
       const lastActive = lastActiveStr ? parseInt(lastActiveStr, 10) : 0;
       const now = Date.now();
       const idleTime = now - lastActive;
 
-      // 1. First time opening the portal? Create a PIN.
-      if (!savedPin) {
+      // 1. No PIN in backend? Must create one (Fresh Account)
+      if (!backendPin) {
         setPinStatus('create');
         return;
       }
 
-      // 2. Check timeouts if returning
-      if (lastActive > 0) {
-        if (idleTime > IDLE_LOGOUT_MS) {
+      // 2. We have a backend PIN. Check session timers.
+      // If lastActive is 0, it means they just logged in via Email/Password -> Ask for PIN
+      if (lastActive === 0 || idleTime > IDLE_LOCK_MS) {
+        // If they've been idle for over 30 mins, perform a hard logout
+        if (lastActive > 0 && idleTime > IDLE_LOGOUT_MS) {
           handleLogout();
           return;
         }
-        if (idleTime > IDLE_LOCK_MS) {
-          setPinStatus('locked');
-          return;
-        }
+        setPinStatus('locked');
+        return;
       }
 
-      // 3. User is within safe limits (e.g. instantly returning from Monime checkout)
+      // 3. User is within safe active limits (e.g. instantly returning from Monime checkout)
       setPinStatus('unlocked');
       localStorage.setItem('matmove_last_active', now.toString());
     };
@@ -143,7 +148,7 @@ export function PortalApp() {
     };
     window.addEventListener('visibilitychange', handleVisibility);
     return () => window.removeEventListener('visibilitychange', handleVisibility);
-  }, []);
+  }, [profile, pinStatus]);
 
   // Track activity to prevent timeouts while using the app
   useEffect(() => {
@@ -167,15 +172,22 @@ export function PortalApp() {
     };
   }, [pinStatus]);
 
-  const handleSetPin = (newPin: string) => {
-    localStorage.setItem('matmove_pin', newPin);
-    localStorage.setItem('matmove_last_active', Date.now().toString());
-    setPinStatus('unlocked');
+  const handleSetPin = async (newPin: string) => {
+    try {
+      const { error } = await supabase.from('profiles').update({ passcode: newPin }).eq('id', profile.id);
+      if (error) throw error;
+
+      localStorage.setItem('matmove_last_active', Date.now().toString());
+      setProfile({ ...profile, passcode: newPin });
+      setPinStatus('unlocked');
+      setPinError('');
+    } catch (err) {
+      setPinError('Failed to securely save passcode. Please try again.');
+    }
   };
 
   const handleUnlockPin = (enteredPin: string) => {
-    const savedPin = localStorage.getItem('matmove_pin');
-    if (enteredPin === savedPin) {
+    if (enteredPin === profile.passcode) {
       localStorage.setItem('matmove_last_active', Date.now().toString());
       setPinError('');
       setPinStatus('unlocked');
@@ -184,12 +196,28 @@ export function PortalApp() {
     }
   };
 
+  const handleResetPin = async (newPin: string) => {
+    try {
+      const { error } = await supabase.from('profiles').update({ passcode: newPin }).eq('id', profile.id);
+      if (error) throw error;
+
+      localStorage.setItem('matmove_last_active', Date.now().toString());
+      setProfile({ ...profile, passcode: newPin });
+      
+      // Because they just securely verified their password to get here, 
+      // we can safely unlock the dashboard for them immediately.
+      setPinStatus('unlocked');
+      setPinError('');
+    } catch (err) {
+      setPinError('Failed to update passcode.');
+    }
+  };
+
   const handleLogout = async () => {
     if (loggingOut) return;
     setLoggingOut(true);
     try {
-      // Clear security keys on manual or forced logout
-      localStorage.removeItem('matmove_pin');
+      // Clear local activity timer on logout so the next sign-in forces the Lock screen
       localStorage.removeItem('matmove_last_active');
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
@@ -246,9 +274,7 @@ export function PortalApp() {
       }
 
       const resolvedPhone = normalizePhone(profileData?.phone) || normalizePhone(session.user.phone) || '';
-
       const { data: kycSubmission } = await supabase.from('kyc_submissions').select('id,status,target_role,created_at,updated_at').eq('profile_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle();
-
       const resolvedKycStatus = kycSubmission?.status ? normalizeKycStatus(kycSubmission?.status) : normalizeKycStatus(profileData?.kyc_status);
 
       const { data: walletData } = await supabase.from('wallets').select('*').eq('user_id', userId).order('currency', { ascending: true });
@@ -260,7 +286,6 @@ export function PortalApp() {
       if (resolvedRole === 'driver') bookingQuery = bookingQuery.or(`status.eq.pending,driver_id.eq.${userId}`);
       else if (resolvedRole === 'rider') bookingQuery = bookingQuery.eq('rider_id', userId);
       else bookingQuery = bookingQuery.eq('rider_id', '00000000-0000-0000-0000-000000000000');
-
       const { data: bookingData } = await bookingQuery;
 
       setProfile({
@@ -270,6 +295,7 @@ export function PortalApp() {
         phone: resolvedPhone,
         kyc_status: resolvedKycStatus,
         role: resolvedRole,
+        passcode: profileData?.passcode || null, // Map the Backend PIN
       });
 
       setWallet(resolvedWallet);
@@ -283,13 +309,11 @@ export function PortalApp() {
 
   useEffect(() => {
     fetchUserData();
-    // Realtime listeners
     const bookingChannel = supabase.channel(`portal-booking-changes-${Date.now()}`).on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => { fetchUserData(); }).subscribe();
     const walletChannel = supabase.channel(`portal-wallet-changes-${Date.now()}`).on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, () => { fetchUserData(); }).subscribe();
     return () => { supabase.removeChannel(bookingChannel); supabase.removeChannel(walletChannel); };
   }, [fetchUserData]);
 
-  // Remaining Handlers (Booking, Payments) remain perfectly untouched...
   const handleNavigation = (section: PortalSection) => {
     setSuccessMsg('');
     setActiveSection(section);
@@ -297,11 +321,7 @@ export function PortalApp() {
 
   const openWalletPage = () => { setSuccessMsg(''); setActiveSection('wallet'); };
   const closeWalletPage = () => { setActiveSection('home'); setSuccessMsg(''); };
-
-  const openWalletTopUp = () => {
-    setWalletAction('topup'); setTopUpMethod(null); setMobileMoneyNetwork('orange'); setWithdrawalPhone(''); setAmount(''); setSuccessMsg(''); setIsWalletModalOpen(true);
-  };
-
+  const openWalletTopUp = () => { setWalletAction('topup'); setTopUpMethod(null); setMobileMoneyNetwork('orange'); setWithdrawalPhone(''); setAmount(''); setSuccessMsg(''); setIsWalletModalOpen(true); };
   const openWalletWithdrawal = () => {
     const kycStatus = normalizeKycStatus(profile?.kyc_status);
     if (kycStatus !== 'approved') return alert('Cash withdrawal is available only after your account has been verified and approved by MatMove Admin.');
@@ -312,7 +332,6 @@ export function PortalApp() {
   // RENDER SECURITY GATES
   // ==========================================
 
-  // 1. PIN Check / Loading State
   if (pinStatus === 'checking' || loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -324,19 +343,27 @@ export function PortalApp() {
     );
   }
 
-  // 2. PIN Lock Screens
-  if (pinStatus === 'create' || pinStatus === 'locked') {
+  // Route to the Unified PIN Screens
+  if (pinStatus !== 'unlocked') {
     return (
       <PasscodeScreen 
         mode={pinStatus} 
-        onComplete={pinStatus === 'create' ? handleSetPin : handleUnlockPin} 
-        error={pinError} 
+        onComplete={(pin: string) => {
+          if (pinStatus === 'create') handleSetPin(pin);
+          else if (pinStatus === 'locked') handleUnlockPin(pin);
+          else if (pinStatus === 'forgot_pin') handleResetPin(pin);
+        }}
+        error={pinError}
+        setError={setPinError}
+        profileEmail={profile?.email}
+        onForgot={() => setPinStatus('forgot_auth')}
+        onForgotAuthSuccess={() => setPinStatus('forgot_pin')}
+        onCancelForgot={() => { setPinError(''); setPinStatus('locked'); }}
         onLogout={handleLogout} 
       />
     );
   }
 
-  // 3. Error State
   if (portalError) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
@@ -349,10 +376,6 @@ export function PortalApp() {
       </div>
     );
   }
-
-  // ==========================================
-  // RENDER MAIN DASHBOARDS
-  // ==========================================
 
   const role = String(profile?.role || '').toLowerCase();
   const isRider = role === 'rider';
@@ -390,11 +413,61 @@ export function PortalApp() {
 }
 
 // ==========================================
-// NEW PASSCODE UI COMPONENT
+// UNIFIED PASSCODE UI COMPONENT
 // ==========================================
-function PasscodeScreen({ mode, onComplete, error, onLogout }: any) {
+function PasscodeScreen({ mode, onComplete, error, setError, profileEmail, onForgot, onForgotAuthSuccess, onCancelForgot, onLogout }: any) {
   const [pin, setPin] = useState('');
+  const [accountPassword, setAccountPassword] = useState('');
+  const [verifying, setVerifying] = useState(false);
   
+  // Step 1 of Forgot flow: Verify account password to prevent unauthorized resets
+  if (mode === 'forgot_auth') {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-white selection:bg-transparent">
+        <div className="w-16 h-16 bg-blue-600/20 text-blue-500 rounded-full flex items-center justify-center mb-6">
+          <LockKeyhole size={32} />
+        </div>
+        <h2 className="text-2xl font-bold mb-2">Verify Identity</h2>
+        <p className="text-slate-400 text-sm mb-8 text-center max-w-xs">
+          To reset your passcode, please enter your MatMove account password to verify your identity.
+        </p>
+
+        {error && <p className="text-red-400 text-sm mb-6 bg-red-950/50 px-4 py-2 rounded-lg">{error}</p>}
+
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          setVerifying(true);
+          setError('');
+          try {
+            const { error: authErr } = await supabase.auth.signInWithPassword({ email: profileEmail, password: accountPassword });
+            if (authErr) throw authErr;
+            onForgotAuthSuccess();
+          } catch(err) {
+            setError('Incorrect account password.');
+          } finally {
+            setVerifying(false);
+          }
+        }} className="w-full max-w-[280px]">
+          <input 
+            type="password" 
+            value={accountPassword}
+            onChange={(e) => setAccountPassword(e.target.value)}
+            placeholder="Account Password"
+            required
+            className="w-full bg-slate-800 border border-slate-700 p-4 rounded-xl text-white outline-none focus:border-blue-500 mb-4"
+          />
+          <button type="submit" disabled={verifying} className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-50">
+            {verifying ? 'Verifying...' : 'Verify & Reset Passcode'}
+          </button>
+          <button type="button" onClick={onCancelForgot} className="w-full mt-6 text-sm text-slate-500 hover:text-slate-300">
+            Cancel and go back
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  // Standard PIN Pad for Create, Lock, and Step 2 of Forgot flow
   const handlePress = (val: string) => {
     if (pin.length >= 4) return;
     const newPin = pin + val;
@@ -402,26 +475,32 @@ function PasscodeScreen({ mode, onComplete, error, onLogout }: any) {
     if (newPin.length === 4) {
       setTimeout(() => {
         onComplete(newPin);
-        if (mode === 'locked') setPin('');
+        if (mode === 'locked') setPin(''); // Clear pin if they entered wrong and stay on locked screen
       }, 250);
     }
   };
 
   const handleDelete = () => setPin(pin.slice(0, -1));
 
+  const getTitle = () => {
+    if (mode === 'create') return 'Create a Passcode';
+    if (mode === 'forgot_pin') return 'Enter New Passcode';
+    return 'Enter Passcode';
+  };
+
+  const getSubtitle = () => {
+    if (mode === 'create') return 'Enter a 4-digit PIN to secure your MatMove account.';
+    if (mode === 'forgot_pin') return 'Please enter your brand new 4-digit MatMove PIN.';
+    return 'Welcome back. Please enter your 4-digit MatMove PIN.';
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-white selection:bg-transparent">
       <div className="w-16 h-16 bg-blue-600/20 text-blue-500 rounded-full flex items-center justify-center mb-6">
         <LockKeyhole size={32} />
       </div>
-      <h2 className="text-2xl font-bold mb-2">
-        {mode === 'create' ? 'Create a Passcode' : 'Enter Passcode'}
-      </h2>
-      <p className="text-slate-400 text-sm mb-8 text-center max-w-xs">
-        {mode === 'create' 
-          ? 'Enter a 4-digit PIN to secure your MatMove account on this device.'
-          : 'Welcome back. Please enter your 4-digit MatMove PIN.'}
-      </p>
+      <h2 className="text-2xl font-bold mb-2">{getTitle()}</h2>
+      <p className="text-slate-400 text-sm mb-8 text-center max-w-xs">{getSubtitle()}</p>
 
       <div className="flex gap-6 mb-10">
         {[...Array(4)].map((_, i) => (
@@ -438,18 +517,19 @@ function PasscodeScreen({ mode, onComplete, error, onLogout }: any) {
           </button>
         ))}
         <div />
-        <button onClick={() => handlePress('0')} className="h-16 rounded-2xl bg-slate-800 text-3xl font-light hover:bg-slate-700 active:bg-slate-600 transition touch-manipulation">
-          0
-        </button>
-        <button onClick={handleDelete} className="h-16 rounded-2xl bg-slate-800 text-2xl flex items-center justify-center hover:bg-slate-700 active:bg-slate-600 transition text-slate-400 touch-manipulation">
-          <Delete size={28} />
-        </button>
+        <button onClick={() => handlePress('0')} className="h-16 rounded-2xl bg-slate-800 text-3xl font-light hover:bg-slate-700 active:bg-slate-600 transition touch-manipulation">0</button>
+        <button onClick={handleDelete} className="h-16 rounded-2xl bg-slate-800 text-2xl flex items-center justify-center hover:bg-slate-700 active:bg-slate-600 transition text-slate-400 touch-manipulation"><Delete size={28} /></button>
       </div>
 
       {mode === 'locked' && (
-        <button onClick={onLogout} className="mt-16 text-sm text-slate-500 hover:text-slate-300 underline underline-offset-4">
-          Forgot PIN? Sign out completely
-        </button>
+        <div className="mt-16 flex flex-col gap-4 text-center">
+          <button onClick={onForgot} className="text-sm font-medium text-blue-400 hover:text-blue-300">
+            Forgot Passcode?
+          </button>
+          <button onClick={onLogout} className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-4">
+            Sign out completely
+          </button>
+        </div>
       )}
     </div>
   );
@@ -460,7 +540,6 @@ function PasscodeScreen({ mode, onComplete, error, onLogout }: any) {
 // ==========================================
 
 function AccountSection({ profile, role, loggingOut, onLogout, onBack }: any) {
-  // Existing AccountSection implementation remains completely unchanged...
   const firstName = profile?.first_name || profile?.firstName || '';
   const lastName = profile?.last_name || profile?.lastName || '';
   const fullName = `${firstName} ${lastName}`.trim() || 'MatMove User';
