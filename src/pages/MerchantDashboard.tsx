@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Store, Wallet, RefreshCw, AlertCircle, ShieldCheck, X, Loader2, Lock, Plus, Package, Smartphone, CreditCard, ArrowUpRight, MapPin, Navigation, Car, CalendarClock } from 'lucide-react';
+import { Store, Wallet, RefreshCw, AlertCircle, ShieldCheck, X, Loader2, Lock, Plus, Package, Smartphone, CreditCard, ArrowUpRight, MapPin, Navigation, Car, CalendarClock, Bike, Truck, Map } from 'lucide-react';
 
 type ServiceType = 'delivery' | 'ride' | 'scheduled';
+type VehicleType = 'keke' | 'bike' | 'car' | 'van';
 
 export function MerchantDashboard({ profile }: any) {
   const [localProfile, setLocalProfile] = useState(profile);
@@ -16,8 +17,12 @@ export function MerchantDashboard({ profile }: any) {
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [serviceType, setServiceType] = useState<ServiceType>('delivery');
+  const [vehicleType, setVehicleType] = useState<VehicleType>('car');
+  const [offerAmount, setOfferAmount] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
+  
   const [isRequesting, setIsRequesting] = useState(false);
+  const [isRouting, setIsRouting] = useState(false);
   const [activeBooking, setActiveBooking] = useState<any>(null);
 
   // Modals...
@@ -29,6 +34,7 @@ export function MerchantDashboard({ profile }: any) {
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
+  const markers = useRef<mapboxgl.Marker[]>([]);
   const isApproved = localProfile?.kyc_status === 'approved';
 
   const fetchLiveBalance = async () => {
@@ -58,22 +64,80 @@ export function MerchantDashboard({ profile }: any) {
     });
   }, []);
 
+  const previewRoute = async () => {
+    if (!pickup || !destination || !map.current) return alert('Enter both pickup and destination locations.');
+    setIsRouting(true);
+    try {
+      const token = import.meta.env.VITE_MAPBOX_TOKEN;
+      // 1. Geocode Pickup
+      const pRes = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(pickup)}.json?access_token=${token}&country=sl`);
+      const pData = await pRes.json();
+      const pCoords = pData.features?.[0]?.center;
+      
+      // 2. Geocode Destination
+      const dRes = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(destination)}.json?access_token=${token}&country=sl`);
+      const dData = await dRes.json();
+      const dCoords = dData.features?.[0]?.center;
+
+      if (!pCoords || !dCoords) throw new Error('Could not find one or both locations.');
+
+      // 3. Clear old markers & routes
+      markers.current.forEach(m => m.remove());
+      markers.current = [];
+      if (map.current.getSource('route')) {
+        map.current.removeLayer('route');
+        map.current.removeSource('route');
+      }
+
+      // 4. Add Pins
+      markers.current.push(new mapboxgl.Marker({ color: '#10B981' }).setLngLat(pCoords).addTo(map.current));
+      markers.current.push(new mapboxgl.Marker({ color: '#3B82F6' }).setLngLat(dCoords).addTo(map.current));
+
+      // 5. Get Directions
+      const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${pCoords[0]},${pCoords[1]};${dCoords[0]},${dCoords[1]}?geometries=geojson&access_token=${token}`);
+      const dirData = await dirRes.json();
+      const route = dirData.routes?.[0]?.geometry;
+
+      if (route) {
+        map.current.addSource('route', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: route } });
+        map.current.addLayer({
+          id: 'route',
+          type: 'line',
+          source: 'route',
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: { 'line-color': '#2563EB', 'line-width': 4 }
+        });
+        
+        // Auto-fit map to the route
+        const coordinates = route.coordinates;
+        const bounds = coordinates.reduce((b: mapboxgl.LngLatBounds, c: [number, number]) => b.extend(c), new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+        map.current.fitBounds(bounds, { padding: 50 });
+      }
+    } catch (err: any) {
+      alert('Routing Error: ' + err.message);
+    } finally {
+      setIsRouting(false);
+    }
+  };
+
   const handleRequest = async () => {
     if (!pickup || !destination) return alert('Enter pickup and destination');
     if (serviceType === 'scheduled' && !scheduledTime) return alert('Select time for scheduled request.');
-    const estimate = serviceType === 'delivery' ? 15 : 25;
+    if (serviceType !== 'scheduled' && (!offerAmount || Number(offerAmount) <= 0)) return alert('Enter a valid offer amount.');
     
     setIsRequesting(true);
     try {
       const { data, error } = await supabase.from('bookings').insert({
         rider_id: profile.id, // Merchants act as requesters
         service_type: serviceType,
+        vehicle_type: serviceType === 'ride' ? vehicleType : null,
         pickup_location: pickup,
         destination_location: destination,
-        fare_amount: estimate,
+        fare_amount: serviceType === 'scheduled' ? 0 : Number(offerAmount),
         scheduled_time: serviceType === 'scheduled' ? scheduledTime : null,
-        status: 'pending'
+        status: 'pending_admin' // Flags it for the Admin Dashboard
       }).select().single();
+      
       if (error) throw error;
       setActiveBooking(data);
     } catch (err: any) { alert('Request failed: ' + err.message); } 
@@ -142,41 +206,64 @@ export function MerchantDashboard({ profile }: any) {
             
             {!activeBooking ? (
               <div className="space-y-3">
-                <div className="flex items-center gap-2 border p-3 rounded-xl">
-                  <Store size={16} className="text-slate-400" />
-                  <input type="text" placeholder="Pickup (Store Location)" value={pickup} onChange={e => setPickup(e.target.value)} className="w-full outline-none text-sm" />
-                </div>
-                <div className="flex items-center gap-2 border p-3 rounded-xl">
-                  <MapPin size={16} className="text-emerald-600" />
-                  <input type="text" placeholder="Customer Destination" value={destination} onChange={e => setDestination(e.target.value)} className="w-full outline-none text-sm" />
-                </div>
-                {serviceType === 'scheduled' && (
-                  <div className="flex items-center gap-2 border p-3 rounded-xl">
-                    <CalendarClock size={16} className="text-emerald-600" />
-                    <input type="datetime-local" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="w-full outline-none text-sm text-slate-700" />
+                {serviceType === 'ride' && (
+                  <div className="grid grid-cols-4 gap-2 mb-2">
+                    {(['keke', 'bike', 'car', 'van'] as VehicleType[]).map(v => (
+                      <button key={v} onClick={() => setVehicleType(v)} className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-600 ring-inset' : 'bg-slate-100 text-slate-500'}`}>
+                        {v}
+                      </button>
+                    ))}
                   </div>
                 )}
-                <button onClick={handleRequest} disabled={isRequesting} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800">
+                
+                <div className="flex items-center gap-2 border p-3 rounded-xl focus-within:border-blue-500">
+                  <MapPin size={16} className="text-emerald-600" />
+                  <input type="text" placeholder="Pickup Location" value={pickup} onChange={e => setPickup(e.target.value)} className="w-full outline-none text-sm bg-transparent" />
+                </div>
+                <div className="flex items-center gap-2 border p-3 rounded-xl focus-within:border-blue-500">
+                  <Navigation size={16} className="text-blue-600" />
+                  <input type="text" placeholder="Destination Location" value={destination} onChange={e => setDestination(e.target.value)} className="w-full outline-none text-sm bg-transparent" />
+                </div>
+
+                <div className="flex items-center justify-end">
+                  <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                    {isRouting ? <Loader2 size={12} className="animate-spin"/> : <Map size={12} />} Preview Route
+                  </button>
+                </div>
+
+                {serviceType !== 'scheduled' && (
+                  <div className="flex items-center gap-2 border p-3 rounded-xl focus-within:border-blue-500">
+                    <span className="text-slate-500 font-bold text-sm">SLE</span>
+                    <input type="number" placeholder="Offer Amount" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-sm bg-transparent font-bold text-slate-900" />
+                  </div>
+                )}
+
+                {serviceType === 'scheduled' && (
+                  <div className="flex items-center gap-2 border p-3 rounded-xl focus-within:border-blue-500">
+                    <CalendarClock size={16} className="text-emerald-600" />
+                    <input type="datetime-local" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="w-full outline-none text-sm bg-transparent text-slate-700" />
+                  </div>
+                )}
+                <button onClick={handleRequest} disabled={isRequesting} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 shadow-md">
                   {isRequesting ? <Loader2 className="animate-spin mx-auto" /> : `Find Driver`}
                 </button>
               </div>
             ) : (
               <div className="text-center py-6">
-                <p className="font-bold text-slate-900">{activeBooking.status === 'pending' ? 'Dispatching driver...' : 'Driver Assigned'}</p>
+                <p className="font-bold text-slate-900">{activeBooking.status.includes('pending') ? 'Dispatching driver...' : 'Driver Assigned'}</p>
                 <button onClick={() => setActiveBooking(null)} className="text-xs text-slate-500 underline mt-4">Reset Dashboard</button>
               </div>
             )}
           </div>
           
           {/* Map */}
-          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[350px] border border-slate-200">
+          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[400px] border border-slate-200 shadow-inner">
             <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
           </div>
         </div>
       </div>
       
-      {/* Existing Modals implementation remains exactly the same logic */}
-      {/* Top-Up Modal */}
+      {/* Existing Modals ... */}
       {isTopUpModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
