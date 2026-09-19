@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Store, Wallet, RefreshCw, AlertCircle, ShieldCheck, X, Loader2, Lock, Plus, Minus, Package, Smartphone, CreditCard, ArrowUpRight, MapPin, Navigation, Car, CalendarClock } from 'lucide-react';
+import { Store, Wallet, RefreshCw, AlertCircle, ShieldCheck, X, Loader2, Lock, Plus, Minus, Package, Smartphone, CreditCard, ArrowUpRight, MapPin, Navigation, Car, CalendarClock, Map } from 'lucide-react';
 
 type ServiceType = 'delivery' | 'ride' | 'scheduled';
 type VehicleType = 'keke' | 'bike' | 'car' | 'van';
@@ -11,8 +11,7 @@ const PRICING_RATES = {
   bike: { min: 10, perKm: 3 },
   keke: { min: 15, perKm: 5 },
   car: { min: 30, perKm: 10 },
-  van: { min: 60, perKm: 20 },
-  delivery: { min: 15, perKm: 4 }, 
+  van: { min: 60, perKm: 20 }
 };
 
 export function MerchantDashboard({ profile }: any) {
@@ -27,7 +26,7 @@ export function MerchantDashboard({ profile }: any) {
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
   
-  // Autocomplete State
+  // Google Places State
   const [pickupSuggestions, setPickupSuggestions] = useState<any[]>([]);
   const [destinationSuggestions, setDestinationSuggestions] = useState<any[]>([]);
   const [activeInput, setActiveInput] = useState<'pickup' | 'destination' | null>(null);
@@ -54,6 +53,18 @@ export function MerchantDashboard({ profile }: any) {
   const markers = useRef<mapboxgl.Marker[]>([]);
   const isApproved = localProfile?.kyc_status === 'approved';
 
+  // 1. Inject Google Maps Script dynamically
+  useEffect(() => {
+    // @ts-ignore
+    if (!window.google) {
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`;
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+  }, []);
+
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
     setIsRefreshing(true);
@@ -74,71 +85,81 @@ export function MerchantDashboard({ profile }: any) {
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12',
-      center: [-13.234, 8.484], // Freetown
+      center: [-13.234, 8.484], // Freetown Default
       zoom: 12
     });
   }, []);
 
-  // --- LIVE AUTOCOMPLETE LOGIC ---
-  const searchPlaces = async (query: string, type: 'pickup' | 'destination') => {
-    if (type === 'pickup') setPickup(query);
-    else setDestination(query);
+  // --- GOOGLE PLACES LIVE SEARCH ---
+  const searchPlaces = (query: string, type: 'pickup' | 'destination') => {
+    if (type === 'pickup') {
+       setPickup(query);
+       setPickupCoords(null);
+    } else {
+       setDestination(query);
+       setDestinationCoords(null);
+    }
 
-    if (query.length < 3) {
+    if (query.trim().length < 3) {
       if (type === 'pickup') setPickupSuggestions([]);
       else setDestinationSuggestions([]);
       return;
     }
 
-    const token = import.meta.env.VITE_MAPBOX_TOKEN;
-    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&country=sl&proximity=-13.234,8.484&autocomplete=true&limit=4`;
-    
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-      if (type === 'pickup') setPickupSuggestions(data.features || []);
-      else setDestinationSuggestions(data.features || []);
-    } catch (err) { console.error('Search error', err); }
+    // @ts-ignore
+    if (!window.google) return;
+
+    // @ts-ignore
+    const autocomplete = new window.google.maps.places.AutocompleteService();
+    autocomplete.getPlacePredictions(
+      { input: query, componentRestrictions: { country: 'sl' } },
+      (predictions: any, status: any) => {
+        // @ts-ignore
+        if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+          if (type === 'pickup') setPickupSuggestions(predictions);
+          else setDestinationSuggestions(predictions);
+        }
+      }
+    );
   };
 
-  const handleSelectPlace = (feature: any, type: 'pickup' | 'destination') => {
-    const coords = feature.center as [number, number];
-    const placeName = feature.place_name;
+  const handleSelectPlace = (placeId: string, description: string, type: 'pickup' | 'destination') => {
+    // @ts-ignore
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode({ placeId }, (results: any, status: any) => {
+      if (status === 'OK' && results[0]) {
+        const lat = results[0].geometry.location.lat();
+        const lng = results[0].geometry.location.lng();
+        const coords: [number, number] = [lng, lat]; // Mapbox expects [lng, lat]
 
-    if (type === 'pickup') {
-      setPickup(placeName);
-      setPickupCoords(coords);
-      setPickupSuggestions([]);
-      dropSinglePin(coords, '#10B981');
-    } else {
-      setDestination(placeName);
-      setDestinationCoords(coords);
-      setDestinationSuggestions([]);
-      dropSinglePin(coords, '#3B82F6');
-    }
+        if (type === 'pickup') {
+          setPickup(description);
+          setPickupCoords(coords);
+          setPickupSuggestions([]);
+          dropSinglePin(coords);
+        } else {
+          setDestination(description);
+          setDestinationCoords(coords);
+          setDestinationSuggestions([]);
+          dropSinglePin(coords);
+        }
+      }
+    });
     setActiveInput(null);
   };
 
-  const dropSinglePin = (coords: [number, number], color: string) => {
-    if (!map.current) return;
-    if ((!pickupCoords || !destinationCoords)) {
-      map.current.flyTo({ center: coords, zoom: 14 });
-    }
+  const dropSinglePin = (coords: [number, number]) => {
+    if (!map.current || !coords) return;
+    map.current.flyTo({ center: coords, zoom: 14 });
   };
 
-  // --- AUTO ROUTING ---
-  useEffect(() => {
-    if (pickupCoords && destinationCoords) {
-      drawRoute(pickupCoords, destinationCoords);
-    }
-  }, [pickupCoords, destinationCoords]);
-
-  const drawRoute = async (start: [number, number], end: [number, number]) => {
-    if (!map.current) return;
+  // --- HYBRID PREVIEW & AUTO-ROUTING ---
+  const previewRoute = async () => {
+    if (!pickupCoords || !destinationCoords || !map.current) return alert('Please select accurate locations from the dropdown suggestions first.');
     setIsRouting(true);
+    setActiveInput(null);
+
     try {
-      const token = import.meta.env.VITE_MAPBOX_TOKEN;
-      
       markers.current.forEach(m => m.remove());
       markers.current = [];
       if (map.current.getSource('route')) {
@@ -146,50 +167,56 @@ export function MerchantDashboard({ profile }: any) {
         map.current.removeSource('route');
       }
 
-      markers.current.push(new mapboxgl.Marker({ color: '#10B981' }).setLngLat(start).addTo(map.current));
-      markers.current.push(new mapboxgl.Marker({ color: '#3B82F6' }).setLngLat(end).addTo(map.current));
+      markers.current.push(new mapboxgl.Marker({ color: '#10B981' }).setLngLat(pickupCoords).addTo(map.current));
+      markers.current.push(new mapboxgl.Marker({ color: '#3B82F6' }).setLngLat(destinationCoords).addTo(map.current));
 
-      const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?geometries=geojson&access_token=${token}`);
-      const dirData = await dirRes.json();
-      const route = dirData.routes?.[0];
+      const bounds = new mapboxgl.LngLatBounds(pickupCoords, pickupCoords).extend(destinationCoords);
+      map.current.fitBounds(bounds, { padding: 50 });
 
-      if (route) {
-        const distKm = route.distance / 1000;
-        setTripDistanceKm(distKm);
-        calculateAndSetPrice(distKm, serviceType === 'ride' ? vehicleType : 'delivery');
+      // Only draw polylines and calculate prices for RIDES
+      if (serviceType === 'ride') {
+        const token = import.meta.env.VITE_MAPBOX_TOKEN;
+        const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${pickupCoords[0]},${pickupCoords[1]};${destinationCoords[0]},${destinationCoords[1]}?geometries=geojson&access_token=${token}`);
+        const dirData = await dirRes.json();
+        const route = dirData.routes?.[0];
 
-        map.current.addSource('route', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: route.geometry } });
-        map.current.addLayer({
-          id: 'route',
-          type: 'line',
-          source: 'route',
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: { 'line-color': '#2563EB', 'line-width': 4 }
-        });
-        
-        const coordinates = route.geometry.coordinates;
-        const bounds = coordinates.reduce((b: mapboxgl.LngLatBounds, c: [number, number]) => b.extend(c), new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
-        map.current.fitBounds(bounds, { padding: 50 });
+        if (route) {
+          const distKm = route.distance / 1000;
+          setTripDistanceKm(distKm);
+          calculateAndSetPrice(distKm, vehicleType);
+
+          map.current.addSource('route', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: route.geometry } });
+          map.current.addLayer({
+            id: 'route',
+            type: 'line',
+            source: 'route',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#2563EB', 'line-width': 4 }
+          });
+        }
+      } else {
+        // If delivery or schedule, we don't calculate price or draw route.
+        setTripDistanceKm(null);
+        setOfferAmount('');
       }
-    } catch (err: any) { alert('Routing Error: ' + err.message); } 
+    } catch (err: any) { alert('Map Error: ' + err.message); } 
     finally { setIsRouting(false); }
   };
 
-  const calculateAndSetPrice = (distanceKm: number, type: string) => {
-    const rate = type === 'delivery' ? PRICING_RATES.delivery : PRICING_RATES[type as VehicleType];
+  const calculateAndSetPrice = (distanceKm: number, type: VehicleType) => {
+    const rate = PRICING_RATES[type];
     const rawPrice = rate.min + (distanceKm * rate.perKm);
     const suggestedPrice = Math.max(rate.min, Math.ceil(rawPrice / 5) * 5);
     setOfferAmount(suggestedPrice.toString());
   };
 
   useEffect(() => {
-    if (tripDistanceKm !== null) calculateAndSetPrice(tripDistanceKm, serviceType === 'ride' ? vehicleType : 'delivery');
+    if (serviceType === 'ride' && tripDistanceKm !== null) calculateAndSetPrice(tripDistanceKm, vehicleType);
   }, [vehicleType, serviceType, tripDistanceKm]);
 
   const adjustOffer = (delta: number) => {
     setOfferAmount(prev => {
-      const type = serviceType === 'ride' ? vehicleType : 'delivery';
-      const minPrice = type === 'delivery' ? PRICING_RATES.delivery.min : PRICING_RATES[type as VehicleType].min;
+      const minPrice = PRICING_RATES[vehicleType].min;
       const current = Number(prev) || minPrice;
       const next = current + delta;
       return (next < minPrice ? minPrice : next).toString();
@@ -205,29 +232,33 @@ export function MerchantDashboard({ profile }: any) {
   }, [activeBooking]);
 
   const handleRequest = async () => {
-    if (!pickupCoords || !destinationCoords) return alert('Please select pickup and destination from the dropdown suggestions.');
+    if (!pickupCoords || !destinationCoords) return alert('Please select pickup and destination from the suggestions.');
     if (serviceType === 'scheduled' && !scheduledTime) return alert('Select time for scheduled request.');
     
-    const amt = Number(offerAmount);
-    if (serviceType !== 'scheduled') {
-      if (!amt || amt <= 0) return alert('Enter a valid offer amount.');
-      const typeKey = serviceType === 'ride' ? vehicleType : 'delivery';
-      const minPrice = typeKey === 'delivery' ? PRICING_RATES.delivery.min : PRICING_RATES[typeKey as VehicleType].min;
-      
-      if (amt < minPrice) return alert(`Minimum fare for ${typeKey} is SLE ${minPrice}`);
+    let finalAmount = 0;
+    let finalStatus = 'pending';
+
+    if (serviceType === 'ride') {
+      finalAmount = Number(offerAmount);
+      if (!finalAmount || finalAmount <= 0) return alert('Please preview route to calculate offer amount.');
+      const minPrice = PRICING_RATES[vehicleType].min;
+      if (finalAmount < minPrice) return alert(`Minimum fare for a ${vehicleType} is SLE ${minPrice}`);
+    } else {
+      // Deliveries and Scheduled Requests go straight to Admin
+      finalStatus = 'pending_admin';
     }
-    
+
     setIsRequesting(true);
     try {
       const { data, error } = await supabase.from('bookings').insert({
-        rider_id: profile.id, 
+        rider_id: profile.id, // Merchants act as requesters
         service_type: serviceType,
         vehicle_type: serviceType === 'ride' ? vehicleType : null,
         pickup_location: pickup,
         destination_location: destination,
-        fare_amount: serviceType === 'scheduled' ? 0 : amt,
+        fare_amount: finalAmount,
         scheduled_time: serviceType === 'scheduled' ? scheduledTime : null,
-        status: 'pending' // Broadcast directly to drivers
+        status: finalStatus
       }).select().single();
       
       if (error) throw error;
@@ -292,8 +323,7 @@ export function MerchantDashboard({ profile }: any) {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Dispatch Request Form */}
-          <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit">
+          <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit z-20">
             <h3 className="font-bold text-lg">Dispatch Request</h3>
             <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
               <button onClick={() => setServiceType('delivery')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Package size={16}/> Delivery</button>
@@ -313,13 +343,13 @@ export function MerchantDashboard({ profile }: any) {
                   </div>
                 )}
                 
-                {/* AUTOCOMPLETE PICKUP */}
-                <div className="relative" onClick={e => e.stopPropagation()}>
+                {/* GOOGLE PLACES AUTOCOMPLETE: PICKUP */}
+                <div className="relative z-30" onClick={e => e.stopPropagation()}>
                   <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'pickup' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
                     <MapPin size={16} className="text-emerald-600 shrink-0" />
                     <input 
                       type="text" 
-                      placeholder="Pickup Location" 
+                      placeholder="Where are you?" 
                       value={pickup} 
                       onChange={e => searchPlaces(e.target.value, 'pickup')}
                       onFocus={() => setActiveInput('pickup')}
@@ -327,24 +357,24 @@ export function MerchantDashboard({ profile }: any) {
                     />
                   </div>
                   {activeInput === 'pickup' && pickupSuggestions.length > 0 && (
-                    <div className="absolute top-full left-0 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50">
+                    <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-[9999]">
                       {pickupSuggestions.map((s, i) => (
-                        <button key={i} onClick={() => handleSelectPlace(s, 'pickup')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0">
-                          <div className="text-sm font-bold text-slate-900">{s.text}</div>
-                          <div className="text-xs text-slate-500 truncate">{s.place_name}</div>
+                        <button key={i} onClick={() => handleSelectPlace(s.place_id, s.description, 'pickup')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0">
+                          <div className="text-sm font-bold text-slate-900">{s.structured_formatting?.main_text || s.description}</div>
+                          <div className="text-xs text-slate-500 truncate">{s.structured_formatting?.secondary_text || ''}</div>
                         </button>
                       ))}
                     </div>
                   )}
                 </div>
 
-                {/* AUTOCOMPLETE DESTINATION */}
-                <div className="relative" onClick={e => e.stopPropagation()}>
+                {/* GOOGLE PLACES AUTOCOMPLETE: DESTINATION */}
+                <div className="relative z-20" onClick={e => e.stopPropagation()}>
                   <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'destination' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
                     <Navigation size={16} className="text-blue-600 shrink-0" />
                     <input 
                       type="text" 
-                      placeholder="Destination Location" 
+                      placeholder="Where to?" 
                       value={destination} 
                       onChange={e => searchPlaces(e.target.value, 'destination')}
                       onFocus={() => setActiveInput('destination')}
@@ -352,23 +382,25 @@ export function MerchantDashboard({ profile }: any) {
                     />
                   </div>
                   {activeInput === 'destination' && destinationSuggestions.length > 0 && (
-                    <div className="absolute top-full left-0 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50">
+                    <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-[9999]">
                       {destinationSuggestions.map((s, i) => (
-                        <button key={i} onClick={() => handleSelectPlace(s, 'destination')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0">
-                          <div className="text-sm font-bold text-slate-900">{s.text}</div>
-                          <div className="text-xs text-slate-500 truncate">{s.place_name}</div>
+                        <button key={i} onClick={() => handleSelectPlace(s.place_id, s.description, 'destination')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0">
+                          <div className="text-sm font-bold text-slate-900">{s.structured_formatting?.main_text || s.description}</div>
+                          <div className="text-xs text-slate-500 truncate">{s.structured_formatting?.secondary_text || ''}</div>
                         </button>
                       ))}
                     </div>
                   )}
                 </div>
 
-                <div className="flex justify-between items-center px-1">
+                <div className="flex justify-between items-center px-1 mt-1">
                   <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Route: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
-                  {isRouting && <span className="text-xs font-bold text-blue-600 flex items-center gap-1"><Loader2 size={12} className="animate-spin"/> Routing...</span>}
+                  <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
+                    {isRouting ? <Loader2 size={12} className="animate-spin"/> : <Map size={12} />} Preview Locations
+                  </button>
                 </div>
 
-                {serviceType !== 'scheduled' && (
+                {serviceType === 'ride' && (
                   <div className="flex items-center gap-2 border border-slate-200 bg-slate-50 p-2 rounded-xl focus-within:border-blue-500 transition">
                     <span className="text-slate-500 font-bold text-sm px-2">SLE</span>
                     <input type="number" placeholder="Offer" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-center" />
@@ -385,33 +417,51 @@ export function MerchantDashboard({ profile }: any) {
                     <input type="datetime-local" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="w-full outline-none text-sm bg-transparent text-slate-700" />
                   </div>
                 )}
-                <button onClick={handleRequest} disabled={isRequesting} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 shadow-md">
-                  {isRequesting ? <Loader2 className="animate-spin mx-auto" /> : `Broadcast Request`}
+                <button onClick={handleRequest} disabled={isRequesting} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 shadow-md mt-4">
+                  {isRequesting ? <Loader2 className="animate-spin mx-auto" /> : `Confirm Request`}
                 </button>
               </div>
             ) : (
               <div className="text-center py-6">
-                <p className="font-bold text-slate-900">{activeBooking.status.includes('pending') ? 'Broadcasting request...' : 'Driver Assigned'}</p>
+                <p className="font-bold text-slate-900">{activeBooking.status === 'pending_admin' ? 'Request sent to Dispatch Admin...' : 'Broadcasting request...'}</p>
                 <button onClick={cancelTrip} className="text-xs text-red-500 font-bold mt-4">Cancel Request</button>
               </div>
             )}
           </div>
           
-          {/* Map */}
-          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] border border-slate-200 shadow-inner">
+          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] border border-slate-200 shadow-inner z-0">
             <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
           </div>
         </div>
       </div>
       
-      {/* Existing Modals ... */}
       {isTopUpModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={() => setIsTopUpModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Top Up Wallet</h2>
-            <input type="number" placeholder="Amount (SLE)" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center my-6 focus:ring-2 focus:ring-blue-600 outline-none" />
-            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">Proceed to Checkout</button>
+            <p className="text-sm text-slate-500 mb-6">Fund your rider wallet securely.</p>
+            <input type="number" placeholder="Amount (SLE)" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 focus:ring-2 focus:ring-blue-600 outline-none" />
+            <button onClick={executeTopUp} disabled={isProcessing || !topUpAmount} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />} Proceed to Checkout
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isWithdrawModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Withdraw Funds</h2>
+            <p className="text-sm text-slate-500 mb-6">Transfer balance to Mobile Money.</p>
+            <div className="space-y-4 mb-6">
+              <input type="number" placeholder="Amount (SLE)" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none" />
+              <input type="tel" placeholder="+232..." value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none" />
+            </div>
+            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Cashout
+            </button>
           </div>
         </div>
       )}
