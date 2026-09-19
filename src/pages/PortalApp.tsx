@@ -103,10 +103,20 @@ export function PortalApp() {
   const [loggingOut, setLoggingOut] = useState(false);
 
   // ==========================================
+  // INTERCEPT MAGIC LINK RESETS
+  // ==========================================
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('reset_pin') === 'true') {
+      setPinStatus('forgot_pin'); // Skips straight to Create New PIN
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  // ==========================================
   // SMART SESSION & BACKEND PIN TRACKER
   // ==========================================
   useEffect(() => {
-    // Skip idle checks if user is currently resetting their PIN
     if (pinStatus === 'forgot_auth' || pinStatus === 'forgot_pin') return;
 
     const checkIdleState = () => {
@@ -125,9 +135,7 @@ export function PortalApp() {
       }
 
       // 2. We have a backend PIN. Check session timers.
-      // If lastActive is 0, it means they just logged in via Email/Password -> Ask for PIN
       if (lastActive === 0 || idleTime > IDLE_LOCK_MS) {
-        // If they've been idle for over 30 mins, perform a hard logout
         if (lastActive > 0 && idleTime > IDLE_LOGOUT_MS) {
           handleLogout();
           return;
@@ -136,7 +144,7 @@ export function PortalApp() {
         return;
       }
 
-      // 3. User is within safe active limits (e.g. instantly returning from Monime checkout)
+      // 3. User is within safe active limits
       setPinStatus('unlocked');
       localStorage.setItem('matmove_last_active', now.toString());
     };
@@ -204,8 +212,8 @@ export function PortalApp() {
       localStorage.setItem('matmove_last_active', Date.now().toString());
       setProfile({ ...profile, passcode: newPin });
       
-      // Because they just securely verified their password to get here, 
-      // we can safely unlock the dashboard for them immediately.
+      // Because they just securely verified their identity via Email Link, 
+      // we safely unlock the dashboard for them immediately.
       setPinStatus('unlocked');
       setPinError('');
     } catch (err) {
@@ -357,7 +365,6 @@ export function PortalApp() {
         setError={setPinError}
         profileEmail={profile?.email}
         onForgot={() => setPinStatus('forgot_auth')}
-        onForgotAuthSuccess={() => setPinStatus('forgot_pin')}
         onCancelForgot={() => { setPinError(''); setPinStatus('locked'); }}
         onLogout={handleLogout} 
       />
@@ -415,54 +422,80 @@ export function PortalApp() {
 // ==========================================
 // UNIFIED PASSCODE UI COMPONENT
 // ==========================================
-function PasscodeScreen({ mode, onComplete, error, setError, profileEmail, onForgot, onForgotAuthSuccess, onCancelForgot, onLogout }: any) {
+function PasscodeScreen({ mode, onComplete, error, setError, profileEmail, onForgot, onCancelForgot, onLogout }: any) {
   const [pin, setPin] = useState('');
-  const [accountPassword, setAccountPassword] = useState('');
-  const [verifying, setVerifying] = useState(false);
   
-  // Step 1 of Forgot flow: Verify account password to prevent unauthorized resets
+  // Step 1 of Forgot flow: Enter email to receive a Magic Reset Link
   if (mode === 'forgot_auth') {
+    const [resetEmail, setResetEmail] = useState(profileEmail || '');
+    const [emailSent, setEmailSent] = useState(false);
+    const [verifying, setVerifying] = useState(false);
+
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-white selection:bg-transparent">
         <div className="w-16 h-16 bg-blue-600/20 text-blue-500 rounded-full flex items-center justify-center mb-6">
-          <LockKeyhole size={32} />
+          <Mail size={32} />
         </div>
-        <h2 className="text-2xl font-bold mb-2">Verify Identity</h2>
-        <p className="text-slate-400 text-sm mb-8 text-center max-w-xs">
-          To reset your passcode, please enter your MatMove account password to verify your identity.
-        </p>
+        <h2 className="text-2xl font-bold mb-2">Reset Passcode</h2>
+        
+        {emailSent ? (
+          <div className="max-w-xs text-center">
+            <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-xl mb-6">
+              <CheckCircle2 className="mx-auto mb-2" size={24} />
+              <p className="text-sm font-medium">Reset link sent!</p>
+            </div>
+            <p className="text-slate-400 text-sm mb-6">
+              Check your email and click the secure link. It will bring you directly to the screen to set your new passcode.
+            </p>
+            <button onClick={onCancelForgot} className="text-sm text-slate-500 hover:text-slate-300">
+              Return to sign in
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="text-slate-400 text-sm mb-8 text-center max-w-xs">
+              Confirm your email address and we will send you a secure link to reset your 4-digit PIN.
+            </p>
 
-        {error && <p className="text-red-400 text-sm mb-6 bg-red-950/50 px-4 py-2 rounded-lg">{error}</p>}
+            {error && <p className="text-red-400 text-sm mb-6 bg-red-950/50 px-4 py-2 rounded-lg">{error}</p>}
 
-        <form onSubmit={async (e) => {
-          e.preventDefault();
-          setVerifying(true);
-          setError('');
-          try {
-            const { error: authErr } = await supabase.auth.signInWithPassword({ email: profileEmail, password: accountPassword });
-            if (authErr) throw authErr;
-            onForgotAuthSuccess();
-          } catch(err) {
-            setError('Incorrect account password.');
-          } finally {
-            setVerifying(false);
-          }
-        }} className="w-full max-w-[280px]">
-          <input 
-            type="password" 
-            value={accountPassword}
-            onChange={(e) => setAccountPassword(e.target.value)}
-            placeholder="Account Password"
-            required
-            className="w-full bg-slate-800 border border-slate-700 p-4 rounded-xl text-white outline-none focus:border-blue-500 mb-4"
-          />
-          <button type="submit" disabled={verifying} className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-50">
-            {verifying ? 'Verifying...' : 'Verify & Reset Passcode'}
-          </button>
-          <button type="button" onClick={onCancelForgot} className="w-full mt-6 text-sm text-slate-500 hover:text-slate-300">
-            Cancel and go back
-          </button>
-        </form>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setVerifying(true);
+              setError('');
+              try {
+                // We use a Magic Link to securely authenticate them from the email and route them back
+                const { error: authErr } = await supabase.auth.signInWithOtp({ 
+                  email: resetEmail,
+                  options: {
+                    emailRedirectTo: `${window.location.origin}${window.location.pathname}?reset_pin=true`
+                  }
+                });
+                if (authErr) throw authErr;
+                setEmailSent(true);
+              } catch(err) {
+                setError('Failed to send reset link. Please try again.');
+              } finally {
+                setVerifying(false);
+              }
+            }} className="w-full max-w-[280px]">
+              <input 
+                type="email" 
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                placeholder="Email Address"
+                required
+                className="w-full bg-slate-800 border border-slate-700 p-4 rounded-xl text-white outline-none focus:border-blue-500 mb-4 text-center"
+              />
+              <button type="submit" disabled={verifying} className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-50">
+                {verifying ? 'Sending Link...' : 'Send Reset Link'}
+              </button>
+              <button type="button" onClick={onCancelForgot} className="w-full mt-6 text-sm text-slate-500 hover:text-slate-300">
+                Cancel and go back
+              </button>
+            </form>
+          </>
+        )}
       </div>
     );
   }
