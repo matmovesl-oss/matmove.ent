@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, Package, MapPin, Navigation, ShieldCheck, Wallet, Loader2, Bell, RefreshCw, X, Map, Lock, ArrowUpRight, CalendarClock, Plus, Minus } from 'lucide-react';
+import { Car, Package, MapPin, Navigation, ShieldCheck, Wallet, Loader2, Bell, RefreshCw, X, Lock, ArrowUpRight, CalendarClock, Plus, Minus } from 'lucide-react';
 
 type ServiceType = 'ride' | 'delivery' | 'scheduled';
 type VehicleType = 'keke' | 'bike' | 'car' | 'van';
@@ -12,7 +12,7 @@ const PRICING_RATES = {
   keke: { min: 15, perKm: 5 },
   car: { min: 30, perKm: 10 },
   van: { min: 60, perKm: 20 },
-  delivery: { min: 15, perKm: 4 }, // Delivery base handling fee + distance
+  delivery: { min: 15, perKm: 4 }, 
 };
 
 export function RiderDashboard({ profile }: any) {
@@ -23,6 +23,14 @@ export function RiderDashboard({ profile }: any) {
   // Trip State
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
+  const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
+  const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
+  
+  // Autocomplete State
+  const [pickupSuggestions, setPickupSuggestions] = useState<any[]>([]);
+  const [destinationSuggestions, setDestinationSuggestions] = useState<any[]>([]);
+  const [activeInput, setActiveInput] = useState<'pickup' | 'destination' | null>(null);
+
   const [serviceType, setServiceType] = useState<ServiceType>('ride');
   const [vehicleType, setVehicleType] = useState<VehicleType>('car');
   const [offerAmount, setOfferAmount] = useState<string>('');
@@ -40,7 +48,6 @@ export function RiderDashboard({ profile }: any) {
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawPhone, setWithdrawPhone] = useState(profile?.phone || '');
-  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -65,10 +72,109 @@ export function RiderDashboard({ profile }: any) {
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12',
-      center: [-13.234, 8.484],
+      center: [-13.234, 8.484], // Freetown
       zoom: 12
     });
   }, []);
+
+  // --- LIVE AUTOCOMPLETE LOGIC ---
+  const searchPlaces = async (query: string, type: 'pickup' | 'destination') => {
+    if (type === 'pickup') setPickup(query);
+    else setDestination(query);
+
+    if (query.length < 3) {
+      if (type === 'pickup') setPickupSuggestions([]);
+      else setDestinationSuggestions([]);
+      return;
+    }
+
+    const token = import.meta.env.VITE_MAPBOX_TOKEN;
+    // Restrict search strongly to Sierra Leone & proximity to Freetown
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&country=sl&proximity=-13.234,8.484&autocomplete=true&limit=4`;
+    
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (type === 'pickup') setPickupSuggestions(data.features || []);
+      else setDestinationSuggestions(data.features || []);
+    } catch (err) { console.error('Search error', err); }
+  };
+
+  const handleSelectPlace = (feature: any, type: 'pickup' | 'destination') => {
+    const coords = feature.center as [number, number];
+    const placeName = feature.place_name;
+
+    if (type === 'pickup') {
+      setPickup(placeName);
+      setPickupCoords(coords);
+      setPickupSuggestions([]);
+      dropSinglePin(coords, '#10B981'); // Green
+    } else {
+      setDestination(placeName);
+      setDestinationCoords(coords);
+      setDestinationSuggestions([]);
+      dropSinglePin(coords, '#3B82F6'); // Blue
+    }
+    setActiveInput(null);
+  };
+
+  const dropSinglePin = (coords: [number, number], color: string) => {
+    if (!map.current) return;
+    // If we only have one point so far, fly to it
+    if ((!pickupCoords || !destinationCoords)) {
+      map.current.flyTo({ center: coords, zoom: 14 });
+    }
+  };
+
+  // --- AUTO ROUTING ---
+  // When BOTH coordinates are set, automatically draw the route and price it
+  useEffect(() => {
+    if (pickupCoords && destinationCoords) {
+      drawRoute(pickupCoords, destinationCoords);
+    }
+  }, [pickupCoords, destinationCoords]);
+
+  const drawRoute = async (start: [number, number], end: [number, number]) => {
+    if (!map.current) return;
+    setIsRouting(true);
+    try {
+      const token = import.meta.env.VITE_MAPBOX_TOKEN;
+      
+      markers.current.forEach(m => m.remove());
+      markers.current = [];
+      if (map.current.getSource('route')) {
+        map.current.removeLayer('route');
+        map.current.removeSource('route');
+      }
+
+      markers.current.push(new mapboxgl.Marker({ color: '#10B981' }).setLngLat(start).addTo(map.current));
+      markers.current.push(new mapboxgl.Marker({ color: '#3B82F6' }).setLngLat(end).addTo(map.current));
+
+      const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?geometries=geojson&access_token=${token}`);
+      const dirData = await dirRes.json();
+      const route = dirData.routes?.[0];
+
+      if (route) {
+        const distKm = route.distance / 1000;
+        setTripDistanceKm(distKm);
+        calculateAndSetPrice(distKm, serviceType === 'ride' ? vehicleType : 'delivery');
+
+        map.current.addSource('route', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: route.geometry } });
+        map.current.addLayer({
+          id: 'route',
+          type: 'line',
+          source: 'route',
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: { 'line-color': '#2563EB', 'line-width': 4 }
+        });
+        
+        const coordinates = route.geometry.coordinates;
+        const bounds = coordinates.reduce((b: mapboxgl.LngLatBounds, c: [number, number]) => b.extend(c), new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+        map.current.fitBounds(bounds, { padding: 50 });
+      }
+    } catch (err: any) { alert('Routing Error: ' + err.message); } 
+    finally { setIsRouting(false); }
+  };
 
   const calculateAndSetPrice = (distanceKm: number, type: string) => {
     const rate = type === 'delivery' ? PRICING_RATES.delivery : PRICING_RATES[type as VehicleType];
@@ -91,59 +197,6 @@ export function RiderDashboard({ profile }: any) {
     });
   };
 
-  const previewRoute = async () => {
-    if (!pickup || !destination || !map.current) return alert('Enter both pickup and destination locations.');
-    setIsRouting(true);
-    try {
-      const token = import.meta.env.VITE_MAPBOX_TOKEN;
-      const safePickup = encodeURIComponent(`${pickup}, Freetown, Sierra Leone`);
-      const safeDestination = encodeURIComponent(`${destination}, Freetown, Sierra Leone`);
-
-      const pRes = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${safePickup}.json?access_token=${token}&limit=1`);
-      const pData = await pRes.json();
-      const pCoords = pData.features?.[0]?.center;
-      
-      const dRes = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${safeDestination}.json?access_token=${token}&limit=1`);
-      const dData = await dRes.json();
-      const dCoords = dData.features?.[0]?.center;
-
-      if (!pCoords || !dCoords) throw new Error('Could not find locations. Try adding a landmark.');
-
-      markers.current.forEach(m => m.remove());
-      markers.current = [];
-      if (map.current.getSource('route')) {
-        map.current.removeLayer('route');
-        map.current.removeSource('route');
-      }
-
-      markers.current.push(new mapboxgl.Marker({ color: '#10B981' }).setLngLat(pCoords).addTo(map.current));
-      markers.current.push(new mapboxgl.Marker({ color: '#3B82F6' }).setLngLat(dCoords).addTo(map.current));
-
-      const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${pCoords[0]},${pCoords[1]};${dCoords[0]},${dCoords[1]}?geometries=geojson&access_token=${token}`);
-      const dirData = await dirRes.json();
-      const route = dirData.routes?.[0];
-
-      if (route) {
-        const distKm = route.distance / 1000;
-        setTripDistanceKm(distKm);
-        calculateAndSetPrice(distKm, serviceType === 'ride' ? vehicleType : 'delivery');
-
-        map.current.addSource('route', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: route.geometry } });
-        map.current.addLayer({
-          id: 'route',
-          type: 'line',
-          source: 'route',
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: { 'line-color': '#2563EB', 'line-width': 4 }
-        });
-        const coordinates = route.geometry.coordinates;
-        const bounds = coordinates.reduce((b: mapboxgl.LngLatBounds, c: [number, number]) => b.extend(c), new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
-        map.current.fitBounds(bounds, { padding: 50 });
-      }
-    } catch (err: any) { alert('Routing Error: ' + err.message); } 
-    finally { setIsRouting(false); }
-  };
-
   useEffect(() => {
     if (!activeBooking) return;
     const channel = supabase.channel(`booking-${activeBooking.id}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `id=eq.${activeBooking.id}` }, 
@@ -153,7 +206,7 @@ export function RiderDashboard({ profile }: any) {
   }, [activeBooking]);
 
   const handleRequest = async () => {
-    if (!pickup || !destination) return alert('Enter pickup and destination');
+    if (!pickupCoords || !destinationCoords) return alert('Please select pickup and destination from the dropdown suggestions.');
     if (serviceType === 'scheduled' && !scheduledTime) return alert('Select a date and time for your scheduled ride.');
     
     const amt = Number(offerAmount);
@@ -162,9 +215,7 @@ export function RiderDashboard({ profile }: any) {
       const typeKey = serviceType === 'ride' ? vehicleType : 'delivery';
       const minPrice = typeKey === 'delivery' ? PRICING_RATES.delivery.min : PRICING_RATES[typeKey as VehicleType].min;
       
-      if (amt < minPrice) {
-        return alert(`Minimum fare for ${typeKey} is SLE ${minPrice}`);
-      }
+      if (amt < minPrice) return alert(`Minimum fare for ${typeKey} is SLE ${minPrice}`);
       if (liveBalance < amt) return alert('Insufficient funds. Please load your wallet.');
     }
 
@@ -174,7 +225,7 @@ export function RiderDashboard({ profile }: any) {
         rider_id: profile.id,
         service_type: serviceType,
         vehicle_type: serviceType === 'ride' ? vehicleType : null,
-        pickup_location: pickup,
+        pickup_location: pickup, // Save string name for UI
         destination_location: destination,
         fare_amount: serviceType === 'scheduled' ? 0 : amt,
         scheduled_time: serviceType === 'scheduled' ? scheduledTime : null,
@@ -234,7 +285,7 @@ export function RiderDashboard({ profile }: any) {
   const firstName = profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider';
 
   return (
-    <div className="flex-1 bg-slate-50 min-h-screen">
+    <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
       <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center sticky top-0 z-10">
         <div className="w-1/2">
           <input type="text" placeholder="Search rides, destinations..." className="w-full bg-slate-100 border-none rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-600" />
@@ -283,7 +334,7 @@ export function RiderDashboard({ profile }: any) {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* REQUEST FORM */}
-          <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+          <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit">
             <h3 className="font-bold text-lg">Request Service</h3>
             
             <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
@@ -305,20 +356,59 @@ export function RiderDashboard({ profile }: any) {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2 border p-3 rounded-xl focus-within:border-blue-500 transition">
-                    <MapPin size={16} className="text-emerald-600 shrink-0" />
-                    <input type="text" placeholder="Pickup Location" value={pickup} onChange={e => setPickup(e.target.value)} className="w-full outline-none text-sm bg-transparent" />
+                  {/* AUTOCOMPLETE PICKUP */}
+                  <div className="relative" onClick={e => e.stopPropagation()}>
+                    <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'pickup' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
+                      <MapPin size={16} className="text-emerald-600 shrink-0" />
+                      <input 
+                        type="text" 
+                        placeholder="Where are you?" 
+                        value={pickup} 
+                        onChange={e => searchPlaces(e.target.value, 'pickup')}
+                        onFocus={() => setActiveInput('pickup')}
+                        className="w-full outline-none text-sm bg-transparent" 
+                      />
+                    </div>
+                    {activeInput === 'pickup' && pickupSuggestions.length > 0 && (
+                      <div className="absolute top-full left-0 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50">
+                        {pickupSuggestions.map((s, i) => (
+                          <button key={i} onClick={() => handleSelectPlace(s, 'pickup')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0">
+                            <div className="text-sm font-bold text-slate-900">{s.text}</div>
+                            <div className="text-xs text-slate-500 truncate">{s.place_name}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2 border p-3 rounded-xl focus-within:border-blue-500 transition">
-                    <Navigation size={16} className="text-blue-600 shrink-0" />
-                    <input type="text" placeholder="Destination" value={destination} onChange={e => setDestination(e.target.value)} className="w-full outline-none text-sm bg-transparent" />
+
+                  {/* AUTOCOMPLETE DESTINATION */}
+                  <div className="relative" onClick={e => e.stopPropagation()}>
+                    <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'destination' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
+                      <Navigation size={16} className="text-blue-600 shrink-0" />
+                      <input 
+                        type="text" 
+                        placeholder="Where to?" 
+                        value={destination} 
+                        onChange={e => searchPlaces(e.target.value, 'destination')}
+                        onFocus={() => setActiveInput('destination')}
+                        className="w-full outline-none text-sm bg-transparent" 
+                      />
+                    </div>
+                    {activeInput === 'destination' && destinationSuggestions.length > 0 && (
+                      <div className="absolute top-full left-0 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50">
+                        {destinationSuggestions.map((s, i) => (
+                          <button key={i} onClick={() => handleSelectPlace(s, 'destination')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0">
+                            <div className="text-sm font-bold text-slate-900">{s.text}</div>
+                            <div className="text-xs text-slate-500 truncate">{s.place_name}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Distance: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
-                    <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                      {isRouting ? <Loader2 size={12} className="animate-spin"/> : <Map size={12} />} Preview Route
-                    </button>
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Route: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
+                    {isRouting && <span className="text-xs font-bold text-blue-600 flex items-center gap-1"><Loader2 size={12} className="animate-spin"/> Routing...</span>}
                   </div>
 
                   {serviceType !== 'scheduled' && (
@@ -349,21 +439,8 @@ export function RiderDashboard({ profile }: any) {
                 {activeBooking.status.includes('pending') && (
                   <>
                     <Loader2 className="animate-spin text-blue-600 mx-auto" size={32} />
-                    <p className="font-bold text-slate-900">Broadcasting request to drivers...</p>
+                    <p className="font-bold text-slate-900">Broadcasting request...</p>
                     <button onClick={cancelTrip} className="text-red-500 text-sm font-bold hover:underline">Cancel Request</button>
-                  </>
-                )}
-                {activeBooking.status === 'accepted' && (
-                  <>
-                    <Car size={32} className="text-emerald-600 mx-auto" />
-                    <p className="font-bold text-slate-900">Driver is en route!</p>
-                  </>
-                )}
-                {activeBooking.status === 'completed' && (
-                  <>
-                    <ShieldCheck size={32} className="text-emerald-600 mx-auto" />
-                    <p className="font-bold text-slate-900">Trip Completed</p>
-                    <button onClick={() => setActiveBooking(null)} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl mt-4">Book Another</button>
                   </>
                 )}
               </div>
@@ -371,7 +448,7 @@ export function RiderDashboard({ profile }: any) {
           </div>
 
           {/* MAPBOX CONTAINER */}
-          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[400px] border border-slate-200 shadow-inner">
+          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] border border-slate-200 shadow-inner">
             <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
           </div>
         </div>
