@@ -15,7 +15,7 @@ export default async function handler(req, res) {
        currency: 'SLE',
        provider: 'monime',
        status: 'pending',
-       admin_notes: `Send to Mobile Money: ${destinationPhone}` // Bypasses the missing column error
+       destination_phone: destinationPhone // Safely targeting the newly added column
     });
 
     if (dbError) throw dbError;

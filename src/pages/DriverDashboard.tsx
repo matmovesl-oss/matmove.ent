@@ -93,7 +93,6 @@ export function DriverDashboard({ profile, activeSection }: any) {
             </div>
           )}
         </div>
-
         <div className="flex-1 bg-slate-200 relative min-h-[450px]">
           <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
         </div>

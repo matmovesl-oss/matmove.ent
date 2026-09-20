@@ -223,10 +223,18 @@ function RiderShop({ profile }: any) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.from('products').select('*, merchant:profiles!merchant_id(business_name, phone)').order('created_at', { ascending: false }).then(({ data, error }) => {
-      if (data) setProducts(data);
-      setLoading(false);
-    });
+    const fetchProducts = async () => {
+      try {
+        const { data, error } = await supabase.from('products').select('*, merchant:profiles!merchant_id(business_name, phone)').order('created_at', { ascending: false });
+        if (error) throw error;
+        setProducts(data || []);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
   }, []);
 
   return (

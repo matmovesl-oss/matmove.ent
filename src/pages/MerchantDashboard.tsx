@@ -2,12 +2,18 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Store, Plus, Package, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, UploadCloud } from 'lucide-react';
+import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, UploadCloud, Minus } from 'lucide-react';
 
 type ServiceType = 'delivery' | 'ride' | 'scheduled';
+type VehicleType = 'keke' | 'bike' | 'car' | 'van';
 
-export function MerchantDashboard({ profile, activeSection }: any) {
+const PRICING_RATES = { bike: { min: 10, perKm: 3 }, keke: { min: 15, perKm: 5 }, car: { min: 30, perKm: 10 }, van: { min: 60, perKm: 20 } };
+
+export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet }: any) {
   if (activeSection === 'inventory') return <MerchantInventory profile={profile} />;
+
+  const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
@@ -18,6 +24,11 @@ export function MerchantDashboard({ profile, activeSection }: any) {
   const [activeInput, setActiveInput] = useState<'pickup' | 'destination' | null>(null);
 
   const [serviceType, setServiceType] = useState<ServiceType>('delivery');
+  const [vehicleType, setVehicleType] = useState<VehicleType>('car');
+  const [offerAmount, setOfferAmount] = useState<string>('');
+  const [tripDistanceKm, setTripDistanceKm] = useState<number | null>(null);
+  const [scheduledTime, setScheduledTime] = useState('');
+
   const [isRequesting, setIsRequesting] = useState(false);
   const [isRouting, setIsRouting] = useState(false);
 
@@ -34,6 +45,17 @@ export function MerchantDashboard({ profile, activeSection }: any) {
       document.head.appendChild(script);
     }
   }, []);
+
+  const fetchLiveBalance = async () => {
+    if (!profile?.id) return;
+    setIsRefreshing(true);
+    try {
+      const { data } = await supabase.from('wallets').select('balance').eq('user_id', profile.id).single();
+      if (data) setLiveBalance(Number(data.balance));
+    } catch (err) {} finally { setIsRefreshing(false); }
+  };
+
+  useEffect(() => { fetchLiveBalance(); }, [profile?.id]);
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
@@ -79,24 +101,52 @@ export function MerchantDashboard({ profile, activeSection }: any) {
       markers.current.push(new mapboxgl.Marker({ color: '#10B981' }).setLngLat(pickupCoords).addTo(map.current));
       markers.current.push(new mapboxgl.Marker({ color: '#3B82F6' }).setLngLat(destinationCoords).addTo(map.current));
       map.current.fitBounds(new mapboxgl.LngLatBounds(pickupCoords, pickupCoords).extend(destinationCoords), { padding: 50 });
+
+      if (serviceType === 'ride' || serviceType === 'delivery') {
+        const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${pickupCoords[0]},${pickupCoords[1]};${destinationCoords[0]},${destinationCoords[1]}?geometries=geojson&access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`);
+        const dirData = await dirRes.json();
+        const route = dirData.routes?.[0];
+        if (route) {
+          const distKm = route.distance / 1000;
+          setTripDistanceKm(distKm);
+          const rate = PRICING_RATES[vehicleType];
+          setOfferAmount(Math.max(rate.min, Math.ceil((rate.min + (distKm * rate.perKm)) / 5) * 5).toString());
+          map.current.addSource('route', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: route.geometry } });
+          map.current.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#f97316', 'line-width': 4 } });
+        }
+      }
     } catch (err: any) { alert('Map Error: ' + err.message); } finally { setIsRouting(false); }
   };
 
   const handleDispatchDelivery = async () => {
-    if (!pickup || !destination) return alert('Select pickup and dropoff locations.');
+    if (!pickupCoords || !destinationCoords) return alert('Please select pickup and destination from suggestions.');
+    if (serviceType === 'scheduled' && !scheduledTime) return alert('Select time for scheduled request.');
+    
+    let finalAmount = 0; let finalStatus = 'pending_admin';
+    if (serviceType === 'ride' || serviceType === 'delivery') {
+      finalAmount = Number(offerAmount);
+      if (!finalAmount || finalAmount <= 0) return alert('Preview route to calculate offer.');
+      if (finalAmount < PRICING_RATES[vehicleType].min) return alert(`Minimum fare is SLE ${PRICING_RATES[vehicleType].min}`);
+      if (liveBalance < finalAmount) return alert('Insufficient funds. Load your wallet first.');
+    }
+
     setIsRequesting(true);
     try {
       const { error } = await supabase.from('bookings').insert({
-        rider_id: profile.id,
+        rider_id: profile.id, // Merchant requests as rider
         service_type: serviceType,
+        vehicle_type: serviceType !== 'scheduled' ? vehicleType : null,
         pickup_location: pickup,
         destination_location: destination,
-        fare_amount: 0,
-        status: 'pending_admin'
+        fare_amount: finalAmount,
+        scheduled_time: serviceType === 'scheduled' ? scheduledTime : null,
+        status: finalStatus
       });
       if (error) throw error;
       alert('Dispatch request sent to Dispatch Admin!');
-      setPickup(''); setDestination('');
+      setPickup(''); setDestination(''); setOfferAmount('');
+      if (map.current?.getSource('route')) { map.current.removeLayer('route'); map.current.removeSource('route'); }
+      markers.current.forEach(m => m.remove());
     } catch (err: any) { alert(err.message); } finally { setIsRequesting(false); }
   };
 
@@ -107,9 +157,18 @@ export function MerchantDashboard({ profile, activeSection }: any) {
           <div className="p-2 bg-orange-100 text-orange-600 rounded-xl"><Store size={20} /></div>
           <div><h2 className="font-bold text-slate-900 leading-tight">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
         </div>
+        <button onClick={onOpenWallet} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">Wallet</button>
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
+        <div className="bg-orange-600 rounded-3xl p-8 text-white relative shadow-lg">
+          <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
+             <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
+          </button>
+          <span className="text-orange-200 text-xs font-bold uppercase tracking-wider">Store Operating Wallet</span>
+          <div className="text-5xl font-bold mt-2">SLE {liveBalance.toFixed(2)}</div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit">
             <h3 className="font-bold text-lg">Dispatch Request</h3>
@@ -121,6 +180,12 @@ export function MerchantDashboard({ profile, activeSection }: any) {
             </div>
             
             <div className="space-y-3">
+               {(serviceType === 'ride' || serviceType === 'delivery') && (
+                 <div className="grid grid-cols-4 gap-2 mb-2">
+                   {(['keke', 'bike', 'car', 'van'] as VehicleType[]).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-orange-100 text-orange-700 ring-2 ring-orange-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}
+                 </div>
+               )}
+
                <div className="relative z-30" onClick={e => e.stopPropagation()}>
                  <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'pickup' ? 'border-orange-500 ring-2 ring-orange-100' : 'border-slate-200'}`}>
                    <MapPin size={16} className="text-emerald-600 shrink-0" />
@@ -145,9 +210,25 @@ export function MerchantDashboard({ profile, activeSection }: any) {
                  )}
                </div>
 
-               <button onClick={previewRoute} disabled={isRouting} className="w-full mt-2 text-xs font-bold text-slate-500 hover:text-slate-700 flex justify-center items-center gap-1 bg-slate-100 px-3 py-2 rounded-lg border border-slate-200">
-                 {isRouting ? <Loader2 size={12} className="animate-spin"/> : <MapPin size={12} />} Preview Route on Map
-               </button>
+               <div className="flex justify-between items-center px-1 mt-1">
+                 <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Route: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
+                 <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">{isRouting ? <Loader2 size={12} className="animate-spin"/> : <MapPin size={12} />} Preview Route</button>
+               </div>
+
+               {(serviceType === 'ride' || serviceType === 'delivery') && (
+                 <div className="flex items-center gap-2 border border-slate-200 bg-slate-50 p-2 rounded-xl">
+                   <span className="text-slate-500 font-bold text-sm px-2">SLE</span>
+                   <input type="number" placeholder="Offer" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-center" />
+                   <div className="flex gap-1">
+                     <button onClick={() => setOfferAmount(prev => Math.max(PRICING_RATES[vehicleType].min, (Number(prev)||PRICING_RATES[vehicleType].min) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16}/></button>
+                     <button onClick={() => setOfferAmount(prev => ((Number(prev)||PRICING_RATES[vehicleType].min) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
+                   </div>
+                 </div>
+               )}
+
+               {serviceType === 'scheduled' && (
+                 <div className="flex items-center gap-2 border p-3 rounded-xl"><CalendarClock size={16} className="text-emerald-600" /><input type="datetime-local" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="w-full outline-none text-sm bg-transparent" /></div>
+               )}
 
                <button onClick={handleDispatchDelivery} disabled={isRequesting} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4">
                  {isRequesting ? <Loader2 className="animate-spin mx-auto"/> : 'Request Dispatch'}
@@ -176,26 +257,45 @@ function MerchantInventory({ profile }: any) {
   const [isSaving, setIsSaving] = useState(false);
 
   const fetchProducts = async () => {
-    setLoading(true);
-    const { data } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
-    if (data) setProducts(data);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
+      if (error) throw error;
+      setProducts(data || []);
+    } catch (err) {
+      console.error('Failed to load products');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchProducts(); }, [profile.id]);
 
-  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // UPLOAD DIRECTLY TO SUPABASE STORAGE
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) return alert('File size must be under 2MB.');
-    const reader = new FileReader();
-    reader.onloadend = () => setImageUrl(reader.result as string);
-    reader.readAsDataURL(file);
+    
+    setIsSaving(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${profile.id}_${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from('product-images').upload(fileName, file);
+      
+      if (uploadError) throw uploadError;
+      
+      const { data } = supabase.storage.from('product-images').getPublicUrl(fileName);
+      setImageUrl(data.publicUrl);
+    } catch (error: any) {
+      alert('Error uploading image: ' + error.message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !price || !whatsappNumber) return alert('Name, Price, and Contact Number are required');
+    if (!name || !price || !whatsappNumber) return alert('Name, Price, and WhatsApp Number are required');
     setIsSaving(true);
     try {
       const { error } = await supabase.from('products').insert({
@@ -258,8 +358,9 @@ function MerchantInventory({ profile }: any) {
 
               <div className="space-y-2 p-3 border border-dashed rounded-xl bg-slate-50">
                 <label className="block text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><UploadCloud size={14}/> Attach Product Image</label>
-                <input type="file" accept="image/*" onChange={handleImageFileChange} className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer" />
-                {imageUrl && <img src={imageUrl} alt="Preview" className="h-24 w-full object-cover rounded-xl mt-2 border border-slate-200 shadow-sm" />}
+                <input type="file" accept="image/*" onChange={handleImageUpload} className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer" />
+                {isSaving && <div className="text-xs text-blue-600 flex items-center gap-1 mt-2"><Loader2 size={12} className="animate-spin" /> Uploading image...</div>}
+                {imageUrl && !isSaving && <img src={imageUrl} alt="Preview" className="h-24 w-full object-cover rounded-xl mt-2 border border-slate-200 shadow-sm" />}
               </div>
 
               <button type="submit" disabled={isSaving} className="w-full bg-slate-900 text-white font-bold p-3.5 rounded-xl flex items-center gap-2 justify-center">{isSaving ? <Loader2 className="animate-spin" size={18}/> : <Plus size={18}/>} Save Product</button>
