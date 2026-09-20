@@ -223,23 +223,25 @@ function RiderShop({ profile }: any) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchProducts = async () => {
+      setLoading(true);
       try {
-        // Safe query that gracefully maps relationships without crashing
         const { data, error } = await supabase.from('products').select('*, profiles(business_name, phone)').order('created_at', { ascending: false });
         if (error) {
           console.error('Products fetch error:', error);
-          setProducts([]);
+          if (isMounted) setProducts([]);
         } else {
-          setProducts(data || []);
+          if (isMounted) setProducts(data || []);
         }
       } catch (err) {
         console.error(err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     fetchProducts();
+    return () => { isMounted = false; };
   }, []);
 
   return (

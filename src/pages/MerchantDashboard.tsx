@@ -15,6 +15,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Map & Dispatch State
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
@@ -256,19 +257,24 @@ function MerchantInventory({ profile }: any) {
   const [whatsappNumber, setWhatsappNumber] = useState(profile?.phone || '');
   const [isSaving, setIsSaving] = useState(false);
 
-  const fetchProducts = async () => {
-    try {
-      const { data, error } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
-      if (error) throw error;
-      setProducts(data || []);
-    } catch (err) {
-      console.error('Failed to load products');
-    } finally {
-      setLoading(false); // Graceful exit ensuring the spinner stops
-    }
-  };
-
-  useEffect(() => { fetchProducts(); }, [profile.id]);
+  useEffect(() => {
+    let isMounted = true;
+    const fetchProducts = async () => {
+      setLoading(true);
+      try {
+        // Safe robust query that won't crash if relationships break
+        const { data, error } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
+        if (error) throw error;
+        if (isMounted) setProducts(data || []);
+      } catch (err) {
+        console.error('Failed to load products');
+      } finally {
+        if (isMounted) setLoading(false); // Graceful exit stops the infinite spinner
+      }
+    };
+    fetchProducts();
+    return () => { isMounted = false; };
+  }, [profile.id]);
 
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -295,7 +301,8 @@ function MerchantInventory({ profile }: any) {
       if (error) throw error;
       setIsAddModalOpen(false);
       setName(''); setPrice(''); setDescription(''); setImageUrl('');
-      fetchProducts();
+      // Manually refresh locally
+      setProducts(prev => [{ id: Date.now().toString(), name, price, description, image_url: imageUrl }, ...prev]);
     } catch (err: any) { alert(err.message); } finally { setIsSaving(false); }
   };
 
