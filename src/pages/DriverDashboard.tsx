@@ -4,20 +4,14 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Car, MapPin, Navigation, Power, Package, CalendarClock, ArrowUpRight, X, Loader2, Wallet, User, Phone } from 'lucide-react';
 
-export function DriverDashboard({ profile, wallet, activeSection }: any) {
+export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }: any) {
   if (activeSection === 'trips') return <DriverTrips profile={profile} />;
 
   const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
   const [isOnline, setIsOnline] = useState(false);
   const [activeRequests, setActiveRequests] = useState<any[]>([]);
 
-  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawPhone, setWithdrawPhone] = useState(profile?.phone || '');
-  const [isWithdrawing, setIsWithdrawing] = useState(false);
-
   const isApproved = profile?.kyc_status === 'approved';
-
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
 
@@ -34,12 +28,7 @@ export function DriverDashboard({ profile, wallet, activeSection }: any) {
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
     mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [-13.234, 8.484],
-      zoom: 13
-    });
+    map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 13 });
   }, []);
 
   useEffect(() => {
@@ -49,7 +38,6 @@ export function DriverDashboard({ profile, wallet, activeSection }: any) {
       if (data) setActiveRequests(data);
     };
     fetchInitialRequests();
-
     const channel = supabase.channel('driver-radar').on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, fetchInitialRequests).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [isOnline, profile.id]);
@@ -65,21 +53,6 @@ export function DriverDashboard({ profile, wallet, activeSection }: any) {
     try { await supabase.from('bookings').update({ status: 'completed' }).eq('id', booking.id); alert(`Trip completed! Collection recorded.`); fetchLiveBalance(); } catch (err: any) { alert('Failed to complete: ' + err.message); }
   };
 
-  const executeWithdrawal = async () => {
-    const amt = Number(withdrawAmount);
-    if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (amt > liveBalance) return alert('Insufficient balance');
-    if (!withdrawPhone.trim()) return alert('Enter valid Mobile Money number');
-    setIsWithdrawing(true);
-    try {
-      const res = await fetch('/api/create-monime-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: withdrawPhone }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Withdrawal failed');
-      alert(`Cashout requested! Pending Admin approval.`);
-      setIsWithdrawModalOpen(false); fetchLiveBalance();
-    } catch (err: any) { alert(err.message); } finally { setIsWithdrawing(false); }
-  };
-
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20">
@@ -89,19 +62,19 @@ export function DriverDashboard({ profile, wallet, activeSection }: any) {
           </button>
           <div><h2 className="font-bold text-slate-900 text-lg">{isOnline ? 'You are Online' : 'You are Offline'}</h2></div>
         </div>
-        <div className="text-right">
-          <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Driver Ledger</div>
-          <div className="text-base font-bold text-slate-900">SLE {liveBalance.toFixed(2)}</div>
-        </div>
+        <button onClick={onOpenWallet} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">View Wallet</button>
       </header>
 
       <div className="flex-1 flex flex-col lg:flex-row">
         <div className="w-full lg:w-96 bg-white border-r border-slate-200 flex flex-col p-6 space-y-6 overflow-y-auto">
-          <button onClick={() => setIsWithdrawModalOpen(true)} disabled={!isApproved} className={`w-full font-bold p-4 rounded-2xl transition shadow-sm flex items-center justify-center gap-2 ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'}`}>
-            <Wallet size={18} /> {isApproved ? 'Withdraw Earnings via Monime' : 'Withdrawals Locked (Pending KYC)'}
-          </button>
+          
+          {/* Driver Mini Wallet Status */}
+          <div className="bg-slate-900 text-white rounded-3xl p-6 relative shadow-lg">
+            <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Driver Ledger</span>
+            <div className="text-3xl font-bold mt-1 text-emerald-400">SLE {liveBalance.toFixed(2)}</div>
+          </div>
 
-          <h3 className="font-bold text-xl text-slate-900">Dispatch Radar</h3>
+          <h3 className="font-bold text-xl text-slate-900 pt-2">Dispatch Radar</h3>
           {!isOnline ? (
             <div className="border-2 border-dashed border-slate-300 bg-slate-100 rounded-3xl p-12 text-center text-slate-400">
               <Power size={48} className="mx-auto mb-4" />
@@ -147,21 +120,6 @@ export function DriverDashboard({ profile, wallet, activeSection }: any) {
           <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
         </div>
       </div>
-
-      {isWithdrawModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Withdraw Driver Earnings</h2>
-            <p className="text-sm text-slate-500 mb-6">Transfer wallet funds to Mobile Money.</p>
-            <div className="space-y-4 mb-6">
-              <input type="number" placeholder="0.00" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none" />
-              <input type="tel" placeholder="+232..." value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none" />
-            </div>
-            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Cashout</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

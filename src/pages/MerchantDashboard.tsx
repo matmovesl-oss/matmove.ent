@@ -2,19 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Store, Wallet, Plus, Package, RefreshCw, X, Loader2, ArrowUpRight, MapPin, Navigation, Car, CalendarClock, Smartphone, CreditCard, Upload } from 'lucide-react';
+import { Store, Wallet, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Map, Phone } from 'lucide-react';
 
 type ServiceType = 'delivery' | 'ride' | 'scheduled';
-type VehicleType = 'keke' | 'bike' | 'car' | 'van';
 
-export function MerchantDashboard({ profile, wallet, activeSection }: any) {
+export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet }: any) {
   if (activeSection === 'inventory') return <MerchantInventory profile={profile} />;
 
   const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const isApproved = profile?.kyc_status === 'approved';
 
-  // Request & Map State
+  // Map & Dispatch State
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
@@ -22,24 +20,13 @@ export function MerchantDashboard({ profile, wallet, activeSection }: any) {
   const [pickupSuggestions, setPickupSuggestions] = useState<any[]>([]);
   const [destinationSuggestions, setDestinationSuggestions] = useState<any[]>([]);
   const [activeInput, setActiveInput] = useState<'pickup' | 'destination' | null>(null);
-
   const [serviceType, setServiceType] = useState<ServiceType>('delivery');
-  const [vehicleType, setVehicleType] = useState<VehicleType>('car');
   const [isRequesting, setIsRequesting] = useState(false);
-
-  // Modals
-  const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
-  const [loadAmount, setLoadAmount] = useState('');
-  const [loadMethod, setLoadMethod] = useState<'flot' | 'monime' | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawPhone, setWithdrawPhone] = useState(profile?.phone || '');
-  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [isRouting, setIsRouting] = useState(false);
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
+  const markers = useRef<mapboxgl.Marker[]>([]);
 
   useEffect(() => {
     // @ts-ignore
@@ -50,17 +37,6 @@ export function MerchantDashboard({ profile, wallet, activeSection }: any) {
       document.head.appendChild(script);
     }
   }, []);
-
-  const fetchLiveBalance = async () => {
-    if (!profile?.id) return;
-    setIsRefreshing(true);
-    try {
-      const { data } = await supabase.from('wallets').select('balance').eq('user_id', profile.id).single();
-      if (data) setLiveBalance(Number(data.balance));
-    } catch (err) {} finally { setIsRefreshing(false); }
-  };
-
-  useEffect(() => { fetchLiveBalance(); }, [profile?.id]);
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
@@ -97,6 +73,18 @@ export function MerchantDashboard({ profile, wallet, activeSection }: any) {
     setActiveInput(null);
   };
 
+  const previewRoute = async () => {
+    if (!pickupCoords || !destinationCoords || !map.current) return alert('Please select accurate locations from suggestions.');
+    setIsRouting(true); setActiveInput(null);
+    try {
+      markers.current.forEach(m => m.remove()); markers.current = [];
+      if (map.current.getSource('route')) { map.current.removeLayer('route'); map.current.removeSource('route'); }
+      markers.current.push(new mapboxgl.Marker({ color: '#10B981' }).setLngLat(pickupCoords).addTo(map.current));
+      markers.current.push(new mapboxgl.Marker({ color: '#3B82F6' }).setLngLat(destinationCoords).addTo(map.current));
+      map.current.fitBounds(new mapboxgl.LngLatBounds(pickupCoords, pickupCoords).extend(destinationCoords), { padding: 50 });
+    } catch (err: any) { alert('Map Error: ' + err.message); } finally { setIsRouting(false); }
+  };
+
   const handleDispatchDelivery = async () => {
     if (!pickup || !destination) return alert('Select pickup and dropoff locations.');
     setIsRequesting(true);
@@ -104,7 +92,6 @@ export function MerchantDashboard({ profile, wallet, activeSection }: any) {
       const { error } = await supabase.from('bookings').insert({
         rider_id: profile.id,
         service_type: serviceType,
-        vehicle_type: vehicleType,
         pickup_location: pickup,
         destination_location: destination,
         fare_amount: 0,
@@ -116,52 +103,25 @@ export function MerchantDashboard({ profile, wallet, activeSection }: any) {
     } catch (err: any) { alert(err.message); } finally { setIsRequesting(false); }
   };
 
-  const executeLoadWallet = async () => {
-    if (!loadAmount || !loadMethod) return alert('Enter amount and select payment method.');
-    setIsProcessing(true);
+  const fetchLiveBalance = async () => {
+    if (!profile?.id) return;
+    setIsRefreshing(true);
     try {
-      const endpoint = loadMethod === 'flot' ? '/api/create-flot-checkout' : '/api/create-monime-checkout';
-      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, email: profile.email, phone: profile.phone, role: 'merchant' }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Payment failed');
-      const redirectUrl = data.link || data.checkoutUrl;
-      if (redirectUrl) window.location.href = redirectUrl;
-    } catch (err: any) { alert(err.message); setIsProcessing(false); }
-  };
-
-  const executeWithdrawal = async () => {
-    const amt = Number(withdrawAmount);
-    if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (amt > liveBalance) return alert('Insufficient balance');
-    if (!withdrawPhone.trim()) return alert('Enter valid Mobile Money number');
-    setIsWithdrawing(true);
-    try {
-      const res = await fetch('/api/create-monime-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: withdrawPhone }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Withdrawal failed');
-      alert(`Cashout requested! Pending Admin approval.`);
-      setIsWithdrawModalOpen(false); fetchLiveBalance();
-    } catch (err: any) { alert(err.message); } finally { setIsWithdrawing(false); }
+      const { data } = await supabase.from('wallets').select('balance').eq('user_id', profile.id).single();
+      if (data) setLiveBalance(Number(data.balance));
+    } catch (err) {} finally { setIsRefreshing(false); }
   };
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-100 text-orange-600 rounded-xl"><Store size={20} /></div>
-          <div><h2 className="font-bold text-slate-900 leading-tight">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => { setIsProcessing(false); setLoadAmount(''); setLoadMethod(null); setIsLoadModalOpen(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">+ Load Wallet</button>
-          <button onClick={() => setIsWithdrawModalOpen(true)} disabled={!isApproved} className={`px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Withdraw</button>
-        </div>
+        <div className="flex items-center gap-3"><div className="p-2 bg-orange-100 text-orange-600 rounded-xl"><Store size={20} /></div><div><h2 className="font-bold text-slate-900 leading-tight">{profile?.business_name || profile?.full_name || 'Merchant'}</h2></div></div>
+        <button onClick={onOpenWallet} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">View Wallet</button>
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
         <div className="bg-orange-600 rounded-3xl p-8 text-white relative shadow-lg">
-          <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
-             <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
-          </button>
+          <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}</button>
           <span className="text-orange-200 text-xs font-bold uppercase tracking-wider">Store Operating Wallet</span>
           <div className="text-5xl font-bold mt-2">SLE {liveBalance.toFixed(2)}</div>
         </div>
@@ -169,16 +129,15 @@ export function MerchantDashboard({ profile, wallet, activeSection }: any) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit">
             <h3 className="font-bold text-lg">Dispatch Request</h3>
-            
             <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
               <button onClick={() => setServiceType('delivery')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Package size={16}/> Delivery</button>
               <button onClick={() => setServiceType('ride')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16}/> Ride</button>
               <button onClick={() => setServiceType('scheduled')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size={16}/> Schedule</button>
             </div>
-
+            
             <div className="space-y-3">
                <div className="relative z-30" onClick={e => e.stopPropagation()}>
-                 <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'pickup' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
+                 <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'pickup' ? 'border-orange-500 ring-2 ring-orange-100' : 'border-slate-200'}`}>
                    <MapPin size={16} className="text-emerald-600 shrink-0" />
                    <input type="text" placeholder="Store Pickup Location" value={pickup} onChange={e => searchPlaces(e.target.value, 'pickup')} onFocus={() => setActiveInput('pickup')} className="w-full outline-none text-sm bg-transparent" />
                  </div>
@@ -190,7 +149,7 @@ export function MerchantDashboard({ profile, wallet, activeSection }: any) {
                </div>
 
                <div className="relative z-20" onClick={e => e.stopPropagation()}>
-                 <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'destination' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
+                 <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'destination' ? 'border-orange-500 ring-2 ring-orange-100' : 'border-slate-200'}`}>
                    <Navigation size={16} className="text-blue-600 shrink-0" />
                    <input type="text" placeholder="Customer Dropoff Location" value={destination} onChange={e => searchPlaces(e.target.value, 'destination')} onFocus={() => setActiveInput('destination')} className="w-full outline-none text-sm bg-transparent" />
                  </div>
@@ -201,8 +160,12 @@ export function MerchantDashboard({ profile, wallet, activeSection }: any) {
                  )}
                </div>
 
-               <button onClick={handleDispatchDelivery} disabled={isRequesting} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-2">
-                 {isRequesting ? <Loader2 className="animate-spin mx-auto"/> : 'Request Delivery Driver'}
+               <button onClick={previewRoute} disabled={isRouting} className="w-full mt-2 text-xs font-bold text-orange-600 hover:text-orange-700 flex justify-center items-center gap-1 bg-orange-50 px-3 py-2 rounded-lg border border-orange-100">
+                 {isRouting ? <Loader2 size={12} className="animate-spin"/> : <Map size={12} />} Preview Locations on Map
+               </button>
+
+               <button onClick={handleDispatchDelivery} disabled={isRequesting} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4">
+                 {isRequesting ? <Loader2 className="animate-spin mx-auto"/> : 'Request Dispatch'}
                </button>
             </div>
           </div>
@@ -212,37 +175,6 @@ export function MerchantDashboard({ profile, wallet, activeSection }: any) {
           </div>
         </div>
       </div>
-
-      {isLoadModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Load Unified Wallet</h2>
-            <p className="text-sm text-slate-500 mb-6">Choose how you want to fund your account.</p>
-            <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <button onClick={() => setLoadMethod('monime')} className={`p-4 border rounded-xl flex flex-col items-center gap-2 ${loadMethod === 'monime' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}><Smartphone size={24} /> <span className="text-xs">Mobile Money</span></button>
-              <button onClick={() => setLoadMethod('flot')} className={`p-4 border rounded-xl flex flex-col items-center gap-2 ${loadMethod === 'flot' ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold' : 'border-slate-200 text-slate-500'}`}><CreditCard size={24} /> <span className="text-xs">Bank Card</span></button>
-            </div>
-            <button onClick={executeLoadWallet} disabled={isProcessing || !loadAmount || !loadMethod} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isProcessing ? <Loader2 className="animate-spin" size={20} /> : 'Proceed to Checkout'}</button>
-          </div>
-        </div>
-      )}
-
-      {isWithdrawModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Withdraw Store Funds</h2>
-            <p className="text-sm text-slate-500 mb-6">Transfer balance to Mobile Money via Monime.</p>
-            <div className="space-y-4 mb-6">
-              <input type="number" placeholder="Amount (SLE)" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none" />
-              <input type="tel" placeholder="+232..." value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none" />
-            </div>
-            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Cashout</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -255,6 +187,7 @@ function MerchantInventory({ profile }: any) {
   const [price, setPrice] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [whatsappNumber, setWhatsappNumber] = useState(profile?.phone || '');
   const [isSaving, setIsSaving] = useState(false);
 
   const fetchProducts = async () => {
@@ -266,20 +199,9 @@ function MerchantInventory({ profile }: any) {
 
   useEffect(() => { fetchProducts(); }, [profile.id]);
 
-  // IMAGE FILE ATTACHMENT CONVERTER
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) return alert('File size must be under 2MB.');
-      const reader = new FileReader();
-      reader.onloadend = () => setImageUrl(reader.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !price) return alert('Name and Price are required');
+    if (!name || !price || !whatsappNumber) return alert('Name, Price, and Contact Number are required');
     setIsSaving(true);
     try {
       const { error } = await supabase.from('products').insert({
@@ -287,7 +209,8 @@ function MerchantInventory({ profile }: any) {
         name,
         price: Number(price),
         description,
-        image_url: imageUrl || null
+        image_url: imageUrl || null,
+        whatsapp_number: whatsappNumber // Saved directly to the DB!
       });
       if (error) throw error;
       setIsAddModalOpen(false);
@@ -315,11 +238,7 @@ function MerchantInventory({ profile }: any) {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {products.map(p => (
             <div key={p.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm p-4">
-              {p.image_url ? (
-                <img src={p.image_url} alt={p.name} className="w-full h-36 object-cover rounded-xl mb-3" />
-              ) : (
-                <div className="w-full h-36 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 mb-3"><Package size={32} /></div>
-              )}
+              {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-36 object-cover rounded-xl mb-3" /> : <div className="w-full h-36 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 mb-3"><Package size={32} /></div>}
               <h3 className="font-bold text-slate-900 text-base">{p.name}</h3>
               <p className="text-xs text-slate-500 mt-1 line-clamp-2">{p.description}</p>
               <div className="text-lg font-bold text-slate-900 mt-3">SLE {p.price}</div>
@@ -337,14 +256,11 @@ function MerchantInventory({ profile }: any) {
               <input required type="text" placeholder="Product Name" value={name} onChange={e=>setName(e.target.value)} className="w-full border p-3 rounded-xl outline-none text-sm" />
               <input required type="number" placeholder="Price (SLE)" value={price} onChange={e=>setPrice(e.target.value)} className="w-full border p-3 rounded-xl outline-none text-sm font-bold" />
               <textarea placeholder="Description" value={description} onChange={e=>setDescription(e.target.value)} className="w-full border p-3 rounded-xl outline-none text-sm" rows={3} />
-              
-              {/* IMAGE FILE ATTACHMENT */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-500 uppercase">Product Image Attachment</label>
-                <input type="file" accept="image/*" onChange={handleImageFileChange} className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-                {imageUrl && <img src={imageUrl} alt="Preview" className="h-20 w-20 object-cover rounded-xl mt-2 border" />}
+              <div className="flex items-center gap-2 border p-3 rounded-xl focus-within:border-orange-500 transition">
+                 <Phone size={16} className="text-slate-400 shrink-0" />
+                 <input required type="tel" placeholder="WhatsApp Contact Number" value={whatsappNumber} onChange={e=>setWhatsappNumber(e.target.value)} className="w-full outline-none text-sm bg-transparent" />
               </div>
-
+              <input type="url" placeholder="Image URL (e.g., Supabase bucket link)" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} className="w-full border p-3 rounded-xl outline-none text-sm" />
               <button type="submit" disabled={isSaving} className="w-full bg-slate-900 text-white font-bold p-3.5 rounded-xl flex justify-center">{isSaving ? <Loader2 className="animate-spin" size={18}/> : 'Save Product'}</button>
             </form>
           </div>
