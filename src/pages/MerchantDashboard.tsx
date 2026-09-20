@@ -157,7 +157,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
           <div className="p-2 bg-orange-100 text-orange-600 rounded-xl"><Store size={20} /></div>
           <div><h2 className="font-bold text-slate-900 leading-tight">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
         </div>
-        <button onClick={onOpenWallet} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">Wallet</button>
+        <button onClick={onOpenWallet} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">View Wallet</button>
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -264,38 +264,24 @@ function MerchantInventory({ profile }: any) {
     } catch (err) {
       console.error('Failed to load products');
     } finally {
-      setLoading(false);
+      setLoading(false); // Graceful exit ensuring the spinner stops
     }
   };
 
   useEffect(() => { fetchProducts(); }, [profile.id]);
 
-  // UPLOAD DIRECTLY TO SUPABASE STORAGE
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) return alert('File size must be under 2MB.');
-    
-    setIsSaving(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${profile.id}_${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from('product-images').upload(fileName, file);
-      
-      if (uploadError) throw uploadError;
-      
-      const { data } = supabase.storage.from('product-images').getPublicUrl(fileName);
-      setImageUrl(data.publicUrl);
-    } catch (error: any) {
-      alert('Error uploading image: ' + error.message);
-    } finally {
-      setIsSaving(false);
-    }
+    const reader = new FileReader();
+    reader.onloadend = () => setImageUrl(reader.result as string);
+    reader.readAsDataURL(file);
   };
 
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !price || !whatsappNumber) return alert('Name, Price, and WhatsApp Number are required');
+    if (!name || !price || !whatsappNumber) return alert('Name, Price, and Contact Number are required');
     setIsSaving(true);
     try {
       const { error } = await supabase.from('products').insert({
@@ -358,8 +344,7 @@ function MerchantInventory({ profile }: any) {
 
               <div className="space-y-2 p-3 border border-dashed rounded-xl bg-slate-50">
                 <label className="block text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><UploadCloud size={14}/> Attach Product Image</label>
-                <input type="file" accept="image/*" onChange={handleImageUpload} className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer" />
-                {isSaving && <div className="text-xs text-blue-600 flex items-center gap-1 mt-2"><Loader2 size={12} className="animate-spin" /> Uploading image...</div>}
+                <input type="file" accept="image/*" onChange={handleImageFileChange} className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer" />
                 {imageUrl && !isSaving && <img src={imageUrl} alt="Preview" className="h-24 w-full object-cover rounded-xl mt-2 border border-slate-200 shadow-sm" />}
               </div>
 

@@ -225,9 +225,14 @@ function RiderShop({ profile }: any) {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const { data, error } = await supabase.from('products').select('*, merchant:profiles!merchant_id(business_name, phone)').order('created_at', { ascending: false });
-        if (error) throw error;
-        setProducts(data || []);
+        // Safe query that gracefully maps relationships without crashing
+        const { data, error } = await supabase.from('products').select('*, profiles(business_name, phone)').order('created_at', { ascending: false });
+        if (error) {
+          console.error('Products fetch error:', error);
+          setProducts([]);
+        } else {
+          setProducts(data || []);
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -253,7 +258,8 @@ function RiderShop({ profile }: any) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {products.map(p => {
-            const contactNumber = p.whatsapp_number || p.merchant?.phone || WHATSAPP_NUMBER;
+            const profileData = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles;
+            const contactNumber = p.whatsapp_number || profileData?.phone || WHATSAPP_NUMBER;
             const cleanNumber = contactNumber.replace(/[^0-9]/g, '');
 
             return (
@@ -264,7 +270,7 @@ function RiderShop({ profile }: any) {
                   <div className="w-full h-44 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 mb-3"><ShoppingBag size={36} /></div>
                 )}
                 <div>
-                  <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{p.merchant?.business_name || 'Verified Merchant'}</div>
+                  <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{profileData?.business_name || 'Verified Merchant'}</div>
                   <h3 className="font-bold text-slate-900 text-base mt-0.5">{p.name}</h3>
                   <p className="text-xs text-slate-500 mt-1 line-clamp-2">{p.description || 'No description.'}</p>
                 </div>

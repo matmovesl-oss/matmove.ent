@@ -1,86 +1,70 @@
-import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   try {
-    const { userId, amount, role, returnUrl } = req.body;
-    if (!userId || !amount) return res.status(400).json({ error: 'Missing userId or amount.' });
+    const { userId, amount } = req.body;
+    if (!userId || !amount) return res.status(400).json({ error: 'Missing required parameters.' });
 
-    const supabase = createClient(
-      process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    // 1. Prepare Keys
+    const merchantId = process.env.FLOT_MERCHANT_ID;
+    let privateKey = process.env.FLOT_PRIVATE_KEY || '';
 
-    const { data: wallets, error: walletError } = await supabase
-      .from('wallets')
-      .select('metadata')
-      .eq('user_id', userId)
-      .eq('currency', 'SLE');
+    // Vercel sometimes escapes newlines in env variables. We must restore them for the PEM format.
+    privateKey = privateKey.replace(/\\n/g, '\n');
 
-    if (walletError) throw new Error('Database error while fetching wallets.');
+    if (!merchantId || !privateKey.includes('BEGIN PRIVATE KEY')) {
+      throw new Error('Vercel Config Error: FLOT_MERCHANT_ID or FLOT_PRIVATE_KEY is missing or improperly formatted.');
+    }
 
-    const wallet = wallets?.find(w => w.metadata?.monime_account_id);
-    if (!wallet) throw new Error('User does not have a linked Monime Financial Account.');
-
-    const monimeAccountId = wallet.metadata.monime_account_id;
-    const transactionRef = `MONIME_${userId}_${Date.now()}`;
-    const apiKey = process.env.MONIME_API_KEY;
-    const spaceId = process.env.MONIME_SPACE_ID;
-
-    const destinationDashboard = returnUrl || `${req.headers.origin}/customer/${role}`;
-    const safeCallbackUrl = `${req.headers.origin}/api/unified-webhook?returnUrl=${encodeURIComponent(destinationDashboard)}&provider=monime&ref=${transactionRef}&amount=${amount}`;
-
-    const payload = {
-      name: "MatMove Wallet Load",
-      reference: transactionRef,
-      financialAccountId: monimeAccountId,
-      successUrl: safeCallbackUrl,
-      cancelUrl: destinationDashboard,
-      lineItems: [
-        {
-          type: "custom",
-          name: "Wallet Top-up",
-          quantity: 1,
-          price: {
-            currency: "SLE",
-            value: Math.round(Number(amount) * 100)
-          }
-        }
-      ]
+    // 2. Build exact payload structure dictated by Flot docs
+    const transactionRef = `FLOT_${userId}_${Date.now()}`;
+    const requestBody = {
+      merchantId: merchantId,
+      type: "in-app",
+      payload: {
+        orderId: transactionRef,
+        currency: "SLE",
+        amount: String(amount)
+      }
     };
 
-    const monimeRes = await fetch('https://api.monime.io/v1/checkout-sessions', {
+    const stringifiedBody = JSON.stringify(requestBody);
+
+    // 3. Flot Signature Computation Pipeline (RSA-4096-PSS SHA-512)
+    const signer = crypto.createSign('RSA-SHA512');
+    signer.update(stringifiedBody);
+    
+    const signature = signer.sign({
+      key: privateKey,
+      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+      saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+    }, 'base64');
+
+    // 4. Request the Payment Link from Flot Production API
+    const flotRes = await fetch('https://api.app.flotme.ai/merchants/private/v1/payment-links', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'Monime-Space-Id': spaceId,
-        'Idempotency-Key': transactionRef
+        'X-Flot-Merchant-Signature': signature
       },
-      body: JSON.stringify(payload)
+      body: stringifiedBody
     });
 
-    const rawData = await monimeRes.json();
-    if (!monimeRes.ok || rawData.success === false) {
-      const errMsg = rawData.messages?.join(', ') || rawData.error || 'Monime checkout session failed';
-      throw new Error(errMsg);
+    const rawData = await flotRes.json();
+    
+    if (!flotRes.ok) {
+      throw new Error(rawData.message || `Flot gateway error: ${JSON.stringify(rawData)}`);
     }
 
-    const checkoutUrl = 
-      rawData?.result?.redirectUrl || 
-      rawData?.result?.url || 
-      rawData?.redirectUrl || 
-      rawData?.url || 
-      rawData?.data?.redirectUrl || 
-      rawData?.data?.url || 
-      rawData?.checkoutUrl;
+    // 5. Extract Link
+    const checkoutUrl = rawData.url || rawData.link || rawData.data?.url || rawData.paymentLink;
+    if (!checkoutUrl) throw new Error(`Missing checkout URL in Flot response: ${JSON.stringify(rawData)}`);
 
-    if (!checkoutUrl) throw new Error('Checkout session created, but redirect URL was not returned.');
-
-    return res.status(200).json({ link: checkoutUrl, checkoutUrl, url: checkoutUrl });
+    return res.status(200).json({ link: checkoutUrl });
   } catch (error) {
-    console.error('Monime Checkout Error:', error);
-    return res.status(500).json({ error: error.message || 'Internal payment error' });
+    console.error('Flot Checkout Error:', error);
+    return res.status(500).json({ error: error.message });
   }
 }
