@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight } from 'lucide-react';
+import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, ArrowUpRight, Smartphone, CreditCard, X, Wallet, Map } from 'lucide-react';
 
 const WHATSAPP_NUMBER = "23290330362";
 const PRICING_RATES = { bike: { min: 10, perKm: 3 }, keke: { min: 15, perKm: 5 }, car: { min: 30, perKm: 10 }, van: { min: 60, perKm: 20 } };
@@ -12,6 +12,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   if (activeSection === 'trips') return <RiderTrips profile={profile} />;
 
   const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
@@ -31,6 +32,16 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [isRequesting, setIsRequesting] = useState(false);
   const [activeBooking, setActiveBooking] = useState<any>(null);
 
+  const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
+  const [loadAmount, setLoadAmount] = useState('');
+  const [loadMethod, setLoadMethod] = useState<'flot' | 'monime' | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawPhone, setWithdrawPhone] = useState(profile?.phone || '');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
@@ -44,6 +55,17 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       document.head.appendChild(script);
     }
   }, []);
+
+  const fetchLiveBalance = async () => {
+    if (!profile?.id) return;
+    setIsRefreshing(true);
+    try {
+      const { data } = await supabase.from('wallets').select('balance').eq('user_id', profile.id).single();
+      if (data) setLiveBalance(Number(data.balance));
+    } catch (err) {} finally { setIsRefreshing(false); }
+  };
+
+  useEffect(() => { fetchLiveBalance(); }, [profile?.id]);
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
@@ -90,7 +112,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       markers.current.push(new mapboxgl.Marker({ color: '#3B82F6' }).setLngLat(destinationCoords).addTo(map.current));
       map.current.fitBounds(new mapboxgl.LngLatBounds(pickupCoords, pickupCoords).extend(destinationCoords), { padding: 50 });
 
-      if (serviceType === 'ride') {
+      if (serviceType === 'ride' || serviceType === 'delivery') {
         const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${pickupCoords[0]},${pickupCoords[1]};${destinationCoords[0]},${destinationCoords[1]}?geometries=geojson&access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`);
         const dirData = await dirRes.json();
         const route = dirData.routes?.[0];
@@ -110,7 +132,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     if (!pickupCoords || !destinationCoords) return alert('Please select pickup and destination from suggestions.');
     if (serviceType === 'scheduled' && !scheduledTime) return alert('Select time for scheduled request.');
     let finalAmount = 0; let finalStatus = 'pending';
-    if (serviceType === 'ride') {
+    if (serviceType === 'ride' || serviceType === 'delivery') {
       finalAmount = Number(offerAmount);
       if (!finalAmount || finalAmount <= 0) return alert('Preview route to calculate offer.');
       if (finalAmount < PRICING_RATES[vehicleType].min) return alert(`Minimum fare is SLE ${PRICING_RATES[vehicleType].min}`);
@@ -119,7 +141,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 
     setIsRequesting(true);
     try {
-      const { data, error } = await supabase.from('bookings').insert({ rider_id: profile.id, service_type: serviceType, vehicle_type: serviceType === 'ride' ? vehicleType : null, pickup_location: pickup, destination_location: destination, fare_amount: finalAmount, scheduled_time: serviceType === 'scheduled' ? scheduledTime : null, status: finalStatus }).select().single();
+      const { data, error } = await supabase.from('bookings').insert({ rider_id: profile.id, service_type: serviceType, vehicle_type: serviceType !== 'scheduled' ? vehicleType : null, pickup_location: pickup, destination_location: destination, fare_amount: finalAmount, scheduled_time: serviceType === 'scheduled' ? scheduledTime : null, status: finalStatus }).select().single();
       if (error) throw error;
       setActiveBooking(data);
     } catch (err: any) { alert('Request failed: ' + err.message); } finally { setIsRequesting(false); }
@@ -130,13 +152,53 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     try { await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', activeBooking.id); setActiveBooking(null); } catch (err) {}
   };
 
+  const executeLoadWallet = async () => {
+    if (!loadAmount || !loadMethod) return alert('Enter amount and select payment method.');
+    setIsProcessing(true);
+    try {
+      const endpoint = loadMethod === 'flot' ? '/api/create-flot-checkout' : '/api/create-monime-checkout';
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, email: profile.email, phone: profile.phone, role: 'rider' }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payment failed');
+      const redirectUrl = data.link || data.checkoutUrl;
+      if (redirectUrl) window.location.href = redirectUrl;
+    } catch (err: any) { alert(err.message); setIsProcessing(false); }
+  };
+
+  const executeWithdrawal = async () => {
+    const amt = Number(withdrawAmount);
+    if (!amt || amt <= 0) return alert('Enter valid amount');
+    if (amt > liveBalance) return alert('Insufficient balance');
+    if (!withdrawPhone.trim()) return alert('Enter valid Mobile Money number');
+    setIsWithdrawing(true);
+    try {
+      const res = await fetch('/api/create-monime-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: withdrawPhone }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Withdrawal failed');
+      alert(`Cashout requested! Pending Admin approval.`);
+      setIsWithdrawModalOpen(false); fetchLiveBalance();
+    } catch (err: any) { alert(err.message); } finally { setIsWithdrawing(false); }
+  };
+
   return (
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || 'Rider'}?</h1></div>
+        <div className="flex gap-2">
+          <button onClick={() => { setIsProcessing(false); setLoadAmount(''); setLoadMethod(null); setIsLoadModalOpen(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">+ Load Wallet</button>
+          <button onClick={() => setIsWithdrawModalOpen(true)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">Withdraw</button>
+        </div>
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
+        <div className="bg-slate-900 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
+          <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
+             <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
+          </button>
+          <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">MatMove Unified Wallet</span>
+          <div className="text-3xl font-bold mt-1 text-blue-400">SLE {liveBalance.toFixed(2)}</div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit z-20">
             <h3 className="font-bold text-lg">Request Service</h3>
@@ -149,9 +211,9 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
             {!activeBooking ? (
               <>
                 <div className="space-y-3">
-                  {serviceType === 'ride' && (
+                  {(serviceType === 'ride' || serviceType === 'delivery') && (
                     <div className="grid grid-cols-4 gap-2 mb-2">
-                      {(['keke', 'bike', 'car', 'van'] as ('keke' | 'bike' | 'car' | 'van')[]).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}
+                      {(['keke', 'bike', 'car', 'van'] as VehicleType[]).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}
                     </div>
                   )}
 
@@ -184,7 +246,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                     <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">{isRouting ? <Loader2 size={12} className="animate-spin"/> : <MapPin size={12} />} Preview Route</button>
                   </div>
 
-                  {serviceType === 'ride' && (
+                  {(serviceType === 'ride' || serviceType === 'delivery') && (
                     <div className="flex items-center gap-2 border border-slate-200 bg-slate-50 p-2 rounded-xl">
                       <span className="text-slate-500 font-bold text-sm px-2">SLE</span>
                       <input type="number" placeholder="Offer" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-center" />
@@ -214,6 +276,38 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
           </div>
         </div>
       </div>
+
+      {/* MODALS */}
+      {isLoadModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Load Unified Wallet</h2>
+            <p className="text-sm text-slate-500 mb-6">Choose how you want to fund your account.</p>
+            <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <button onClick={() => setLoadMethod('monime')} className={`p-4 border rounded-xl flex flex-col items-center gap-2 ${loadMethod === 'monime' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}><Smartphone size={24} /> <span className="text-xs">Mobile Money</span></button>
+              <button onClick={() => setLoadMethod('flot')} className={`p-4 border rounded-xl flex flex-col items-center gap-2 ${loadMethod === 'flot' ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold' : 'border-slate-200 text-slate-500'}`}><CreditCard size={24} /> <span className="text-xs">Bank Card</span></button>
+            </div>
+            <button onClick={executeLoadWallet} disabled={isProcessing || !loadAmount || !loadMethod} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isProcessing ? <Loader2 className="animate-spin" size={20} /> : 'Proceed to Checkout'}</button>
+          </div>
+        </div>
+      )}
+
+      {isWithdrawModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Withdraw Funds</h2>
+            <p className="text-sm text-slate-500 mb-6">Transfer balance to Mobile Money via Monime.</p>
+            <div className="space-y-4 mb-6">
+              <input type="number" placeholder="Amount (SLE)" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none" />
+              <input type="tel" placeholder="+232..." value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none" />
+            </div>
+            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Cashout</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -227,7 +321,11 @@ function RiderShop({ profile }: any) {
     const fetchProducts = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase.from('products').select('*, profiles(business_name, phone)').order('created_at', { ascending: false });
+        const { data, error } = await supabase
+          .from('products')
+          .select('*, merchant:profiles!merchant_id(business_name, phone)')
+          .order('created_at', { ascending: false });
+          
         if (error) {
           console.error('Products fetch error:', error);
           if (isMounted) setProducts([]);
@@ -260,8 +358,7 @@ function RiderShop({ profile }: any) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {products.map(p => {
-            const profileData = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles;
-            const contactNumber = p.whatsapp_number || profileData?.phone || WHATSAPP_NUMBER;
+            const contactNumber = p.whatsapp_number || p.merchant?.phone || WHATSAPP_NUMBER;
             const cleanNumber = contactNumber.replace(/[^0-9]/g, '');
 
             return (
@@ -272,7 +369,7 @@ function RiderShop({ profile }: any) {
                   <div className="w-full h-44 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 mb-3"><ShoppingBag size={36} /></div>
                 )}
                 <div>
-                  <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{profileData?.business_name || 'Verified Merchant'}</div>
+                  <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{p.merchant?.business_name || 'Verified Merchant'}</div>
                   <h3 className="font-bold text-slate-900 text-base mt-0.5">{p.name}</h3>
                   <p className="text-xs text-slate-500 mt-1 line-clamp-2">{p.description || 'No description.'}</p>
                 </div>

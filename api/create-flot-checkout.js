@@ -7,18 +7,16 @@ export default async function handler(req, res) {
     const { userId, amount } = req.body;
     if (!userId || !amount) return res.status(400).json({ error: 'Missing required parameters.' });
 
-    // 1. Prepare Keys
     const merchantId = process.env.FLOT_MERCHANT_ID;
     let privateKey = process.env.FLOT_PRIVATE_KEY || '';
     
-    // Format the RSA key correctly for Node.js
+    // Safely reconstruct the RSA key from Vercel's environment variables
     privateKey = privateKey.replace(/\\n/g, '\n');
 
-    if (!merchantId || !privateKey.includes('BEGIN PRIVATE KEY')) {
-      throw new Error('Vercel Config Error: FLOT_MERCHANT_ID or FLOT_PRIVATE_KEY is missing. You must use the RSA Private Key.');
+    if (!merchantId || !privateKey) {
+      throw new Error('Vercel Config Error: Missing FLOT_MERCHANT_ID or FLOT_PRIVATE_KEY.');
     }
 
-    // 2. Build the STRICT payload structure dictated by Flot docs (NO extra fields allowed)
     const transactionRef = `FLOT_${userId}_${Date.now()}`;
     const requestBody = {
       merchantId: merchantId,
@@ -32,7 +30,6 @@ export default async function handler(req, res) {
 
     const stringifiedBody = JSON.stringify(requestBody);
 
-    // 3. Generate Flot RSA Signature (RSA-SHA512 with PSS Padding)
     const signer = crypto.createSign('RSA-SHA512');
     signer.update(stringifiedBody);
     
@@ -42,7 +39,6 @@ export default async function handler(req, res) {
       saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
     }, 'base64');
 
-    // 4. Send to Flot Production API
     const flotRes = await fetch('https://api.app.flotme.ai/merchants/private/v1/payment-links', {
       method: 'POST',
       headers: {
@@ -58,9 +54,8 @@ export default async function handler(req, res) {
       throw new Error(rawData.message || `Flot gateway error: ${JSON.stringify(rawData)}`);
     }
 
-    // 5. Extract Link
     const checkoutUrl = rawData.url || rawData.link || rawData.data?.url || rawData.paymentLink;
-    if (!checkoutUrl) throw new Error(`Missing checkout URL in Flot response: ${JSON.stringify(rawData)}`);
+    if (!checkoutUrl) throw new Error('Missing checkout URL in Flot response.');
 
     return res.status(200).json({ link: checkoutUrl });
   } catch (error) {

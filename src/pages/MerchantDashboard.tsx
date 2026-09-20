@@ -15,7 +15,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Map & Dispatch State
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
@@ -134,7 +133,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     setIsRequesting(true);
     try {
       const { error } = await supabase.from('bookings').insert({
-        rider_id: profile.id, // Merchant requests as rider
+        rider_id: profile.id, 
         service_type: serviceType,
         vehicle_type: serviceType !== 'scheduled' ? vehicleType : null,
         pickup_location: pickup,
@@ -216,10 +215,11 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                  <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">{isRouting ? <Loader2 size={12} className="animate-spin"/> : <MapPin size={12} />} Preview Route</button>
                </div>
 
+               {/* RESTORED OFFER AMOUNT SECTION */}
                {(serviceType === 'ride' || serviceType === 'delivery') && (
                  <div className="flex items-center gap-2 border border-slate-200 bg-slate-50 p-2 rounded-xl">
                    <span className="text-slate-500 font-bold text-sm px-2">SLE</span>
-                   <input type="number" placeholder="Offer" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-center" />
+                   <input type="number" placeholder="Offer Amount" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-center" />
                    <div className="flex gap-1">
                      <button onClick={() => setOfferAmount(prev => Math.max(PRICING_RATES[vehicleType].min, (Number(prev)||PRICING_RATES[vehicleType].min) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16}/></button>
                      <button onClick={() => setOfferAmount(prev => ((Number(prev)||PRICING_RATES[vehicleType].min) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
@@ -257,24 +257,21 @@ function MerchantInventory({ profile }: any) {
   const [whatsappNumber, setWhatsappNumber] = useState(profile?.phone || '');
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    const fetchProducts = async () => {
-      setLoading(true);
-      try {
-        // Safe robust query that won't crash if relationships break
-        const { data, error } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
-        if (error) throw error;
-        if (isMounted) setProducts(data || []);
-      } catch (err) {
-        console.error('Failed to load products');
-      } finally {
-        if (isMounted) setLoading(false); // Graceful exit stops the infinite spinner
-      }
-    };
-    fetchProducts();
-    return () => { isMounted = false; };
-  }, [profile.id]);
+  const fetchProducts = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
+      if (error) throw error;
+      setProducts(data || []);
+    } catch (err) {
+      console.error('Failed to load products');
+      setProducts([]);
+    } finally {
+      setLoading(false); // Graceful exit ensuring the spinner stops
+    }
+  };
+
+  useEffect(() => { fetchProducts(); }, [profile.id]);
 
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -301,8 +298,7 @@ function MerchantInventory({ profile }: any) {
       if (error) throw error;
       setIsAddModalOpen(false);
       setName(''); setPrice(''); setDescription(''); setImageUrl('');
-      // Manually refresh locally
-      setProducts(prev => [{ id: Date.now().toString(), name, price, description, image_url: imageUrl }, ...prev]);
+      fetchProducts();
     } catch (err: any) { alert(err.message); } finally { setIsSaving(false); }
   };
 
