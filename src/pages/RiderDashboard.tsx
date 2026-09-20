@@ -8,6 +8,7 @@ type ServiceType = 'ride' | 'delivery' | 'scheduled';
 type VehicleType = 'keke' | 'bike' | 'car' | 'van';
 
 const PRICING_RATES = { bike: { min: 10, perKm: 3 }, keke: { min: 15, perKm: 5 }, car: { min: 30, perKm: 10 }, van: { min: 60, perKm: 20 } };
+const WHATSAPP_NUMBER = "23290330362";
 
 export function RiderDashboard({ profile, wallet, activeSection }: any) {
   if (activeSection === 'shop') return <RiderShop profile={profile} />;
@@ -44,7 +45,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [withdrawPhone, setWithdrawPhone] = useState(profile?.phone || '');
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  const isApproved = profile?.kyc_status === 'approved';
+  const isApproved = profile?.role === 'rider' || profile?.kyc_status === 'approved';
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -156,6 +157,20 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     try { await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', activeBooking.id); setActiveBooking(null); } catch (err) {}
   };
 
+  const openLoadModal = () => {
+    setIsProcessing(false);
+    setLoadAmount('');
+    setLoadMethod(null);
+    setIsLoadModalOpen(true);
+  };
+
+  const closeLoadModal = () => {
+    setIsProcessing(false);
+    setLoadAmount('');
+    setLoadMethod(null);
+    setIsLoadModalOpen(false);
+  };
+
   const executeLoadWallet = async () => {
     if (!loadAmount || !loadMethod) return alert('Enter amount and select payment method.');
     setIsProcessing(true);
@@ -164,8 +179,17 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, email: profile.email, phone: profile.phone, role: 'rider' }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment failed');
-      window.location.href = data.link || data.checkoutUrl;
-    } catch (err: any) { alert(err.message); setIsProcessing(false); }
+      
+      const redirectUrl = data.link || data.checkoutUrl;
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+      } else {
+        throw new Error('Payment gateway did not return a valid checkout link.');
+      }
+    } catch (err: any) { 
+      alert(err.message || 'Gateway error'); 
+      setIsProcessing(false); 
+    }
   };
 
   const executeWithdrawal = async () => {
@@ -188,8 +212,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || 'Rider'}?</h1></div>
         <div className="flex gap-2">
-          <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">+ Load Wallet</button>
-          <button onClick={() => setIsWithdrawModalOpen(true)} disabled={!isApproved} className={`px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Withdraw</button>
+          <button onClick={openLoadModal} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">+ Load Wallet</button>
+          <button onClick={() => setIsWithdrawModalOpen(true)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">Withdraw</button>
         </div>
       </header>
 
@@ -283,15 +307,20 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={closeLoadModal} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Load Unified Wallet</h2>
             <p className="text-sm text-slate-500 mb-6">Choose how you want to fund your account.</p>
+
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
+
             <div className="grid grid-cols-2 gap-3 mb-6">
-              <button onClick={() => setLoadMethod('monime')} className={`p-4 border rounded-xl flex flex-col items-center gap-2 ${loadMethod === 'monime' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 text-slate-500'}`}><Smartphone size={24} /> <span className="text-xs font-bold">Mobile Money</span></button>
-              <button onClick={() => setLoadMethod('flot')} className={`p-4 border rounded-xl flex flex-col items-center gap-2 ${loadMethod === 'flot' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}><CreditCard size={24} /> <span className="text-xs font-bold">Bank Card</span></button>
+              <button onClick={() => setLoadMethod('monime')} className={`p-4 border rounded-xl flex flex-col items-center gap-2 ${loadMethod === 'monime' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}><Smartphone size={24} /> <span className="text-xs">Mobile Money</span></button>
+              <button onClick={() => setLoadMethod('flot')} className={`p-4 border rounded-xl flex flex-col items-center gap-2 ${loadMethod === 'flot' ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold' : 'border-slate-200 text-slate-500'}`}><CreditCard size={24} /> <span className="text-xs">Bank Card</span></button>
             </div>
-            <button onClick={executeLoadWallet} disabled={isProcessing || !loadAmount || !loadMethod} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isProcessing ? <Loader2 className="animate-spin" size={20} /> : 'Proceed to Checkout'}</button>
+
+            <button onClick={executeLoadWallet} disabled={isProcessing || !loadAmount || !loadMethod} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : 'Proceed to Checkout'}
+            </button>
           </div>
         </div>
       )}
@@ -319,7 +348,7 @@ function RiderShop({ profile }: any) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.from('products').select('*, merchant:profiles(business_name, phone)').order('created_at', { ascending: false }).then(({ data }) => {
+    supabase.from('products').select('*, merchant:profiles!merchant_id(business_name, phone)').order('created_at', { ascending: false }).then(({ data, error }) => {
       if (data) setProducts(data);
       setLoading(false);
     });
@@ -328,8 +357,8 @@ function RiderShop({ profile }: any) {
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <h1 className="text-3xl font-bold text-slate-900">MatMove Shop</h1>
-      <p className="text-slate-500">Browse verified merchant products and order directly.</p>
-      
+      <p className="text-slate-500">Browse verified merchant products and order directly via WhatsApp.</p>
+
       {loading ? (
         <div className="py-12 text-center text-slate-400"><Loader2 className="animate-spin mx-auto mb-2" size={24} /> Loading marketplace...</div>
       ) : products.length === 0 ? (
@@ -341,20 +370,20 @@ function RiderShop({ profile }: any) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {products.map(p => (
-            <div key={p.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm flex flex-col justify-between">
+            <div key={p.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm flex flex-col justify-between p-4">
               {p.image_url ? (
-                <img src={p.image_url} alt={p.name} className="w-full h-48 object-cover" />
+                <img src={p.image_url} alt={p.name} className="w-full h-44 object-cover rounded-xl mb-3" />
               ) : (
-                <div className="w-full h-48 bg-slate-100 flex items-center justify-center text-slate-400"><ShoppingBag size={32} /></div>
+                <div className="w-full h-44 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 mb-3"><ShoppingBag size={36} /></div>
               )}
-              <div className="p-4">
-                <div className="text-xs font-bold text-blue-600 uppercase">{p.merchant?.business_name || 'Verified Merchant'}</div>
-                <h3 className="font-bold text-slate-900 text-lg mt-1">{p.name}</h3>
-                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{p.description || 'No description provided.'}</p>
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="text-xl font-bold text-slate-900">SLE {p.price}</span>
-                  <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hello, I am interested in buying ${p.name} (SLE ${p.price}) from${p.merchant?.business_name || 'Merchant'}.`)}`} target="_blank" rel="noreferrer" className="bg-blue-600 text-white font-bold text-xs px-3 py-2 rounded-xl hover:bg-blue-700">Order Now</a>
-                </div>
+              <div>
+                <div className="text-[10px] font-bold text-blue-600 uppercase">{p.merchant?.business_name || 'Verified Merchant'}</div>
+                <h3 className="font-bold text-slate-900 text-base mt-0.5">{p.name}</h3>
+                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{p.description || 'No description.'}</p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-lg font-bold text-slate-900">SLE {p.price}</span>
+                <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hello, I am interested in ordering ${p.name} (SLE ${p.price}) from ${p.merchant?.business_name || 'Merchant'}.`)}`} target="_blank" rel="noreferrer" className="bg-blue-600 text-white font-bold text-xs px-3 py-2 rounded-xl hover:bg-blue-700">Order Item</a>
               </div>
             </div>
           ))}

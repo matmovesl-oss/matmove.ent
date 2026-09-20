@@ -45,7 +45,7 @@ export function DriverDashboard({ profile, wallet, activeSection }: any) {
   useEffect(() => {
     if (!isOnline) { setActiveRequests([]); return; }
     const fetchInitialRequests = async () => {
-      const { data } = await supabase.from('bookings').select('*, rider:profiles!rider_id(full_name, phone)').or(`status.eq.pending,driver_id.eq.${profile.id}`).neq('status', 'cancelled').order('created_at', { ascending: false });
+      const { data } = await supabase.from('bookings').select('*, rider:profiles!rider_id(full_name, phone, phone_number)').or(`status.eq.pending,driver_id.eq.${profile.id}`).neq('status', 'cancelled').order('created_at', { ascending: false });
       if (data) setActiveRequests(data);
     };
     fetchInitialRequests();
@@ -118,17 +118,20 @@ export function DriverDashboard({ profile, wallet, activeSection }: any) {
                 <div key={r.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-md space-y-3">
                    <div className="flex justify-between items-start">
                      <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider">{r.service_type}</span>
-                     <span className="text-2xl font-bold text-slate-900">SLE {r.fare_amount}</span>
+                     <div>
+                       <span className="text-2xl font-bold text-slate-900 block text-right">SLE {r.fare_amount}</span>
+                       <span className="text-[10px] font-bold text-slate-400 block text-right">Fee: SLE {(r.fare_amount * 0.15).toFixed(2)}</span>
+                     </div>
                    </div>
 
                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs space-y-2">
                      <div className="flex items-center gap-2 font-semibold text-slate-800"><MapPin size={14} className="text-emerald-500 shrink-0"/> Pickup: {r.pickup_location}</div>
-                     <div className="flex items-center gap-2 font-semibold text-slate-800"><Navigation size={14} className="text-blue-500 shrink-0"/> Destination: {r.destination_location}</div>
+                     <div className="flex items-center gap-2 font-semibold text-slate-800"><Navigation size={14} className="text-blue-500 shrink-0"/> Dropoff: {r.destination_location}</div>
                    </div>
 
-                   <div className="flex items-center gap-2 text-xs font-bold text-slate-600 pt-1">
-                     <User size={14} className="text-slate-400"/> {r.rider?.full_name || 'Customer'}
-                     <Phone size={14} className="text-slate-400 ml-2"/> {r.rider?.phone || 'No Phone'}
+                   <div className="flex items-center justify-between text-xs font-bold text-slate-600 pt-1 border-t border-slate-100">
+                     <span className="flex items-center gap-1.5"><User size={14} className="text-slate-400"/> {r.rider?.full_name || 'Rider Customer'}</span>
+                     <span className="flex items-center gap-1.5"><Phone size={14} className="text-slate-400"/> {r.rider?.phone || r.rider?.phone_number || 'No Phone'}</span>
                    </div>
 
                    {r.status === 'pending' && <button onClick={() => handleAcceptBooking(r)} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800">Accept Request</button>}

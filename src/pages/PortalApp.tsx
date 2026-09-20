@@ -12,7 +12,6 @@ type CustomerRole = 'rider' | 'driver' | 'merchant';
 
 const IDLE_LOCK_MS = 1 * 60 * 1000; 
 const IDLE_LOGOUT_MS = 30 * 60 * 1000;
-
 const WHATSAPP_NUMBER = "23290330362";
 
 function getRoleFromPath(pathname: string): CustomerRole | null {
@@ -65,7 +64,7 @@ export function PortalApp() {
       localStorage.setItem('matmove_last_active', Date.now().toString());
       setProfile({ ...profile, passcode: newPin });
       setPinStatus('unlocked'); setPinError('');
-    } catch (err) { setPinError('Failed to securely save passcode.'); }
+    } catch (err) { setPinError('Failed to save passcode.'); }
   };
 
   const handleUnlockPin = (enteredPin: string) => {
@@ -99,7 +98,7 @@ export function PortalApp() {
       const profileRole = profileData?.role ? String(profileData.role).toLowerCase() : '';
       let resolvedRole: CustomerRole | '' = (profileRole === 'rider' || profileRole === 'driver' || profileRole === 'merchant') ? (profileRole as CustomerRole) : (pathRole || '');
 
-      if (!resolvedRole || profileRole === 'admin') throw new Error('Invalid customer account access.');
+      if (!resolvedRole || profileRole === 'admin') throw new Error('Invalid account type.');
 
       const { data: walletData } = await supabase.from('wallets').select('*').eq('user_id', userId);
       const sleWallet = (walletData || []).find((item) => String(item.currency || '').toUpperCase() === 'SLE');
@@ -152,7 +151,7 @@ function AccountSection({ profile, loggingOut, onLogout, onBack }: any) {
 
   const handleDeleteAccount = () => {
     if (deletePin !== profile.passcode) return alert("Incorrect Passcode");
-    window.location.href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hello MatMove Support, I am requesting account deletion for ${profile.email} (${profile.phone || ''}). Please guide me through final wallet settlement.`)}`;
+    window.location.href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hello MatMove Support, I am requesting account deletion for ${profile.email} (${profile.phone || ''}). Please assist me with final settlement.`)}`;
   };
 
   return (

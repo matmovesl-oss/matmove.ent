@@ -1,123 +1,196 @@
-import { useState, useEffect } from 'react';
-import { ArrowDownToLine, ArrowUpFromLine, Banknote, CheckCircle2, CreditCard, LockKeyhole, ReceiptText, Send, ShieldCheck, Smartphone, Wallet, X } from 'lucide-react';
+import { useState } from 'react';
+import { Wallet, X, Smartphone, CreditCard, Loader2, ArrowUpRight, ArrowDownLeft, Lock } from 'lucide-react';
 
-export function WalletPage({ profile, wallet, onClose, onTopUp, onWithdraw, onSendMoney }: any) {
-  const [liveSleBalance, setLiveSleBalance] = useState<number>(0);
-  const [isSyncing, setIsSyncing] = useState(true);
+export function WalletPage({ profile, wallet, onClose }: any) {
+  const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [loadMethod, setLoadMethod] = useState<'flot' | 'monime' | null>(null);
+  const [withdrawPhone, setWithdrawPhone] = useState(profile?.phone || '');
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Live Mirror: Fetch true balance directly from Monime on load
-  useEffect(() => {
-    if (!profile?.id) return;
-    const fetchBalance = async () => {
-      try {
-        const res = await fetch(`/api/get-live-wallet?userId=${profile.id}`);
-        const data = await res.json();
-        if (data.balance !== undefined) setLiveSleBalance(data.balance);
-      } catch (err) {
-        console.error("Failed to fetch true balance", err);
-      } finally {
-        setIsSyncing(false);
+  const isApproved = profile?.role === 'rider' || profile?.kyc_status === 'approved';
+  const balance = Number(wallet?.balance || 0);
+
+  const resetModalState = () => {
+    setIsProcessing(false);
+    setAmount('');
+    setLoadMethod(null);
+  };
+
+  const handleOpenLoad = () => {
+    resetModalState();
+    setIsLoadModalOpen(true);
+  };
+
+  const handleCloseLoad = () => {
+    resetModalState();
+    setIsLoadModalOpen(false);
+  };
+
+  const handleOpenWithdraw = () => {
+    if (!isApproved) return alert('Cash withdrawals are unlocked once your KYC application is approved by MatMove Admin.');
+    resetModalState();
+    setIsWithdrawModalOpen(true);
+  };
+
+  const handleCloseWithdraw = () => {
+    resetModalState();
+    setIsWithdrawModalOpen(false);
+  };
+
+  const executeLoad = async () => {
+    if (!amount || Number(amount) <= 0) return alert('Enter a valid amount');
+    if (!loadMethod) return alert('Select payment method');
+
+    setIsProcessing(true);
+    try {
+      const endpoint = loadMethod === 'flot' ? '/api/create-flot-checkout' : '/api/create-monime-checkout';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount,
+          userId: profile.id,
+          email: profile.email,
+          phone: profile.phone,
+          role: profile.role
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payment gateway failed');
+
+      const redirectUrl = data.link || data.checkoutUrl;
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+      } else {
+        throw new Error('No checkout URL received');
       }
-    };
-    fetchBalance();
-  }, [profile?.id]);
+    } catch (err: any) {
+      alert(err.message || 'Payment initialization error');
+      setIsProcessing(false);
+    }
+  };
 
-  const role = String(profile?.role || profile?.customer_role || '').toLowerCase();
-  const isRider = role === 'rider' || role === 'client';
-  const isDriver = role === 'driver';
-  const isMerchant = role === 'merchant' || role === 'vendor';
-  const isCustomer = isRider || isDriver || isMerchant;
+  const executeWithdraw = async () => {
+    const amt = Number(amount);
+    if (!amt || amt <= 0) return alert('Enter a valid withdrawal amount');
+    if (amt > balance) return alert('Insufficient balance in wallet');
+    if (!withdrawPhone.trim()) return alert('Enter a valid Mobile Money number');
 
-  const isVerified = String(profile?.kyc_status || profile?.verification_status).trim().toLowerCase() === 'approved';
-  const canWithdraw = isVerified && liveSleBalance > 0;
-  const firstName = profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'User';
+    setIsProcessing(true);
+    try {
+      const res = await fetch('/api/create-monime-payout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: withdrawPhone })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Cashout failed');
 
-  const roleLabel = isRider ? 'Rider Wallet' : isDriver ? 'Driver Wallet' : isMerchant ? 'Merchant Wallet' : 'MatMove Wallet';
+      alert('Withdrawal requested successfully! Pending Admin authorization.');
+      handleCloseWithdraw();
+      window.location.reload();
+    } catch (err: any) {
+      alert(err.message || 'Cashout request failed');
+      setIsProcessing(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24 md:pb-10">
-      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 py-5 sticky top-0 z-20">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                <Wallet size={19} />
-              </div>
-              <p className="text-xs font-bold uppercase tracking-wider text-blue-600">MatMove Wallet • Secure Gateway</p>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-3">{roleLabel}</h1>
-            <p className="text-sm text-slate-500 mt-1 max-w-2xl">Hello, {firstName}. Manage your active funds directly from the Monime ledger.</p>
-          </div>
-          {onClose && (
-            <button onClick={onClose} className="p-2.5 rounded-full bg-slate-100 text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition">
-              <X size={20} />
-            </button>
-          )}
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">MatMove Wallet</span>
+          <h1 className="text-3xl font-bold text-slate-900 capitalize">{profile?.role} Operating Ledger</h1>
         </div>
-      </header>
+        <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"><X size={24} /></button>
+      </div>
 
-      <main className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        <section className="bg-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-lg overflow-hidden relative">
-          <div className="absolute -right-20 -top-20 w-56 h-56 rounded-full bg-blue-500/10" />
-          <div className="absolute -right-10 -bottom-24 w-48 h-48 rounded-full bg-emerald-500/10" />
+      <div className="bg-slate-900 text-white rounded-3xl p-8 mb-8 relative shadow-xl overflow-hidden">
+        <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Available SLE Balance</span>
+        <div className="text-5xl font-bold mt-2 text-blue-400">SLE {balance.toFixed(2)}</div>
+        <p className="text-xs text-slate-400 mt-2">True active balance synchronized with Monime & Flot.</p>
+        <Wallet size={80} className="absolute right-6 top-6 opacity-10 text-white" />
+      </div>
 
-          <div className="relative">
-            <div className="flex items-start justify-between gap-5">
-              <div>
-                <div className="flex items-center gap-2 text-slate-300 text-sm font-medium">
-                  <Wallet size={18} /> Available SLE Balance
-                </div>
-                <div className="text-4xl sm:text-5xl font-bold mt-3 tracking-tight flex items-center gap-3">
-                  SLE {liveSleBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  {isSyncing && <span className="text-sm text-blue-400 font-normal animate-pulse">Syncing...</span>}
-                </div>
-                <p className="text-xs text-slate-400 mt-3">Your true active balance mirrored from Monime.</p>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center">
-                <ShieldCheck size={22} />
-              </div>
-            </div>
-
-            <div className="mt-7 pt-5 border-t border-white/10 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-300">
-              <span className="flex items-center gap-2"><ShieldCheck size={14} className="text-emerald-400" /> Protected by Monime API</span>
-              <span className="flex items-center gap-2"><CheckCircle2 size={14} className="text-emerald-400" /> Live Webhook Sync</span>
+      <h2 className="text-lg font-bold text-slate-900 mb-4">Wallet Actions</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        {/* ACTIVE LOAD CARD */}
+        <div onClick={handleOpenLoad} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:border-blue-500 cursor-pointer transition flex flex-col justify-between">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center"><ArrowDownLeft size={24} /></div>
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">Load Wallet</h3>
+              <p className="text-xs text-slate-500">Top up using Mobile Money or Bank Card.</p>
             </div>
           </div>
-        </section>
+          <button className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition text-sm">Add Funds</button>
+        </div>
 
-        {isCustomer && (
-          <section>
-            <div className="mb-4">
-              <h2 className="text-lg font-bold text-slate-900">Wallet Actions</h2>
+        {/* ACTIVE WITHDRAW CARD */}
+        <div onClick={handleOpenWithdraw} className={`bg-white border rounded-3xl p-6 shadow-sm flex flex-col justify-between ${isApproved ? 'border-slate-200 hover:border-emerald-500 cursor-pointer' : 'border-slate-100 opacity-60'}`}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isApproved ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+              {isApproved ? <ArrowUpRight size={24} /> : <Lock size={24} />}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <button onClick={onTopUp} className="group bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm hover:border-blue-300 transition">
-                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4"><ArrowDownToLine size={22} /></div>
-                <h3 className="font-bold text-slate-900">Load Wallet</h3>
-                <p className="text-sm text-slate-500 mt-1">Top up using Mobile Money checkout.</p>
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">Withdraw SLE</h3>
+              <p className="text-xs text-slate-500">{isApproved ? 'Transfer funds to your Mobile Money account.' : 'Admin KYC Approval required.'}</p>
+            </div>
+          </div>
+          <button disabled={!isApproved} className={`w-full font-bold py-3 rounded-xl transition text-sm ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
+            {isApproved ? 'Withdraw Funds' : 'Withdrawals Locked'}
+          </button>
+        </div>
+      </div>
+
+      {/* LOAD MODAL */}
+      {isLoadModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={handleCloseLoad} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Load Unified Wallet</h2>
+            <p className="text-sm text-slate-500 mb-6">Choose how you want to fund your account.</p>
+
+            <input type="number" placeholder="Amount (SLE)" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
+
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <button onClick={() => setLoadMethod('monime')} className={`p-4 border rounded-xl flex flex-col items-center gap-2 ${loadMethod === 'monime' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>
+                <Smartphone size={24} /> <span className="text-xs">Mobile Money</span>
               </button>
-
-              {isRider && (
-                <button onClick={onSendMoney} className="group bg-white border border-slate-200 rounded-2xl p-5 text-left shadow-sm hover:border-emerald-300 transition">
-                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4"><Send size={22} /></div>
-                  <h3 className="font-bold text-slate-900">Pay / Send Money</h3>
-                  <p className="text-sm text-slate-500 mt-1">Pay drivers directly from your balance.</p>
-                </button>
-              )}
-
-              <button onClick={onWithdraw} disabled={!canWithdraw} className={`group rounded-2xl p-5 text-left shadow-sm transition border ${canWithdraw ? 'bg-white border-slate-200 hover:border-blue-300' : 'bg-slate-100 border-slate-200 cursor-not-allowed'}`}>
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${canWithdraw ? 'bg-blue-50 text-blue-600' : 'bg-slate-200 text-slate-400'}`}>
-                  {canWithdraw ? <ArrowUpFromLine size={22} /> : <LockKeyhole size={22} />}
-                </div>
-                <h3 className={`font-bold ${canWithdraw ? 'text-slate-900' : 'text-slate-500'}`}>Withdraw SLE</h3>
-                <p className={`text-sm mt-1 ${canWithdraw ? 'text-slate-500' : 'text-slate-400'}`}>
-                  {canWithdraw ? 'Withdraw your balance to Mobile Money.' : 'Verification required to withdraw funds.'}
-                </p>
+              <button onClick={() => setLoadMethod('flot')} className={`p-4 border rounded-xl flex flex-col items-center gap-2 ${loadMethod === 'flot' ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold' : 'border-slate-200 text-slate-500'}`}>
+                <CreditCard size={24} /> <span className="text-xs">Bank Card</span>
               </button>
             </div>
-          </section>
-        )}
-      </main>
+
+            <button onClick={executeLoad} disabled={isProcessing || !amount || !loadMethod} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : 'Proceed to Checkout'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* WITHDRAW MODAL */}
+      {isWithdrawModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={handleCloseWithdraw} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Withdraw Funds</h2>
+            <p className="text-sm text-slate-500 mb-6">Transfer balance to Mobile Money via Monime.</p>
+
+            <div className="space-y-4 mb-6">
+              <input type="number" placeholder="Amount (SLE)" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none" />
+              <input type="tel" placeholder="+232..." value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none" />
+            </div>
+
+            <button onClick={executeWithdraw} disabled={isProcessing || !amount} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : 'Confirm Cashout'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

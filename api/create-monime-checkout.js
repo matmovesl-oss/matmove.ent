@@ -63,10 +63,10 @@ export default async function handler(req, res) {
 
     const rawData = await monimeRes.json();
     if (!monimeRes.ok || rawData.success === false) {
-      throw new Error(`Monime checkout failed: ${JSON.stringify(rawData)}`);
+      const errMsg = rawData.messages?.join(', ') || rawData.error || 'Monime checkout session failed';
+      throw new Error(errMsg);
     }
 
-    // MONIME FIX: Extract redirectUrl directly from rawData.result
     const checkoutUrl = 
       rawData?.result?.redirectUrl || 
       rawData?.result?.url || 
@@ -76,11 +76,11 @@ export default async function handler(req, res) {
       rawData?.data?.url || 
       rawData?.checkoutUrl;
 
-    if (!checkoutUrl) throw new Error(`MISSING URL. Monime responded with: ${JSON.stringify(rawData)}`);
+    if (!checkoutUrl) throw new Error('Checkout session created, but redirect URL was not returned.');
 
     return res.status(200).json({ link: checkoutUrl, checkoutUrl, url: checkoutUrl });
   } catch (error) {
-    console.error('Checkout Error:', error);
-    return res.status(500).json({ error: error.message });
+    console.error('Monime Checkout Error:', error);
+    return res.status(500).json({ error: error.message || 'Internal payment error' });
   }
 }

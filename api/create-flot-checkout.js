@@ -11,6 +11,8 @@ export default async function handler(req, res) {
 
     const secretKey = process.env.FLOT_SECRET_KEY || process.env.FLOT_PRIVATE_KEY;
 
+    if (!secretKey) throw new Error('Flot API Secret Key is missing in environment variables.');
+
     const payload = {
       tx_ref: transactionRef,
       amount: amount,
@@ -39,12 +41,13 @@ export default async function handler(req, res) {
 
     const rawData = await flotRes.json();
     if (!flotRes.ok || rawData.status !== "success") {
-      throw new Error(`Flot checkout failed: ${JSON.stringify(rawData)}`);
+      const errMsg = rawData.message || 'Flot gateway card initialization failed';
+      throw new Error(errMsg);
     }
 
     return res.status(200).json({ link: rawData.data.link });
   } catch (error) {
     console.error('Flot Checkout Error:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message || 'Flot card gateway error' });
   }
 }
