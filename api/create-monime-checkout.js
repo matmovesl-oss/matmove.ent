@@ -4,53 +4,36 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   try {
-    // 1. Extract the returnUrl passed from the frontend
     const { userId, amount, role, returnUrl } = req.body;
     if (!userId || !amount) return res.status(400).json({ error: 'Missing userId or amount.' });
 
+    // Use Service Role to bypass RLS and read the protected metadata
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    const { data: wallets, error: walletError } = await supabase
-      .from('wallets')
-      .select('metadata')
-      .eq('user_id', userId)
-      .eq('currency', 'SLE');
-
+    const { data: wallets, error: walletError } = await supabase.from('wallets').select('metadata').eq('user_id', userId).eq('currency', 'SLE');
     if (walletError) throw new Error('Database error while fetching wallets.');
 
     const wallet = wallets?.find(w => w.metadata?.monime_account_id);
     if (!wallet) throw new Error('User does not have a linked Monime Financial Account.');
 
     const monimeAccountId = wallet.metadata.monime_account_id;
-    const transactionRef = `MM_MOMO_${userId}_${Date.now()}`;
-    const apiKey = process.env.MONIME_API_KEY;
-    const spaceId = process.env.MONIME_SPACE_ID;
-
-    // 2. Define the exact dashboard destination using returnUrl
+    const transactionRef = `MONIME_${userId}_${Date.now()}`;
     const destinationDashboard = returnUrl || `${req.headers.origin}/customer/${role}`;
     
-    // 3. Set the Safe Callback URL so Monime POSTs to the backend, not the frontend
-    const safeCallbackUrl = `${req.headers.origin}/api/monime-callback?returnUrl=${encodeURIComponent(destinationDashboard)}`;
+    // Route to our Unified Webhook
+    const safeCallbackUrl = `${req.headers.origin}/api/unified-webhook?returnUrl=${encodeURIComponent(destinationDashboard)}&provider=monime&ref=${transactionRef}&amount=${amount}`;
 
     const payload = {
       name: "MatMove Wallet Load",
       reference: transactionRef,
       financialAccountId: monimeAccountId,
-      successUrl: safeCallbackUrl, // Using the backend bouncer
-      cancelUrl: safeCallbackUrl,  // Using the backend bouncer
+      successUrl: safeCallbackUrl, 
+      cancelUrl: destinationDashboard,
       lineItems: [
-        {
-          type: "custom",
-          name: "Wallet Top-up",
-          quantity: 1,
-          price: {
-            currency: "SLE",
-            value: Math.round(Number(amount) * 100)
-          }
-        }
+        { type: "custom", name: "Wallet Top-up", quantity: 1, price: { currency: "SLE", value: Math.round(Number(amount) * 100) } }
       ]
     };
 
@@ -58,26 +41,19 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'Monime-Space-Id': spaceId,
+        'Authorization': `Bearer ${process.env.MONIME_API_KEY}`,
+        'Monime-Space-Id': process.env.MONIME_SPACE_ID,
         'Idempotency-Key': transactionRef
       },
       body: JSON.stringify(payload)
     });
 
     const rawData = await monimeRes.json();
-    if (!monimeRes.ok || rawData.success === false) {
-      throw new Error(`Monime checkout failed: ${JSON.stringify(rawData)}`);
-    }
-
-    const checkoutUrl = 
-      rawData?.url || rawData?.redirectUrl || rawData?.data?.url ||
-      rawData?.data?.redirectUrl || rawData?.result?.url ||
-      rawData?.result?.redirectUrl || rawData?.checkoutUrl || rawData?.data?.checkoutUrl;
+    const checkoutUrl = rawData?.url || rawData?.checkoutUrl || rawData?.data?.checkoutUrl || rawData?.data?.url;
 
     if (!checkoutUrl) throw new Error(`MISSING URL. Monime responded with: ${JSON.stringify(rawData)}`);
 
-    return res.status(200).json({ checkoutUrl, url: checkoutUrl, redirectUrl: checkoutUrl, link: checkoutUrl });
+    return res.status(200).json({ link: checkoutUrl });
   } catch (error) {
     console.error('Checkout Error:', error);
     return res.status(500).json({ error: error.message });

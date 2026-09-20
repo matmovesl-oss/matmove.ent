@@ -1,470 +1,105 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
-import { Store, Wallet, RefreshCw, AlertCircle, ShieldCheck, X, Loader2, Lock, Plus, Minus, Package, Smartphone, CreditCard, ArrowUpRight, MapPin, Navigation, Car, CalendarClock, Map } from 'lucide-react';
+import { Store, Wallet, Plus, Package, RefreshCw, X, Loader2, ArrowUpRight } from 'lucide-react';
 
-type ServiceType = 'delivery' | 'ride' | 'scheduled';
-type VehicleType = 'keke' | 'bike' | 'car' | 'van';
+export function MerchantDashboard({ profile, wallet, activeSection }: any) {
+  if (activeSection === 'inventory') return <MerchantInventory profile={profile} />;
 
-const PRICING_RATES = {
-  bike: { min: 10, perKm: 3 },
-  keke: { min: 15, perKm: 5 },
-  car: { min: 30, perKm: 10 },
-  van: { min: 60, perKm: 20 }
-};
-
-export function MerchantDashboard({ profile }: any) {
-  const [localProfile, setLocalProfile] = useState(profile);
-  const [liveBalance, setLiveBalance] = useState<number>(0);
-  const [monimeId, setMonimeId] = useState<string>('');
+  const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const isApproved = profile?.kyc_status === 'approved';
 
-  // Request State
-  const [pickup, setPickup] = useState('');
-  const [destination, setDestination] = useState('');
-  const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
-  const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
-  
-  // Google Places State
-  const [pickupSuggestions, setPickupSuggestions] = useState<any[]>([]);
-  const [destinationSuggestions, setDestinationSuggestions] = useState<any[]>([]);
-  const [activeInput, setActiveInput] = useState<'pickup' | 'destination' | null>(null);
-
-  const [serviceType, setServiceType] = useState<ServiceType>('delivery');
-  const [vehicleType, setVehicleType] = useState<VehicleType>('car');
-  const [offerAmount, setOfferAmount] = useState<string>('');
-  const [tripDistanceKm, setTripDistanceKm] = useState<number | null>(null);
-  const [scheduledTime, setScheduledTime] = useState('');
-  
-  const [isRequesting, setIsRequesting] = useState(false);
-  const [isRouting, setIsRouting] = useState(false);
-  const [activeBooking, setActiveBooking] = useState<any>(null);
-
-  // Modals...
-  const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
-  const [topUpAmount, setTopUpAmount] = useState('');
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawPhone, setWithdrawPhone] = useState(profile?.phone || '');
-
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const markers = useRef<mapboxgl.Marker[]>([]);
-  const isApproved = localProfile?.kyc_status === 'approved';
-
-  // 1. Inject Google Maps Script dynamically
-  useEffect(() => {
-    // @ts-ignore
-    if (!window.google) {
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`;
-      script.async = true;
-      script.defer = true;
-      document.head.appendChild(script);
-    }
-  }, []);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
     setIsRefreshing(true);
     try {
-      const res = await fetch(`/api/get-live-wallet?userId=${profile.id}`);
-      const data = await res.json();
-      if (data.balance !== undefined) setLiveBalance(data.balance);
-      if (data.accountId) setMonimeId(data.accountId);
-    } catch (err) { console.error(err); } 
-    finally { setIsRefreshing(false); }
+      const { data } = await supabase.from('wallets').select('balance').eq('user_id', profile.id).single();
+      if (data) setLiveBalance(Number(data.balance));
+    } catch (err) {} finally { setIsRefreshing(false); }
   };
 
   useEffect(() => { fetchLiveBalance(); }, [profile?.id]);
 
-  useEffect(() => {
-    if (map.current || !mapContainer.current) return;
-    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [-13.234, 8.484], // Freetown Default
-      zoom: 12
-    });
-  }, []);
-
-  // --- GOOGLE PLACES LIVE SEARCH ---
-  const searchPlaces = (query: string, type: 'pickup' | 'destination') => {
-    if (type === 'pickup') {
-       setPickup(query);
-       setPickupCoords(null);
-    } else {
-       setDestination(query);
-       setDestinationCoords(null);
-    }
-
-    if (query.trim().length < 3) {
-      if (type === 'pickup') setPickupSuggestions([]);
-      else setDestinationSuggestions([]);
-      return;
-    }
-
-    // @ts-ignore
-    if (!window.google) return;
-
-    // @ts-ignore
-    const autocomplete = new window.google.maps.places.AutocompleteService();
-    autocomplete.getPlacePredictions(
-      { input: query, componentRestrictions: { country: 'sl' } },
-      (predictions: any, status: any) => {
-        // @ts-ignore
-        if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
-          if (type === 'pickup') setPickupSuggestions(predictions);
-          else setDestinationSuggestions(predictions);
-        }
-      }
-    );
-  };
-
-  const handleSelectPlace = (placeId: string, description: string, type: 'pickup' | 'destination') => {
-    // @ts-ignore
-    const geocoder = new window.google.maps.Geocoder();
-    geocoder.geocode({ placeId }, (results: any, status: any) => {
-      if (status === 'OK' && results[0]) {
-        const lat = results[0].geometry.location.lat();
-        const lng = results[0].geometry.location.lng();
-        const coords: [number, number] = [lng, lat]; // Mapbox expects [lng, lat]
-
-        if (type === 'pickup') {
-          setPickup(description);
-          setPickupCoords(coords);
-          setPickupSuggestions([]);
-          dropSinglePin(coords);
-        } else {
-          setDestination(description);
-          setDestinationCoords(coords);
-          setDestinationSuggestions([]);
-          dropSinglePin(coords);
-        }
-      }
-    });
-    setActiveInput(null);
-  };
-
-  const dropSinglePin = (coords: [number, number]) => {
-    if (!map.current || !coords) return;
-    map.current.flyTo({ center: coords, zoom: 14 });
-  };
-
-  // --- HYBRID PREVIEW & AUTO-ROUTING ---
-  const previewRoute = async () => {
-    if (!pickupCoords || !destinationCoords || !map.current) return alert('Please select accurate locations from the dropdown suggestions first.');
-    setIsRouting(true);
-    setActiveInput(null);
-
+  const executeWithdrawal = async () => {
+    const amt = Number(withdrawAmount);
+    if (!amt || amt <= 0) return alert('Enter valid amount');
+    if (amt > liveBalance) return alert('Insufficient balance');
+    if (!withdrawPhone.trim()) return alert('Enter valid Mobile Money number');
+    setIsWithdrawing(true);
     try {
-      markers.current.forEach(m => m.remove());
-      markers.current = [];
-      if (map.current.getSource('route')) {
-        map.current.removeLayer('route');
-        map.current.removeSource('route');
-      }
-
-      markers.current.push(new mapboxgl.Marker({ color: '#10B981' }).setLngLat(pickupCoords).addTo(map.current));
-      markers.current.push(new mapboxgl.Marker({ color: '#3B82F6' }).setLngLat(destinationCoords).addTo(map.current));
-
-      const bounds = new mapboxgl.LngLatBounds(pickupCoords, pickupCoords).extend(destinationCoords);
-      map.current.fitBounds(bounds, { padding: 50 });
-
-      // Only draw polylines and calculate prices for RIDES
-      if (serviceType === 'ride') {
-        const token = import.meta.env.VITE_MAPBOX_TOKEN;
-        const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${pickupCoords[0]},${pickupCoords[1]};${destinationCoords[0]},${destinationCoords[1]}?geometries=geojson&access_token=${token}`);
-        const dirData = await dirRes.json();
-        const route = dirData.routes?.[0];
-
-        if (route) {
-          const distKm = route.distance / 1000;
-          setTripDistanceKm(distKm);
-          calculateAndSetPrice(distKm, vehicleType);
-
-          map.current.addSource('route', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: route.geometry } });
-          map.current.addLayer({
-            id: 'route',
-            type: 'line',
-            source: 'route',
-            layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: { 'line-color': '#2563EB', 'line-width': 4 }
-          });
-        }
-      } else {
-        // If delivery or schedule, we don't calculate price or draw route.
-        setTripDistanceKm(null);
-        setOfferAmount('');
-      }
-    } catch (err: any) { alert('Map Error: ' + err.message); } 
-    finally { setIsRouting(false); }
+      const res = await fetch('/api/create-monime-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: withdrawPhone }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Withdrawal failed');
+      alert(`Cashout requested! Pending Admin approval.`);
+      setIsWithdrawModalOpen(false); fetchLiveBalance();
+    } catch (err: any) { alert(err.message); } finally { setIsWithdrawing(false); }
   };
-
-  const calculateAndSetPrice = (distanceKm: number, type: VehicleType) => {
-    const rate = PRICING_RATES[type];
-    const rawPrice = rate.min + (distanceKm * rate.perKm);
-    const suggestedPrice = Math.max(rate.min, Math.ceil(rawPrice / 5) * 5);
-    setOfferAmount(suggestedPrice.toString());
-  };
-
-  useEffect(() => {
-    if (serviceType === 'ride' && tripDistanceKm !== null) calculateAndSetPrice(tripDistanceKm, vehicleType);
-  }, [vehicleType, serviceType, tripDistanceKm]);
-
-  const adjustOffer = (delta: number) => {
-    setOfferAmount(prev => {
-      const minPrice = PRICING_RATES[vehicleType].min;
-      const current = Number(prev) || minPrice;
-      const next = current + delta;
-      return (next < minPrice ? minPrice : next).toString();
-    });
-  };
-
-  useEffect(() => {
-    if (!activeBooking) return;
-    const channel = supabase.channel(`booking-${activeBooking.id}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `id=eq.${activeBooking.id}` }, 
-        (payload) => setActiveBooking(payload.new)
-      ).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [activeBooking]);
-
-  const handleRequest = async () => {
-    if (!pickupCoords || !destinationCoords) return alert('Please select pickup and destination from the suggestions.');
-    if (serviceType === 'scheduled' && !scheduledTime) return alert('Select time for scheduled request.');
-    
-    let finalAmount = 0;
-    let finalStatus = 'pending';
-
-    if (serviceType === 'ride') {
-      finalAmount = Number(offerAmount);
-      if (!finalAmount || finalAmount <= 0) return alert('Please preview route to calculate offer amount.');
-      const minPrice = PRICING_RATES[vehicleType].min;
-      if (finalAmount < minPrice) return alert(`Minimum fare for a ${vehicleType} is SLE ${minPrice}`);
-    } else {
-      // Deliveries and Scheduled Requests go straight to Admin
-      finalStatus = 'pending_admin';
-    }
-
-    setIsRequesting(true);
-    try {
-      const { data, error } = await supabase.from('bookings').insert({
-        rider_id: profile.id, // Merchants act as requesters
-        service_type: serviceType,
-        vehicle_type: serviceType === 'ride' ? vehicleType : null,
-        pickup_location: pickup,
-        destination_location: destination,
-        fare_amount: finalAmount,
-        scheduled_time: serviceType === 'scheduled' ? scheduledTime : null,
-        status: finalStatus
-      }).select().single();
-      
-      if (error) throw error;
-      setActiveBooking(data);
-    } catch (err: any) { alert('Request failed: ' + err.message); } 
-    finally { setIsRequesting(false); }
-  };
-
-  const cancelTrip = async () => {
-    if (!activeBooking) return;
-    try { await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', activeBooking.id); setActiveBooking(null); } catch (err) {}
-  };
-
-  const businessName = localProfile?.business_name || localProfile?.full_name || 'Merchant';
 
   return (
-    <div className="flex-1 bg-slate-50 min-h-screen flex flex-col" onClick={() => setActiveInput(null)}>
-      <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center sticky top-0 z-10">
+    <div className="flex-1 bg-slate-50 min-h-screen">
+      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-orange-100 text-orange-600 rounded-xl"><Store size={20} /></div>
-          <div>
-            <h2 className="font-bold text-slate-900 leading-tight">{businessName}</h2>
-            <span className="text-xs font-bold text-orange-600 uppercase">Merchant Portal</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button onClick={() => setIsTopUpModalOpen(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition">
-            + Load Wallet
-          </button>
-          <div className="text-right hidden sm:block">
-            <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Merchant Balance</div>
-            <div className="text-lg font-bold text-slate-900">SLE {liveBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-          </div>
+          <div><h2 className="font-bold text-slate-900 leading-tight">{profile?.business_name || 'Merchant Store'}</h2></div>
         </div>
       </header>
 
-      <div className="p-8 max-w-6xl mx-auto space-y-6 flex-1 w-full">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="col-span-1 lg:col-span-2 bg-slate-900 rounded-3xl p-6 text-white relative shadow-lg flex justify-between items-center">
-            <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-xl text-white transition flex items-center gap-2 text-xs font-bold">
-              <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-              {isRefreshing ? 'Syncing...' : 'Refresh Balance'}
-            </button>
-            <div>
-              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Store Operating Wallet</span>
-              <div className="text-4xl font-bold mt-1 text-emerald-400">SLE {liveBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-              {monimeId && <div className="mt-2 text-xs text-slate-400 font-mono bg-white/10 px-2 py-1 rounded inline-block">Account ID: {monimeId}</div>}
-            </div>
-            <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-sm mt-8 mr-12 hidden sm:block"><Wallet size={36} className="text-white" /></div>
-          </div>
-
-          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
-            <div>
-              <h3 className="font-bold text-slate-900 text-sm">Payout Access</h3>
-              <p className="text-slate-500 text-xs mt-1">Withdraw store funds to Mobile Money.</p>
-            </div>
-            <button onClick={() => setIsWithdrawModalOpen(true)} disabled={!isApproved} className={`w-full font-bold p-3 rounded-xl transition text-xs shadow-sm ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'}`}>
-              {isApproved ? 'Withdraw Funds' : 'Withdrawals Locked (Pending KYC)'}
-            </button>
-          </div>
+      <div className="p-6 max-w-4xl mx-auto space-y-6">
+        <div className="bg-orange-600 rounded-3xl p-8 text-white relative shadow-lg">
+          <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
+             <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
+          </button>
+          <span className="text-orange-200 text-xs font-bold uppercase tracking-wider">Store Operating Wallet</span>
+          <div className="text-5xl font-bold mt-2">SLE {liveBalance.toFixed(2)}</div>
+          <Wallet size={64} className="absolute right-8 top-8 opacity-20" />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit z-20">
-            <h3 className="font-bold text-lg">Dispatch Request</h3>
-            <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
-              <button onClick={() => setServiceType('delivery')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Package size={16}/> Delivery</button>
-              <button onClick={() => setServiceType('ride')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16}/> Ride</button>
-              <button onClick={() => setServiceType('scheduled')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size={16}/> Schedule</button>
-            </div>
-            
-            {!activeBooking ? (
-              <div className="space-y-3">
-                {serviceType === 'ride' && (
-                  <div className="grid grid-cols-4 gap-2 mb-2">
-                    {(['keke', 'bike', 'car', 'van'] as VehicleType[]).map(v => (
-                      <button key={v} onClick={() => setVehicleType(v)} className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-600 ring-inset' : 'bg-slate-100 text-slate-500'}`}>
-                        {v}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                
-                {/* GOOGLE PLACES AUTOCOMPLETE: PICKUP */}
-                <div className="relative z-30" onClick={e => e.stopPropagation()}>
-                  <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'pickup' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
-                    <MapPin size={16} className="text-emerald-600 shrink-0" />
-                    <input 
-                      type="text" 
-                      placeholder="Where are you?" 
-                      value={pickup} 
-                      onChange={e => searchPlaces(e.target.value, 'pickup')}
-                      onFocus={() => setActiveInput('pickup')}
-                      className="w-full outline-none text-sm bg-transparent" 
-                    />
-                  </div>
-                  {activeInput === 'pickup' && pickupSuggestions.length > 0 && (
-                    <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-[9999]">
-                      {pickupSuggestions.map((s, i) => (
-                        <button key={i} onClick={() => handleSelectPlace(s.place_id, s.description, 'pickup')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0">
-                          <div className="text-sm font-bold text-slate-900">{s.structured_formatting?.main_text || s.description}</div>
-                          <div className="text-xs text-slate-500 truncate">{s.structured_formatting?.secondary_text || ''}</div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* GOOGLE PLACES AUTOCOMPLETE: DESTINATION */}
-                <div className="relative z-20" onClick={e => e.stopPropagation()}>
-                  <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'destination' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
-                    <Navigation size={16} className="text-blue-600 shrink-0" />
-                    <input 
-                      type="text" 
-                      placeholder="Where to?" 
-                      value={destination} 
-                      onChange={e => searchPlaces(e.target.value, 'destination')}
-                      onFocus={() => setActiveInput('destination')}
-                      className="w-full outline-none text-sm bg-transparent" 
-                    />
-                  </div>
-                  {activeInput === 'destination' && destinationSuggestions.length > 0 && (
-                    <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-[9999]">
-                      {destinationSuggestions.map((s, i) => (
-                        <button key={i} onClick={() => handleSelectPlace(s.place_id, s.description, 'destination')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0">
-                          <div className="text-sm font-bold text-slate-900">{s.structured_formatting?.main_text || s.description}</div>
-                          <div className="text-xs text-slate-500 truncate">{s.structured_formatting?.secondary_text || ''}</div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-between items-center px-1 mt-1">
-                  <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Route: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
-                  <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
-                    {isRouting ? <Loader2 size={12} className="animate-spin"/> : <Map size={12} />} Preview Locations
-                  </button>
-                </div>
-
-                {serviceType === 'ride' && (
-                  <div className="flex items-center gap-2 border border-slate-200 bg-slate-50 p-2 rounded-xl focus-within:border-blue-500 transition">
-                    <span className="text-slate-500 font-bold text-sm px-2">SLE</span>
-                    <input type="number" placeholder="Offer" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-center" />
-                    <div className="flex gap-1">
-                      <button onClick={() => adjustOffer(-5)} type="button" className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 transition"><Minus size={16}/></button>
-                      <button onClick={() => adjustOffer(5)} type="button" className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 transition"><Plus size={16}/></button>
-                    </div>
-                  </div>
-                )}
-
-                {serviceType === 'scheduled' && (
-                  <div className="flex items-center gap-2 border p-3 rounded-xl focus-within:border-blue-500 transition">
-                    <CalendarClock size={16} className="text-emerald-600 shrink-0" />
-                    <input type="datetime-local" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="w-full outline-none text-sm bg-transparent text-slate-700" />
-                  </div>
-                )}
-                <button onClick={handleRequest} disabled={isRequesting} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 shadow-md mt-4">
-                  {isRequesting ? <Loader2 className="animate-spin mx-auto" /> : `Confirm Request`}
-                </button>
-              </div>
-            ) : (
-              <div className="text-center py-6">
-                <p className="font-bold text-slate-900">{activeBooking.status === 'pending_admin' ? 'Request sent to Dispatch Admin...' : 'Broadcasting request...'}</p>
-                <button onClick={cancelTrip} className="text-xs text-red-500 font-bold mt-4">Cancel Request</button>
-              </div>
-            )}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 className="font-bold text-slate-900 text-xl">Payout Access</h3>
+            <p className="text-slate-500 text-sm mt-1">Withdraw store funds to your Mobile Money account.</p>
           </div>
-          
-          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] border border-slate-200 shadow-inner z-0">
-            <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
-          </div>
+          <button onClick={() => setIsWithdrawModalOpen(true)} disabled={!isApproved} className={`mt-6 w-full font-bold p-4 rounded-xl transition shadow-sm ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'}`}>
+            {isApproved ? 'Withdraw Funds' : 'Withdrawals Locked (Pending Admin KYC Approval)'}
+          </button>
         </div>
       </div>
-      
-      {isTopUpModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsTopUpModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Top Up Wallet</h2>
-            <p className="text-sm text-slate-500 mb-6">Fund your rider wallet securely.</p>
-            <input type="number" placeholder="Amount (SLE)" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 focus:ring-2 focus:ring-blue-600 outline-none" />
-            <button onClick={executeTopUp} disabled={isProcessing || !topUpAmount} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />} Proceed to Checkout
-            </button>
-          </div>
-        </div>
-      )}
 
       {isWithdrawModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Withdraw Funds</h2>
-            <p className="text-sm text-slate-500 mb-6">Transfer balance to Mobile Money.</p>
+            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Withdraw Store Funds</h2>
+            <p className="text-sm text-slate-500 mb-6">Transfer balance to Mobile Money via Monime.</p>
             <div className="space-y-4 mb-6">
               <input type="number" placeholder="Amount (SLE)" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none" />
               <input type="tel" placeholder="+232..." value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none" />
             </div>
-            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Cashout
-            </button>
+            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Cashout</button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function MerchantInventory({ profile }: any) {
+  return (
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
+      <div className="flex justify-between items-center mb-6">
+        <div><h1 className="text-3xl font-bold text-slate-900">Store Inventory</h1><p className="text-sm text-slate-500">Manage products available in the Rider Shop.</p></div>
+        <button className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-md"><Plus size={18}/> Add Product</button>
+      </div>
+      <div className="bg-white border border-slate-200 rounded-3xl p-16 text-center text-slate-400 shadow-sm mt-10">
+        <Package size={64} className="mx-auto mb-6 text-slate-200" />
+        <h3 className="font-bold text-xl text-slate-900">No products listed</h3>
+        <p className="text-sm mt-2 text-slate-500">Click "Add Product" to create your first listing for Riders to buy.</p>
+      </div>
     </div>
   );
 }
