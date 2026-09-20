@@ -5,13 +5,15 @@ import { RiderDashboard } from './RiderDashboard';
 import { DriverDashboard } from './DriverDashboard';
 import { MerchantDashboard } from './MerchantDashboard';
 import { WalletPage } from './WalletPage';
-import { CheckCircle2, AlertCircle, Home, Wallet, Navigation, UserCircle, LogOut, Mail, Phone, RefreshCw, LockKeyhole, Delete, ShoppingBag, Store, ShieldAlert, MessageSquare } from 'lucide-react';
+import { UserCircle, LogOut, MessageSquare, ShieldAlert, Home, Wallet, Navigation, ShoppingBag, Store, LockKeyhole, Delete } from 'lucide-react';
 
 type PortalSection = 'home' | 'wallet' | 'trips' | 'shop' | 'inventory' | 'account';
 type CustomerRole = 'rider' | 'driver' | 'merchant';
 
 const IDLE_LOCK_MS = 1 * 60 * 1000; 
 const IDLE_LOGOUT_MS = 30 * 60 * 1000;
+
+const WHATSAPP_NUMBER = "23290330362";
 
 function getRoleFromPath(pathname: string): CustomerRole | null {
   if (pathname.includes('/driver')) return 'driver';
@@ -24,9 +26,8 @@ export function PortalApp() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [pinStatus, setPinStatus] = useState<'checking' | 'create' | 'locked' | 'unlocked' | 'forgot_auth' | 'forgot_pin'>('checking');
+  const [pinStatus, setPinStatus] = useState<'checking' | 'create' | 'locked' | 'unlocked'>('checking');
   const [pinError, setPinError] = useState('');
-
   const [profile, setProfile] = useState<any>(null);
   const [wallet, setWallet] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -35,15 +36,6 @@ export function PortalApp() {
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    if (searchParams.get('reset_pin') === 'true') {
-      setPinStatus('forgot_pin');
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (pinStatus === 'forgot_auth' || pinStatus === 'forgot_pin') return;
     const checkIdleState = () => {
       if (!profile) return;
       const backendPin = profile.passcode;
@@ -65,26 +57,6 @@ export function PortalApp() {
     window.addEventListener('visibilitychange', handleVisibility);
     return () => window.removeEventListener('visibilitychange', handleVisibility);
   }, [profile, pinStatus]);
-
-  useEffect(() => {
-    if (pinStatus !== 'unlocked') return;
-    const updateActivity = () => localStorage.setItem('matmove_last_active', Date.now().toString());
-    window.addEventListener('click', updateActivity);
-    window.addEventListener('touchstart', updateActivity);
-    window.addEventListener('keydown', updateActivity);
-    
-    const interval = setInterval(() => {
-      const lastActive = parseInt(localStorage.getItem('matmove_last_active') || '0', 10);
-      if (Date.now() - lastActive > IDLE_LOCK_MS) setPinStatus('locked');
-    }, 15000);
-
-    return () => {
-      window.removeEventListener('click', updateActivity);
-      window.removeEventListener('touchstart', updateActivity);
-      window.removeEventListener('keydown', updateActivity);
-      clearInterval(interval);
-    };
-  }, [pinStatus]);
 
   const handleSetPin = async (newPin: string) => {
     try {
@@ -180,8 +152,7 @@ function AccountSection({ profile, loggingOut, onLogout, onBack }: any) {
 
   const handleDeleteAccount = () => {
     if (deletePin !== profile.passcode) return alert("Incorrect Passcode");
-    alert("For security reasons, your account deletion request must be verified. You will be redirected to our Support team via WhatsApp to finalize account removal and retrieve any remaining wallet funds.");
-    window.location.href = `https://wa.me/23277000000?text=Hello MatMove Support, I would like to request immediate deletion of my account (Email: ${profile.email}).`;
+    window.location.href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hello MatMove Support, I am requesting account deletion for ${profile.email} (${profile.phone || ''}). Please guide me through final wallet settlement.`)}`;
   };
 
   return (
@@ -198,10 +169,10 @@ function AccountSection({ profile, loggingOut, onLogout, onBack }: any) {
       </div>
 
       <div className="bg-white border border-slate-200 rounded-3xl p-6 mb-6">
-        <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2"><MessageSquare size={20} className="text-indigo-600" /> Support & Help</h2>
-        <p className="text-sm text-slate-500 mb-4">Need assistance with a trip, payment, or your account? Our team is available 24/7.</p>
-        <a href="https://wa.me/23277000000" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-emerald-100 text-emerald-700 font-bold px-5 py-3 rounded-xl hover:bg-emerald-200 transition">
-          <MessageSquare size={18} /> Contact Support on WhatsApp
+        <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2"><MessageSquare size={20} className="text-emerald-600" /> Customer Support</h2>
+        <p className="text-sm text-slate-500 mb-4">Contact our team directly on WhatsApp for instant assistance.</p>
+        <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-emerald-600 text-white font-bold px-5 py-3 rounded-xl hover:bg-emerald-700 transition">
+          <MessageSquare size={18} /> Chat with Support (+232 90 330 362)
         </a>
       </div>
 
@@ -211,7 +182,7 @@ function AccountSection({ profile, loggingOut, onLogout, onBack }: any) {
           <button onClick={() => setShowDeleteConfirm(true)} className="text-sm font-bold text-red-600 border border-red-200 bg-red-50 px-5 py-2.5 rounded-xl hover:bg-red-100">Request Account Deletion</button>
         ) : (
           <div className="bg-red-50 border border-red-200 p-5 rounded-xl">
-            <p className="text-sm text-red-800 font-bold mb-3">Enter your 4-digit Passcode to confirm deletion request:</p>
+            <p className="text-sm text-red-800 font-bold mb-3">Enter your 4-digit Passcode to proceed:</p>
             <div className="flex gap-2 mb-4">
               <input type="password" maxLength={4} value={deletePin} onChange={e=>setDeletePin(e.target.value)} className="w-24 text-center tracking-widest text-lg p-2 rounded-lg border border-red-300 outline-none bg-white" />
               <button onClick={handleDeleteAccount} className="bg-red-600 text-white font-bold px-4 rounded-lg">Confirm</button>
@@ -237,14 +208,14 @@ function PortalNavigation({ activeSection, onNavigate, role }: any) {
   };
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] px-2 py-2 pb-safe">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-2xl px-2 py-2 pb-safe">
       <div className="flex justify-around items-center max-w-lg mx-auto">
         {getTabs().map((item) => {
           const Icon = item.icon;
           const active = activeSection === item.id;
           return (
-            <button key={item.id} onClick={() => onNavigate(item.id)} className={`flex flex-col items-center justify-center gap-1 py-2 px-4 rounded-2xl transition ${active ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
-              <Icon size={20} className={active ? "fill-blue-100/50" : ""} />
+            <button key={item.id} onClick={() => onNavigate(item.id)} className={`flex flex-col items-center justify-center gap-1 py-2 px-4 rounded-2xl transition ${active ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+              <Icon size={20} />
               <span className={`text-[10px] font-bold ${active ? 'text-blue-600' : ''}`}>{item.label}</span>
             </button>
           );
@@ -263,7 +234,7 @@ function PasscodeScreen({ mode, onComplete, error, onLogout }: any) {
     if (newPin.length === 4) { setTimeout(() => { onComplete(newPin); if (mode === 'locked') setPin(''); }, 250); }
   };
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-white selection:bg-transparent">
+    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-white">
       <LockKeyhole size={48} className="text-blue-500 mb-6" />
       <h2 className="text-2xl font-bold mb-2">{mode === 'create' ? 'Create PIN' : 'Enter PIN'}</h2>
       <div className="flex gap-4 mb-8">{[...Array(4)].map((_, i) => <div key={i} className={`w-4 h-4 rounded-full ${i < pin.length ? 'bg-blue-500' : 'bg-slate-800'}`} />)}</div>

@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Car, MapPin, Navigation, Power, Package, CalendarClock, ArrowUpRight, X, Loader2, Wallet } from 'lucide-react';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import { Car, MapPin, Navigation, Power, Package, CalendarClock, ArrowUpRight, X, Loader2, Wallet, User, Phone } from 'lucide-react';
 
 export function DriverDashboard({ profile, wallet, activeSection }: any) {
   if (activeSection === 'trips') return <DriverTrips profile={profile} />;
@@ -16,6 +18,9 @@ export function DriverDashboard({ profile, wallet, activeSection }: any) {
 
   const isApproved = profile?.kyc_status === 'approved';
 
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<mapboxgl.Map | null>(null);
+
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
     try {
@@ -27,9 +32,20 @@ export function DriverDashboard({ profile, wallet, activeSection }: any) {
   useEffect(() => { fetchLiveBalance(); }, [profile?.id]);
 
   useEffect(() => {
+    if (map.current || !mapContainer.current) return;
+    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
+    map.current = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: 'mapbox://styles/mapbox/streets-v12',
+      center: [-13.234, 8.484],
+      zoom: 13
+    });
+  }, []);
+
+  useEffect(() => {
     if (!isOnline) { setActiveRequests([]); return; }
     const fetchInitialRequests = async () => {
-      const { data } = await supabase.from('bookings').select('*').or(`status.eq.pending,driver_id.eq.${profile.id}`).neq('status', 'cancelled').order('created_at', { ascending: false });
+      const { data } = await supabase.from('bookings').select('*, rider:profiles!rider_id(full_name, phone)').or(`status.eq.pending,driver_id.eq.${profile.id}`).neq('status', 'cancelled').order('created_at', { ascending: false });
       if (data) setActiveRequests(data);
     };
     fetchInitialRequests();
@@ -65,7 +81,7 @@ export function DriverDashboard({ profile, wallet, activeSection }: any) {
   };
 
   return (
-    <div className="flex-1 bg-slate-50 min-h-screen">
+    <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20">
         <div className="flex items-center gap-4">
           <button onClick={() => setIsOnline(!isOnline)} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}>
@@ -79,40 +95,54 @@ export function DriverDashboard({ profile, wallet, activeSection }: any) {
         </div>
       </header>
 
-      <div className="p-6 max-w-2xl mx-auto space-y-6">
-        <button onClick={() => setIsWithdrawModalOpen(true)} disabled={!isApproved} className={`w-full font-bold p-4 rounded-2xl transition shadow-sm flex items-center justify-center gap-2 ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'}`}>
-          <Wallet size={18} /> {isApproved ? 'Withdraw Earnings via Monime' : 'Withdrawals Locked (Pending KYC)'}
-        </button>
+      <div className="flex-1 flex flex-col lg:flex-row">
+        <div className="w-full lg:w-96 bg-white border-r border-slate-200 flex flex-col p-6 space-y-6 overflow-y-auto">
+          <button onClick={() => setIsWithdrawModalOpen(true)} disabled={!isApproved} className={`w-full font-bold p-4 rounded-2xl transition shadow-sm flex items-center justify-center gap-2 ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'}`}>
+            <Wallet size={18} /> {isApproved ? 'Withdraw Earnings via Monime' : 'Withdrawals Locked (Pending KYC)'}
+          </button>
 
-        <h3 className="font-bold text-2xl text-slate-900 pt-4">Live Dispatch Radar</h3>
-        {!isOnline ? (
-          <div className="border-2 border-dashed border-slate-300 bg-slate-100 rounded-3xl p-12 text-center text-slate-400">
-            <Power size={48} className="mx-auto mb-4" />
-            <p>Go online to receive live ride and delivery requests.</p>
-          </div>
-        ) : activeRequests.length === 0 ? (
-          <div className="border-2 border-dashed border-emerald-300 bg-emerald-50 rounded-3xl p-12 text-center text-emerald-600 animate-pulse">
-             <Car size={48} className="mx-auto mb-4" />
-             <p className="font-bold">Listening for nearby requests...</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {activeRequests.map(r => (
-              <div key={r.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-md">
-                 <div className="flex justify-between items-start mb-4">
-                   <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider">{r.service_type}</span>
-                   <span className="text-2xl font-bold text-slate-900">SLE {r.fare_amount}</span>
-                 </div>
-                 <div className="space-y-2 mb-6">
-                   <div className="flex items-center gap-2 text-sm text-slate-700"><MapPin size={16} className="text-emerald-500"/> {r.pickup_location}</div>
-                   <div className="flex items-center gap-2 text-sm text-slate-700"><Navigation size={16} className="text-blue-500"/> {r.destination_location}</div>
-                 </div>
-                 {r.status === 'pending' && <button onClick={() => handleAcceptBooking(r)} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800">Accept Request</button>}
-                 {r.status === 'accepted' && r.driver_id === profile.id && <button onClick={() => handleCompleteBooking(r)} className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-700">Complete & Collect Fare</button>}
-              </div>
-            ))}
-          </div>
-        )}
+          <h3 className="font-bold text-xl text-slate-900">Dispatch Radar</h3>
+          {!isOnline ? (
+            <div className="border-2 border-dashed border-slate-300 bg-slate-100 rounded-3xl p-12 text-center text-slate-400">
+              <Power size={48} className="mx-auto mb-4" />
+              <p>Go online to receive live ride and delivery requests.</p>
+            </div>
+          ) : activeRequests.length === 0 ? (
+            <div className="border-2 border-dashed border-emerald-300 bg-emerald-50 rounded-3xl p-12 text-center text-emerald-600 animate-pulse">
+               <Car size={48} className="mx-auto mb-4" />
+               <p className="font-bold">Listening for nearby requests...</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {activeRequests.map(r => (
+                <div key={r.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-md space-y-3">
+                   <div className="flex justify-between items-start">
+                     <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider">{r.service_type}</span>
+                     <span className="text-2xl font-bold text-slate-900">SLE {r.fare_amount}</span>
+                   </div>
+
+                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs space-y-2">
+                     <div className="flex items-center gap-2 font-semibold text-slate-800"><MapPin size={14} className="text-emerald-500 shrink-0"/> Pickup: {r.pickup_location}</div>
+                     <div className="flex items-center gap-2 font-semibold text-slate-800"><Navigation size={14} className="text-blue-500 shrink-0"/> Destination: {r.destination_location}</div>
+                   </div>
+
+                   <div className="flex items-center gap-2 text-xs font-bold text-slate-600 pt-1">
+                     <User size={14} className="text-slate-400"/> {r.rider?.full_name || 'Customer'}
+                     <Phone size={14} className="text-slate-400 ml-2"/> {r.rider?.phone || 'No Phone'}
+                   </div>
+
+                   {r.status === 'pending' && <button onClick={() => handleAcceptBooking(r)} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800">Accept Request</button>}
+                   {r.status === 'accepted' && r.driver_id === profile.id && <button onClick={() => handleCompleteBooking(r)} className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-700">Complete & Collect Fare</button>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* MAP CONTAINER FOR DRIVER */}
+        <div className="flex-1 bg-slate-200 relative min-h-[450px]">
+          <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
+        </div>
       </div>
 
       {isWithdrawModalOpen && (

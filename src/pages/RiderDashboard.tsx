@@ -10,7 +10,7 @@ type VehicleType = 'keke' | 'bike' | 'car' | 'van';
 const PRICING_RATES = { bike: { min: 10, perKm: 3 }, keke: { min: 15, perKm: 5 }, car: { min: 30, perKm: 10 }, van: { min: 60, perKm: 20 } };
 
 export function RiderDashboard({ profile, wallet, activeSection }: any) {
-  if (activeSection === 'shop') return <RiderShop />;
+  if (activeSection === 'shop') return <RiderShop profile={profile} />;
   if (activeSection === 'trips') return <RiderTrips profile={profile} />;
 
   const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
@@ -43,6 +43,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawPhone, setWithdrawPhone] = useState(profile?.phone || '');
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+  const isApproved = profile?.kyc_status === 'approved';
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -186,8 +188,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || 'Rider'}?</h1></div>
         <div className="flex gap-2">
-          <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">+ Load</button>
-          <button onClick={() => setIsWithdrawModalOpen(true)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">Withdraw</button>
+          <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">+ Load Wallet</button>
+          <button onClick={() => setIsWithdrawModalOpen(true)} disabled={!isApproved} className={`px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Withdraw</button>
         </div>
       </header>
 
@@ -312,16 +314,52 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   );
 }
 
-function RiderShop() {
+function RiderShop({ profile }: any) {
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.from('products').select('*, merchant:profiles(business_name, phone)').order('created_at', { ascending: false }).then(({ data }) => {
+      if (data) setProducts(data);
+      setLoading(false);
+    });
+  }, []);
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <h1 className="text-3xl font-bold text-slate-900">MatMove Shop</h1>
-      <p className="text-slate-500">Browse verified merchants and pay securely wallet-to-wallet.</p>
-      <div className="bg-blue-50 border border-blue-200 rounded-3xl p-12 text-center text-blue-700 mt-10">
-         <ShoppingBag size={64} className="mx-auto mb-4 opacity-50" />
-         <h3 className="font-bold text-xl">Marketplace is opening soon!</h3>
-         <p className="text-sm mt-2">Merchants are currently onboarding their inventory. Check back shortly.</p>
-      </div>
+      <p className="text-slate-500">Browse verified merchant products and order directly.</p>
+      
+      {loading ? (
+        <div className="py-12 text-center text-slate-400"><Loader2 className="animate-spin mx-auto mb-2" size={24} /> Loading marketplace...</div>
+      ) : products.length === 0 ? (
+        <div className="bg-blue-50 border border-blue-200 rounded-3xl p-12 text-center text-blue-700 mt-10">
+           <ShoppingBag size={64} className="mx-auto mb-4 opacity-50" />
+           <h3 className="font-bold text-xl">Marketplace is opening soon!</h3>
+           <p className="text-sm mt-2">Merchants are currently onboarding their inventory.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+          {products.map(p => (
+            <div key={p.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm flex flex-col justify-between">
+              {p.image_url ? (
+                <img src={p.image_url} alt={p.name} className="w-full h-48 object-cover" />
+              ) : (
+                <div className="w-full h-48 bg-slate-100 flex items-center justify-center text-slate-400"><ShoppingBag size={32} /></div>
+              )}
+              <div className="p-4">
+                <div className="text-xs font-bold text-blue-600 uppercase">{p.merchant?.business_name || 'Verified Merchant'}</div>
+                <h3 className="font-bold text-slate-900 text-lg mt-1">{p.name}</h3>
+                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{p.description || 'No description provided.'}</p>
+                <div className="mt-4 flex items-center justify-between">
+                  <span className="text-xl font-bold text-slate-900">SLE {p.price}</span>
+                  <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hello, I am interested in buying ${p.name} (SLE ${p.price}) from${p.merchant?.business_name || 'Merchant'}.`)}`} target="_blank" rel="noreferrer" className="bg-blue-600 text-white font-bold text-xs px-3 py-2 rounded-xl hover:bg-blue-700">Order Now</a>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

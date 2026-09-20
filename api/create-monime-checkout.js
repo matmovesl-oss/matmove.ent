@@ -7,13 +7,17 @@ export default async function handler(req, res) {
     const { userId, amount, role, returnUrl } = req.body;
     if (!userId || !amount) return res.status(400).json({ error: 'Missing userId or amount.' });
 
-    // Use Service Role to bypass RLS and read the protected metadata
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    const { data: wallets, error: walletError } = await supabase.from('wallets').select('metadata').eq('user_id', userId).eq('currency', 'SLE');
+    const { data: wallets, error: walletError } = await supabase
+      .from('wallets')
+      .select('metadata')
+      .eq('user_id', userId)
+      .eq('currency', 'SLE');
+
     if (walletError) throw new Error('Database error while fetching wallets.');
 
     const wallet = wallets?.find(w => w.metadata?.monime_account_id);
@@ -21,19 +25,28 @@ export default async function handler(req, res) {
 
     const monimeAccountId = wallet.metadata.monime_account_id;
     const transactionRef = `MONIME_${userId}_${Date.now()}`;
+    const apiKey = process.env.MONIME_API_KEY;
+    const spaceId = process.env.MONIME_SPACE_ID;
+
     const destinationDashboard = returnUrl || `${req.headers.origin}/customer/${role}`;
-    
-    // Route to our Unified Webhook
     const safeCallbackUrl = `${req.headers.origin}/api/unified-webhook?returnUrl=${encodeURIComponent(destinationDashboard)}&provider=monime&ref=${transactionRef}&amount=${amount}`;
 
     const payload = {
       name: "MatMove Wallet Load",
       reference: transactionRef,
       financialAccountId: monimeAccountId,
-      successUrl: safeCallbackUrl, 
+      successUrl: safeCallbackUrl,
       cancelUrl: destinationDashboard,
       lineItems: [
-        { type: "custom", name: "Wallet Top-up", quantity: 1, price: { currency: "SLE", value: Math.round(Number(amount) * 100) } }
+        {
+          type: "custom",
+          name: "Wallet Top-up",
+          quantity: 1,
+          price: {
+            currency: "SLE",
+            value: Math.round(Number(amount) * 100)
+          }
+        }
       ]
     };
 
@@ -41,19 +54,31 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.MONIME_API_KEY}`,
-        'Monime-Space-Id': process.env.MONIME_SPACE_ID,
+        'Authorization': `Bearer ${apiKey}`,
+        'Monime-Space-Id': spaceId,
         'Idempotency-Key': transactionRef
       },
       body: JSON.stringify(payload)
     });
 
     const rawData = await monimeRes.json();
-    const checkoutUrl = rawData?.url || rawData?.checkoutUrl || rawData?.data?.checkoutUrl || rawData?.data?.url;
+    if (!monimeRes.ok || rawData.success === false) {
+      throw new Error(`Monime checkout failed: ${JSON.stringify(rawData)}`);
+    }
+
+    // MONIME FIX: Extract redirectUrl directly from rawData.result
+    const checkoutUrl = 
+      rawData?.result?.redirectUrl || 
+      rawData?.result?.url || 
+      rawData?.redirectUrl || 
+      rawData?.url || 
+      rawData?.data?.redirectUrl || 
+      rawData?.data?.url || 
+      rawData?.checkoutUrl;
 
     if (!checkoutUrl) throw new Error(`MISSING URL. Monime responded with: ${JSON.stringify(rawData)}`);
 
-    return res.status(200).json({ link: checkoutUrl });
+    return res.status(200).json({ link: checkoutUrl, checkoutUrl, url: checkoutUrl });
   } catch (error) {
     console.error('Checkout Error:', error);
     return res.status(500).json({ error: error.message });

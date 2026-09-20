@@ -7,9 +7,9 @@ export default async function handler(req, res) {
 
     const transactionRef = `FLOT_${userId}_${Date.now()}`;
     const destinationDashboard = returnUrl || `${req.headers.origin}/customer/${role}`;
-    
-    // We pass the amount securely in the callback so the webhook knows how much to credit
     const safeCallbackUrl = `${req.headers.origin}/api/unified-webhook?returnUrl=${encodeURIComponent(destinationDashboard)}&provider=flot&amount=${amount}`;
+
+    const secretKey = process.env.FLOT_SECRET_KEY || process.env.FLOT_PRIVATE_KEY;
 
     const payload = {
       tx_ref: transactionRef,
@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       },
       customizations: {
         title: "MatMove Wallet Top-Up",
-        description: "Fund your Unified Wallet using Credit/Debit Card",
+        description: "Fund your MatMove Wallet using Credit/Debit Card",
         logo: "https://your-matmove-logo-url.com/logo.png"
       }
     };
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.FLOT_SECRET_KEY}` // Ensure this is in your Vercel Environment Variables!
+        'Authorization': `Bearer ${secretKey}`
       },
       body: JSON.stringify(payload)
     });
