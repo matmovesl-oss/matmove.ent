@@ -2,17 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Store, Wallet, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Map, Phone } from 'lucide-react';
+import { Store, Plus, Package, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, UploadCloud } from 'lucide-react';
 
 type ServiceType = 'delivery' | 'ride' | 'scheduled';
 
-export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet }: any) {
+export function MerchantDashboard({ profile, activeSection }: any) {
   if (activeSection === 'inventory') return <MerchantInventory profile={profile} />;
 
-  const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // Map & Dispatch State
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
@@ -20,6 +16,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [pickupSuggestions, setPickupSuggestions] = useState<any[]>([]);
   const [destinationSuggestions, setDestinationSuggestions] = useState<any[]>([]);
   const [activeInput, setActiveInput] = useState<'pickup' | 'destination' | null>(null);
+
   const [serviceType, setServiceType] = useState<ServiceType>('delivery');
   const [isRequesting, setIsRequesting] = useState(false);
   const [isRouting, setIsRouting] = useState(false);
@@ -103,32 +100,20 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     } catch (err: any) { alert(err.message); } finally { setIsRequesting(false); }
   };
 
-  const fetchLiveBalance = async () => {
-    if (!profile?.id) return;
-    setIsRefreshing(true);
-    try {
-      const { data } = await supabase.from('wallets').select('balance').eq('user_id', profile.id).single();
-      if (data) setLiveBalance(Number(data.balance));
-    } catch (err) {} finally { setIsRefreshing(false); }
-  };
-
   return (
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
-        <div className="flex items-center gap-3"><div className="p-2 bg-orange-100 text-orange-600 rounded-xl"><Store size={20} /></div><div><h2 className="font-bold text-slate-900 leading-tight">{profile?.business_name || profile?.full_name || 'Merchant'}</h2></div></div>
-        <button onClick={onOpenWallet} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">View Wallet</button>
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-orange-100 text-orange-600 rounded-xl"><Store size={20} /></div>
+          <div><h2 className="font-bold text-slate-900 leading-tight">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
+        </div>
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
-        <div className="bg-orange-600 rounded-3xl p-8 text-white relative shadow-lg">
-          <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}</button>
-          <span className="text-orange-200 text-xs font-bold uppercase tracking-wider">Store Operating Wallet</span>
-          <div className="text-5xl font-bold mt-2">SLE {liveBalance.toFixed(2)}</div>
-        </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit">
             <h3 className="font-bold text-lg">Dispatch Request</h3>
+            
             <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
               <button onClick={() => setServiceType('delivery')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Package size={16}/> Delivery</button>
               <button onClick={() => setServiceType('ride')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16}/> Ride</button>
@@ -160,8 +145,8 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                  )}
                </div>
 
-               <button onClick={previewRoute} disabled={isRouting} className="w-full mt-2 text-xs font-bold text-orange-600 hover:text-orange-700 flex justify-center items-center gap-1 bg-orange-50 px-3 py-2 rounded-lg border border-orange-100">
-                 {isRouting ? <Loader2 size={12} className="animate-spin"/> : <Map size={12} />} Preview Locations on Map
+               <button onClick={previewRoute} disabled={isRouting} className="w-full mt-2 text-xs font-bold text-slate-500 hover:text-slate-700 flex justify-center items-center gap-1 bg-slate-100 px-3 py-2 rounded-lg border border-slate-200">
+                 {isRouting ? <Loader2 size={12} className="animate-spin"/> : <MapPin size={12} />} Preview Route on Map
                </button>
 
                <button onClick={handleDispatchDelivery} disabled={isRequesting} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4">
@@ -199,6 +184,15 @@ function MerchantInventory({ profile }: any) {
 
   useEffect(() => { fetchProducts(); }, [profile.id]);
 
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) return alert('File size must be under 2MB.');
+    const reader = new FileReader();
+    reader.onloadend = () => setImageUrl(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !price || !whatsappNumber) return alert('Name, Price, and Contact Number are required');
@@ -210,7 +204,7 @@ function MerchantInventory({ profile }: any) {
         price: Number(price),
         description,
         image_url: imageUrl || null,
-        whatsapp_number: whatsappNumber // Saved directly to the DB!
+        whatsapp_number: whatsappNumber
       });
       if (error) throw error;
       setIsAddModalOpen(false);
@@ -250,18 +244,25 @@ function MerchantInventory({ profile }: any) {
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl space-y-4">
-            <button onClick={() => setIsAddModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={() => setIsAddModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:bg-slate-100 rounded-full p-1"><X size={20} /></button>
             <h2 className="text-2xl font-bold">Add New Product</h2>
             <form onSubmit={handleAddProduct} className="space-y-4">
               <input required type="text" placeholder="Product Name" value={name} onChange={e=>setName(e.target.value)} className="w-full border p-3 rounded-xl outline-none text-sm" />
               <input required type="number" placeholder="Price (SLE)" value={price} onChange={e=>setPrice(e.target.value)} className="w-full border p-3 rounded-xl outline-none text-sm font-bold" />
               <textarea placeholder="Description" value={description} onChange={e=>setDescription(e.target.value)} className="w-full border p-3 rounded-xl outline-none text-sm" rows={3} />
+              
               <div className="flex items-center gap-2 border p-3 rounded-xl focus-within:border-orange-500 transition">
                  <Phone size={16} className="text-slate-400 shrink-0" />
                  <input required type="tel" placeholder="WhatsApp Contact Number" value={whatsappNumber} onChange={e=>setWhatsappNumber(e.target.value)} className="w-full outline-none text-sm bg-transparent" />
               </div>
-              <input type="url" placeholder="Image URL (e.g., Supabase bucket link)" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} className="w-full border p-3 rounded-xl outline-none text-sm" />
-              <button type="submit" disabled={isSaving} className="w-full bg-slate-900 text-white font-bold p-3.5 rounded-xl flex justify-center">{isSaving ? <Loader2 className="animate-spin" size={18}/> : 'Save Product'}</button>
+
+              <div className="space-y-2 p-3 border border-dashed rounded-xl bg-slate-50">
+                <label className="block text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><UploadCloud size={14}/> Attach Product Image</label>
+                <input type="file" accept="image/*" onChange={handleImageFileChange} className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer" />
+                {imageUrl && <img src={imageUrl} alt="Preview" className="h-24 w-full object-cover rounded-xl mt-2 border border-slate-200 shadow-sm" />}
+              </div>
+
+              <button type="submit" disabled={isSaving} className="w-full bg-slate-900 text-white font-bold p-3.5 rounded-xl flex items-center gap-2 justify-center">{isSaving ? <Loader2 className="animate-spin" size={18}/> : <Plus size={18}/>} Save Product</button>
             </form>
           </div>
         </div>

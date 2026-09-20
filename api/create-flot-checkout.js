@@ -9,9 +9,9 @@ export default async function handler(req, res) {
     const destinationDashboard = returnUrl || `${req.headers.origin}/customer/${role}`;
     const safeCallbackUrl = `${req.headers.origin}/api/unified-webhook?returnUrl=${encodeURIComponent(destinationDashboard)}&provider=flot&amount=${amount}`;
 
-    const secretKey = process.env.FLOT_SECRET_KEY || process.env.FLOT_PRIVATE_KEY;
-
-    if (!secretKey) throw new Error('Flot API Secret Key is missing in environment variables.');
+    // CRITICAL FIX: Strip all newlines and carriage returns to prevent Node.js Header crashes
+    let secretKey = process.env.FLOT_PRIVATE_KEY || process.env.FLOT_SECRET_KEY || '';
+    secretKey = secretKey.replace(/(\r\n|\n|\r)/gm, "").trim();
 
     const payload = {
       tx_ref: transactionRef,
@@ -41,13 +41,12 @@ export default async function handler(req, res) {
 
     const rawData = await flotRes.json();
     if (!flotRes.ok || rawData.status !== "success") {
-      const errMsg = rawData.message || 'Flot gateway card initialization failed';
-      throw new Error(errMsg);
+      throw new Error(rawData.message || `Flot checkout failed: ${JSON.stringify(rawData)}`);
     }
 
     return res.status(200).json({ link: rawData.data.link });
   } catch (error) {
     console.error('Flot Checkout Error:', error);
-    return res.status(500).json({ error: error.message || 'Flot card gateway error' });
+    return res.status(500).json({ error: error.message });
   }
 }

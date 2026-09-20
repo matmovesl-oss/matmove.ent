@@ -2,28 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, MapPin, Navigation, Power, Package, CalendarClock, ArrowUpRight, X, Loader2, Wallet, User, Phone } from 'lucide-react';
+import { Car, MapPin, Navigation, Power, User, Phone } from 'lucide-react';
 
-export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }: any) {
+export function DriverDashboard({ profile, activeSection }: any) {
   if (activeSection === 'trips') return <DriverTrips profile={profile} />;
 
-  const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
   const [isOnline, setIsOnline] = useState(false);
   const [activeRequests, setActiveRequests] = useState<any[]>([]);
-
   const isApproved = profile?.kyc_status === 'approved';
+
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-
-  const fetchLiveBalance = async () => {
-    if (!profile?.id) return;
-    try {
-      const { data } = await supabase.from('wallets').select('balance').eq('user_id', profile.id).single();
-      if (data) setLiveBalance(Number(data.balance));
-    } catch (err) {}
-  };
-
-  useEffect(() => { fetchLiveBalance(); }, [profile?.id]);
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
@@ -44,36 +33,26 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
 
   const handleAcceptBooking = async (booking: any) => {
     if (!isApproved) return alert('You must be KYC Approved by an Admin to accept trips.');
-    const commission = Number((booking.fare_amount * 0.15).toFixed(2));
-    if (liveBalance < commission) return alert(`Insufficient funds. You need at least SLE ${commission} in your wallet to cover the platform commission.`);
-    try { await supabase.from('bookings').update({ status: 'accepted', driver_id: profile.id }).eq('id', booking.id); fetchLiveBalance(); } catch (err: any) { alert('Failed: ' + err.message); }
+    try { await supabase.from('bookings').update({ status: 'accepted', driver_id: profile.id }).eq('id', booking.id); } catch (err: any) { alert('Failed: ' + err.message); }
   };
 
   const handleCompleteBooking = async (booking: any) => {
-    try { await supabase.from('bookings').update({ status: 'completed' }).eq('id', booking.id); alert(`Trip completed! Collection recorded.`); fetchLiveBalance(); } catch (err: any) { alert('Failed to complete: ' + err.message); }
+    try { await supabase.from('bookings').update({ status: 'completed' }).eq('id', booking.id); alert(`Trip completed! Collection recorded.`); } catch (err: any) { alert('Failed to complete: ' + err.message); }
   };
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20">
+      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-4">
           <button onClick={() => setIsOnline(!isOnline)} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}>
             <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${isOnline ? 'translate-x-7' : 'translate-x-1'}`} />
           </button>
           <div><h2 className="font-bold text-slate-900 text-lg">{isOnline ? 'You are Online' : 'You are Offline'}</h2></div>
         </div>
-        <button onClick={onOpenWallet} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">View Wallet</button>
       </header>
 
       <div className="flex-1 flex flex-col lg:flex-row">
         <div className="w-full lg:w-96 bg-white border-r border-slate-200 flex flex-col p-6 space-y-6 overflow-y-auto">
-          
-          {/* Driver Mini Wallet Status */}
-          <div className="bg-slate-900 text-white rounded-3xl p-6 relative shadow-lg">
-            <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Driver Ledger</span>
-            <div className="text-3xl font-bold mt-1 text-emerald-400">SLE {liveBalance.toFixed(2)}</div>
-          </div>
-
           <h3 className="font-bold text-xl text-slate-900 pt-2">Dispatch Radar</h3>
           {!isOnline ? (
             <div className="border-2 border-dashed border-slate-300 bg-slate-100 rounded-3xl p-12 text-center text-slate-400">
@@ -115,7 +94,6 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           )}
         </div>
 
-        {/* MAP CONTAINER FOR DRIVER */}
         <div className="flex-1 bg-slate-200 relative min-h-[450px]">
           <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
         </div>

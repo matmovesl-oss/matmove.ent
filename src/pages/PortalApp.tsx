@@ -207,14 +207,14 @@ function PortalNavigation({ activeSection, onNavigate, role }: any) {
   };
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-2xl px-2 py-2 pb-safe">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] px-2 py-2 pb-safe">
       <div className="flex justify-around items-center max-w-lg mx-auto">
         {getTabs().map((item) => {
           const Icon = item.icon;
           const active = activeSection === item.id;
           return (
-            <button key={item.id} onClick={() => onNavigate(item.id)} className={`flex flex-col items-center justify-center gap-1 py-2 px-4 rounded-2xl transition ${active ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
-              <Icon size={20} />
+            <button key={item.id} onClick={() => onNavigate(item.id)} className={`flex flex-col items-center justify-center gap-1 py-2 px-4 rounded-2xl transition ${active ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
+              <Icon size={20} className={active ? "fill-blue-100/50" : ""} />
               <span className={`text-[10px] font-bold ${active ? 'text-blue-600' : ''}`}>{item.label}</span>
             </button>
           );
