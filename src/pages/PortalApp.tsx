@@ -34,6 +34,19 @@ export function PortalApp() {
   const [activeSection, setActiveSection] = useState<PortalSection>('home');
   const [loggingOut, setLoggingOut] = useState(false);
 
+  // CRITICAL FIX: Intercept Browser "Back" button (BFCache) from Monime checkout
+  useEffect(() => {
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        // Force the app into locked state and hard reload to clear spinners
+        localStorage.setItem('matmove_last_active', '0');
+        window.location.reload();
+      }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
+
   useEffect(() => {
     const checkIdleState = () => {
       if (!profile) return;

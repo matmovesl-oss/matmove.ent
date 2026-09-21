@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Wallet, X, Smartphone, Loader2, ArrowUpRight, ArrowDownLeft, Lock } from 'lucide-react';
 
 export function WalletPage({ profile, wallet, onClose }: any) {
@@ -10,14 +10,6 @@ export function WalletPage({ profile, wallet, onClose }: any) {
 
   const isApproved = profile?.role === 'rider' || profile?.kyc_status === 'approved';
   const balance = Number(wallet?.balance || 0);
-
-  useEffect(() => {
-    const handlePageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) setIsProcessing(false);
-    };
-    window.addEventListener('pageshow', handlePageShow);
-    return () => window.removeEventListener('pageshow', handlePageShow);
-  }, []);
 
   const closeModals = () => {
     setIsLoadModalOpen(false);
