@@ -17,11 +17,10 @@ export default async function handler(req, res) {
       throw new Error('Your account is not linked to a Monime Wallet yet.');
     }
 
-    // REMOVED LOCAL BALANCE CHECK. Monime will handle validation.
-
     const valueMinor = Math.round(Number(amount) * 100);
     const idempotencyKey = `payout_${crypto.randomUUID()}`;
 
+    // Ensure strict local formatting (e.g., 077... or 030...)
     let formattedPhone = destinationPhone.replace(/\D/g, '');
     if (formattedPhone.startsWith('232') && formattedPhone.length >= 11) {
       formattedPhone = '0' + formattedPhone.substring(3);
@@ -29,16 +28,14 @@ export default async function handler(req, res) {
       formattedPhone = '0' + formattedPhone;
     }
 
+    // Rely on user dropdown selection for the provider
     let providerId = networkProvider === 'afrimoney' ? "m18" : "m17";
-    if (formattedPhone.match(/^(0)?(30|33|34|35|77|79)/)) {
-      providerId = "m18";
-    }
 
+    // STRICT SCHEMA COMPLIANCE: No additional tracking fields allowed in the body
     const payload = {
       amount: { currency: "SLE", value: valueMinor },
       source: { financialAccountId: sourceWallet.metadata.monime_account_id },
-      destination: { type: "momo", providerId: providerId, phoneNumber: formattedPhone },
-      reference: idempotencyKey
+      destination: { type: "momo", providerId: providerId, phoneNumber: formattedPhone }
     };
 
     const monimeRes = await fetch('https://api.monime.io/v1/payouts', {
@@ -56,17 +53,19 @@ export default async function handler(req, res) {
     const rawText = await monimeRes.text();
     let rawData;
     try { rawData = rawText ? JSON.parse(rawText) : {}; } 
-    catch (e) { throw new Error(`Monime Non-JSON Error: ${rawText.substring(0, 100)}`); }
+    catch (e) { throw new Error(`Monime Server Error: ${rawText.substring(0, 100)}`); }
 
-    // If Monime rejects it (e.g. Insufficient Funds), it will throw here natively!
+    // Enhanced error parsing to catch exact validation issues from Monime
     if (!monimeRes.ok || rawData.success === false) {
-      let apiError = 'Monime API rejected the payout';
-      if (rawData.messages && Array.isArray(rawData.messages)) {
+      let apiError = 'Monime rejected the payout';
+      if (rawData.messages && Array.isArray(rawData.messages) && rawData.messages.length > 0) {
         apiError = rawData.messages.map(m => m.message).join(' | ');
       } else if (rawData.message) {
         apiError = rawData.message;
       } else if (rawData.failureDetail?.message) {
         apiError = rawData.failureDetail.message;
+      } else if (rawData.error) {
+        apiError = rawData.error;
       }
       throw new Error(apiError);
     }
@@ -82,11 +81,18 @@ export default async function handler(req, res) {
     });
 
     await supabase.from('withdrawal_requests').insert({
-       user_id: userId, amount, currency: 'SLE', provider: 'monime', status: 'processing', destination_phone: formattedPhone, reference: transactionId
+       user_id: userId, 
+       amount: amount, 
+       currency: 'SLE', 
+       provider: 'monime', 
+       status: 'processing', 
+       destination_phone: formattedPhone, 
+       reference: transactionId
     });
 
     return res.status(200).json({ success: true, message: 'Payout requested successfully!' });
   } catch (error) {
+    console.error('Payout API Error:', error.message);
     return res.status(500).json({ error: error.message });
   }
 }
