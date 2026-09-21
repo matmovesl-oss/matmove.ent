@@ -32,16 +32,19 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [isRequesting, setIsRequesting] = useState(false);
   const [activeBooking, setActiveBooking] = useState<any>(null);
 
+  // CRITICAL FIX: Transfer Modal State added here to prevent blank screen crash
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-
+  
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferAmount, setTransferAmount] = useState('');
   const [transferTarget, setTransferTarget] = useState<'mobile_money' | 'matmove_user'>('mobile_money');
   const [transferPhone, setTransferPhone] = useState(profile?.phone || '');
   const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
   const [isTransferring, setIsTransferring] = useState(false);
+
+  const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -219,7 +222,11 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
           <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
              <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
           </button>
-          <div><span className="text-slate-400 text-xs font-bold uppercase tracking-wider">MatMove Unified Wallet</span><div className="text-3xl font-bold mt-1 text-blue-400">SLE {liveBalance.toFixed(2)}</div></div>
+          <div>
+            <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">MatMove Unified Wallet</span>
+            <div className="text-3xl font-bold mt-1 text-blue-400">SLE {liveBalance.toFixed(2)}</div>
+            <div className="text-xs font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">Account ID: {monimeAccountId}</div>
+          </div>
           <Wallet size={32} className="text-slate-700 mr-12" />
         </div>
 
@@ -304,7 +311,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:bg-slate-100 rounded-full p-1"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
@@ -318,7 +325,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       {isTransferModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <button onClick={() => setIsTransferModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:bg-slate-100 rounded-full p-1"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Transfer Funds</h2>
             <p className="text-sm text-slate-500 mb-6">Send money instantly via Monime.</p>
 

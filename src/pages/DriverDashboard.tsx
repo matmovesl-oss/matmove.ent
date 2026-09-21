@@ -11,6 +11,8 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const [isOnline, setIsOnline] = useState(false);
   const [activeRequests, setActiveRequests] = useState<any[]>([]);
   const isApproved = profile?.kyc_status === 'approved';
+  
+  const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -27,8 +29,12 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
-    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
-    map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 13 });
+    try {
+      mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
+      map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 13 });
+    } catch (e) {
+      console.error(e);
+    }
   }, []);
 
   useEffect(() => {
@@ -71,6 +77,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           <div className="bg-slate-900 text-white rounded-3xl p-6 relative shadow-lg">
             <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Driver Ledger</span>
             <div className="text-3xl font-bold mt-1 text-emerald-400">SLE {liveBalance.toFixed(2)}</div>
+            <div className="text-xs font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">Account ID: {monimeAccountId}</div>
           </div>
 
           <h3 className="font-bold text-xl text-slate-900 pt-2">Dispatch Radar</h3>

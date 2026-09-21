@@ -15,6 +15,7 @@ export function WalletPage({ profile, wallet, onClose }: any) {
 
   const isApproved = profile?.role === 'rider' || profile?.kyc_status === 'approved';
   const balance = Number(wallet?.balance || 0);
+  const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
 
   useEffect(() => {
     const handlePageShow = (e: PageTransitionEvent) => {
@@ -89,6 +90,7 @@ export function WalletPage({ profile, wallet, onClose }: any) {
       <div className="bg-slate-900 text-white rounded-3xl p-8 mb-8 relative shadow-xl overflow-hidden">
         <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Available SLE Balance</span>
         <div className="text-5xl font-bold mt-2 text-blue-400">SLE {balance.toFixed(2)}</div>
+        <div className="text-xs font-mono text-slate-400 mt-4 bg-slate-800 inline-block px-3 py-1.5 rounded-lg border border-slate-700">Account ID: {monimeAccountId}</div>
         <Wallet size={80} className="absolute right-6 top-6 opacity-10 text-white" />
       </div>
 
@@ -135,13 +137,11 @@ export function WalletPage({ profile, wallet, onClose }: any) {
             <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Transfer Funds</h2>
             <p className="text-sm text-slate-500 mb-6">Send money instantly via Monime.</p>
-
             <div className="space-y-4 mb-6">
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase">Transfer Amount (SLE)</label>
                 <input type="number" placeholder="0.00" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none mt-1 focus:border-blue-500" />
               </div>
-
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase">Transfer Destination</label>
                 <select value={transferTarget} onChange={(e) => setTransferTarget(e.target.value as any)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none mt-1 focus:border-blue-500 bg-white appearance-none">
@@ -149,17 +149,14 @@ export function WalletPage({ profile, wallet, onClose }: any) {
                   <option value="matmove_user">MatMove Account (Internal Transfer)</option>
                 </select>
               </div>
-
               {transferTarget === 'mobile_money' && (
                 <div className="grid grid-cols-2 gap-3">
                   <button onClick={() => setNetworkProvider('orange')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
                   <button onClick={() => setNetworkProvider('afrimoney')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
                 </div>
               )}
-              
               <input type="tel" placeholder={transferTarget === 'mobile_money' ? "Mobile Money Number (+232...)" : "Recipient's Registered Phone (+232...)"} value={transferPhone} onChange={(e) => setTransferPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-blue-500" />
             </div>
-
             <button onClick={executeTransfer} disabled={isTransferring || !transferAmount} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
               {isTransferring ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Transfer
             </button>

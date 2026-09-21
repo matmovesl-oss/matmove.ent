@@ -32,6 +32,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [isRequesting, setIsRequesting] = useState(false);
   const [isRouting, setIsRouting] = useState(false);
 
+  // CRITICAL FIX: Transfer Modal State added here to prevent blank screen crash
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -44,6 +45,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [isTransferring, setIsTransferring] = useState(false);
 
   const isApproved = profile?.kyc_status === 'approved';
+  const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -231,8 +233,11 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
           <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
              <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
           </button>
-          <span className="text-orange-200 text-xs font-bold uppercase tracking-wider">Store Operating Wallet</span>
-          <div className="text-5xl font-bold mt-2">SLE {liveBalance.toFixed(2)}</div>
+          <div>
+            <span className="text-orange-200 text-xs font-bold uppercase tracking-wider">Store Operating Wallet</span>
+            <div className="text-5xl font-bold mt-2">SLE {liveBalance.toFixed(2)}</div>
+            <div className="text-xs font-mono text-white/70 mt-2 bg-black/20 inline-block px-2 py-1 rounded">Account ID: {monimeAccountId}</div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
