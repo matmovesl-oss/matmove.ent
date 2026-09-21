@@ -2,11 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { 
-  Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, 
-  Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, CreditCard, 
-  ArrowUpRight, Map, ShieldCheck, Lock 
-} from 'lucide-react';
+import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowUpRight, Map } from 'lucide-react';
 
 const WHATSAPP_NUMBER = "23290330362";
 const PRICING_RATES = { bike: { min: 10, perKm: 3 }, keke: { min: 15, perKm: 5 }, car: { min: 30, perKm: 10 }, van: { min: 60, perKm: 20 } };
@@ -38,7 +34,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
-  const [loadMethod, setLoadMethod] = useState<'flot' | 'monime' | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
@@ -166,11 +161,10 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   };
 
   const executeLoadWallet = async () => {
-    if (!loadAmount || !loadMethod) return alert('Enter amount and select payment method.');
+    if (!loadAmount || Number(loadAmount) <= 0) return alert('Enter a valid amount.');
     setIsProcessing(true);
     try {
-      const endpoint = loadMethod === 'flot' ? '/api/create-flot-checkout' : '/api/create-monime-checkout';
-      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, email: profile.email, phone: profile.phone, role: 'rider' }) });
+      const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: 'rider' }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment failed');
       const redirectUrl = data.link || data.checkoutUrl;
@@ -198,7 +192,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋</h1></div>
         <div className="flex gap-2">
-          <button onClick={() => { setIsProcessing(false); setLoadAmount(''); setLoadMethod(null); setIsLoadModalOpen(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">+ Load Wallet</button>
+          <button onClick={() => { setIsProcessing(false); setLoadAmount(''); setIsLoadModalOpen(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">+ Load Wallet</button>
           <button onClick={() => setIsWithdrawModalOpen(true)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">Withdraw</button>
         </div>
       </header>
@@ -293,15 +287,13 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Load Unified Wallet</h2>
-            <p className="text-sm text-slate-500 mb-6">Choose how you want to fund your account.</p>
+            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:bg-slate-100 rounded-full p-1"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
+            <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <button onClick={() => setLoadMethod('monime')} className={`p-4 border rounded-xl flex flex-col items-center gap-2 ${loadMethod === 'monime' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}><Smartphone size={24} /> <span className="text-xs">Mobile Money</span></button>
-              <button onClick={() => setLoadMethod('flot')} className={`p-4 border rounded-xl flex flex-col items-center gap-2 ${loadMethod === 'flot' ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold' : 'border-slate-200 text-slate-500'}`}><CreditCard size={24} /> <span className="text-xs">Bank Card</span></button>
-            </div>
-            <button onClick={executeLoadWallet} disabled={isProcessing || !loadAmount || !loadMethod} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isProcessing ? <Loader2 className="animate-spin" size={20} /> : 'Proceed to Checkout'}</button>
+            <button onClick={executeLoadWallet} disabled={isProcessing || !loadAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <><Smartphone size={20} /> Proceed to Checkout</>}
+            </button>
           </div>
         </div>
       )}
@@ -309,12 +301,12 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       {isWithdrawModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:bg-slate-100 rounded-full p-1"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Withdraw Funds</h2>
             <p className="text-sm text-slate-500 mb-6">Transfer balance to Mobile Money via Monime.</p>
             <div className="space-y-4 mb-6">
               <input type="number" placeholder="Amount (SLE)" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none" />
-              <input type="tel" placeholder="+232..." value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none" />
+              <input type="tel" placeholder="Mobile Money Number (+232...)" value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none" />
             </div>
             <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Cashout</button>
           </div>
@@ -333,7 +325,7 @@ function RiderShop({ profile }: any) {
     const fetchProducts = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('products').select('*, profiles(business_name, phone)').order('created_at', { ascending: false });
         if (error) {
           console.error('Products fetch error:', error);
           if (isMounted) setProducts([]);
@@ -366,7 +358,8 @@ function RiderShop({ profile }: any) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {products.map(p => {
-            const contactNumber = p.whatsapp_number || WHATSAPP_NUMBER;
+            const profileData = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles;
+            const contactNumber = p.whatsapp_number || profileData?.phone || WHATSAPP_NUMBER;
             const cleanNumber = contactNumber.replace(/[^0-9]/g, '');
 
             return (
@@ -377,6 +370,7 @@ function RiderShop({ profile }: any) {
                   <div className="w-full h-44 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 mb-3"><ShoppingBag size={36} /></div>
                 )}
                 <div>
+                  <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{profileData?.business_name || 'Verified Merchant'}</div>
                   <h3 className="font-bold text-slate-900 text-base mt-0.5">{p.name}</h3>
                   <p className="text-xs text-slate-500 mt-1 line-clamp-2">{p.description || 'No description.'}</p>
                 </div>

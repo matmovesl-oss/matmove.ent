@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, UploadCloud, Minus } from 'lucide-react';
+import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, UploadCloud, Minus, Smartphone, ArrowUpRight } from 'lucide-react';
 
 type ServiceType = 'delivery' | 'ride' | 'scheduled';
 type VehicleType = 'keke' | 'bike' | 'car' | 'van';
@@ -31,6 +31,17 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
 
   const [isRequesting, setIsRequesting] = useState(false);
   const [isRouting, setIsRouting] = useState(false);
+
+  const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
+  const [loadAmount, setLoadAmount] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawPhone, setWithdrawPhone] = useState(profile?.phone || '');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+  const isApproved = profile?.kyc_status === 'approved';
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -133,7 +144,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     setIsRequesting(true);
     try {
       const { error } = await supabase.from('bookings').insert({
-        rider_id: profile.id, 
+        rider_id: profile.id, // Merchant requests as rider
         service_type: serviceType,
         vehicle_type: serviceType !== 'scheduled' ? vehicleType : null,
         pickup_location: pickup,
@@ -150,6 +161,33 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     } catch (err: any) { alert(err.message); } finally { setIsRequesting(false); }
   };
 
+  const executeLoadWallet = async () => {
+    if (!loadAmount || Number(loadAmount) <= 0) return alert('Enter a valid amount.');
+    setIsProcessing(true);
+    try {
+      const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: 'merchant' }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payment failed');
+      const redirectUrl = data.link || data.checkoutUrl;
+      if (redirectUrl) window.location.href = redirectUrl;
+    } catch (err: any) { alert(err.message); setIsProcessing(false); }
+  };
+
+  const executeWithdrawal = async () => {
+    const amt = Number(withdrawAmount);
+    if (!amt || amt <= 0) return alert('Enter valid amount');
+    if (amt > liveBalance) return alert('Insufficient balance');
+    if (!withdrawPhone.trim()) return alert('Enter valid Mobile Money number');
+    setIsWithdrawing(true);
+    try {
+      const res = await fetch('/api/create-monime-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: withdrawPhone }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Withdrawal failed');
+      alert(`Cashout processed!`);
+      setIsWithdrawModalOpen(false); fetchLiveBalance();
+    } catch (err: any) { alert(err.message); } finally { setIsWithdrawing(false); }
+  };
+
   return (
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
@@ -157,7 +195,10 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
           <div className="p-2 bg-orange-100 text-orange-600 rounded-xl"><Store size={20} /></div>
           <div><h2 className="font-bold text-slate-900 leading-tight">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
         </div>
-        <button onClick={onOpenWallet} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">View Wallet</button>
+        <div className="flex gap-2">
+          <button onClick={() => { setIsProcessing(false); setLoadAmount(''); setIsLoadModalOpen(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">+ Load Wallet</button>
+          <button onClick={() => setIsWithdrawModalOpen(true)} disabled={!isApproved} className={`px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Withdraw</button>
+        </div>
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -215,7 +256,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                  <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">{isRouting ? <Loader2 size={12} className="animate-spin"/> : <MapPin size={12} />} Preview Route</button>
                </div>
 
-               {/* RESTORED OFFER AMOUNT SECTION */}
                {(serviceType === 'ride' || serviceType === 'delivery') && (
                  <div className="flex items-center gap-2 border border-slate-200 bg-slate-50 p-2 rounded-xl">
                    <span className="text-slate-500 font-bold text-sm px-2">SLE</span>
@@ -242,6 +282,35 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
           </div>
         </div>
       </div>
+
+      {isLoadModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:bg-slate-100 rounded-full p-1"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
+            <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
+            <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
+            <button onClick={executeLoadWallet} disabled={isProcessing || !loadAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <><Smartphone size={20} /> Proceed to Checkout</>}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isWithdrawModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:bg-slate-100 rounded-full p-1"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Withdraw Funds</h2>
+            <p className="text-sm text-slate-500 mb-6">Transfer balance to Mobile Money via Monime.</p>
+            <div className="space-y-4 mb-6">
+              <input type="number" placeholder="Amount (SLE)" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none" />
+              <input type="tel" placeholder="Mobile Money Number (+232...)" value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none" />
+            </div>
+            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Cashout</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -267,7 +336,7 @@ function MerchantInventory({ profile }: any) {
       console.error('Failed to load products');
       setProducts([]);
     } finally {
-      setLoading(false); // Graceful exit ensuring the spinner stops
+      setLoading(false);
     }
   };
 
