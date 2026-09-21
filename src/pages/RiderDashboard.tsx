@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowUpRight, Map } from 'lucide-react';
+import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowUpRight } from 'lucide-react';
 
 const WHATSAPP_NUMBER = "23290330362";
 const PRICING_RATES = { bike: { min: 10, perKm: 3 }, keke: { min: 15, perKm: 5 }, car: { min: 30, perKm: 10 }, van: { min: 60, perKm: 20 } };
@@ -77,7 +77,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         zoom: 12 
       });
     } catch (e) {
-      console.error('Mapbox load warning:', e);
+      console.error('Mapbox error:', e);
     }
   }, []);
 
@@ -220,7 +220,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                 <div className="space-y-3">
                   {(serviceType === 'ride' || serviceType === 'delivery') && (
                     <div className="grid grid-cols-4 gap-2 mb-2">
-                      {(['keke', 'bike', 'car', 'van'] as VehicleType[]).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}
+                      {(['keke', 'bike', 'car', 'van'] as ('keke' | 'bike' | 'car' | 'van')[]).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}
                     </div>
                   )}
 
@@ -292,7 +292,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
             <button onClick={executeLoadWallet} disabled={isProcessing || !loadAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <><Smartphone size={20} /> Proceed to Checkout</>}
+              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <><Smartphone size={20} /> Checkout with Monime</>}
             </button>
           </div>
         </div>
@@ -325,7 +325,7 @@ function RiderShop({ profile }: any) {
     const fetchProducts = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase.from('products').select('*, profiles(business_name, phone)').order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
         if (error) {
           console.error('Products fetch error:', error);
           if (isMounted) setProducts([]);
@@ -358,8 +358,7 @@ function RiderShop({ profile }: any) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {products.map(p => {
-            const profileData = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles;
-            const contactNumber = p.whatsapp_number || profileData?.phone || WHATSAPP_NUMBER;
+            const contactNumber = p.whatsapp_number || WHATSAPP_NUMBER;
             const cleanNumber = contactNumber.replace(/[^0-9]/g, '');
 
             return (
@@ -370,7 +369,6 @@ function RiderShop({ profile }: any) {
                   <div className="w-full h-44 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 mb-3"><ShoppingBag size={36} /></div>
                 )}
                 <div>
-                  <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{profileData?.business_name || 'Verified Merchant'}</div>
                   <h3 className="font-bold text-slate-900 text-base mt-0.5">{p.name}</h3>
                   <p className="text-xs text-slate-500 mt-1 line-clamp-2">{p.description || 'No description.'}</p>
                 </div>

@@ -8,7 +8,10 @@ export default async function handler(req, res) {
     const { userId, amount, destinationPhone } = req.body;
     if (!userId || !amount || !destinationPhone) return res.status(400).json({ error: 'Missing parameters.' });
 
-    const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createClient(
+      process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
 
     const { data: wallets } = await supabase.from('wallets').select('*').eq('user_id', userId).eq('currency', 'SLE');
     const wallet = wallets?.find(w => w.metadata?.monime_account_id);
@@ -16,7 +19,6 @@ export default async function handler(req, res) {
     if (!wallet) throw new Error('Your account is not linked to a Monime Wallet yet.');
     if (Number(wallet.balance) < Number(amount)) throw new Error('Insufficient wallet balance.');
 
-    // Dynamically detect Afrimoney vs Orange Money based on prefix
     let network = "ORANGE";
     const cleanPhone = destinationPhone.replace(/\D/g, '');
     if (cleanPhone.match(/^(232|0)?(30|33|34|35|77|79)/)) {
@@ -50,21 +52,26 @@ export default async function handler(req, res) {
       throw new Error(rawData.messages?.join(', ') || rawData.message || 'Monime API rejected the payout.');
     }
 
-    // Deduct the funds securely
     await supabase.rpc('process_gateway_payment', {
        p_provider: 'monime_cashout',
        p_wallet_id: wallet.id,
-       p_amount: -Number(amount), 
+       p_amount: -Number(amount),
        p_currency: 'SLE',
        p_reference: rawData.result?.id || idempotencyKey
     });
 
     await supabase.from('withdrawal_requests').insert({
-       user_id: userId, amount, currency: 'SLE', provider: 'monime', status: 'completed', destination_phone: destinationPhone
+       user_id: userId,
+       amount: amount,
+       currency: 'SLE',
+       provider: 'monime',
+       status: 'completed',
+       destination_phone: destinationPhone
     });
 
     return res.status(200).json({ success: true, message: 'Instant transfer successful!' });
   } catch (error) {
+    console.error('Monime Payout Error:', error);
     return res.status(500).json({ error: error.message });
   }
 }

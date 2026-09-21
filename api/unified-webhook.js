@@ -4,10 +4,7 @@ export default async function handler(req, res) {
   const { returnUrl, provider, ref, amount } = req.query;
   const redirectUrl = returnUrl || '/';
 
-  // Validate Success strictly for Monime
-  const isMonimeSuccess = provider === 'monime'; 
-
-  if (!isMonimeSuccess) {
+  if (provider !== 'monime') {
     return res.redirect(302, `${redirectUrl}?error=payment_failed`);
   }
 
@@ -17,21 +14,21 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
     
-    // Extract UserId from our custom reference format (e.g., MONIME_userid_timestamp)
-    const parts = ref.split('_');
+    const parts = (ref || '').split('_');
     const userId = parts[1];
     
-    const { data: walletData } = await supabase.from('wallets').select('id').eq('user_id', userId).eq('currency', 'SLE').single();
-    
-    if (walletData) {
-       // Hit the secure Admin function to log the transaction and update balance
-       await supabase.rpc('process_gateway_payment', {
-         p_provider: 'monime',
-         p_wallet_id: walletData.id,
-         p_amount: Number(amount || 0),
-         p_currency: 'SLE',
-         p_reference: ref
-       });
+    if (userId) {
+      const { data: walletData } = await supabase.from('wallets').select('id').eq('user_id', userId).eq('currency', 'SLE').single();
+      
+      if (walletData) {
+         await supabase.rpc('process_gateway_payment', {
+           p_provider: 'monime',
+           p_wallet_id: walletData.id,
+           p_amount: Number(amount || 0),
+           p_currency: 'SLE',
+           p_reference: ref
+         });
+      }
     }
 
     return res.redirect(302, `${redirectUrl}?payment=success`);
