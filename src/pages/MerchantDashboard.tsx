@@ -57,6 +57,14 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     }
   }, []);
 
+  useEffect(() => {
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setIsProcessing(false);
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
+
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
     setIsRefreshing(true);
@@ -70,8 +78,12 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
-    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
-    map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 12 });
+    try {
+      mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
+      map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 12 });
+    } catch (e) {
+      console.error(e);
+    }
   }, []);
 
   const searchPlaces = (query: string, type: 'pickup' | 'destination') => {
@@ -144,7 +156,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     setIsRequesting(true);
     try {
       const { error } = await supabase.from('bookings').insert({
-        rider_id: profile.id, // Merchant requests as rider
+        rider_id: profile.id, 
         service_type: serviceType,
         vehicle_type: serviceType !== 'scheduled' ? vehicleType : null,
         pickup_location: pickup,
@@ -168,8 +180,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: 'merchant' }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment failed');
-      const redirectUrl = data.link || data.checkoutUrl;
-      if (redirectUrl) window.location.href = redirectUrl;
+      if (data.link || data.checkoutUrl) window.location.href = data.link || data.checkoutUrl;
     } catch (err: any) { alert(err.message); setIsProcessing(false); }
   };
 
@@ -182,8 +193,8 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     try {
       const res = await fetch('/api/create-monime-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: withdrawPhone }) });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Withdrawal failed');
-      alert(`Cashout processed successfully!`);
+      if (!res.ok) throw new Error(data.error || 'Transfer failed');
+      alert(`Transfer successful!`);
       setIsWithdrawModalOpen(false); fetchLiveBalance();
     } catch (err: any) { alert(err.message); } finally { setIsWithdrawing(false); }
   };
@@ -298,13 +309,13 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Withdraw Funds</h2>
+            <h2 className="text-2xl font-bold mb-1">Transfer Funds</h2>
             <p className="text-sm text-slate-500 mb-6">Transfer balance to Mobile Money via Monime.</p>
             <div className="space-y-4 mb-6">
               <input type="number" placeholder="Amount (SLE)" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none" />
               <input type="tel" placeholder="Mobile Money Number (+232...)" value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none" />
             </div>
-            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Cashout</button>
+            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Transfer</button>
           </div>
         </div>
       )}
@@ -324,14 +335,16 @@ function MerchantInventory({ profile }: any) {
   const [isSaving, setIsSaving] = useState(false);
 
   const fetchProducts = async () => {
+    setLoading(true);
     try {
       const { data, error } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
       if (error) throw error;
       setProducts(data || []);
     } catch (err) {
       console.error('Failed to load products');
+      setProducts([]);
     } finally {
-      setLoading(false);
+      setLoading(false); // Graceful exit ensuring the spinner stops
     }
   };
 

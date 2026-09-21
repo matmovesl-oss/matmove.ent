@@ -25,7 +25,7 @@ export default async function handler(req, res) {
 
     const idempotencyKey = `cashout_${crypto.randomUUID()}`;
     
-    // EXACT PAYLOAD FROM MONIME DOCS
+    // EXACT PAYLOAD STRUCTURE FROM MONIME API DOCS
     const payload = {
       sourceAccountId: wallet.metadata.monime_account_id,
       amount: Number(amount),
@@ -43,14 +43,18 @@ export default async function handler(req, res) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.MONIME_API_KEY}`,
+        'Monime-Space-Id': process.env.MONIME_SPACE_ID,
         'Idempotency-Key': idempotencyKey
       },
       body: JSON.stringify(payload)
     });
 
     const rawData = await monimeRes.json();
+    
+    // Improved error logging to catch exactly what Monime complains about
     if (!monimeRes.ok || rawData.success === false) {
-      throw new Error(rawData.messages?.join(', ') || rawData.message || 'Monime API rejected the payout.');
+      const apiError = rawData.messages?.join(', ') || rawData.error || rawData.message || JSON.stringify(rawData);
+      throw new Error(`Monime API Error: ${apiError}`);
     }
 
     // Deduct the funds securely from the MatMove ledger
@@ -59,15 +63,16 @@ export default async function handler(req, res) {
        p_wallet_id: wallet.id,
        p_amount: -Number(amount), 
        p_currency: 'SLE',
-       p_reference: rawData.id || idempotencyKey
+       p_reference: rawData.result?.id || rawData.id || idempotencyKey
     });
 
     await supabase.from('withdrawal_requests').insert({
        user_id: userId, amount, currency: 'SLE', provider: 'monime', status: 'completed', destination_phone: destinationPhone
     });
 
-    return res.status(200).json({ success: true, message: 'Cashout successful!' });
+    return res.status(200).json({ success: true, message: 'Transfer successful!' });
   } catch (error) {
+    console.error('Monime Payout Error:', error.message);
     return res.status(500).json({ error: error.message });
   }
 }

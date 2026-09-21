@@ -55,6 +55,14 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     }
   }, []);
 
+  useEffect(() => {
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setIsProcessing(false);
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
+
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
     setIsRefreshing(true);
@@ -77,7 +85,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         zoom: 12 
       });
     } catch (e) {
-      console.error('Mapbox load warning:', e);
+      console.error('Mapbox error:', e);
     }
   }, []);
 
@@ -182,7 +190,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       const res = await fetch('/api/create-monime-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: withdrawPhone }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Withdrawal failed');
-      alert(`Cashout processed successfully!`);
+      alert(`Transfer processed successfully!`);
       setIsWithdrawModalOpen(false); fetchLiveBalance();
     } catch (err: any) { alert(err.message); } finally { setIsWithdrawing(false); }
   };
@@ -287,7 +295,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:bg-slate-100 rounded-full p-1"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
@@ -301,14 +309,14 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       {isWithdrawModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Withdraw Funds</h2>
+            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:bg-slate-100 rounded-full p-1"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Transfer Funds</h2>
             <p className="text-sm text-slate-500 mb-6">Transfer balance to Mobile Money via Monime.</p>
             <div className="space-y-4 mb-6">
               <input type="number" placeholder="Amount (SLE)" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none" />
               <input type="tel" placeholder="Mobile Money Number (+232...)" value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none" />
             </div>
-            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Cashout</button>
+            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Transfer</button>
           </div>
         </div>
       )}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Wallet, X, Smartphone, Loader2, ArrowUpRight, ArrowDownLeft, Lock } from 'lucide-react';
 
 export function WalletPage({ profile, wallet, onClose }: any) {
@@ -10,6 +10,18 @@ export function WalletPage({ profile, wallet, onClose }: any) {
 
   const isApproved = profile?.role === 'rider' || profile?.kyc_status === 'approved';
   const balance = Number(wallet?.balance || 0);
+
+  // Kills the infinite spinner safely if user clicks the Browser "Back" arrow from checkout
+  useEffect(() => {
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        setIsProcessing(false);
+        setIsLoadModalOpen(false);
+      }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
 
   const closeModals = () => {
     setIsLoadModalOpen(false);
@@ -102,9 +114,7 @@ export function WalletPage({ profile, wallet, onClose }: any) {
             <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
-
             <input type="number" placeholder="Amount (SLE)" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
-
             <button onClick={executeLoad} disabled={isProcessing || !amount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
               {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <><Smartphone size={20} /> Checkout with Monime</>}
             </button>
@@ -116,14 +126,12 @@ export function WalletPage({ profile, wallet, onClose }: any) {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Withdraw Funds</h2>
-            <p className="text-sm text-slate-500 mb-6">Cash out to your Mobile Money account.</p>
-
+            <h2 className="text-2xl font-bold mb-1">Transfer Funds</h2>
+            <p className="text-sm text-slate-500 mb-6">Transfer balance to Mobile Money via Monime.</p>
             <input type="number" placeholder="Amount (SLE)" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl text-center mb-4 outline-none focus:border-emerald-500" />
             <input type="tel" placeholder="Mobile Money Number (+232...)" value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm mb-6 outline-none focus:border-emerald-500" />
-
             <button onClick={executeWithdraw} disabled={isProcessing || !amount} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : 'Confirm Cashout'}
+              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : 'Confirm Transfer'}
             </button>
           </div>
         </div>
