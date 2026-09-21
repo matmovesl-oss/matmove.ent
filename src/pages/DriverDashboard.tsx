@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, MapPin, Navigation, Power, User, Phone, Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft, Users } from 'lucide-react';
+import { Car, MapPin, Navigation, Power, User, Phone, Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft, Users, RefreshCw } from 'lucide-react';
 
 export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }: any) {
   if (activeSection === 'trips') return <DriverTrips profile={profile} />;
@@ -24,7 +24,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
 
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
-  const [payoutPhone, setPayoutPhone] = useState(profile?.phone || '');
+  const [payoutPhone, setPayoutPhone] = useState('');
   const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
   const [isProcessingPayout, setIsProcessingPayout] = useState(false);
 
@@ -33,14 +33,15 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
   const [matmoveUsers, setMatmoveUsers] = useState<any[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     if (isTransferModalOpen) {
-      supabase.from('profiles').select('id, full_name, role, phone, business_name').neq('id', profile.id).then(({ data }) => {
+      supabase.from('profiles').select('id, full_name, role, phone, business_name').neq('id', profile?.id).then(({ data }) => {
         if (data) setMatmoveUsers(data);
       });
     }
-  }, [isTransferModalOpen, profile.id]);
+  }, [isTransferModalOpen, profile?.id]);
 
   useEffect(() => {
     const handlePageShow = (e: PageTransitionEvent) => {
@@ -52,10 +53,16 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
 
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
+    setIsRefreshing(true);
     try {
-      const { data } = await supabase.from('wallets').select('balance').eq('user_id', profile.id).single();
-      if (data) setLiveBalance(Number(data.balance));
-    } catch (err) {}
+      const res = await fetch('/api/get-live-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: profile.id })
+      });
+      const data = await res.json();
+      if (data.balance !== undefined) setLiveBalance(Number(data.balance));
+    } catch (err) {} finally { setIsRefreshing(false); }
   };
 
   useEffect(() => { fetchLiveBalance(); }, [profile?.id]);
@@ -77,7 +84,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
     fetchInitialRequests();
     const channel = supabase.channel('driver-radar').on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, fetchInitialRequests).subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [isOnline, profile.id]);
+  }, [isOnline, profile?.id]);
 
   const handleAcceptBooking = async (booking: any) => {
     if (!isApproved) return alert('You must be KYC Approved by an Admin to accept trips.');
@@ -93,6 +100,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const closeModals = () => {
     setIsLoadModalOpen(false); setIsPayoutModalOpen(false); setIsTransferModalOpen(false);
     setIsProcessingLoad(false); setIsProcessingPayout(false); setIsProcessingTransfer(false);
+    setLoadAmount(''); setPayoutAmount(''); setTransferAmount(''); setTransferRecipient(''); setPayoutPhone('');
   };
 
   const executeLoad = async () => {
@@ -164,6 +172,9 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
         <div className="w-full lg:w-96 bg-white border-r border-slate-200 flex flex-col p-6 space-y-6 overflow-y-auto">
           
           <div className="bg-slate-900 text-white rounded-3xl p-6 relative shadow-lg">
+            <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
+               <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
+            </button>
             <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Driver Ledger</span>
             <div className="text-3xl font-bold mt-1 text-emerald-400">SLE {liveBalance.toFixed(2)}</div>
             <div className="text-xs font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">Account ID: {monimeAccountId}</div>
@@ -240,7 +251,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
                 <button onClick={() => setNetworkProvider('orange')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
                 <button onClick={() => setNetworkProvider('afrimoney')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
               </div>
-              <input type="tel" placeholder="Mobile Money Number (e.g. 077...)" value={payoutPhone} onChange={(e) => setPayoutPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500" />
+              <input type="tel" placeholder="e.g. 077123456 or 030123456" value={payoutPhone} onChange={(e) => setPayoutPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500" />
             </div>
             <button onClick={executePayout} disabled={isProcessingPayout || !payoutAmount || !payoutPhone} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
               {isProcessingPayout ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Payout
@@ -274,4 +285,22 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   );
 }
 
-// ... DriverTrips remains the same ...
+function DriverTrips({ profile }: any) {
+  const [trips, setTrips] = useState<any[]>([]);
+  useEffect(() => { 
+    if (!profile?.id) return;
+    supabase.from('bookings').select('*').eq('driver_id', profile.id).order('created_at', { ascending: false }).then(({data}) => { if(data) setTrips(data); }); 
+  }, [profile?.id]);
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto space-y-4">
+      <h1 className="text-3xl font-bold text-slate-900 mb-6">Earnings History</h1>
+      {trips.length === 0 ? <div className="text-center text-slate-500 py-10">No trips completed yet.</div> : trips.map(t => (
+        <div key={t.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
+          <div><div className="font-bold text-slate-900 capitalize">{t.service_type}</div><div className="text-xs text-slate-500 mt-1">{new Date(t.created_at).toLocaleDateString()}</div></div>
+          <div className="text-right"><div className="font-bold text-lg text-emerald-600">+ SLE {t.fare_amount}</div><div className="text-[10px] text-slate-500 font-bold uppercase mt-1">{t.status}</div></div>
+        </div>
+      ))}
+    </div>
+  );
+}

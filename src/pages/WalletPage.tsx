@@ -3,19 +3,16 @@ import { supabase } from '@/lib/supabase';
 import { Wallet, X, Smartphone, Loader2, ArrowUpRight, ArrowDownLeft, Lock, Users } from 'lucide-react';
 
 export function WalletPage({ profile, wallet, onClose }: any) {
-  // Load State
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessingLoad, setIsProcessingLoad] = useState(false);
 
-  // Payout State (Mobile Money)
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
-  const [payoutPhone, setPayoutPhone] = useState(profile?.phone || '');
+  const [payoutPhone, setPayoutPhone] = useState(''); // CRITICAL FIX: Starts entirely blank
   const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
   const [isProcessingPayout, setIsProcessingPayout] = useState(false);
 
-  // Transfer State (Internal Account)
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferAmount, setTransferAmount] = useState('');
   const [transferRecipient, setTransferRecipient] = useState('');
@@ -45,7 +42,7 @@ export function WalletPage({ profile, wallet, onClose }: any) {
   const closeModals = () => {
     setIsLoadModalOpen(false); setIsPayoutModalOpen(false); setIsTransferModalOpen(false);
     setIsProcessingLoad(false); setIsProcessingPayout(false); setIsProcessingTransfer(false);
-    setLoadAmount(''); setPayoutAmount(''); setTransferAmount(''); setTransferRecipient('');
+    setLoadAmount(''); setPayoutAmount(''); setTransferAmount(''); setTransferRecipient(''); setPayoutPhone('');
   };
 
   const executeLoad = async () => {
@@ -159,7 +156,7 @@ export function WalletPage({ profile, wallet, onClose }: any) {
                 <button onClick={() => setNetworkProvider('orange')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
                 <button onClick={() => setNetworkProvider('afrimoney')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
               </div>
-              <input type="tel" placeholder="Mobile Money Number (e.g. 077...)" value={payoutPhone} onChange={(e) => setPayoutPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500" />
+              <input type="tel" placeholder="e.g. 077123456 or 030123456" value={payoutPhone} onChange={(e) => setPayoutPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500" />
             </div>
             <button onClick={executePayout} disabled={isProcessingPayout || !payoutAmount || !payoutPhone} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
               {isProcessingPayout ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Payout

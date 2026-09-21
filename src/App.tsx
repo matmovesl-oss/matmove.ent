@@ -20,7 +20,6 @@ import { UpdatePassword } from '@/pages/UpdatePassword';
 function CustomerPortal() {
   const { session, loading } = useAuth();
 
-  // 1. Wait for Supabase to finish checking the session BEFORE panicking
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -29,12 +28,11 @@ function CustomerPortal() {
     );
   }
 
-  // 2. If it finishes loading and there truly is no session, then kick to login
+  // Intercept unauthorized users and send them explicitly to the Landing Page (Root)
   if (!session) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
-  // 3. Otherwise, enter the Portal and let the Smart PIN Tracker do its job!
   return <PortalApp />;
 }
 
@@ -47,7 +45,6 @@ export default function App() {
 
       {/* SECURE PASSWORD ROUTES */}
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      {/* This MUST match the path you configure in Supabase Email Templates */}
       <Route path="/reset-password" element={<UpdatePassword />} /> 
 
       {/* ONBOARDING ROUTES */}
@@ -67,7 +64,7 @@ export default function App() {
       <Route path="/customer/driver/*" element={<CustomerPortal />} />
       <Route path="/customer/merchant/*" element={<CustomerPortal />} />
 
-      {/* FALLBACK */}
+      {/* FALLBACK -> Redirect to Landing Page */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

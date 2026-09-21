@@ -34,18 +34,39 @@ export function PortalApp() {
   const [activeSection, setActiveSection] = useState<PortalSection>('home');
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // CRITICAL FIX: Intercept Browser "Back" button (BFCache) from Monime checkout
+  // CRITICAL FIX: Intercept Monime Return URLs and Browser Back button caching
   useEffect(() => {
+    // 1. If returning from Monime, clean the URL immediately so the "Back" button works correctly
+    if (location.search.includes('payment=')) {
+      const cleanPath = location.pathname;
+      window.history.replaceState({}, document.title, cleanPath);
+      // Force reload to sync latest balance from Monime
+      window.location.reload();
+      return;
+    }
+
+    // 2. Prevent BFCache from showing stale states
     const handlePageShow = (e: PageTransitionEvent) => {
       if (e.persisted) {
-        // Force the app into locked state and hard reload to clear spinners
         localStorage.setItem('matmove_last_active', '0');
         window.location.reload();
       }
     };
     window.addEventListener('pageshow', handlePageShow);
     return () => window.removeEventListener('pageshow', handlePageShow);
-  }, []);
+  }, [location]);
+
+  // Handle Android/Browser Back Button Navigation gracefully
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (location.pathname.includes('/customer')) {
+        e.preventDefault();
+        navigate('/', { replace: true });
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [navigate, location.pathname]);
 
   useEffect(() => {
     const checkIdleState = () => {
