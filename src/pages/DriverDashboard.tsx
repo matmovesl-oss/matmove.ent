@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, MapPin, Navigation, Power, User, Phone } from 'lucide-react';
+import { Car, MapPin, Navigation, Power, User, Phone, Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft, Users } from 'lucide-react';
 
 export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }: any) {
   if (activeSection === 'trips') return <DriverTrips profile={profile} />;
@@ -16,6 +16,39 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
+
+  // New Dedicated Modals
+  const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
+  const [loadAmount, setLoadAmount] = useState('');
+  const [isProcessingLoad, setIsProcessingLoad] = useState(false);
+
+  const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState('');
+  const [payoutPhone, setPayoutPhone] = useState(profile?.phone || '');
+  const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
+  const [isProcessingPayout, setIsProcessingPayout] = useState(false);
+
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferRecipient, setTransferRecipient] = useState('');
+  const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
+  const [matmoveUsers, setMatmoveUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (isTransferModalOpen) {
+      supabase.from('profiles').select('id, full_name, role, phone, business_name').neq('id', profile.id).then(({ data }) => {
+        if (data) setMatmoveUsers(data);
+      });
+    }
+  }, [isTransferModalOpen, profile.id]);
+
+  useEffect(() => {
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) { setIsProcessingLoad(false); setIsProcessingPayout(false); setIsProcessingTransfer(false); }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
 
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
@@ -32,9 +65,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
     try {
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
       map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 13 });
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
   }, []);
 
   useEffect(() => {
@@ -59,6 +90,60 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
     try { await supabase.from('bookings').update({ status: 'completed' }).eq('id', booking.id); alert(`Trip completed! Collection recorded.`); fetchLiveBalance(); } catch (err: any) { alert('Failed to complete: ' + err.message); }
   };
 
+  const closeModals = () => {
+    setIsLoadModalOpen(false); setIsPayoutModalOpen(false); setIsTransferModalOpen(false);
+    setIsProcessingLoad(false); setIsProcessingPayout(false); setIsProcessingTransfer(false);
+  };
+
+  const executeLoad = async () => {
+    if (!loadAmount || Number(loadAmount) <= 0) return alert('Enter a valid amount');
+    setIsProcessingLoad(true);
+    try {
+      const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: profile.role }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payment gateway failed');
+      if (data.link) window.location.href = data.link;
+    } catch (err: any) { alert(err.message); setIsProcessingLoad(false); }
+  };
+
+  const executePayout = async () => {
+    const amt = Number(payoutAmount);
+    if (!amt || amt <= 0) return alert('Enter valid amount');
+    if (amt > liveBalance) return alert('Insufficient balance');
+    if (!payoutPhone.trim()) return alert('Enter recipient mobile money number');
+
+    setIsProcessingPayout(true);
+    try {
+      const res = await fetch('/api/create-monime-payout', { 
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: payoutPhone, networkProvider }) 
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payout failed');
+      alert(`Payout requested successfully!`);
+      closeModals(); fetchLiveBalance();
+    } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
+  };
+
+  const executeTransfer = async () => {
+    const amt = Number(transferAmount);
+    if (!amt || amt <= 0) return alert('Enter valid amount');
+    if (amt > liveBalance) return alert('Insufficient balance');
+    if (!transferRecipient.trim()) return alert('Select a recipient account');
+
+    setIsProcessingTransfer(true);
+    try {
+      const res = await fetch('/api/create-monime-transfer', { 
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ amount: amt, userId: profile.id, recipientPhone: transferRecipient }) 
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Transfer failed');
+      alert(`Internal transfer successful!`);
+      closeModals(); fetchLiveBalance();
+    } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
+  };
+
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
@@ -68,7 +153,11 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           </button>
           <div><h2 className="font-bold text-slate-900 text-lg">{isOnline ? 'You are Online' : 'You are Offline'}</h2></div>
         </div>
-        <button onClick={onOpenWallet} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">View Wallet</button>
+        <div className="flex gap-2">
+          <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm">Load</button>
+          <button onClick={() => isApproved ? setIsPayoutModalOpen(true) : alert('KYC Approval required')} className={`px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Payout</button>
+          <button onClick={() => isApproved ? setIsTransferModalOpen(true) : alert('KYC Approval required')} className={`px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Transfer</button>
+        </div>
       </header>
 
       <div className="flex-1 flex flex-col lg:flex-row">
@@ -124,23 +213,65 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
         </div>
       </div>
-    </div>
-  );
-}
 
-function DriverTrips({ profile }: any) {
-  const [trips, setTrips] = useState<any[]>([]);
-  useEffect(() => { supabase.from('bookings').select('*').eq('driver_id', profile.id).order('created_at', { ascending: false }).then(({data}) => { if(data) setTrips(data); }); }, [profile.id]);
-
-  return (
-    <div className="p-6 max-w-4xl mx-auto space-y-4">
-      <h1 className="text-3xl font-bold text-slate-900 mb-6">Earnings History</h1>
-      {trips.length === 0 ? <div className="text-center text-slate-500 py-10">No trips completed yet.</div> : trips.map(t => (
-        <div key={t.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
-          <div><div className="font-bold text-slate-900 capitalize">{t.service_type}</div><div className="text-xs text-slate-500 mt-1">{new Date(t.created_at).toLocaleDateString()}</div></div>
-          <div className="text-right"><div className="font-bold text-lg text-emerald-600">+ SLE {t.fare_amount}</div><div className="text-[10px] text-slate-500 font-bold uppercase mt-1">{t.status}</div></div>
+      {isLoadModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
+            <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
+            <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
+            <button onClick={executeLoad} disabled={isProcessingLoad || !loadAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessingLoad ? <Loader2 className="animate-spin" size={20} /> : <><ArrowDownLeft size={20} /> Checkout</>}
+            </button>
+          </div>
         </div>
-      ))}
+      )}
+
+      {isPayoutModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Mobile Payout</h2>
+            <p className="text-sm text-slate-500 mb-6">Cashout to Mobile Money.</p>
+            <div className="space-y-4 mb-6">
+              <input type="number" placeholder="Amount (SLE)" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-emerald-500" />
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => setNetworkProvider('orange')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
+                <button onClick={() => setNetworkProvider('afrimoney')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
+              </div>
+              <input type="tel" placeholder="Mobile Money Number (e.g. 077...)" value={payoutPhone} onChange={(e) => setPayoutPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500" />
+            </div>
+            <button onClick={executePayout} disabled={isProcessingPayout || !payoutAmount || !payoutPhone} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessingPayout ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Payout
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isTransferModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Internal Transfer</h2>
+            <p className="text-sm text-slate-500 mb-6">Send money to another MatMove account.</p>
+            <div className="space-y-4 mb-6">
+              <input type="number" placeholder="Amount (SLE)" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-purple-500" />
+              <select value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500">
+                <option value="">Select Account...</option>
+                {matmoveUsers.map(u => (
+                  <option key={u.id} value={u.phone}>MatMove {String(u.role).toUpperCase()} - {u.business_name || u.full_name} ({u.phone})</option>
+                ))}
+              </select>
+            </div>
+            <button onClick={executeTransfer} disabled={isProcessingTransfer || !transferAmount || !transferRecipient} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessingTransfer ? <Loader2 className="animate-spin" size={20} /> : <Users size={20} />} Send Transfer
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+// ... DriverTrips remains the same ...

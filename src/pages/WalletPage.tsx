@@ -1,27 +1,39 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Wallet, X, Smartphone, Loader2, ArrowUpRight, ArrowDownLeft, Lock } from 'lucide-react';
+import { Wallet, X, Smartphone, Loader2, ArrowUpRight, ArrowDownLeft, Lock, Users } from 'lucide-react';
 
 export function WalletPage({ profile, wallet, onClose }: any) {
+  // Load State
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessingLoad, setIsProcessingLoad] = useState(false);
 
+  // Payout State (Mobile Money)
+  const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState('');
+  const [payoutPhone, setPayoutPhone] = useState(profile?.phone || '');
+  const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
+  const [isProcessingPayout, setIsProcessingPayout] = useState(false);
+
+  // Transfer State (Internal Account)
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferAmount, setTransferAmount] = useState('');
-  const [transferTarget, setTransferTarget] = useState<'mobile_money' | 'matmove_user'>('mobile_money');
-  const [transferPhone, setTransferPhone] = useState(profile?.phone || '');
-  const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
-  const [isTransferring, setIsTransferring] = useState(false);
-  
-  // CRITICAL FIX: Missing state for the internal user dropdown
+  const [transferRecipient, setTransferRecipient] = useState('');
+  const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
   const [matmoveUsers, setMatmoveUsers] = useState<any[]>([]);
 
   const isApproved = profile?.role === 'rider' || profile?.kyc_status === 'approved';
   const balance = Number(wallet?.balance || 0);
   const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
 
-  // Securely fetch MatMove users for the Internal Transfer dropdown
+  useEffect(() => {
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) { setIsProcessingLoad(false); setIsProcessingPayout(false); setIsProcessingTransfer(false); }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
+
   useEffect(() => {
     if (isTransferModalOpen) {
       supabase.from('profiles').select('id, full_name, role, phone, business_name').neq('id', profile.id).then(({ data }) => {
@@ -30,67 +42,59 @@ export function WalletPage({ profile, wallet, onClose }: any) {
     }
   }, [isTransferModalOpen, profile.id]);
 
-  useEffect(() => {
-    const handlePageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) { setIsProcessing(false); setIsLoadModalOpen(false); }
-    };
-    window.addEventListener('pageshow', handlePageShow);
-    return () => window.removeEventListener('pageshow', handlePageShow);
-  }, []);
-
   const closeModals = () => {
-    setIsLoadModalOpen(false);
-    setIsTransferModalOpen(false);
-    setIsProcessing(false);
-    setIsTransferring(false);
-    setLoadAmount('');
-    setTransferAmount('');
-  };
-
-  const handleOpenTransfer = () => {
-    if (!isApproved) return alert('Transfers are unlocked once your KYC application is approved by MatMove Admin.');
-    setIsTransferModalOpen(true);
+    setIsLoadModalOpen(false); setIsPayoutModalOpen(false); setIsTransferModalOpen(false);
+    setIsProcessingLoad(false); setIsProcessingPayout(false); setIsProcessingTransfer(false);
+    setLoadAmount(''); setPayoutAmount(''); setTransferAmount(''); setTransferRecipient('');
   };
 
   const executeLoad = async () => {
     if (!loadAmount || Number(loadAmount) <= 0) return alert('Enter a valid amount');
-    setIsProcessing(true);
+    setIsProcessingLoad(true);
     try {
-      const res = await fetch('/api/create-monime-checkout', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: profile.role }) 
-      });
+      const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: profile.role }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment gateway failed');
-      if (data.link || data.checkoutUrl) window.location.href = data.link || data.checkoutUrl;
-    } catch (err: any) { alert(err.message); setIsProcessing(false); }
+      if (data.link) window.location.href = data.link;
+    } catch (err: any) { alert(err.message); setIsProcessingLoad(false); }
+  };
+
+  const executePayout = async () => {
+    const amt = Number(payoutAmount);
+    if (!amt || amt <= 0) return alert('Enter valid amount');
+    if (amt > balance) return alert('Insufficient balance');
+    if (!payoutPhone.trim()) return alert('Enter recipient mobile money number');
+
+    setIsProcessingPayout(true);
+    try {
+      const res = await fetch('/api/create-monime-payout', { 
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: payoutPhone, networkProvider }) 
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payout failed');
+      alert(`Payout requested successfully!`);
+      closeModals(); window.location.reload();
+    } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
   };
 
   const executeTransfer = async () => {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
     if (amt > balance) return alert('Insufficient balance');
-    if (!transferPhone.trim()) return alert('Select or enter a recipient');
+    if (!transferRecipient.trim()) return alert('Select a recipient account');
 
-    setIsTransferring(true);
+    setIsProcessingTransfer(true);
     try {
       const res = await fetch('/api/create-monime-transfer', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ 
-          amount: amt, 
-          userId: profile.id, 
-          transferType: transferTarget,
-          destinationPhone: transferPhone,
-          networkProvider: networkProvider
-        }) 
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ amount: amt, userId: profile.id, recipientPhone: transferRecipient }) 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
-      alert(`Transfer processed successfully!`);
+      alert(`Internal transfer successful!`);
       closeModals(); window.location.reload();
-    } catch (err: any) { alert(err.message); setIsTransferring(false); }
+    } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
   return (
@@ -108,37 +112,57 @@ export function WalletPage({ profile, wallet, onClose }: any) {
       </div>
 
       <h2 className="text-lg font-bold text-slate-900 mb-4">Wallet Actions</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div onClick={() => setIsLoadModalOpen(true)} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:border-blue-500 cursor-pointer transition flex flex-col justify-between">
-          <div className="flex items-center gap-3 mb-4"><div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center"><ArrowDownLeft size={24} /></div><div><h3 className="font-bold text-slate-900 text-base">Load Wallet</h3><p className="text-xs text-slate-500">Top up via Mobile Money.</p></div></div>
-          <button className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition text-sm">Add Funds</button>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <button onClick={() => setIsLoadModalOpen(true)} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:border-blue-500 flex flex-col items-center justify-center gap-3 transition">
+          <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center"><ArrowDownLeft size={24} /></div>
+          <span className="font-bold text-slate-900">Load Wallet</span>
+        </button>
 
-        <div onClick={handleOpenTransfer} className={`bg-white border rounded-3xl p-6 shadow-sm flex flex-col justify-between transition ${isApproved ? 'border-emerald-200 hover:border-emerald-500 cursor-pointer' : 'border-slate-100 opacity-60 cursor-not-allowed'}`}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isApproved ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-              {isApproved ? <ArrowUpRight size={24} /> : <Lock size={24} />}
-            </div>
-            <div>
-              <h3 className={`font-bold text-base ${isApproved ? 'text-slate-900' : 'text-slate-500'}`}>Transfer Funds</h3>
-              <p className="text-xs text-slate-500">{isApproved ? 'Send to MatMove users or Mobile Money.' : 'Admin KYC Approval required.'}</p>
-            </div>
+        <button onClick={() => isApproved ? setIsPayoutModalOpen(true) : alert('KYC Approval required.')} className={`bg-white border rounded-2xl p-5 shadow-sm flex flex-col items-center justify-center gap-3 transition ${isApproved ? 'border-emerald-200 hover:border-emerald-500' : 'border-slate-100 opacity-60'}`}>
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isApproved ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+            {isApproved ? <Smartphone size={24} /> : <Lock size={24} />}
           </div>
-          <button disabled={!isApproved} className={`w-full font-bold py-3 rounded-xl transition text-sm ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm' : 'bg-slate-200 text-slate-400'}`}>
-            {isApproved ? 'Transfer Funds' : 'Transfers Locked'}
-          </button>
-        </div>
+          <span className={`font-bold ${isApproved ? 'text-slate-900' : 'text-slate-400'}`}>Mobile Payout</span>
+        </button>
+
+        <button onClick={() => isApproved ? setIsTransferModalOpen(true) : alert('KYC Approval required.')} className={`bg-white border rounded-2xl p-5 shadow-sm flex flex-col items-center justify-center gap-3 transition ${isApproved ? 'border-purple-200 hover:border-purple-500' : 'border-slate-100 opacity-60'}`}>
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isApproved ? 'bg-purple-50 text-purple-600' : 'bg-slate-100 text-slate-400'}`}>
+            {isApproved ? <Users size={24} /> : <Lock size={24} />}
+          </div>
+          <span className={`font-bold ${isApproved ? 'text-slate-900' : 'text-slate-400'}`}>Internal Transfer</span>
+        </button>
       </div>
 
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
-            <button onClick={executeLoad} disabled={isProcessing || !loadAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <><Smartphone size={20} /> Checkout with Monime</>}
+            <button onClick={executeLoad} disabled={isProcessingLoad || !loadAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessingLoad ? <Loader2 className="animate-spin" size={20} /> : <><ArrowDownLeft size={20} /> Checkout</>}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isPayoutModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Mobile Payout</h2>
+            <p className="text-sm text-slate-500 mb-6">Cashout to Mobile Money.</p>
+            <div className="space-y-4 mb-6">
+              <input type="number" placeholder="Amount (SLE)" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-emerald-500" />
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => setNetworkProvider('orange')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
+                <button onClick={() => setNetworkProvider('afrimoney')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
+              </div>
+              <input type="tel" placeholder="Mobile Money Number (e.g. 077...)" value={payoutPhone} onChange={(e) => setPayoutPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500" />
+            </div>
+            <button onClick={executePayout} disabled={isProcessingPayout || !payoutAmount || !payoutPhone} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessingPayout ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Payout
             </button>
           </div>
         </div>
@@ -147,40 +171,20 @@ export function WalletPage({ profile, wallet, onClose }: any) {
       {isTransferModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Transfer Funds</h2>
-            <p className="text-sm text-slate-500 mb-6">Send money instantly via Monime.</p>
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Internal Transfer</h2>
+            <p className="text-sm text-slate-500 mb-6">Send money to another MatMove account.</p>
             <div className="space-y-4 mb-6">
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase">Transfer Amount (SLE)</label>
-                <input type="number" placeholder="0.00" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none mt-1 focus:border-blue-500" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase">Transfer Destination</label>
-                <select value={transferTarget} onChange={(e) => { setTransferTarget(e.target.value as any); setTransferPhone(''); }} className="w-full border p-4 rounded-xl font-bold text-sm outline-none mt-1 focus:border-blue-500 bg-white appearance-none">
-                  <option value="mobile_money">Mobile Money (External Cashout)</option>
-                  <option value="matmove_user">MatMove Account (Internal Transfer)</option>
-                </select>
-              </div>
-              {transferTarget === 'mobile_money' ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => setNetworkProvider('orange')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
-                    <button onClick={() => setNetworkProvider('afrimoney')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
-                  </div>
-                  <input type="tel" placeholder="Mobile Money Number (+232...)" value={transferPhone} onChange={(e) => setTransferPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-blue-500" />
-                </>
-              ) : (
-                <select value={transferPhone} onChange={(e) => setTransferPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none mt-1 focus:border-blue-500 bg-white">
-                  <option value="">Select a MatMove Account...</option>
-                  {matmoveUsers?.map(u => (
-                    <option key={u.id} value={u.phone}>MatMove {String(u.role).toUpperCase()} - {u.business_name || u.full_name} ({u.phone})</option>
-                  ))}
-                </select>
-              )}
+              <input type="number" placeholder="Amount (SLE)" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-purple-500" />
+              <select value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500">
+                <option value="">Select Account...</option>
+                {matmoveUsers.map(u => (
+                  <option key={u.id} value={u.phone}>MatMove {String(u.role).toUpperCase()} - {u.business_name || u.full_name} ({u.phone})</option>
+                ))}
+              </select>
             </div>
-            <button onClick={executeTransfer} disabled={isTransferring || !transferAmount || !transferPhone} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isTransferring ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Transfer
+            <button onClick={executeTransfer} disabled={isProcessingTransfer || !transferAmount || !transferRecipient} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessingTransfer ? <Loader2 className="animate-spin" size={20} /> : <Users size={20} />} Send Transfer
             </button>
           </div>
         </div>
