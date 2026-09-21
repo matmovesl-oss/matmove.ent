@@ -157,7 +157,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       finalAmount = Number(offerAmount);
       if (!finalAmount || finalAmount <= 0) return alert('Preview route to calculate offer.');
       if (finalAmount < PRICING_RATES[vehicleType].min) return alert(`Minimum fare is SLE ${PRICING_RATES[vehicleType].min}`);
-      if (liveBalance < finalAmount) return alert('Insufficient funds. Load your wallet first.');
     } else { finalStatus = 'pending_admin'; }
 
     setIsRequesting(true);
@@ -193,7 +192,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const executePayout = async () => {
     const amt = Number(payoutAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (amt > liveBalance) return alert('Insufficient balance');
     if (!payoutPhone.trim()) return alert('Enter recipient mobile money number');
 
     setIsProcessingPayout(true);
@@ -212,7 +210,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const executeTransfer = async () => {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (amt > liveBalance) return alert('Insufficient balance');
     if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID (starts with fac-)');
 
     setIsProcessingTransfer(true);
@@ -234,8 +231,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋</h1></div>
         <div className="flex gap-2">
           <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm">Load</button>
-          <button onClick={() => isApproved ? setIsPayoutModalOpen(true) : alert('KYC Approval required')} className={`px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Payout</button>
-          <button onClick={() => isApproved ? setIsTransferModalOpen(true) : alert('KYC Approval required')} className={`px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Transfer</button>
+          <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm">Payout</button>
+          <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm">Transfer</button>
         </div>
       </header>
 
@@ -247,9 +244,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
           <div>
             <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">MatMove Unified Wallet</span>
             <div className="text-3xl font-bold mt-1 text-blue-400">SLE {liveBalance.toFixed(2)}</div>
-            <div className="text-xs font-mono text-slate-400 mt-2 bg-slate-800 inline-flex flex-col sm:flex-row gap-2 px-2 py-1 rounded">
-              <span>Account ID:</span> <span className="select-all">{monimeAccountId}</span>
-            </div>
+            <div className="text-xs font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">Account ID: {monimeAccountId}</div>
           </div>
           <Wallet size={32} className="text-slate-700 mr-12 pointer-events-none" />
         </div>

@@ -81,7 +81,6 @@ export function WalletPage({ profile, wallet, onClose }: any) {
   const executePayout = async () => {
     const amt = Number(payoutAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (amt > liveBalance) return alert('Insufficient balance');
     if (!payoutPhone.trim()) return alert('Enter recipient mobile money number');
 
     setIsProcessingPayout(true);
@@ -100,7 +99,6 @@ export function WalletPage({ profile, wallet, onClose }: any) {
   const executeTransfer = async () => {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (amt > liveBalance) return alert('Insufficient balance');
     if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID (starts with fac-)');
 
     setIsProcessingTransfer(true);

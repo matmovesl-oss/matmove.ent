@@ -79,7 +79,6 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const handleAcceptBooking = async (booking: any) => {
     if (!isApproved) return alert('You must be KYC Approved by an Admin to accept trips.');
     const commission = Number((booking.fare_amount * 0.15).toFixed(2));
-    if (liveBalance < commission) return alert(`Insufficient funds. You need at least SLE ${commission} in your wallet to cover the platform commission.`);
     try { await supabase.from('bookings').update({ status: 'accepted', driver_id: profile.id }).eq('id', booking.id); fetchLiveBalance(); } catch (err: any) { alert('Failed: ' + err.message); }
   };
 
@@ -107,7 +106,6 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const executePayout = async () => {
     const amt = Number(payoutAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (amt > liveBalance) return alert('Insufficient balance');
     if (!payoutPhone.trim()) return alert('Enter recipient mobile money number');
 
     setIsProcessingPayout(true);
@@ -126,7 +124,6 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const executeTransfer = async () => {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (amt > liveBalance) return alert('Insufficient balance');
     if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID (starts with fac-)');
 
     setIsProcessingTransfer(true);

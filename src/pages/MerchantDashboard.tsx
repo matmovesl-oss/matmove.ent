@@ -158,7 +158,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       finalAmount = Number(offerAmount);
       if (!finalAmount || finalAmount <= 0) return alert('Preview route to calculate offer.');
       if (finalAmount < PRICING_RATES[vehicleType].min) return alert(`Minimum fare is SLE ${PRICING_RATES[vehicleType].min}`);
-      if (liveBalance < finalAmount) return alert('Insufficient funds. Load your wallet first.');
     }
 
     setIsRequesting(true);
