@@ -6,12 +6,10 @@ export function WalletPage({ profile, wallet, onClose }: any) {
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // New Transfer State
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferAmount, setTransferAmount] = useState('');
   const [transferTarget, setTransferTarget] = useState<'mobile_money' | 'matmove_user'>('mobile_money');
   const [transferPhone, setTransferPhone] = useState(profile?.phone || '');
-  const [transferEmail, setTransferEmail] = useState('');
   const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
   const [isTransferring, setIsTransferring] = useState(false);
 
@@ -59,8 +57,7 @@ export function WalletPage({ profile, wallet, onClose }: any) {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
     if (amt > balance) return alert('Insufficient balance');
-    if (transferTarget === 'mobile_money' && !transferPhone.trim()) return alert('Enter Mobile Money number');
-    if (transferTarget === 'matmove_user' && !transferEmail.trim()) return alert('Enter recipient email');
+    if (!transferPhone.trim()) return alert('Enter the recipient\'s phone number');
 
     setIsTransferring(true);
     try {
@@ -72,7 +69,6 @@ export function WalletPage({ profile, wallet, onClose }: any) {
           userId: profile.id, 
           transferType: transferTarget,
           destinationPhone: transferPhone,
-          destinationEmail: transferEmail,
           networkProvider: networkProvider
         }) 
       });
@@ -125,9 +121,7 @@ export function WalletPage({ profile, wallet, onClose }: any) {
             <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
-
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
-
             <button onClick={executeLoad} disabled={isProcessing || !loadAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
               {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <><Smartphone size={20} /> Checkout with Monime</>}
             </button>
@@ -151,22 +145,19 @@ export function WalletPage({ profile, wallet, onClose }: any) {
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase">Transfer Destination</label>
                 <select value={transferTarget} onChange={(e) => setTransferTarget(e.target.value as any)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none mt-1 focus:border-blue-500 bg-white appearance-none">
-                  <option value="mobile_money">Mobile Money (External)</option>
-                  <option value="matmove_user">MatMove Account (Internal)</option>
+                  <option value="mobile_money">Mobile Money (External Cashout)</option>
+                  <option value="matmove_user">MatMove Account (Internal Transfer)</option>
                 </select>
               </div>
 
-              {transferTarget === 'mobile_money' ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => setNetworkProvider('orange')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
-                    <button onClick={() => setNetworkProvider('afrimoney')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
-                  </div>
-                  <input type="tel" placeholder="Mobile Money Number (+232...)" value={transferPhone} onChange={(e) => setTransferPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-blue-500" />
-                </>
-              ) : (
-                <input type="email" placeholder="Recipient's Email Address" value={transferEmail} onChange={(e) => setTransferEmail(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-blue-500" />
+              {transferTarget === 'mobile_money' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => setNetworkProvider('orange')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
+                  <button onClick={() => setNetworkProvider('afrimoney')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
+                </div>
               )}
+              
+              <input type="tel" placeholder={transferTarget === 'mobile_money' ? "Mobile Money Number (+232...)" : "Recipient's Registered Phone (+232...)"} value={transferPhone} onChange={(e) => setTransferPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-blue-500" />
             </div>
 
             <button onClick={executeTransfer} disabled={isTransferring || !transferAmount} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
