@@ -17,7 +17,6 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
 
-  // New Dedicated Modals
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessingLoad, setIsProcessingLoad] = useState(false);
@@ -32,22 +31,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const [transferAmount, setTransferAmount] = useState('');
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
-  const [monimeAccounts, setMonimeAccounts] = useState<any[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  useEffect(() => {
-    if (isTransferModalOpen) {
-      fetch('/api/get-monime-accounts')
-        .then(res => res.json())
-        .then(data => {
-          if (data.accounts) {
-            const otherAccounts = data.accounts.filter((acc: any) => acc.id !== monimeAccountId);
-            setMonimeAccounts(otherAccounts);
-          }
-        })
-        .catch(err => console.error("Failed to load Monime accounts:", err));
-    }
-  }, [isTransferModalOpen, monimeAccountId]);
 
   useEffect(() => {
     const handlePageShow = (e: PageTransitionEvent) => {
@@ -123,6 +107,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const executePayout = async () => {
     const amt = Number(payoutAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
+    if (amt > liveBalance) return alert('Insufficient balance');
     if (!payoutPhone.trim()) return alert('Enter recipient mobile money number');
 
     setIsProcessingPayout(true);
@@ -141,13 +126,14 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const executeTransfer = async () => {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (!transferRecipient.trim()) return alert('Select a recipient account');
+    if (amt > liveBalance) return alert('Insufficient balance');
+    if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID (starts with fac-)');
 
     setIsProcessingTransfer(true);
     try {
       const res = await fetch('/api/create-monime-transfer', { 
         method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient }) 
+        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient.trim() }) 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
@@ -181,7 +167,9 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
             </button>
             <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Driver Ledger</span>
             <div className="text-3xl font-bold mt-1 text-emerald-400">SLE {liveBalance.toFixed(2)}</div>
-            <div className="text-xs font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">Account ID: {monimeAccountId}</div>
+            <div className="text-xs font-mono text-slate-400 mt-2 bg-slate-800 inline-flex flex-col sm:flex-row gap-2 px-2 py-1 rounded">
+               <span>Account ID:</span> <span className="select-all">{monimeAccountId}</span>
+            </div>
           </div>
 
           <h3 className="font-bold text-xl text-slate-900 pt-2">Dispatch Radar</h3>
@@ -269,15 +257,10 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Internal Transfer</h2>
-            <p className="text-sm text-slate-500 mb-6">Send money to another MatMove account.</p>
+            <p className="text-sm text-slate-500 mb-6">Paste the recipient's exact MatMove Account ID.</p>
             <div className="space-y-4 mb-6">
               <input type="number" placeholder="Amount (SLE)" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-purple-500" />
-              <select value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500">
-                <option value="">Select Account...</option>
-                {monimeAccounts.map(u => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
+              <input type="text" placeholder="Recipient ID (e.g. fac-k6V8...)" value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500" />
             </div>
             <button onClick={executeTransfer} disabled={isProcessingTransfer || !transferAmount || !transferRecipient} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
               {isProcessingTransfer ? <Loader2 className="animate-spin" size={20} /> : <Users size={20} />} Send Transfer

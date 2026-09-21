@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, UploadCloud, Minus, Smartphone, ArrowUpRight, Users, ArrowDownLeft } from 'lucide-react';
+import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, UploadCloud, Minus, Smartphone, ArrowUpRight, Users, ArrowDownLeft, Trash2 } from 'lucide-react';
 
 type ServiceType = 'delivery' | 'ride' | 'scheduled';
 type VehicleType = 'keke' | 'bike' | 'car' | 'van';
@@ -30,7 +30,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [isRequesting, setIsRequesting] = useState(false);
   const [isRouting, setIsRouting] = useState(false);
 
-  // New Dedicated Modals
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessingLoad, setIsProcessingLoad] = useState(false);
@@ -45,7 +44,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [transferAmount, setTransferAmount] = useState('');
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
-  const [monimeAccounts, setMonimeAccounts] = useState<any[]>([]);
 
   const isApproved = profile?.kyc_status === 'approved';
   const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
@@ -65,20 +63,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   }, []);
 
   useEffect(() => {
-    if (isTransferModalOpen) {
-      fetch('/api/get-monime-accounts')
-        .then(res => res.json())
-        .then(data => {
-          if (data.accounts) {
-            const otherAccounts = data.accounts.filter((acc: any) => acc.id !== monimeAccountId);
-            setMonimeAccounts(otherAccounts);
-          }
-        })
-        .catch(err => console.error("Failed to load Monime accounts:", err));
-    }
-  }, [isTransferModalOpen, monimeAccountId]);
-
-  useEffect(() => {
     const handlePageShow = (e: PageTransitionEvent) => {
       if (e.persisted) { setIsProcessingLoad(false); setIsProcessingPayout(false); setIsProcessingTransfer(false); }
     };
@@ -86,7 +70,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     return () => window.removeEventListener('pageshow', handlePageShow);
   }, []);
 
-  // CRITICAL FIX: Direct Sync with Monime via API
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
     setIsRefreshing(true);
@@ -236,13 +219,13 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const executeTransfer = async () => {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (!transferRecipient.trim()) return alert('Select a recipient account');
+    if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID (starts with fac-)');
 
     setIsProcessingTransfer(true);
     try {
       const res = await fetch('/api/create-monime-transfer', { 
         method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient }) 
+        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient.trim() }) 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
@@ -273,7 +256,9 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
           <div>
             <span className="text-orange-200 text-xs font-bold uppercase tracking-wider">Store Operating Wallet</span>
             <div className="text-5xl font-bold mt-2">SLE {liveBalance.toFixed(2)}</div>
-            <div className="text-xs font-mono text-white/70 mt-2 bg-black/20 inline-block px-2 py-1 rounded">Account ID: {monimeAccountId}</div>
+            <div className="text-xs font-mono text-white/70 mt-2 bg-black/20 inline-flex flex-col sm:flex-row gap-2 px-2 py-1 rounded">
+               <span>Account ID:</span> <span className="select-all">{monimeAccountId}</span>
+            </div>
           </div>
         </div>
 
@@ -390,15 +375,10 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Internal Transfer</h2>
-            <p className="text-sm text-slate-500 mb-6">Send money to another MatMove account.</p>
+            <p className="text-sm text-slate-500 mb-6">Paste the recipient's exact MatMove Account ID.</p>
             <div className="space-y-4 mb-6">
               <input type="number" placeholder="Amount (SLE)" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-purple-500" />
-              <select value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500">
-                <option value="">Select Account...</option>
-                {monimeAccounts.map((acc: any) => (
-                  <option key={acc.id} value={acc.id}>{acc.name}</option>
-                ))}
-              </select>
+              <input type="text" placeholder="Recipient ID (e.g. fac-k6V8...)" value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500" />
             </div>
             <button onClick={executeTransfer} disabled={isProcessingTransfer || !transferAmount || !transferRecipient} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
               {isProcessingTransfer ? <Loader2 className="animate-spin" size={20} /> : <Users size={20} />} Send Transfer
@@ -467,6 +447,17 @@ function MerchantInventory({ profile }: any) {
     } catch (err: any) { alert(err.message); } finally { setIsSaving(false); }
   };
 
+  const handleDeleteProduct = async (productId: string) => {
+    if (!window.confirm("Are you sure you want to delete this product?")) return;
+    try {
+      const { error } = await supabase.from('products').delete().eq('id', productId);
+      if (error) throw error;
+      fetchProducts();
+    } catch (err: any) {
+      alert("Failed to delete: " + err.message);
+    }
+  };
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex justify-between items-center mb-6">
@@ -485,7 +476,14 @@ function MerchantInventory({ profile }: any) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {products.map(p => (
-            <div key={p.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm p-4">
+            <div key={p.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm p-4 relative group">
+              <button 
+                onClick={() => handleDeleteProduct(p.id)} 
+                className="absolute top-6 right-6 p-2 bg-red-100 text-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200 shadow-sm"
+                title="Delete Product"
+              >
+                <Trash2 size={16} />
+              </button>
               {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-36 object-cover rounded-xl mb-3" /> : <div className="w-full h-36 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 mb-3"><Package size={32} /></div>}
               <h3 className="font-bold text-slate-900 text-base">{p.name}</h3>
               <p className="text-xs text-slate-500 mt-1 line-clamp-2">{p.description}</p>

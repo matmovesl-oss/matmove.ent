@@ -1,53 +1,57 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Wallet, X, Smartphone, Loader2, ArrowUpRight, ArrowDownLeft, Lock, Users, RefreshCw } from 'lucide-react';
+import { Wallet, X, Smartphone, Loader2, ArrowUpRight, ArrowDownLeft, Lock, Users, RefreshCw, Clock, FileText } from 'lucide-react';
 
 export function WalletPage({ profile, wallet, onClose }: any) {
-  // Live Balance State
   const [liveBalance, setLiveBalance] = useState<number>(Number(wallet?.balance || 0));
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [isLoadingTx, setIsLoadingTx] = useState(true);
+  const [selectedTx, setSelectedTx] = useState<any>(null);
 
-  // Load State
+  // Modals
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessingLoad, setIsProcessingLoad] = useState(false);
 
-  // Payout State (Mobile Money)
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
   const [payoutPhone, setPayoutPhone] = useState(''); 
   const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
   const [isProcessingPayout, setIsProcessingPayout] = useState(false);
 
-  // Transfer State (Internal Account)
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferAmount, setTransferAmount] = useState('');
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
-  const [monimeAccounts, setMonimeAccounts] = useState<any[]>([]);
 
   const isApproved = profile?.role === 'rider' || profile?.kyc_status === 'approved';
   const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
 
-  // Live Sync with Monime API
-  const fetchLiveBalance = async () => {
+  const fetchLiveBalanceAndTransactions = async () => {
     if (!profile?.id) return;
     setIsRefreshing(true);
+    setIsLoadingTx(true);
     try {
-      const res = await fetch('/api/get-live-wallet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: profile.id })
+      const balRes = await fetch('/api/get-live-wallet', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: profile.id })
       });
-      const data = await res.json();
-      if (data.balance !== undefined) setLiveBalance(Number(data.balance));
-    } catch (err) {} finally { setIsRefreshing(false); }
+      const balData = await balRes.json();
+      if (balData.balance !== undefined) setLiveBalance(Number(balData.balance));
+
+      const txRes = await fetch('/api/get-monime-transactions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: profile.id })
+      });
+      const txData = await txRes.json();
+      if (txData.transactions) setTransactions(txData.transactions);
+
+    } catch (err) {} finally { 
+      setIsRefreshing(false); 
+      setIsLoadingTx(false);
+    }
   };
 
-  // Fetch on mount or when the wallet prop updates
-  useEffect(() => {
-    fetchLiveBalance();
-  }, [profile?.id]);
+  useEffect(() => { fetchLiveBalanceAndTransactions(); }, [profile?.id]);
 
   useEffect(() => {
     const handlePageShow = (e: PageTransitionEvent) => {
@@ -57,24 +61,8 @@ export function WalletPage({ profile, wallet, onClose }: any) {
     return () => window.removeEventListener('pageshow', handlePageShow);
   }, []);
 
-  // Fetch Monime Financial Accounts directly for internal transfers
-  useEffect(() => {
-    if (isTransferModalOpen) {
-      fetch('/api/get-monime-accounts')
-        .then(res => res.json())
-        .then(data => {
-          if (data.accounts) {
-            // Remove the user's own account so they don't transfer to themselves
-            const otherAccounts = data.accounts.filter((acc: any) => acc.id !== monimeAccountId);
-            setMonimeAccounts(otherAccounts);
-          }
-        })
-        .catch(err => console.error("Failed to load Monime accounts:", err));
-    }
-  }, [isTransferModalOpen, monimeAccountId]);
-
   const closeModals = () => {
-    setIsLoadModalOpen(false); setIsPayoutModalOpen(false); setIsTransferModalOpen(false);
+    setIsLoadModalOpen(false); setIsPayoutModalOpen(false); setIsTransferModalOpen(false); setSelectedTx(null);
     setIsProcessingLoad(false); setIsProcessingPayout(false); setIsProcessingTransfer(false);
     setLoadAmount(''); setPayoutAmount(''); setTransferAmount(''); setTransferRecipient(''); setPayoutPhone('');
   };
@@ -105,7 +93,7 @@ export function WalletPage({ profile, wallet, onClose }: any) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payout failed');
       alert(`Payout requested successfully!`);
-      closeModals(); fetchLiveBalance(); 
+      closeModals(); fetchLiveBalanceAndTransactions(); 
     } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
   };
 
@@ -113,18 +101,18 @@ export function WalletPage({ profile, wallet, onClose }: any) {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
     if (amt > liveBalance) return alert('Insufficient balance');
-    if (!transferRecipient.trim()) return alert('Select a recipient account');
+    if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID (starts with fac-)');
 
     setIsProcessingTransfer(true);
     try {
       const res = await fetch('/api/create-monime-transfer', { 
         method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient }) 
+        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient.trim() }) 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
       alert(`Internal transfer successful!`);
-      closeModals(); fetchLiveBalance();
+      closeModals(); fetchLiveBalanceAndTransactions();
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
@@ -136,17 +124,19 @@ export function WalletPage({ profile, wallet, onClose }: any) {
       </div>
 
       <div className="bg-slate-900 text-white rounded-3xl p-8 mb-8 relative shadow-xl overflow-hidden">
-        <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
+        <button onClick={fetchLiveBalanceAndTransactions} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
         </button>
         <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Available SLE Balance</span>
         <div className="text-5xl font-bold mt-2 text-blue-400">SLE {liveBalance.toFixed(2)}</div>
-        <div className="text-xs font-mono text-slate-400 mt-4 bg-slate-800 inline-block px-3 py-1.5 rounded-lg border border-slate-700">Account ID: {monimeAccountId}</div>
+        <div className="text-xs font-mono text-slate-400 mt-4 bg-slate-800 inline-flex flex-col sm:flex-row gap-2 px-3 py-1.5 rounded-lg border border-slate-700">
+           <span>Account ID:</span> <span className="text-white select-all">{monimeAccountId}</span>
+        </div>
         <Wallet size={80} className="absolute right-6 top-6 opacity-10 text-white pointer-events-none" />
       </div>
 
       <h2 className="text-lg font-bold text-slate-900 mb-4">Wallet Actions</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
         <button onClick={() => setIsLoadModalOpen(true)} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:border-blue-500 flex flex-col items-center justify-center gap-3 transition">
           <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center"><ArrowDownLeft size={24} /></div>
           <span className="font-bold text-slate-900">Load Wallet</span>
@@ -166,6 +156,85 @@ export function WalletPage({ profile, wallet, onClose }: any) {
           <span className={`font-bold ${isApproved ? 'text-slate-900' : 'text-slate-400'}`}>Internal Transfer</span>
         </button>
       </div>
+
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold text-slate-900">Recent Transactions</h2>
+        <Clock size={18} className="text-slate-400" />
+      </div>
+
+      {isLoadingTx ? (
+        <div className="flex justify-center py-8"><Loader2 className="animate-spin text-blue-600" size={24} /></div>
+      ) : transactions.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500 text-sm shadow-sm">No recent transactions found.</div>
+      ) : (
+        <div className="space-y-3">
+          {transactions.map((tx: any) => {
+             const amountSLE = (tx.amount?.value || 0) / 100;
+             const isCredit = tx.type === 'credit';
+             return (
+               <div key={tx.id} onClick={() => setSelectedTx(tx)} className="bg-white border border-slate-200 p-4 rounded-2xl flex justify-between items-center shadow-sm cursor-pointer hover:border-blue-300 transition group">
+                 <div className="flex items-center gap-4">
+                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isCredit ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                     {isCredit ? <ArrowDownLeft size={18}/> : <ArrowUpRight size={18}/>}
+                   </div>
+                   <div>
+                     <div className="font-bold text-slate-900 group-hover:text-blue-600 transition">{isCredit ? 'Received Funds' : 'Sent Funds'}</div>
+                     <div className="text-[10px] font-mono text-slate-400 mt-1">{new Date(tx.timestamp).toLocaleString()}</div>
+                   </div>
+                 </div>
+                 <div className="flex items-center gap-3">
+                   <div className={`font-bold text-lg ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>
+                     {isCredit ? '+' : '-'} SLE {amountSLE.toFixed(2)}
+                   </div>
+                   <FileText size={16} className="text-slate-300 group-hover:text-blue-500" />
+                 </div>
+               </div>
+             );
+          })}
+        </div>
+      )}
+
+      {selectedTx && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full relative shadow-2xl">
+            <button onClick={() => setSelectedTx(null)} className="absolute top-4 right-4 text-slate-400 hover:bg-slate-100 rounded-full p-1"><X size={20} /></button>
+            <div className="text-center border-b border-dashed border-slate-300 pb-6 mb-6 mt-4">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Wallet size={32} className="text-slate-900" />
+              </div>
+              <h2 className="text-2xl font-bold text-slate-900">Transaction Receipt</h2>
+              <p className="text-xs text-slate-500 uppercase tracking-widest mt-1">MatMove Financial</p>
+            </div>
+            <div className="space-y-4 mb-8 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Amount</span>
+                <span className="font-bold text-slate-900">SLE {((selectedTx.amount?.value || 0) / 100).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Type</span>
+                <span className="font-bold text-slate-900 capitalize">{selectedTx.type}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Date</span>
+                <span className="font-bold text-slate-900 text-right">{new Date(selectedTx.timestamp).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Transaction ID</span>
+                <span className="font-mono text-xs text-slate-900 truncate max-w-[150px]" title={selectedTx.id}>{selectedTx.id}</span>
+              </div>
+              {selectedTx.reference && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Reference</span>
+                  <span className="font-mono text-xs text-slate-900 truncate max-w-[150px]">{selectedTx.reference}</span>
+                </div>
+              )}
+            </div>
+            <button onClick={() => setSelectedTx(null)} className="w-full bg-slate-100 text-slate-900 font-bold p-4 rounded-xl hover:bg-slate-200 transition">
+              Close Receipt
+            </button>
+          </div>
+        </div>
+      )}
 
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -207,15 +276,10 @@ export function WalletPage({ profile, wallet, onClose }: any) {
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Internal Transfer</h2>
-            <p className="text-sm text-slate-500 mb-6">Send money to another MatMove account.</p>
+            <p className="text-sm text-slate-500 mb-6">Paste the recipient's exact MatMove Account ID.</p>
             <div className="space-y-4 mb-6">
               <input type="number" placeholder="Amount (SLE)" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-purple-500" />
-              <select value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500">
-                <option value="">Select Account...</option>
-                {monimeAccounts.map((acc: any) => (
-                  <option key={acc.id} value={acc.id}>{acc.name}</option>
-                ))}
-              </select>
+              <input type="text" placeholder="Recipient ID (e.g. fac-k6V8...)" value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500" />
             </div>
             <button onClick={executeTransfer} disabled={isProcessingTransfer || !transferAmount || !transferRecipient} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
               {isProcessingTransfer ? <Loader2 className="animate-spin" size={20} /> : <Users size={20} />} Send Transfer

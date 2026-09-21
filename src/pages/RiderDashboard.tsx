@@ -45,8 +45,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [transferAmount, setTransferAmount] = useState('');
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
-  const [monimeAccounts, setMonimeAccounts] = useState<any[]>([]);
 
+  const isApproved = profile?.kyc_status === 'approved' || profile?.role === 'rider';
   const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -61,20 +61,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       document.head.appendChild(script);
     }
   }, []);
-
-  useEffect(() => {
-    if (isTransferModalOpen) {
-      fetch('/api/get-monime-accounts')
-        .then(res => res.json())
-        .then(data => {
-          if (data.accounts) {
-            const otherAccounts = data.accounts.filter((acc: any) => acc.id !== monimeAccountId);
-            setMonimeAccounts(otherAccounts);
-          }
-        })
-        .catch(err => console.error("Failed to load Monime accounts:", err));
-    }
-  }, [isTransferModalOpen, monimeAccountId]);
 
   useEffect(() => {
     const handlePageShow = (e: PageTransitionEvent) => {
@@ -227,13 +213,13 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
     if (amt > liveBalance) return alert('Insufficient balance');
-    if (!transferRecipient.trim()) return alert('Select a recipient account');
+    if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID (starts with fac-)');
 
     setIsProcessingTransfer(true);
     try {
       const res = await fetch('/api/create-monime-transfer', { 
         method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient }) 
+        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient.trim() }) 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
@@ -248,8 +234,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋</h1></div>
         <div className="flex gap-2">
           <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm">Load</button>
-          <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm">Payout</button>
-          <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm">Transfer</button>
+          <button onClick={() => isApproved ? setIsPayoutModalOpen(true) : alert('KYC Approval required')} className={`px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Payout</button>
+          <button onClick={() => isApproved ? setIsTransferModalOpen(true) : alert('KYC Approval required')} className={`px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Transfer</button>
         </div>
       </header>
 
@@ -261,9 +247,11 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
           <div>
             <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">MatMove Unified Wallet</span>
             <div className="text-3xl font-bold mt-1 text-blue-400">SLE {liveBalance.toFixed(2)}</div>
-            <div className="text-xs font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">Account ID: {monimeAccountId}</div>
+            <div className="text-xs font-mono text-slate-400 mt-2 bg-slate-800 inline-flex flex-col sm:flex-row gap-2 px-2 py-1 rounded">
+              <span>Account ID:</span> <span className="select-all">{monimeAccountId}</span>
+            </div>
           </div>
-          <Wallet size={32} className="text-slate-700 mr-12" />
+          <Wallet size={32} className="text-slate-700 mr-12 pointer-events-none" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -384,15 +372,10 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Internal Transfer</h2>
-            <p className="text-sm text-slate-500 mb-6">Send money to another MatMove account.</p>
+            <p className="text-sm text-slate-500 mb-6">Paste the recipient's exact MatMove Account ID.</p>
             <div className="space-y-4 mb-6">
               <input type="number" placeholder="Amount (SLE)" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-purple-500" />
-              <select value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500">
-                <option value="">Select Account...</option>
-                {monimeAccounts.map((acc: any) => (
-                  <option key={acc.id} value={acc.id}>{acc.name}</option>
-                ))}
-              </select>
+              <input type="text" placeholder="Recipient ID (e.g. fac-k6V8...)" value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500" />
             </div>
             <button onClick={executeTransfer} disabled={isProcessingTransfer || !transferAmount || !transferRecipient} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
               {isProcessingTransfer ? <Loader2 className="animate-spin" size={20} /> : <Users size={20} />} Send Transfer
@@ -404,7 +387,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   );
 }
 
-// CRITICAL FIX: Secure Shop Phone Replacement
 function RiderShop({ profile }: any) {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -448,7 +430,6 @@ function RiderShop({ profile }: any) {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {products.map(p => {
             const profileData = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles;
-            // CRITICAL FIX: Force string to prevent .replace() crash on undefined
             const contactNumber = String(p.whatsapp_number || profileData?.phone || WHATSAPP_NUMBER);
             const cleanNumber = contactNumber.replace(/[^0-9]/g, '');
 
