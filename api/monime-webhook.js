@@ -4,91 +4,100 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   try {
-    const payload = req.body;
-    console.log("🚨 INCOMING MONIME WEBHOOK PAYLOAD:", JSON.stringify(payload));
-    
-    // 1. Verify this is a completed checkout event
-    const eventName = payload?.event?.name;
-    if (eventName !== 'checkout_session.completed') {
-      return res.status(200).json({ message: 'Event ignored - Not a completed checkout' });
-    }
-
-    const data = payload?.data || {};
-    const financialAccountId = data.financialAccountId;
-    const reference = data.reference;
-
-    if (!financialAccountId || !reference) {
-      return res.status(400).json({ error: 'Missing account or reference data in payload' });
-    }
+    const event = req.body;
+    if (!event || !event.type) return res.status(400).json({ error: 'Invalid event payload.' });
 
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // 2. EXTRACT USER ID FROM THE REFERENCE (Format: MM_MOMO_UserID_Timestamp)
-    const referenceParts = reference.split('_');
-    const userId = referenceParts[2];
+    const eventData = event.data || {};
+    const ref = eventData.reference || eventData.id;
 
-    if (!userId) return res.status(400).json({ error: 'Invalid reference format' });
+    switch (event.type) {
+      case 'checkout_session.completed': {
+        // We injected MatMove User ID into the reference (e.g. MONIME_123e4567-e89b..._1699999)
+        const parts = (ref || '').split('_');
+        const userId = parts[1]; 
+        
+        const lineItemPrice = eventData.lineItems?.data?.[0]?.price?.value || 0;
+        const amountSLE = lineItemPrice > 0 ? lineItemPrice / 100 : Number(eventData.amount?.value || 0) / 100;
 
-    // 3. Mark the pending transaction as completed in history
-    const { data: pendingTxs, error: txError } = await supabase
-      .from('payment_transactions')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'pending');
+        if (userId && amountSLE > 0) {
+          // Look up the exact Supabase internal UUID for the wallet
+          const { data: walletData } = await supabase
+            .from('wallets')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('currency', 'SLE')
+            .single();
 
-    if (!txError && pendingTxs && pendingTxs.length > 0) {
-      const transaction = pendingTxs.find(tx => tx.metadata && tx.metadata.reference === reference);
-      if (transaction) {
-        await supabase.from('payment_transactions').update({ status: 'completed' }).eq('id', transaction.id);
+          if (walletData) {
+            await supabase.rpc('process_gateway_payment', {
+              p_provider: 'monime_payin',
+              p_wallet_id: walletData.id, // Passes internal UUID to prevent 22P02 Error
+              p_amount: amountSLE,
+              p_currency: 'SLE',
+              p_reference: ref
+            });
+          }
+        }
+        break;
       }
+
+      case 'payout.completed': {
+        if (ref) {
+          await supabase
+            .from('withdrawal_requests')
+            .update({ status: 'completed' })
+            .eq('reference', ref);
+        }
+        break;
+      }
+
+      case 'payout.failed': {
+        if (ref) {
+          const { data: request } = await supabase
+            .from('withdrawal_requests')
+            .select('*')
+            .eq('reference', ref)
+            .single();
+
+          if (request && request.status !== 'failed') {
+            await supabase
+              .from('withdrawal_requests')
+              .update({ status: 'failed' })
+              .eq('reference', ref);
+
+            const { data: walletData } = await supabase
+              .from('wallets')
+              .select('id')
+              .eq('user_id', request.user_id)
+              .eq('currency', 'SLE')
+              .single();
+
+            if (walletData) {
+              await supabase.rpc('process_gateway_payment', {
+                p_provider: 'monime_refund',
+                p_wallet_id: walletData.id,
+                p_amount: Number(request.amount),
+                p_currency: 'SLE',
+                p_reference: `refund_${ref}`
+              });
+            }
+          }
+        }
+        break;
+      }
+
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
     }
 
-    // 4. Query Monime for the TRUE ledger balance (?withBalance=true is required)
-    const apiKey = process.env.MONIME_API_KEY;
-    const spaceId = process.env.MONIME_SPACE_ID;
-    
-    const accountRes = await fetch(`https://api.monime.io/v1/financial-accounts/${financialAccountId}?withBalance=true`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Monime-Space-Id': spaceId
-      }
-    });
-
-    if (!accountRes.ok) {
-      console.error("Failed to fetch Monime Account:", await accountRes.text());
-      throw new Error('Failed to fetch true account balance from Monime');
-    }
-
-    const accountData = await accountRes.json();
-    
-    // 5. Extract balance securely checking all of Monime's possible nested paths
-    let rawBalance = 
-      accountData?.data?.balance?.available?.value || 
-      accountData?.result?.balance?.available?.value ||
-      accountData?.data?.balance?.value || 
-      accountData?.balance?.available?.value || 
-      0;
-
-    // Convert minor units (cents) back to standard SLE format (e.g., 198 -> 1.98)
-    const trueBalance = Number(rawBalance) / 100;
-
-    // 6. Force Supabase wallet to mirror Monime's true balance perfectly
-    const { error: updateError } = await supabase
-      .from('wallets')
-      .update({ balance: trueBalance })
-      .eq('user_id', userId)
-      .eq('currency', 'SLE');
-
-    if (updateError) throw updateError;
-
-    return res.status(200).json({ success: true, message: `Wallet synced perfectly. True balance: ${trueBalance}` });
-
+    return res.status(200).json({ received: true });
   } catch (error) {
     console.error('FATAL Webhook Error:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
+    return res.status(500).json({ error: error.message });
   }
 }

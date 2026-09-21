@@ -12,7 +12,6 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // 1. Fetch the user's MatMove wallet to get their secret Monime Account ID
     const { data: wallet } = await supabase
       .from('wallets')
       .select('*')
@@ -26,8 +25,8 @@ export default async function handler(req, res) {
 
     const accountId = wallet.metadata.monime_account_id;
 
-    // 2. Ask Monime directly for the true, real-time balance
-    const monimeRes = await fetch(`https://api.monime.io/v1/financial-accounts/${accountId}`, {
+    // Fetch account from Monime with '?withBalance=true' query parameter as per docs
+    const monimeRes = await fetch(`https://api.monime.io/v1/financial-accounts/${accountId}?withBalance=true`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${process.env.MONIME_API_KEY}`,
@@ -36,38 +35,24 @@ export default async function handler(req, res) {
       }
     });
 
-    const rawText = await monimeRes.text();
-    let monimeData = {};
-    
-    try {
-      const parsed = JSON.parse(rawText);
-      monimeData = parsed.result || parsed; // Handle Monime's wrapper
-    } catch(e) {
-      console.error("Failed to parse Monime API response:", rawText);
+    if (monimeRes.ok) {
+      const rawData = await monimeRes.json();
+      const monimeData = rawData.result || rawData;
+      
+      // Strict mapping based on Monime's OpenAPI schema: balance.available.value
+      if (monimeData.balance?.available?.value !== undefined) {
+         const realBalance = monimeData.balance.available.value / 100; 
+         
+         // Sync real balance to local DB
+         await supabase
+           .from('wallets')
+           .update({ balance: realBalance, updated_at: new Date().toISOString() })
+           .eq('id', wallet.id);
+           
+         return res.status(200).json({ balance: realBalance });
+      }
     }
 
-    let realBalance = null;
-
-    // 3. Dynamically locate the balance in Monime's schema (Monime uses minor units / cents)
-    if (monimeData.balance && typeof monimeData.balance.value !== 'undefined') {
-        realBalance = monimeData.balance.value / 100;
-    } else if (monimeData.availableBalance && typeof monimeData.availableBalance.value !== 'undefined') {
-        realBalance = monimeData.availableBalance.value / 100;
-    } else if (monimeData.amount && typeof monimeData.amount.value !== 'undefined') {
-        realBalance = monimeData.amount.value / 100;
-    }
-
-    // 4. Force-Sync the true balance back to the MatMove database
-    if (realBalance !== null) {
-      await supabase
-        .from('wallets')
-        .update({ balance: realBalance, updated_at: new Date().toISOString() })
-        .eq('id', wallet.id);
-        
-      return res.status(200).json({ balance: realBalance });
-    }
-
-    // Fallback if Monime is unreachable or structure changes
     return res.status(200).json({ balance: wallet.balance });
   } catch (error) {
     console.error('Live Sync Error:', error.message);
