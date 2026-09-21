@@ -31,6 +31,7 @@ export default async function handler(req, res) {
     const destinationDashboard = returnUrl || `${req.headers.origin}/customer/${role || 'rider'}`;
     const safeCallbackUrl = `${req.headers.origin}/api/unified-webhook?returnUrl=${encodeURIComponent(destinationDashboard)}&provider=monime&ref=${transactionRef}&amount=${amount}`;
 
+    // STRICT PAYLOAD BASED ON MONIME CHECKOUT DOCS
     const payload = {
       name: "MatMove Wallet Top-Up",
       reference: transactionRef,
@@ -56,29 +57,30 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
         'Monime-Space-Id': spaceId,
-        'Idempotency-Key': transactionRef
+        'Idempotency-Key': transactionRef,
+        'Monime-Version': 'caph.2025-08-23'
       },
       body: JSON.stringify(payload)
     });
 
     const rawData = await monimeRes.json();
     if (!monimeRes.ok || rawData.success === false) {
-      throw new Error(rawData.messages?.join(', ') || 'Monime checkout failed.');
+      const apiError = rawData.messages?.map(m => m.message).join(', ') || rawData.message || 'Checkout session failed.';
+      throw new Error(`Monime API Error: ${apiError}`);
     }
 
+    // Extract redirect URL (Monime nests this in result.redirectUrl usually)
     const checkoutUrl = 
       rawData?.result?.redirectUrl || 
       rawData?.result?.url || 
       rawData?.redirectUrl || 
-      rawData?.url || 
-      rawData?.data?.redirectUrl || 
-      rawData?.checkoutUrl;
+      rawData?.url;
 
     if (!checkoutUrl) throw new Error('Checkout session created, but redirect URL was missing.');
 
     return res.status(200).json({ link: checkoutUrl });
   } catch (error) {
-    console.error('Monime Checkout Error:', error);
+    console.error('Monime Checkout Error:', error.message);
     return res.status(500).json({ error: error.message || 'Internal payment error' });
   }
 }

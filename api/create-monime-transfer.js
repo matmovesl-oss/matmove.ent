@@ -17,6 +17,7 @@ export default async function handler(req, res) {
     if (!sourceWallet) throw new Error('Your account is not linked to a Monime Wallet yet.');
     if (Number(sourceWallet.balance) < Number(amount)) throw new Error('Insufficient wallet balance.');
 
+    // Amount must be in minor units (cents)
     const valueMinor = Math.round(Number(amount) * 100);
     const idempotencyKey = `trans_${crypto.randomUUID()}`;
 
@@ -25,7 +26,9 @@ export default async function handler(req, res) {
     let targetWalletId = null;
 
     if (transferType === 'matmove_user') {
-      // MODE A: INTERNAL TRANSFER (MatMove to MatMove via Phone Number)
+      // ==========================================
+      // MODE A: INTERNAL TRANSFER (Wallet to Wallet)
+      // ==========================================
       const cleanSearchPhone = destinationPhone.trim();
       const { data: targetProfile } = await supabase.from('profiles').select('id').eq('phone', cleanSearchPhone).single();
       
@@ -38,46 +41,48 @@ export default async function handler(req, res) {
       targetWalletId = targetWallet.id;
       apiUrl = 'https://api.monime.io/v1/internal-transfers';
       
-      // Strict Monime Internal Transfer Schema using the exact Account IDs
+      // Strict Monime Schema for Internal Transfers
       payload = {
-        sourceAccountId: sourceWallet.metadata.monime_account_id,
-        destinationAccountId: targetWallet.metadata.monime_account_id,
-        amount: Number(amount),
-        currency: "SLE",
-        reference: idempotencyKey,
+        amount: { currency: "SLE", value: valueMinor },
+        sourceFinancialAccount: { id: sourceWallet.metadata.monime_account_id },
+        destinationFinancialAccount: { id: targetWallet.metadata.monime_account_id },
         description: "MatMove Internal Transfer"
       };
 
     } else {
-      // MODE B: EXTERNAL PAYOUT (Mobile Money Cashout)
+      // ==========================================
+      // MODE B: EXTERNAL PAYOUT (Mobile Money)
+      // ==========================================
       apiUrl = 'https://api.monime.io/v1/payouts';
       
-      let provider = networkProvider ? networkProvider.toLowerCase() : "orange";
+      // Map provider to strict Monime ENUMS: m17 = Orange, m18 = Afrimoney
+      let providerId = networkProvider === 'afrimoney' ? "m18" : "m17";
       const cleanPhone = destinationPhone.replace(/\D/g, '');
       if (cleanPhone.match(/^(232|0)?(30|33|34|35|77|79)/)) {
-        provider = "afrimoney";
+        providerId = "m18"; // Auto-detect Afrimoney prefix
       }
       
+      // Strict Monime Schema for Payouts
       payload = {
-        sourceAccountId: sourceWallet.metadata.monime_account_id,
-        amount: Number(amount),
-        currency: "SLE",
+        amount: { currency: "SLE", value: valueMinor },
+        source: { financialAccountId: sourceWallet.metadata.monime_account_id },
         destination: {
-          type: "mobile_money",
-          provider: provider,
+          type: "momo",
+          providerId: providerId,
           phoneNumber: destinationPhone
-        },
-        reference: idempotencyKey
+        }
       };
     }
 
+    // 2. Call Monime API
     const monimeRes = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.MONIME_API_KEY}`,
         'Monime-Space-Id': process.env.MONIME_SPACE_ID,
-        'Idempotency-Key': idempotencyKey
+        'Idempotency-Key': idempotencyKey,
+        'Monime-Version': 'caph.2025-08-23'
       },
       body: JSON.stringify(payload)
     });
@@ -85,14 +90,13 @@ export default async function handler(req, res) {
     const rawText = await monimeRes.text();
     let rawData;
     try { rawData = rawText ? JSON.parse(rawText) : {}; } 
-    catch (e) { throw new Error(`Monime returned invalid JSON: ${rawText.substring(0, 100)}...`); }
+    catch (e) { throw new Error(`Monime Error (Not JSON): ${rawText.substring(0, 100)}...`); }
 
-    if (!monimeRes.ok || rawData.success === false || rawData.status === 'failed') {
-      let apiError = 'Unknown error';
+    // Check for success == true OR status == 200
+    if (!monimeRes.ok || rawData.success === false) {
+      let apiError = 'Unknown API error';
       if (rawData.messages && Array.isArray(rawData.messages)) {
         apiError = rawData.messages.map(m => m.message || JSON.stringify(m)).join(' | ');
-      } else if (rawData.error) {
-        apiError = typeof rawData.error === 'string' ? rawData.error : JSON.stringify(rawData.error);
       } else if (rawData.message) {
         apiError = rawData.message;
       } else {
@@ -103,7 +107,7 @@ export default async function handler(req, res) {
 
     const transactionId = rawData.result?.id || rawData.id || idempotencyKey;
 
-    // Deduct Sender Balance
+    // 3. Process Ledger Updates
     await supabase.rpc('process_gateway_payment', {
        p_provider: transferType === 'matmove_user' ? 'monime_internal' : 'monime_cashout',
        p_wallet_id: sourceWallet.id,
@@ -112,7 +116,6 @@ export default async function handler(req, res) {
        p_reference: transactionId
     });
 
-    // Credit Receiver OR Log External Transfer
     if (transferType === 'matmove_user' && targetWalletId) {
       await supabase.rpc('process_gateway_payment', {
          p_provider: 'monime_internal',
