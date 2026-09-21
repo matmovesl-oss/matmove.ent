@@ -5,7 +5,7 @@ export default async function handler(req, res) {
 
   try {
     const { userId, amount, role, returnUrl } = req.body;
-    if (!userId || !amount) return res.status(400).json({ error: 'Missing userId or amount.' });
+    if (!userId || !amount) return res.status(400).json({ error: 'Missing required parameters.' });
 
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
@@ -18,25 +18,24 @@ export default async function handler(req, res) {
       .eq('user_id', userId)
       .eq('currency', 'SLE');
 
-    if (walletError) throw new Error('Database error while fetching wallets.');
+    if (walletError) throw new Error('Database error while fetching wallet.');
 
     const wallet = wallets?.find(w => w.metadata?.monime_account_id);
-    if (!wallet) throw new Error('User does not have a linked Monime Financial Account.');
+    if (!wallet || !wallet.metadata?.monime_account_id) {
+      throw new Error('User does not have a linked Monime Financial Account.');
+    }
 
     const monimeAccountId = wallet.metadata.monime_account_id;
     const transactionRef = `MONIME_${userId}_${Date.now()}`;
-    const apiKey = process.env.MONIME_API_KEY;
-    const spaceId = process.env.MONIME_SPACE_ID;
-
+    
+    // Redirect directly to the dashboard, skipping the old unified-webhook
     const destinationDashboard = returnUrl || `${req.headers.origin}/customer/${role || 'rider'}`;
-    const safeCallbackUrl = `${req.headers.origin}/api/unified-webhook?returnUrl=${encodeURIComponent(destinationDashboard)}&provider=monime&ref=${transactionRef}&amount=${amount}`;
 
-    // STRICT PAYLOAD BASED ON MONIME CHECKOUT DOCS
     const payload = {
       name: "MatMove Wallet Top-Up",
       reference: transactionRef,
       financialAccountId: monimeAccountId,
-      successUrl: safeCallbackUrl,
+      successUrl: destinationDashboard, 
       cancelUrl: destinationDashboard,
       lineItems: [
         {
@@ -55,8 +54,8 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'Monime-Space-Id': spaceId,
+        'Authorization': `Bearer ${process.env.MONIME_API_KEY}`,
+        'Monime-Space-Id': process.env.MONIME_SPACE_ID,
         'Idempotency-Key': transactionRef,
         'Monime-Version': 'caph.2025-08-23'
       },
@@ -65,17 +64,11 @@ export default async function handler(req, res) {
 
     const rawData = await monimeRes.json();
     if (!monimeRes.ok || rawData.success === false) {
-      const apiError = rawData.messages?.map(m => m.message).join(', ') || rawData.message || 'Checkout session failed.';
+      const apiError = rawData.messages?.map(m => m.message).join(', ') || rawData.message || 'Checkout session creation failed.';
       throw new Error(`Monime API Error: ${apiError}`);
     }
 
-    // Extract redirect URL (Monime nests this in result.redirectUrl usually)
-    const checkoutUrl = 
-      rawData?.result?.redirectUrl || 
-      rawData?.result?.url || 
-      rawData?.redirectUrl || 
-      rawData?.url;
-
+    const checkoutUrl = rawData?.result?.redirectUrl || rawData?.result?.url || rawData?.redirectUrl || rawData?.url;
     if (!checkoutUrl) throw new Error('Checkout session created, but redirect URL was missing.');
 
     return res.status(200).json({ link: checkoutUrl });

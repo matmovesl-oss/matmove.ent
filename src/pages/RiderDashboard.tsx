@@ -45,7 +45,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [transferAmount, setTransferAmount] = useState('');
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
-  const [matmoveUsers, setMatmoveUsers] = useState<any[]>([]);
+  const [monimeAccounts, setMonimeAccounts] = useState<any[]>([]);
 
   const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -64,11 +64,17 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 
   useEffect(() => {
     if (isTransferModalOpen) {
-      supabase.from('profiles').select('id, full_name, role, phone, business_name').neq('id', profile.id).then(({ data }) => {
-        if (data) setMatmoveUsers(data);
-      });
+      fetch('/api/get-monime-accounts')
+        .then(res => res.json())
+        .then(data => {
+          if (data.accounts) {
+            const otherAccounts = data.accounts.filter((acc: any) => acc.id !== monimeAccountId);
+            setMonimeAccounts(otherAccounts);
+          }
+        })
+        .catch(err => console.error("Failed to load Monime accounts:", err));
     }
-  }, [isTransferModalOpen, profile.id]);
+  }, [isTransferModalOpen, monimeAccountId]);
 
   useEffect(() => {
     const handlePageShow = (e: PageTransitionEvent) => {
@@ -78,7 +84,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     return () => window.removeEventListener('pageshow', handlePageShow);
   }, []);
 
-  // CRITICAL FIX: Direct Sync with Monime via API
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
     setIsRefreshing(true);
@@ -228,7 +233,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     try {
       const res = await fetch('/api/create-monime-transfer', { 
         method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ amount: amt, userId: profile.id, recipientPhone: transferRecipient }) 
+        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient }) 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
@@ -384,8 +389,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
               <input type="number" placeholder="Amount (SLE)" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-purple-500" />
               <select value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500">
                 <option value="">Select Account...</option>
-                {matmoveUsers.map(u => (
-                  <option key={u.id} value={u.phone}>MatMove {String(u.role).toUpperCase()} - {u.business_name || u.full_name} ({u.phone})</option>
+                {monimeAccounts.map((acc: any) => (
+                  <option key={acc.id} value={acc.id}>{acc.name}</option>
                 ))}
               </select>
             </div>

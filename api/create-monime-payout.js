@@ -16,14 +16,12 @@ export default async function handler(req, res) {
     if (!sourceWallet || !sourceWallet.metadata?.monime_account_id) {
       throw new Error('Your account is not linked to a Monime Wallet yet.');
     }
-    if (Number(sourceWallet.balance) < Number(amount)) {
-      throw new Error('Insufficient wallet balance.');
-    }
+
+    // REMOVED LOCAL BALANCE CHECK. Monime will handle validation.
 
     const valueMinor = Math.round(Number(amount) * 100);
     const idempotencyKey = `payout_${crypto.randomUUID()}`;
 
-    // --- STRICT PHONE FORMATTING (Force 0 prefix) ---
     let formattedPhone = destinationPhone.replace(/\D/g, '');
     if (formattedPhone.startsWith('232') && formattedPhone.length >= 11) {
       formattedPhone = '0' + formattedPhone.substring(3);
@@ -33,7 +31,7 @@ export default async function handler(req, res) {
 
     let providerId = networkProvider === 'afrimoney' ? "m18" : "m17";
     if (formattedPhone.match(/^(0)?(30|33|34|35|77|79)/)) {
-      providerId = "m18"; // Auto-detect Afrimoney
+      providerId = "m18";
     }
 
     const payload = {
@@ -60,12 +58,15 @@ export default async function handler(req, res) {
     try { rawData = rawText ? JSON.parse(rawText) : {}; } 
     catch (e) { throw new Error(`Monime Non-JSON Error: ${rawText.substring(0, 100)}`); }
 
+    // If Monime rejects it (e.g. Insufficient Funds), it will throw here natively!
     if (!monimeRes.ok || rawData.success === false) {
       let apiError = 'Monime API rejected the payout';
       if (rawData.messages && Array.isArray(rawData.messages)) {
         apiError = rawData.messages.map(m => m.message).join(' | ');
       } else if (rawData.message) {
         apiError = rawData.message;
+      } else if (rawData.failureDetail?.message) {
+        apiError = rawData.failureDetail.message;
       }
       throw new Error(apiError);
     }

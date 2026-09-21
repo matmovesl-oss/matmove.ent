@@ -5,8 +5,8 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   try {
-    const { userId, amount, recipientPhone } = req.body;
-    if (!userId || !amount || !recipientPhone) return res.status(400).json({ error: 'Missing required parameters.' });
+    const { userId, amount, recipientAccountId } = req.body;
+    if (!userId || !amount || !recipientAccountId) return res.status(400).json({ error: 'Missing required parameters.' });
 
     const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -14,15 +14,6 @@ export default async function handler(req, res) {
     const sourceWallet = wallets?.find(w => w.metadata?.monime_account_id);
     
     if (!sourceWallet || !sourceWallet.metadata?.monime_account_id) throw new Error('Your account is not linked to a Monime Wallet.');
-    if (Number(sourceWallet.balance) < Number(amount)) throw new Error('Insufficient wallet balance.');
-
-    // Find Recipient
-    const { data: targetProfile } = await supabase.from('profiles').select('id').eq('phone', recipientPhone.trim()).single();
-    if (!targetProfile) throw new Error('Recipient MatMove account not found.');
-
-    const { data: targetWallets } = await supabase.from('wallets').select('*').eq('user_id', targetProfile.id).eq('currency', 'SLE');
-    const targetWallet = targetWallets?.find(w => w.metadata?.monime_account_id);
-    if (!targetWallet || !targetWallet.metadata?.monime_account_id) throw new Error('Recipient does not have an active Monime Wallet.');
 
     const valueMinor = Math.round(Number(amount) * 100);
     const idempotencyKey = `trans_${crypto.randomUUID()}`;
@@ -30,7 +21,7 @@ export default async function handler(req, res) {
     const payload = {
       amount: { currency: "SLE", value: valueMinor },
       sourceFinancialAccount: { id: sourceWallet.metadata.monime_account_id },
-      destinationFinancialAccount: { id: targetWallet.metadata.monime_account_id },
+      destinationFinancialAccount: { id: recipientAccountId },
       description: "MatMove Internal Transfer"
     };
 
@@ -55,13 +46,20 @@ export default async function handler(req, res) {
       let apiError = 'Monime API rejected the internal transfer';
       if (rawData.messages && Array.isArray(rawData.messages)) apiError = rawData.messages.map(m => m.message).join(' | ');
       else if (rawData.message) apiError = rawData.message;
+      else if (rawData.failureDetail?.message) apiError = rawData.failureDetail.message;
       throw new Error(apiError);
     }
 
     const transactionId = rawData.result?.id || rawData.id || idempotencyKey;
 
     await supabase.rpc('process_gateway_payment', { p_provider: 'monime_internal', p_wallet_id: sourceWallet.id, p_amount: -Number(amount), p_currency: 'SLE', p_reference: transactionId });
-    await supabase.rpc('process_gateway_payment', { p_provider: 'monime_internal', p_wallet_id: targetWallet.id, p_amount: Number(amount), p_currency: 'SLE', p_reference: transactionId });
+    
+    // Attempt to locate target wallet in local DB to sync credit
+    const { data: allWallets } = await supabase.from('wallets').select('id, metadata');
+    const targetWallet = allWallets?.find(w => w.metadata?.monime_account_id === recipientAccountId);
+    if (targetWallet) {
+      await supabase.rpc('process_gateway_payment', { p_provider: 'monime_internal', p_wallet_id: targetWallet.id, p_amount: Number(amount), p_currency: 'SLE', p_reference: transactionId });
+    }
 
     return res.status(200).json({ success: true, message: 'Internal transfer processed!' });
   } catch (error) {

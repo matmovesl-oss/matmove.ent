@@ -24,7 +24,7 @@ export function WalletPage({ profile, wallet, onClose }: any) {
   const [transferAmount, setTransferAmount] = useState('');
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
-  const [matmoveUsers, setMatmoveUsers] = useState<any[]>([]);
+  const [monimeAccounts, setMonimeAccounts] = useState<any[]>([]);
 
   const isApproved = profile?.role === 'rider' || profile?.kyc_status === 'approved';
   const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
@@ -57,13 +57,21 @@ export function WalletPage({ profile, wallet, onClose }: any) {
     return () => window.removeEventListener('pageshow', handlePageShow);
   }, []);
 
+  // Fetch Monime Financial Accounts directly for internal transfers
   useEffect(() => {
     if (isTransferModalOpen) {
-      supabase.from('profiles').select('id, full_name, role, phone, business_name').neq('id', profile.id).then(({ data }) => {
-        if (data) setMatmoveUsers(data);
-      });
+      fetch('/api/get-monime-accounts')
+        .then(res => res.json())
+        .then(data => {
+          if (data.accounts) {
+            // Remove the user's own account so they don't transfer to themselves
+            const otherAccounts = data.accounts.filter((acc: any) => acc.id !== monimeAccountId);
+            setMonimeAccounts(otherAccounts);
+          }
+        })
+        .catch(err => console.error("Failed to load Monime accounts:", err));
     }
-  }, [isTransferModalOpen, profile.id]);
+  }, [isTransferModalOpen, monimeAccountId]);
 
   const closeModals = () => {
     setIsLoadModalOpen(false); setIsPayoutModalOpen(false); setIsTransferModalOpen(false);
@@ -97,7 +105,7 @@ export function WalletPage({ profile, wallet, onClose }: any) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payout failed');
       alert(`Payout requested successfully!`);
-      closeModals(); fetchLiveBalance(); // Fetch fresh balance instead of hard reload
+      closeModals(); fetchLiveBalance(); 
     } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
   };
 
@@ -111,12 +119,12 @@ export function WalletPage({ profile, wallet, onClose }: any) {
     try {
       const res = await fetch('/api/create-monime-transfer', { 
         method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ amount: amt, userId: profile.id, recipientPhone: transferRecipient }) 
+        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient }) 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
       alert(`Internal transfer successful!`);
-      closeModals(); fetchLiveBalance(); // Fetch fresh balance instead of hard reload
+      closeModals(); fetchLiveBalance();
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
@@ -204,8 +212,8 @@ export function WalletPage({ profile, wallet, onClose }: any) {
               <input type="number" placeholder="Amount (SLE)" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-purple-500" />
               <select value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500">
                 <option value="">Select Account...</option>
-                {matmoveUsers.map(u => (
-                  <option key={u.id} value={u.phone}>MatMove {String(u.role).toUpperCase()} - {u.business_name || u.full_name} ({u.phone})</option>
+                {monimeAccounts.map((acc: any) => (
+                  <option key={acc.id} value={acc.id}>{acc.name}</option>
                 ))}
               </select>
             </div>

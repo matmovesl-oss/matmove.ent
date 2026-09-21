@@ -24,7 +24,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
 
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
-  const [payoutPhone, setPayoutPhone] = useState('');
+  const [payoutPhone, setPayoutPhone] = useState(''); 
   const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
   const [isProcessingPayout, setIsProcessingPayout] = useState(false);
 
@@ -32,16 +32,22 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const [transferAmount, setTransferAmount] = useState('');
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
-  const [matmoveUsers, setMatmoveUsers] = useState<any[]>([]);
+  const [monimeAccounts, setMonimeAccounts] = useState<any[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     if (isTransferModalOpen) {
-      supabase.from('profiles').select('id, full_name, role, phone, business_name').neq('id', profile?.id).then(({ data }) => {
-        if (data) setMatmoveUsers(data);
-      });
+      fetch('/api/get-monime-accounts')
+        .then(res => res.json())
+        .then(data => {
+          if (data.accounts) {
+            const otherAccounts = data.accounts.filter((acc: any) => acc.id !== monimeAccountId);
+            setMonimeAccounts(otherAccounts);
+          }
+        })
+        .catch(err => console.error("Failed to load Monime accounts:", err));
     }
-  }, [isTransferModalOpen, profile?.id]);
+  }, [isTransferModalOpen, monimeAccountId]);
 
   useEffect(() => {
     const handlePageShow = (e: PageTransitionEvent) => {
@@ -117,7 +123,6 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const executePayout = async () => {
     const amt = Number(payoutAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (amt > liveBalance) return alert('Insufficient balance');
     if (!payoutPhone.trim()) return alert('Enter recipient mobile money number');
 
     setIsProcessingPayout(true);
@@ -136,14 +141,13 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const executeTransfer = async () => {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (amt > liveBalance) return alert('Insufficient balance');
     if (!transferRecipient.trim()) return alert('Select a recipient account');
 
     setIsProcessingTransfer(true);
     try {
       const res = await fetch('/api/create-monime-transfer', { 
         method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ amount: amt, userId: profile.id, recipientPhone: transferRecipient }) 
+        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient }) 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
@@ -270,8 +274,8 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
               <input type="number" placeholder="Amount (SLE)" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-purple-500" />
               <select value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500">
                 <option value="">Select Account...</option>
-                {matmoveUsers.map(u => (
-                  <option key={u.id} value={u.phone}>MatMove {String(u.role).toUpperCase()} - {u.business_name || u.full_name} ({u.phone})</option>
+                {monimeAccounts.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
                 ))}
               </select>
             </div>
