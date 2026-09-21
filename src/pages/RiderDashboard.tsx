@@ -43,6 +43,9 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [transferPhone, setTransferPhone] = useState(profile?.phone || '');
   const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
   const [isTransferring, setIsTransferring] = useState(false);
+  
+  // CRITICAL FIX: Missing state for the internal user dropdown
+  const [matmoveUsers, setMatmoveUsers] = useState<any[]>([]);
 
   const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
 
@@ -59,6 +62,15 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       document.head.appendChild(script);
     }
   }, []);
+
+  // Securely fetch MatMove users for the Internal Transfer dropdown
+  useEffect(() => {
+    if (isTransferModalOpen) {
+      supabase.from('profiles').select('id, full_name, role, phone, business_name').neq('id', profile.id).then(({ data }) => {
+        if (data) setMatmoveUsers(data);
+      });
+    }
+  }, [isTransferModalOpen, profile.id]);
 
   useEffect(() => {
     const handlePageShow = (e: PageTransitionEvent) => {
@@ -184,7 +196,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
     if (amt > liveBalance) return alert('Insufficient balance');
-    if (!transferPhone.trim()) return alert('Enter recipient phone number');
+    if (!transferPhone.trim()) return alert('Select or enter a recipient');
 
     setIsTransferring(true);
     try {
@@ -337,23 +349,31 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase">Transfer Destination</label>
-                <select value={transferTarget} onChange={(e) => setTransferTarget(e.target.value as any)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none mt-1 focus:border-blue-500 bg-white appearance-none">
+                <select value={transferTarget} onChange={(e) => { setTransferTarget(e.target.value as any); setTransferPhone(''); }} className="w-full border p-4 rounded-xl font-bold text-sm outline-none mt-1 focus:border-blue-500 bg-white appearance-none">
                   <option value="mobile_money">Mobile Money (External Cashout)</option>
                   <option value="matmove_user">MatMove Account (Internal Transfer)</option>
                 </select>
               </div>
 
-              {transferTarget === 'mobile_money' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <button onClick={() => setNetworkProvider('orange')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
-                  <button onClick={() => setNetworkProvider('afrimoney')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
-                </div>
+              {transferTarget === 'mobile_money' ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => setNetworkProvider('orange')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
+                    <button onClick={() => setNetworkProvider('afrimoney')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
+                  </div>
+                  <input type="tel" placeholder="Mobile Money Number (e.g. 077...)" value={transferPhone} onChange={(e) => setTransferPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-blue-500" />
+                </>
+              ) : (
+                <select value={transferPhone} onChange={(e) => setTransferPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none mt-1 focus:border-blue-500 bg-white">
+                  <option value="">Select a MatMove Account...</option>
+                  {matmoveUsers?.map(u => (
+                    <option key={u.id} value={u.phone}>MatMove {String(u.role).toUpperCase()} - {u.business_name || u.full_name} ({u.phone})</option>
+                  ))}
+                </select>
               )}
-              
-              <input type="tel" placeholder={transferTarget === 'mobile_money' ? "Mobile Money Number (+232...)" : "Recipient's Registered Phone (+232...)"} value={transferPhone} onChange={(e) => setTransferPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-blue-500" />
             </div>
 
-            <button onClick={executeTransfer} disabled={isTransferring || !transferAmount} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+            <button onClick={executeTransfer} disabled={isTransferring || !transferAmount || !transferPhone} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
               {isTransferring ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Transfer
             </button>
           </div>
