@@ -12,7 +12,12 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    const { data: wallet } = await supabase.from('wallets').select('*').eq('user_id', userId).eq('currency', 'SLE').single();
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('currency', 'SLE')
+      .single();
     
     if (!wallet || !wallet.metadata?.monime_account_id) {
       return res.status(200).json({ transactions: [] });
@@ -20,7 +25,6 @@ export default async function handler(req, res) {
 
     const accountId = wallet.metadata.monime_account_id;
 
-    // Fetch transactions strictly filtered to this specific user's Monime Account ID
     const monimeRes = await fetch(`https://api.monime.io/v1/financial-transactions?financialAccountId=${accountId}&limit=20`, {
       method: 'GET',
       headers: {
@@ -36,7 +40,8 @@ export default async function handler(req, res) {
       throw new Error(rawData.message || 'Failed to fetch transactions');
     }
 
-    return res.status(200).json({ transactions: rawData.result || [] });
+    const txList = rawData.result?.items || rawData.result || [];
+    return res.status(200).json({ transactions: Array.isArray(txList) ? txList : [] });
   } catch (error) {
     console.error('Fetch Transactions Error:', error.message);
     return res.status(500).json({ error: error.message });
