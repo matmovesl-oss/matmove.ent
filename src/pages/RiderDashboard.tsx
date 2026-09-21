@@ -2,7 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, ArrowUpRight, Smartphone, CreditCard, X, Wallet, Map } from 'lucide-react';
+import { 
+  Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, 
+  Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, CreditCard, 
+  ArrowUpRight, Map, ShieldCheck, Lock 
+} from 'lucide-react';
 
 const WHATSAPP_NUMBER = "23290330362";
 const PRICING_RATES = { bike: { min: 10, perKm: 3 }, keke: { min: 15, perKm: 5 }, car: { min: 30, perKm: 10 }, van: { min: 60, perKm: 20 } };
@@ -69,8 +73,17 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
-    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
-    map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 12 });
+    try {
+      mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
+      map.current = new mapboxgl.Map({ 
+        container: mapContainer.current, 
+        style: 'mapbox://styles/mapbox/streets-v12', 
+        center: [-13.234, 8.484], 
+        zoom: 12 
+      });
+    } catch (e) {
+      console.error('Mapbox load warning:', e);
+    }
   }, []);
 
   const searchPlaces = (query: string, type: 'pickup' | 'destination') => {
@@ -175,7 +188,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       const res = await fetch('/api/create-monime-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: withdrawPhone }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Withdrawal failed');
-      alert(`Cashout requested! Pending Admin approval.`);
+      alert(`Cashout processed!`);
       setIsWithdrawModalOpen(false); fetchLiveBalance();
     } catch (err: any) { alert(err.message); } finally { setIsWithdrawing(false); }
   };
@@ -183,7 +196,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   return (
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-        <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || 'Rider'}?</h1></div>
+        <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋</h1></div>
         <div className="flex gap-2">
           <button onClick={() => { setIsProcessing(false); setLoadAmount(''); setLoadMethod(null); setIsLoadModalOpen(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">+ Load Wallet</button>
           <button onClick={() => setIsWithdrawModalOpen(true)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">Withdraw</button>
@@ -195,8 +208,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
           <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
              <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
           </button>
-          <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">MatMove Unified Wallet</span>
-          <div className="text-3xl font-bold mt-1 text-blue-400">SLE {liveBalance.toFixed(2)}</div>
+          <div><span className="text-slate-400 text-xs font-bold uppercase tracking-wider">MatMove Unified Wallet</span><div className="text-3xl font-bold mt-1 text-blue-400">SLE {liveBalance.toFixed(2)}</div></div>
+          <Wallet size={32} className="text-slate-700 mr-12" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -277,7 +290,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         </div>
       </div>
 
-      {/* MODALS */}
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
@@ -321,11 +333,7 @@ function RiderShop({ profile }: any) {
     const fetchProducts = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('products')
-          .select('*, merchant:profiles!merchant_id(business_name, phone)')
-          .order('created_at', { ascending: false });
-          
+        const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
         if (error) {
           console.error('Products fetch error:', error);
           if (isMounted) setProducts([]);
@@ -358,7 +366,7 @@ function RiderShop({ profile }: any) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {products.map(p => {
-            const contactNumber = p.whatsapp_number || p.merchant?.phone || WHATSAPP_NUMBER;
+            const contactNumber = p.whatsapp_number || WHATSAPP_NUMBER;
             const cleanNumber = contactNumber.replace(/[^0-9]/g, '');
 
             return (
@@ -369,7 +377,6 @@ function RiderShop({ profile }: any) {
                   <div className="w-full h-44 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 mb-3"><ShoppingBag size={36} /></div>
                 )}
                 <div>
-                  <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{p.merchant?.business_name || 'Verified Merchant'}</div>
                   <h3 className="font-bold text-slate-900 text-base mt-0.5">{p.name}</h3>
                   <p className="text-xs text-slate-500 mt-1 line-clamp-2">{p.description || 'No description.'}</p>
                 </div>
