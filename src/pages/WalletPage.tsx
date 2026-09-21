@@ -1,18 +1,25 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Wallet, X, Smartphone, Loader2, ArrowUpRight, ArrowDownLeft, Lock, Users } from 'lucide-react';
+import { Wallet, X, Smartphone, Loader2, ArrowUpRight, ArrowDownLeft, Lock, Users, RefreshCw } from 'lucide-react';
 
 export function WalletPage({ profile, wallet, onClose }: any) {
+  // Live Balance State
+  const [liveBalance, setLiveBalance] = useState<number>(Number(wallet?.balance || 0));
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Load State
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessingLoad, setIsProcessingLoad] = useState(false);
 
+  // Payout State (Mobile Money)
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
-  const [payoutPhone, setPayoutPhone] = useState(''); // CRITICAL FIX: Starts entirely blank
+  const [payoutPhone, setPayoutPhone] = useState(''); 
   const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
   const [isProcessingPayout, setIsProcessingPayout] = useState(false);
 
+  // Transfer State (Internal Account)
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferAmount, setTransferAmount] = useState('');
   const [transferRecipient, setTransferRecipient] = useState('');
@@ -20,8 +27,27 @@ export function WalletPage({ profile, wallet, onClose }: any) {
   const [matmoveUsers, setMatmoveUsers] = useState<any[]>([]);
 
   const isApproved = profile?.role === 'rider' || profile?.kyc_status === 'approved';
-  const balance = Number(wallet?.balance || 0);
   const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
+
+  // Live Sync with Monime API
+  const fetchLiveBalance = async () => {
+    if (!profile?.id) return;
+    setIsRefreshing(true);
+    try {
+      const res = await fetch('/api/get-live-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: profile.id })
+      });
+      const data = await res.json();
+      if (data.balance !== undefined) setLiveBalance(Number(data.balance));
+    } catch (err) {} finally { setIsRefreshing(false); }
+  };
+
+  // Fetch on mount or when the wallet prop updates
+  useEffect(() => {
+    fetchLiveBalance();
+  }, [profile?.id]);
 
   useEffect(() => {
     const handlePageShow = (e: PageTransitionEvent) => {
@@ -59,7 +85,7 @@ export function WalletPage({ profile, wallet, onClose }: any) {
   const executePayout = async () => {
     const amt = Number(payoutAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (amt > balance) return alert('Insufficient balance');
+    if (amt > liveBalance) return alert('Insufficient balance');
     if (!payoutPhone.trim()) return alert('Enter recipient mobile money number');
 
     setIsProcessingPayout(true);
@@ -71,14 +97,14 @@ export function WalletPage({ profile, wallet, onClose }: any) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payout failed');
       alert(`Payout requested successfully!`);
-      closeModals(); window.location.reload();
+      closeModals(); fetchLiveBalance(); // Fetch fresh balance instead of hard reload
     } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
   };
 
   const executeTransfer = async () => {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (amt > balance) return alert('Insufficient balance');
+    if (amt > liveBalance) return alert('Insufficient balance');
     if (!transferRecipient.trim()) return alert('Select a recipient account');
 
     setIsProcessingTransfer(true);
@@ -90,7 +116,7 @@ export function WalletPage({ profile, wallet, onClose }: any) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
       alert(`Internal transfer successful!`);
-      closeModals(); window.location.reload();
+      closeModals(); fetchLiveBalance(); // Fetch fresh balance instead of hard reload
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
@@ -102,10 +128,13 @@ export function WalletPage({ profile, wallet, onClose }: any) {
       </div>
 
       <div className="bg-slate-900 text-white rounded-3xl p-8 mb-8 relative shadow-xl overflow-hidden">
+        <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
+           <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
+        </button>
         <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Available SLE Balance</span>
-        <div className="text-5xl font-bold mt-2 text-blue-400">SLE {balance.toFixed(2)}</div>
+        <div className="text-5xl font-bold mt-2 text-blue-400">SLE {liveBalance.toFixed(2)}</div>
         <div className="text-xs font-mono text-slate-400 mt-4 bg-slate-800 inline-block px-3 py-1.5 rounded-lg border border-slate-700">Account ID: {monimeAccountId}</div>
-        <Wallet size={80} className="absolute right-6 top-6 opacity-10 text-white" />
+        <Wallet size={80} className="absolute right-6 top-6 opacity-10 text-white pointer-events-none" />
       </div>
 
       <h2 className="text-lg font-bold text-slate-900 mb-4">Wallet Actions</h2>
