@@ -32,7 +32,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [isRequesting, setIsRequesting] = useState(false);
   const [isRouting, setIsRouting] = useState(false);
 
-  // CRITICAL FIX: Transfer Modal State added here to prevent blank screen crash
+  // Modals
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -192,7 +192,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
     if (amt > liveBalance) return alert('Insufficient balance');
-    if (!transferPhone.trim()) return alert('Enter the recipient\'s phone number');
+    if (!transferPhone.trim()) return alert('Enter recipient phone number');
 
     setIsTransferring(true);
     try {
@@ -330,7 +330,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       {isTransferModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <button onClick={() => setIsTransferModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Transfer Funds</h2>
             <p className="text-sm text-slate-500 mb-6">Send money instantly via Monime.</p>
 

@@ -58,7 +58,7 @@ export function WalletPage({ profile, wallet, onClose }: any) {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
     if (amt > balance) return alert('Insufficient balance');
-    if (!transferPhone.trim()) return alert('Enter the recipient\'s phone number');
+    if (!transferPhone.trim()) return alert('Enter recipient phone number');
 
     setIsTransferring(true);
     try {
