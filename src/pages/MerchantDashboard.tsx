@@ -36,10 +36,13 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawPhone, setWithdrawPhone] = useState(profile?.phone || '');
-  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferTarget, setTransferTarget] = useState<'mobile_money' | 'matmove_user'>('mobile_money');
+  const [transferPhone, setTransferPhone] = useState(profile?.phone || '');
+  const [transferEmail, setTransferEmail] = useState('');
+  const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
+  const [isTransferring, setIsTransferring] = useState(false);
 
   const isApproved = profile?.kyc_status === 'approved';
 
@@ -59,7 +62,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
 
   useEffect(() => {
     const handlePageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) setIsProcessing(false);
+      if (e.persisted) { setIsProcessing(false); setIsLoadModalOpen(false); }
     };
     window.addEventListener('pageshow', handlePageShow);
     return () => window.removeEventListener('pageshow', handlePageShow);
@@ -184,19 +187,33 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     } catch (err: any) { alert(err.message); setIsProcessing(false); }
   };
 
-  const executeWithdrawal = async () => {
-    const amt = Number(withdrawAmount);
+  const executeTransfer = async () => {
+    const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
     if (amt > liveBalance) return alert('Insufficient balance');
-    if (!withdrawPhone.trim()) return alert('Enter valid Mobile Money number');
-    setIsWithdrawing(true);
+    if (transferTarget === 'mobile_money' && !transferPhone.trim()) return alert('Enter valid Mobile Money number');
+    if (transferTarget === 'matmove_user' && !transferEmail.trim()) return alert('Enter recipient email');
+
+    setIsTransferring(true);
     try {
-      const res = await fetch('/api/create-monime-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: withdrawPhone }) });
+      const res = await fetch('/api/create-monime-transfer', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ 
+          amount: amt, 
+          userId: profile.id, 
+          transferType: transferTarget,
+          destinationPhone: transferPhone,
+          destinationEmail: transferEmail,
+          networkProvider: networkProvider
+        }) 
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
-      alert(`Transfer successful!`);
-      setIsWithdrawModalOpen(false); fetchLiveBalance();
-    } catch (err: any) { alert(err.message); } finally { setIsWithdrawing(false); }
+      alert(`Transfer processed successfully!`);
+      setIsTransferModalOpen(false); 
+      fetchLiveBalance();
+    } catch (err: any) { alert(err.message); } finally { setIsTransferring(false); }
   };
 
   return (
@@ -206,7 +223,10 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
           <div className="p-2 bg-orange-100 text-orange-600 rounded-xl"><Store size={20} /></div>
           <div><h2 className="font-bold text-slate-900 leading-tight">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
         </div>
-        <button onClick={onOpenWallet} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">View Wallet</button>
+        <div className="flex gap-2">
+          <button onClick={() => { setIsProcessing(false); setLoadAmount(''); setIsLoadModalOpen(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">+ Load Wallet</button>
+          <button onClick={() => setIsTransferModalOpen(true)} disabled={!isApproved} className={`px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Transfer</button>
+        </div>
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -291,6 +311,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
         </div>
       </div>
 
+      {/* MODALS */}
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
@@ -305,17 +326,43 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
         </div>
       )}
 
-      {isWithdrawModalOpen && (
+      {isTransferModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Transfer Funds</h2>
-            <p className="text-sm text-slate-500 mb-6">Transfer balance to Mobile Money via Monime.</p>
+            <p className="text-sm text-slate-500 mb-6">Send money instantly via Monime.</p>
+
             <div className="space-y-4 mb-6">
-              <input type="number" placeholder="Amount (SLE)" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none" />
-              <input type="tel" placeholder="Mobile Money Number (+232...)" value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none" />
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Transfer Amount (SLE)</label>
+                <input type="number" placeholder="0.00" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none mt-1 focus:border-blue-500" />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Transfer Destination</label>
+                <select value={transferTarget} onChange={(e) => setTransferTarget(e.target.value as any)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none mt-1 focus:border-blue-500 bg-white appearance-none">
+                  <option value="mobile_money">Mobile Money (External)</option>
+                  <option value="matmove_user">MatMove Account (Internal)</option>
+                </select>
+              </div>
+
+              {transferTarget === 'mobile_money' ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => setNetworkProvider('orange')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
+                    <button onClick={() => setNetworkProvider('afrimoney')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
+                  </div>
+                  <input type="tel" placeholder="Mobile Money Number (+232...)" value={transferPhone} onChange={(e) => setTransferPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-blue-500" />
+                </>
+              ) : (
+                <input type="email" placeholder="Recipient's Email Address" value={transferEmail} onChange={(e) => setTransferEmail(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-blue-500" />
+              )}
             </div>
-            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Transfer</button>
+
+            <button onClick={executeTransfer} disabled={isTransferring || !transferAmount} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isTransferring ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Transfer
+            </button>
           </div>
         </div>
       )}
@@ -344,7 +391,7 @@ function MerchantInventory({ profile }: any) {
       console.error('Failed to load products');
       setProducts([]);
     } finally {
-      setLoading(false); // Graceful exit ensuring the spinner stops
+      setLoading(false);
     }
   };
 

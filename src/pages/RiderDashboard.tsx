@@ -32,14 +32,18 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [isRequesting, setIsRequesting] = useState(false);
   const [activeBooking, setActiveBooking] = useState<any>(null);
 
+  // Unified Modals
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawPhone, setWithdrawPhone] = useState(profile?.phone || '');
-  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferTarget, setTransferTarget] = useState<'mobile_money' | 'matmove_user'>('mobile_money');
+  const [transferPhone, setTransferPhone] = useState(profile?.phone || '');
+  const [transferEmail, setTransferEmail] = useState('');
+  const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
+  const [isTransferring, setIsTransferring] = useState(false);
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -78,12 +82,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     if (map.current || !mapContainer.current) return;
     try {
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
-      map.current = new mapboxgl.Map({ 
-        container: mapContainer.current, 
-        style: 'mapbox://styles/mapbox/streets-v12', 
-        center: [-13.234, 8.484], 
-        zoom: 12 
-      });
+      map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 12 });
     } catch (e) {
       console.error('Mapbox error:', e);
     }
@@ -175,24 +174,37 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: 'rider' }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment failed');
-      const redirectUrl = data.link || data.checkoutUrl;
-      if (redirectUrl) window.location.href = redirectUrl;
+      if (data.link || data.checkoutUrl) window.location.href = data.link || data.checkoutUrl;
     } catch (err: any) { alert(err.message); setIsProcessing(false); }
   };
 
-  const executeWithdrawal = async () => {
-    const amt = Number(withdrawAmount);
+  const executeTransfer = async () => {
+    const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
     if (amt > liveBalance) return alert('Insufficient balance');
-    if (!withdrawPhone.trim()) return alert('Enter valid Mobile Money number');
-    setIsWithdrawing(true);
+    if (transferTarget === 'mobile_money' && !transferPhone.trim()) return alert('Enter valid Mobile Money number');
+    if (transferTarget === 'matmove_user' && !transferEmail.trim()) return alert('Enter recipient email');
+
+    setIsTransferring(true);
     try {
-      const res = await fetch('/api/create-monime-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: withdrawPhone }) });
+      const res = await fetch('/api/create-monime-transfer', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ 
+          amount: amt, 
+          userId: profile.id, 
+          transferType: transferTarget,
+          destinationPhone: transferPhone,
+          destinationEmail: transferEmail,
+          networkProvider: networkProvider
+        }) 
+      });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Withdrawal failed');
+      if (!res.ok) throw new Error(data.error || 'Transfer failed');
       alert(`Transfer processed successfully!`);
-      setIsWithdrawModalOpen(false); fetchLiveBalance();
-    } catch (err: any) { alert(err.message); } finally { setIsWithdrawing(false); }
+      setIsTransferModalOpen(false); 
+      fetchLiveBalance();
+    } catch (err: any) { alert(err.message); } finally { setIsTransferring(false); }
   };
 
   return (
@@ -201,7 +213,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋</h1></div>
         <div className="flex gap-2">
           <button onClick={() => { setIsProcessing(false); setLoadAmount(''); setIsLoadModalOpen(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">+ Load Wallet</button>
-          <button onClick={() => setIsWithdrawModalOpen(true)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">Withdraw</button>
+          <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">Transfer</button>
         </div>
       </header>
 
@@ -295,7 +307,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:bg-slate-100 rounded-full p-1"><X size={20} /></button>
+            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
@@ -306,17 +318,43 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         </div>
       )}
 
-      {isWithdrawModalOpen && (
+      {isTransferModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsWithdrawModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:bg-slate-100 rounded-full p-1"><X size={20} /></button>
+            <button onClick={() => setIsTransferModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:bg-slate-100 rounded-full p-1"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Transfer Funds</h2>
-            <p className="text-sm text-slate-500 mb-6">Transfer balance to Mobile Money via Monime.</p>
+            <p className="text-sm text-slate-500 mb-6">Send money instantly via Monime.</p>
+
             <div className="space-y-4 mb-6">
-              <input type="number" placeholder="Amount (SLE)" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none" />
-              <input type="tel" placeholder="Mobile Money Number (+232...)" value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-base outline-none" />
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Transfer Amount (SLE)</label>
+                <input type="number" placeholder="0.00" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none mt-1 focus:border-blue-500" />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Transfer Destination</label>
+                <select value={transferTarget} onChange={(e) => setTransferTarget(e.target.value as any)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none mt-1 focus:border-blue-500 bg-white appearance-none">
+                  <option value="mobile_money">Mobile Money (External)</option>
+                  <option value="matmove_user">MatMove Account (Internal)</option>
+                </select>
+              </div>
+
+              {transferTarget === 'mobile_money' ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => setNetworkProvider('orange')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
+                    <button onClick={() => setNetworkProvider('afrimoney')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
+                  </div>
+                  <input type="tel" placeholder="Mobile Money Number (+232...)" value={transferPhone} onChange={(e) => setTransferPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-blue-500" />
+                </>
+              ) : (
+                <input type="email" placeholder="Recipient's Email Address" value={transferEmail} onChange={(e) => setTransferEmail(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-blue-500" />
+              )}
             </div>
-            <button onClick={executeWithdrawal} disabled={isWithdrawing || !withdrawAmount} className="w-full bg-emerald-600 text-white font-bold p-4 rounded-xl flex justify-center gap-2 disabled:opacity-50">{isWithdrawing ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Transfer</button>
+
+            <button onClick={executeTransfer} disabled={isTransferring || !transferAmount} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isTransferring ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Transfer
+            </button>
           </div>
         </div>
       )}
