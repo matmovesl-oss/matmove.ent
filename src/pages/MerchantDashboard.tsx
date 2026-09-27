@@ -53,7 +53,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
 
-  // 🔴 FIX: RECOVER ACTIVE BOOKING ON LOAD
   useEffect(() => {
     if (!profile?.id) return;
     const checkActiveTrip = async () => {
@@ -361,14 +360,39 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                 {activeBooking.status === 'accepted' || activeBooking.status === 'in_progress' ? (
                   <>
                      <Car className="text-emerald-600 mx-auto mb-4" size={48} />
-                     <h4 className="font-bold text-xl text-slate-900">Driver is on the way!</h4>
+                     <h4 className="font-bold text-xl text-slate-900">
+                       {activeBooking.status === 'in_progress' ? 'Trip in Progress!' : 'Driver is on the way!'}
+                     </h4>
                      <p className="text-sm text-slate-500 mt-2">Your fare (SLE {activeBooking.fare_amount}) is held securely in Escrow.</p>
+                     
                      {activeBooking.driver && (
-                        <div className="mt-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-left">
+                        <div className="mt-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-left mb-6">
                            <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Your Driver</div>
                            <div className="font-bold text-slate-900">{activeBooking.driver.full_name}</div>
                            <div className="text-sm text-slate-600 flex items-center gap-1 mt-1"><Smartphone size={14}/> {activeBooking.driver.phone}</div>
                         </div>
+                     )}
+
+                     {activeBooking.status === 'in_progress' && (
+                       <button 
+                         onClick={async () => {
+                           setIsRequesting(true);
+                           try {
+                             const res = await fetch('/api/complete-ride-payout', {
+                               method: 'POST', headers: { 'Content-Type': 'application/json' },
+                               body: JSON.stringify({ bookingId: activeBooking.id, driverId: activeBooking.driver_id, amount: activeBooking.fare_amount })
+                             });
+                             const data = await res.json();
+                             if (!res.ok) throw new Error(data.error);
+                             alert('Payment released to Driver! Trip Complete.');
+                             fetchLiveBalance();
+                           } catch (err: any) { alert(err.message); } finally { setIsRequesting(false); }
+                         }}
+                         disabled={isRequesting}
+                         className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2"
+                       >
+                         {isRequesting ? <Loader2 className="animate-spin" size={20} /> : `Pay SLE ${activeBooking.fare_amount} & Complete Trip`}
+                       </button>
                      )}
                   </>
                 ) : (
@@ -377,7 +401,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                      <h4 className="font-bold text-lg text-slate-900">{activeBooking.status === 'pending_admin' ? 'Request sent to Dispatch...' : 'Broadcasting request...'}</h4>
                      <p className="text-sm text-slate-500 mt-2">Please wait while we assign a driver to your delivery.</p>
                      
-                     {/* FIX: Cancel button ONLY visible if still pending */}
                      {(activeBooking.status === 'pending' || activeBooking.status === 'pending_admin') && (
                        <button onClick={cancelTrip} className="text-red-500 text-sm font-bold hover:underline mt-4">Cancel Request</button>
                      )}

@@ -33,7 +33,6 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  // Track acceptance loading state
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -73,48 +72,34 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       if (data) setActiveRequests(data);
     };
     fetchInitialRequests();
-    const channel = supabase.channel('driver-radar').on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, fetchInitialRequests).subscribe();
+    const channel = supabase.channel('driver-radar').on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+      fetchInitialRequests();
+      fetchLiveBalance(); 
+    }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [isOnline, profile?.id]);
 
-  // 🔴 FIX: TRUE ESCROW LOGIC - Call backend API to handle transfer to Admin Escrow, then update Supabase status
+  // 🔴 ESCROW TRANSFER ON ACCEPT
   const handleAcceptBooking = async (booking: any) => {
     if (!isApproved) return alert('You must be KYC Approved by an Admin to accept trips.');
     setAcceptingId(booking.id);
-    
     try {
-      // 1. Trigger the Escrow Transfer in the Node.js backend
       const res = await fetch('/api/accept-ride-escrow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-           bookingId: booking.id, 
-           riderId: booking.rider_id, 
-           driverId: profile.id, 
-           amount: booking.fare_amount 
-        })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, riderId: booking.rider_id, driverId: profile.id, amount: booking.fare_amount })
       });
-      
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to move funds to Escrow');
-
-      // 2. The backend successfully moved the money and updated Supabase to 'accepted'. Refresh local UI.
       fetchLiveBalance();
-      
-    } catch (err: any) { 
-      alert('Acceptance Failed: ' + err.message); 
-    } finally { 
-      setAcceptingId(null); 
-    }
+    } catch (err: any) { alert('Acceptance Failed: ' + err.message); } finally { setAcceptingId(null); }
   };
 
-  const handleCompleteBooking = async (booking: any) => {
+  // 🔴 DRIVER MARKS AS ARRIVED/STARTED
+  const handleStartRide = async (booking: any) => {
+    setAcceptingId(booking.id);
     try { 
-       // In a full implementation, you would call '/api/complete-ride-payout' here to move money from Escrow to the Driver.
-       await supabase.from('bookings').update({ status: 'completed' }).eq('id', booking.id); 
-       alert(`Trip completed! Collection recorded.`); 
-       fetchLiveBalance(); 
-    } catch (err: any) { alert('Failed to complete: ' + err.message); }
+       await supabase.from('bookings').update({ status: 'in_progress' }).eq('id', booking.id); 
+    } catch (err: any) { alert('Failed: ' + err.message); } finally { setAcceptingId(null); }
   };
 
   const closeModals = () => {
@@ -240,7 +225,15 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
                    )}
                    
                    {r.status === 'accepted' && r.driver_id === profile.id && (
-                     <button onClick={() => handleCompleteBooking(r)} className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-700">Complete & Collect Fare</button>
+                     <button onClick={() => handleStartRide(r)} disabled={acceptingId === r.id} className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50">
+                       {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Arrived / Start Ride'}
+                     </button>
+                   )}
+
+                   {r.status === 'in_progress' && r.driver_id === profile.id && (
+                     <div className="w-full bg-amber-100 text-amber-800 font-bold py-3.5 rounded-xl text-center text-sm border border-amber-200 flex items-center justify-center gap-2 shadow-inner">
+                       <Loader2 size={16} className="animate-spin" /> Waiting for Rider to Pay...
+                     </div>
                    )}
                 </div>
               ))}
@@ -308,6 +301,21 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
 }
 
 function DriverTrips({ profile }: any) {
-  // [Code Unchanged for brevity]
-  return <div>Trips UI Hidden for brevity</div>;
+  const [trips, setTrips] = useState<any[]>([]);
+  useEffect(() => { 
+    if (!profile?.id) return;
+    supabase.from('bookings').select('*').eq('driver_id', profile.id).order('created_at', { ascending: false }).then(({data}) => { if(data) setTrips(data); }); 
+  }, [profile?.id]);
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto space-y-4">
+      <h1 className="text-3xl font-bold text-slate-900 mb-6">Earnings History</h1>
+      {trips.length === 0 ? <div className="text-center text-slate-500 py-10">No trips completed yet.</div> : trips.map(t => (
+        <div key={t.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
+          <div><div className="font-bold text-slate-900 capitalize">{t.service_type}</div><div className="text-xs text-slate-500 mt-1">{new Date(t.created_at).toLocaleDateString()}</div></div>
+          <div className="text-right"><div className="font-bold text-lg text-emerald-600">+ SLE {(t.fare_amount * 0.85).toFixed(2)}</div><div className="text-[10px] text-slate-500 font-bold uppercase mt-1">{t.status}</div></div>
+        </div>
+      ))}
+    </div>
+  );
 }
