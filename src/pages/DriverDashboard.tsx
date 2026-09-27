@@ -90,15 +90,26 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to move funds to Escrow');
+      
+      // INSTANT UI UPDATE
+      setActiveRequests(prev => prev.map(r => r.id === booking.id ? { ...r, status: 'accepted', driver_id: profile.id } : r));
       fetchLiveBalance();
     } catch (err: any) { alert('Acceptance Failed: ' + err.message); } finally { setAcceptingId(null); }
   };
 
-  // 🔴 DRIVER MARKS AS ARRIVED/STARTED
+  // 🔴 DRIVER MARKS AS ARRIVED/STARTED (Bypasses RLS via API)
   const handleStartRide = async (booking: any) => {
     setAcceptingId(booking.id);
     try { 
-       await supabase.from('bookings').update({ status: 'in_progress' }).eq('id', booking.id); 
+       const res = await fetch('/api/start-ride', {
+         method: 'POST', headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ bookingId: booking.id })
+       });
+       const data = await res.json();
+       if (!res.ok) throw new Error(data.error || 'Failed to start ride');
+       
+       // INSTANT UI UPDATE to clear the spinning button
+       setActiveRequests(prev => prev.map(r => r.id === booking.id ? { ...r, status: 'in_progress' } : r));
     } catch (err: any) { alert('Failed: ' + err.message); } finally { setAcceptingId(null); }
   };
 
@@ -204,7 +215,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
                      <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider">{r.service_type}</span>
                      <div>
                        <span className="text-2xl font-bold text-slate-900 block text-right">SLE {r.fare_amount}</span>
-                       <span className="text-[10px] font-bold text-slate-400 block text-right">Fee: SLE {(r.fare_amount * 0.15).toFixed(2)}</span>
+                       <span className="text-[10px] font-bold text-slate-400 block text-right">Est. Earn: SLE {(r.fare_amount * 0.85).toFixed(2)}</span>
                      </div>
                    </div>
 
