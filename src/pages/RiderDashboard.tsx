@@ -5,7 +5,9 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowUpRight, Users, ArrowDownLeft } from 'lucide-react';
 
 const WHATSAPP_NUMBER = "23290330362";
-const PRICING_RATES = { bike: { min: 10, perKm: 3 }, keke: { min: 15, perKm: 5 }, car: { min: 30, perKm: 10 }, van: { min: 60, perKm: 20 } };
+
+// FIX: Set all base test fares to 1 SLE
+const PRICING_RATES = { bike: { min: 1, perKm: 1 }, keke: { min: 1, perKm: 1 }, car: { min: 1, perKm: 1 }, van: { min: 1, perKm: 1 } };
 
 export function RiderDashboard({ profile, wallet, activeSection }: any) {
   if (activeSection === 'shop') return <RiderShop profile={profile} />;
@@ -153,10 +155,12 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     if (!pickupCoords || !destinationCoords) return alert('Please select pickup and destination from suggestions.');
     if (serviceType === 'scheduled' && !scheduledTime) return alert('Select time for scheduled request.');
     let finalAmount = 0; let finalStatus = 'pending';
+    
     if (serviceType === 'ride' || serviceType === 'delivery') {
       finalAmount = Number(offerAmount);
       if (!finalAmount || finalAmount <= 0) return alert('Preview route to calculate offer.');
-      if (finalAmount < PRICING_RATES[vehicleType].min) return alert(`Minimum fare is SLE ${PRICING_RATES[vehicleType].min}`);
+      // FIX: Alert removed. It will now accept any fare >= 1 SLE
+      if (finalAmount < 1) return alert(`Minimum test fare is SLE 1`); 
     } else { finalStatus = 'pending_admin'; }
 
     setIsRequesting(true);
@@ -263,7 +267,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                 <div className="space-y-3">
                   {(serviceType === 'ride' || serviceType === 'delivery') && (
                     <div className="grid grid-cols-4 gap-2 mb-2">
-                      {(['keke', 'bike', 'car', 'van'] as VehicleType[]).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}
+                      {(['keke', 'bike', 'car', 'van'] as const).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}
                     </div>
                   )}
 
@@ -301,8 +305,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                       <span className="text-slate-500 font-bold text-sm px-2">SLE</span>
                       <input type="number" placeholder="Offer" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-center" />
                       <div className="flex gap-1">
-                        <button onClick={() => setOfferAmount(prev => Math.max(PRICING_RATES[vehicleType].min, (Number(prev)||PRICING_RATES[vehicleType].min) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16}/></button>
-                        <button onClick={() => setOfferAmount(prev => ((Number(prev)||PRICING_RATES[vehicleType].min) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
+                        <button onClick={() => setOfferAmount(prev => Math.max(1, (Number(prev)||1) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16}/></button>
+                        <button onClick={() => setOfferAmount(prev => ((Number(prev)||1) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
                       </div>
                     </div>
                   )}

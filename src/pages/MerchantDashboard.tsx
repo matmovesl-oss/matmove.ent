@@ -7,7 +7,8 @@ import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, C
 type ServiceType = 'delivery' | 'ride' | 'scheduled';
 type VehicleType = 'keke' | 'bike' | 'car' | 'van';
 
-const PRICING_RATES = { bike: { min: 10, perKm: 3 }, keke: { min: 15, perKm: 5 }, car: { min: 30, perKm: 10 }, van: { min: 60, perKm: 20 } };
+// FIX: Set all base test fares to 1 SLE
+const PRICING_RATES = { bike: { min: 1, perKm: 1 }, keke: { min: 1, perKm: 1 }, car: { min: 1, perKm: 1 }, van: { min: 1, perKm: 1 } };
 
 export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet }: any) {
   if (activeSection === 'inventory') return <MerchantInventory profile={profile} />;
@@ -157,7 +158,8 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     if (serviceType === 'ride' || serviceType === 'delivery') {
       finalAmount = Number(offerAmount);
       if (!finalAmount || finalAmount <= 0) return alert('Preview route to calculate offer.');
-      if (finalAmount < PRICING_RATES[vehicleType].min) return alert(`Minimum fare is SLE ${PRICING_RATES[vehicleType].min}`);
+      // FIX: Alert removed. It will now accept any fare >= 1 SLE
+      if (finalAmount < 1) return alert(`Minimum test fare is SLE 1`); 
     }
 
     setIsRequesting(true);
@@ -312,8 +314,8 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                    <span className="text-slate-500 font-bold text-sm px-2">SLE</span>
                    <input type="number" placeholder="Offer Amount" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-center" />
                    <div className="flex gap-1">
-                     <button onClick={() => setOfferAmount(prev => Math.max(PRICING_RATES[vehicleType].min, (Number(prev)||PRICING_RATES[vehicleType].min) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16}/></button>
-                     <button onClick={() => setOfferAmount(prev => ((Number(prev)||PRICING_RATES[vehicleType].min) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
+                     <button onClick={() => setOfferAmount(prev => Math.max(1, (Number(prev)||1) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16}/></button>
+                     <button onClick={() => setOfferAmount(prev => ((Number(prev)||1) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
                    </div>
                  </div>
                )}
