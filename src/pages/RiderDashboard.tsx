@@ -5,8 +5,6 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowUpRight, Users, ArrowDownLeft } from 'lucide-react';
 
 const WHATSAPP_NUMBER = "23290330362";
-
-// FIX: Set all base test fares to 1 SLE
 const PRICING_RATES = { bike: { min: 1, perKm: 1 }, keke: { min: 1, perKm: 1 }, car: { min: 1, perKm: 1 }, van: { min: 1, perKm: 1 } };
 
 export function RiderDashboard({ profile, wallet, activeSection }: any) {
@@ -55,6 +53,35 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const markers = useRef<mapboxgl.Marker[]>([]);
 
   useEffect(() => {
+    if (!profile?.id) return;
+    const checkActiveTrip = async () => {
+      const { data } = await supabase
+        .from('bookings')
+        .select('*, driver:driver_id(full_name, phone)')
+        .eq('rider_id', profile.id)
+        .in('status', ['pending', 'pending_admin', 'accepted', 'in_progress'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      if (data) setActiveBooking(data);
+    };
+    checkActiveTrip();
+
+    const channel = supabase.channel('rider-active-booking')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `rider_id=eq.${profile.id}` }, (payload) => {
+         const updated = payload.new as any;
+         if (['pending', 'pending_admin', 'accepted', 'in_progress'].includes(updated.status)) {
+            setActiveBooking(updated);
+         } else if (['completed', 'cancelled'].includes(updated.status)) {
+            setActiveBooking(null);
+            setPickup(''); setDestination('');
+         }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [profile?.id]);
+
+  useEffect(() => {
     // @ts-ignore
     if (!window.google) {
       const script = document.createElement('script');
@@ -64,22 +91,12 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     }
   }, []);
 
-  useEffect(() => {
-    const handlePageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) { setIsProcessingLoad(false); setIsProcessingPayout(false); setIsProcessingTransfer(false); }
-    };
-    window.addEventListener('pageshow', handlePageShow);
-    return () => window.removeEventListener('pageshow', handlePageShow);
-  }, []);
-
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
     setIsRefreshing(true);
     try {
       const res = await fetch('/api/get-live-wallet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: profile.id })
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: profile.id })
       });
       const data = await res.json();
       if (data.balance !== undefined) setLiveBalance(Number(data.balance));
@@ -159,9 +176,12 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     if (serviceType === 'ride' || serviceType === 'delivery') {
       finalAmount = Number(offerAmount);
       if (!finalAmount || finalAmount <= 0) return alert('Preview route to calculate offer.');
-      // FIX: Alert removed. It will now accept any fare >= 1 SLE
       if (finalAmount < 1) return alert(`Minimum test fare is SLE 1`); 
     } else { finalStatus = 'pending_admin'; }
+
+    if (liveBalance < finalAmount) {
+      return alert(`Insufficient Balance. You need SLE ${finalAmount} to request this trip. Please Load your wallet.`);
+    }
 
     setIsRequesting(true);
     try {
@@ -256,14 +276,14 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit z-20">
             <h3 className="font-bold text-lg">Request Service</h3>
-            <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
-              <button onClick={() => setServiceType('ride')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16}/> Ride</button>
-              <button onClick={() => setServiceType('delivery')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Package size={16}/> Delivery</button>
-              <button onClick={() => setServiceType('scheduled')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size={16}/> Schedule</button>
-            </div>
-
+            
             {!activeBooking ? (
               <>
+                <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
+                  <button onClick={() => setServiceType('ride')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16}/> Ride</button>
+                  <button onClick={() => setServiceType('delivery')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Package size={16}/> Delivery</button>
+                  <button onClick={() => setServiceType('scheduled')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size={16}/> Schedule</button>
+                </div>
                 <div className="space-y-3">
                   {(serviceType === 'ride' || serviceType === 'delivery') && (
                     <div className="grid grid-cols-4 gap-2 mb-2">
@@ -319,9 +339,31 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
               </>
             ) : (
               <div className="text-center py-8">
-                <Loader2 className="animate-spin text-blue-600 mx-auto mb-2" size={32} />
-                <p className="font-bold text-slate-900">{activeBooking.status === 'pending_admin' ? 'Request sent to Dispatch...' : 'Broadcasting request...'}</p>
-                <button onClick={cancelTrip} className="text-red-500 text-sm font-bold hover:underline mt-4">Cancel Request</button>
+                {activeBooking.status === 'accepted' || activeBooking.status === 'in_progress' ? (
+                  <>
+                     <Car className="text-emerald-600 mx-auto mb-4" size={48} />
+                     <h4 className="font-bold text-xl text-slate-900">Driver is on the way!</h4>
+                     <p className="text-sm text-slate-500 mt-2">Your fare (SLE {activeBooking.fare_amount}) is held securely in Escrow.</p>
+                     {activeBooking.driver && (
+                        <div className="mt-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-left">
+                           <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Your Driver</div>
+                           <div className="font-bold text-slate-900">{activeBooking.driver.full_name}</div>
+                           <div className="text-sm text-slate-600 flex items-center gap-1 mt-1"><Smartphone size={14}/> {activeBooking.driver.phone}</div>
+                        </div>
+                     )}
+                  </>
+                ) : (
+                  <>
+                     <Loader2 className="animate-spin text-blue-600 mx-auto mb-4" size={40} />
+                     <h4 className="font-bold text-lg text-slate-900">{activeBooking.status === 'pending_admin' ? 'Request sent to Dispatch...' : 'Broadcasting request...'}</h4>
+                     <p className="text-sm text-slate-500 mt-2">Please wait while we assign a driver to your trip.</p>
+                     
+                     {/* FIX: Cancel button ONLY visible if still pending */}
+                     {(activeBooking.status === 'pending' || activeBooking.status === 'pending_admin') && (
+                       <button onClick={cancelTrip} className="text-red-500 text-sm font-bold hover:underline mt-4">Cancel Request</button>
+                     )}
+                  </>
+                )}
               </div>
             )}
           </div>
