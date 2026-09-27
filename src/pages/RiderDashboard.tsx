@@ -52,8 +52,10 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
 
+  // 🔴 FIX: PERFECT SYNC LOGIC
   useEffect(() => {
     if (!profile?.id) return;
+    
     const checkActiveTrip = async () => {
       const { data } = await supabase
         .from('bookings')
@@ -63,21 +65,23 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
-      if (data) setActiveBooking(data);
+        
+      if (data) {
+         setActiveBooking(data);
+      } else {
+         setActiveBooking(null);
+         setPickup(''); setDestination('');
+      }
     };
     checkActiveTrip();
 
     const channel = supabase.channel('rider-active-booking')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `rider_id=eq.${profile.id}` }, (payload) => {
-         const updated = payload.new as any;
-         if (['pending', 'pending_admin', 'accepted', 'in_progress'].includes(updated.status)) {
-            setActiveBooking(updated);
-         } else if (['completed', 'cancelled'].includes(updated.status)) {
-            setActiveBooking(null);
-            setPickup(''); setDestination('');
-         }
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `rider_id=eq.${profile.id}` }, () => {
+         // Force a complete re-fetch so we get the correct driver details and status
+         checkActiveTrip();
       })
       .subscribe();
+      
     return () => { supabase.removeChannel(channel); };
   }, [profile?.id]);
 

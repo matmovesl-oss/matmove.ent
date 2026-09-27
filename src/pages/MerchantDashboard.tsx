@@ -53,8 +53,10 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
 
+  // 🔴 FIX: PERFECT SYNC LOGIC
   useEffect(() => {
     if (!profile?.id) return;
+    
     const checkActiveTrip = async () => {
       const { data } = await supabase
         .from('bookings')
@@ -64,21 +66,23 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
-      if (data) setActiveBooking(data);
+        
+      if (data) {
+         setActiveBooking(data);
+      } else {
+         setActiveBooking(null);
+         setPickup(''); setDestination('');
+      }
     };
     checkActiveTrip();
 
     const channel = supabase.channel('merchant-active-booking')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `rider_id=eq.${profile.id}` }, (payload) => {
-         const updated = payload.new as any;
-         if (['pending', 'pending_admin', 'accepted', 'in_progress'].includes(updated.status)) {
-            setActiveBooking(updated);
-         } else if (['completed', 'cancelled'].includes(updated.status)) {
-            setActiveBooking(null);
-            setPickup(''); setDestination('');
-         }
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `rider_id=eq.${profile.id}` }, () => {
+         // Force a complete re-fetch so we get the correct driver details and status
+         checkActiveTrip();
       })
       .subscribe();
+      
     return () => { supabase.removeChannel(channel); };
   }, [profile?.id]);
 
@@ -416,6 +420,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
         </div>
       </div>
 
+      {/* ... [Modals unchanged] ... */}
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
@@ -472,6 +477,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
 }
 
 function MerchantInventory({ profile }: any) {
-  // [Code Unchanged for brevity]
+  // [Code Unchanged]
   return <div>Inventory UI Hidden for brevity</div>;
 }
