@@ -9,25 +9,27 @@ const MONIME_API_KEY = process.env.VITE_MONIME_API_KEY || process.env.MONIME_API
 const MONIME_SPACE_ID = process.env.VITE_MONIME_SPACE_ID || process.env.MONIME_SPACE_ID!;
 const ADMIN_MASTER_ESCROW_ID = 'fac-k6V1AXPbAjLxDw9rnsDxWqYpjXp';
 
-// Smart Resolver: Finds Monime Account ID from Supabase or queries Monime API directly
 async function resolveMonimeAccountId(userId: string): Promise<string | null> {
-  // 1. Try Supabase Wallets Table
-  const { data: wallet } = await supabase.from('wallets').select('*').eq('user_id', userId).single();
-  
-  let accountId = wallet?.metadata?.monime_account_id || wallet?.monime_account_id;
-  if (accountId && String(accountId).startsWith('fac-')) {
-    return accountId;
-  }
-
-  // 2. Fallback: Query Driver Profile
-  const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
-  if (!profile) return null;
-
-  const phone = profile.phone || profile.phone_number || '';
-  const fullName = profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
-
-  // 3. Fallback: Query Monime API directly for matching Financial Accounts
   try {
+    // FIX 1: Use .limit(1) instead of .single() to avoid crashes if duplicate wallets exist
+    const { data: wallets } = await supabase.from('wallets').select('*').eq('user_id', userId).limit(1);
+    const wallet = wallets?.[0];
+    
+    let accountId = wallet?.metadata?.monime_account_id || wallet?.monime_account_id;
+    if (accountId && String(accountId).startsWith('fac-')) {
+      return accountId;
+    }
+
+    // Fallback: Query Profile
+    const { data: profiles } = await supabase.from('profiles').select('*').eq('id', userId).limit(1);
+    const profile = profiles?.[0];
+    if (!profile) return null;
+
+    const phone = profile.phone || profile.phone_number || '';
+    const firstName = (profile.first_name || '').toLowerCase();
+    const lastName = (profile.last_name || '').toLowerCase();
+
+    // Fallback: Query Monime API
     const monimeRes = await fetch('https://api.monime.io/v1/financial_accounts', {
       headers: {
         'Authorization': `Bearer ${MONIME_API_KEY}`,
@@ -39,28 +41,26 @@ async function resolveMonimeAccountId(userId: string): Promise<string | null> {
       const monimeData = await monimeRes.json();
       const accounts = monimeData.data || monimeData.accounts || [];
 
-      // Fuzzy match by Phone Number or Full Name
+      // FIX 2: Smarter fuzzy matching
       const match = accounts.find((acc: any) => {
         const accName = String(acc.name || '').toLowerCase();
-        return (
-          (phone && accName.includes(phone.toLowerCase())) ||
-          (fullName && accName.includes(fullName.toLowerCase()))
-        );
+        const hasPhoneMatch = phone && accName.includes(phone.toLowerCase());
+        const hasNameMatch = (firstName && accName.includes(firstName)) && (lastName && accName.includes(lastName));
+        return hasPhoneMatch || hasNameMatch;
       });
 
       if (match?.id) {
-        // Heal Supabase record for future calls
-        await supabase.from('wallets').update({
-          metadata: { ...(wallet?.metadata || {}), monime_account_id: match.id }
-        }).eq('user_id', userId);
-
+        if (wallet?.id) {
+          await supabase.from('wallets').update({
+            metadata: { ...(wallet.metadata || {}), monime_account_id: match.id }
+          }).eq('id', wallet.id);
+        }
         return match.id;
       }
     }
   } catch (e) {
-    console.error('Monime account resolution failed:', e);
+    console.error('Resolver error:', e);
   }
-
   return null;
 }
 
@@ -74,7 +74,6 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Missing bookingId, driverId, or amount.' });
     }
 
-    // Resolve Driver's Monime Account ID
     const driverAccountId = await resolveMonimeAccountId(driverId);
     if (!driverAccountId) {
       return res.status(400).json({ error: 'Driver Monime Financial Account could not be resolved.' });
@@ -83,7 +82,6 @@ export default async function handler(req: any, res: any) {
     // Driver receives 85% of fare in minor units (cents)
     const driverEarnings = Math.round((Number(amount) * 0.85) * 100);
 
-    // Execute Internal Transfer from Escrow to Driver Wallet
     const monimeResponse = await fetch('https://api.monime.io/v1/internal_transfers', {
       method: 'POST',
       headers: {

@@ -10,17 +10,21 @@ const MONIME_SPACE_ID = process.env.VITE_MONIME_SPACE_ID || process.env.MONIME_S
 const ADMIN_MASTER_ESCROW_ID = 'fac-k6V1AXPbAjLxDw9rnsDxWqYpjXp';
 
 async function resolveMonimeAccountId(userId: string): Promise<string | null> {
-  const { data: wallet } = await supabase.from('wallets').select('*').eq('user_id', userId).single();
-  let accountId = wallet?.metadata?.monime_account_id || wallet?.monime_account_id;
-  if (accountId && String(accountId).startsWith('fac-')) return accountId;
-
-  const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
-  if (!profile) return null;
-
-  const phone = profile.phone || profile.phone_number || '';
-  const fullName = profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
-
   try {
+    const { data: wallets } = await supabase.from('wallets').select('*').eq('user_id', userId).limit(1);
+    const wallet = wallets?.[0];
+    
+    let accountId = wallet?.metadata?.monime_account_id || wallet?.monime_account_id;
+    if (accountId && String(accountId).startsWith('fac-')) return accountId;
+
+    const { data: profiles } = await supabase.from('profiles').select('*').eq('id', userId).limit(1);
+    const profile = profiles?.[0];
+    if (!profile) return null;
+
+    const phone = profile.phone || profile.phone_number || '';
+    const firstName = (profile.first_name || '').toLowerCase();
+    const lastName = (profile.last_name || '').toLowerCase();
+
     const monimeRes = await fetch('https://api.monime.io/v1/financial_accounts', {
       headers: {
         'Authorization': `Bearer ${MONIME_API_KEY}`,
@@ -34,24 +38,23 @@ async function resolveMonimeAccountId(userId: string): Promise<string | null> {
 
       const match = accounts.find((acc: any) => {
         const accName = String(acc.name || '').toLowerCase();
-        return (
-          (phone && accName.includes(phone.toLowerCase())) ||
-          (fullName && accName.includes(fullName.toLowerCase()))
-        );
+        const hasPhoneMatch = phone && accName.includes(phone.toLowerCase());
+        const hasNameMatch = (firstName && accName.includes(firstName)) && (lastName && accName.includes(lastName));
+        return hasPhoneMatch || hasNameMatch;
       });
 
       if (match?.id) {
-        await supabase.from('wallets').update({
-          metadata: { ...(wallet?.metadata || {}), monime_account_id: match.id }
-        }).eq('user_id', userId);
-
+        if (wallet?.id) {
+          await supabase.from('wallets').update({
+            metadata: { ...(wallet.metadata || {}), monime_account_id: match.id }
+          }).eq('id', wallet.id);
+        }
         return match.id;
       }
     }
   } catch (e) {
-    console.error('Monime resolution error:', e);
+    console.error('Resolver error:', e);
   }
-
   return null;
 }
 
@@ -66,7 +69,6 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Rider Monime Account could not be resolved.' });
     }
 
-    // Transfer full fare from Rider to Admin Escrow
     const monimeResponse = await fetch('https://api.monime.io/v1/internal_transfers', {
       method: 'POST',
       headers: {
