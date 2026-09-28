@@ -81,11 +81,11 @@ export default async function handler(req: any, res: any) {
       'Idempotency-Key': `payout-${bookingId}-${Date.now()}`
     };
 
-    // EXACT PAYLOAD KEYS AS DEMANDED BY MONIME LOGS
+    // EXACT PAYLOAD STRUCTURE DEMANDED BY THE ERROR LOG
     const payload = {
       amount: { currency: "SLE", value: driverEarnings },
-      sourceFinancialAccount: ADMIN_MASTER_ESCROW_ID,
-      destinationFinancialAccount: driverAccountId,
+      sourceFinancialAccount: { id: ADMIN_MASTER_ESCROW_ID },
+      destinationFinancialAccount: { id: driverAccountId },
       description: `Trip Earnings Payout for Booking ${bookingId}`
     };
 

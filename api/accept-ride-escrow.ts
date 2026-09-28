@@ -71,11 +71,11 @@ export default async function handler(req: any, res: any) {
       'Idempotency-Key': `hold-${bookingId}-${Date.now()}`
     };
 
-    // EXACT PAYLOAD KEYS AS DEMANDED BY MONIME LOGS
+    // EXACT PAYLOAD STRUCTURE DEMANDED BY THE ERROR LOG
     const payload = {
       amount: { currency: "SLE", value: Math.round(Number(amount) * 100) },
-      sourceFinancialAccount: riderAccountId,
-      destinationFinancialAccount: ADMIN_MASTER_ESCROW_ID,
+      sourceFinancialAccount: { id: riderAccountId },
+      destinationFinancialAccount: { id: ADMIN_MASTER_ESCROW_ID },
       description: `Escrow Hold for Booking ${bookingId}`
     };
 
