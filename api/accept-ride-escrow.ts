@@ -9,6 +9,45 @@ const MONIME_API_KEY = process.env.VITE_MONIME_API_KEY || process.env.MONIME_API
 const MONIME_SPACE_ID = process.env.VITE_MONIME_SPACE_ID || process.env.MONIME_SPACE_ID!;
 const ADMIN_MASTER_ESCROW_ID = 'fac-k6V1AXPbAjLxDw9rnsDxWqYpjXp';
 
+// 100% ACCURATE RESOLVER for Riders
+async function resolveMonimeAccountId(userId: string) {
+  const { data: w1 } = await supabase.from('wallets').select('*').eq('user_id', userId).limit(1);
+  const { data: w2 } = await supabase.from('wallets').select('*').eq('id', userId).limit(1);
+  const wallet = w1?.[0] || w2?.[0];
+  
+  let accountId = wallet?.metadata?.monime_account_id || wallet?.monime_account_id;
+  if (accountId && String(accountId).startsWith('fac-')) return accountId;
+
+  try {
+    const monimeRes = await fetch('https://api.monime.io/v1/financial-accounts', {
+      headers: {
+        'Authorization': `Bearer ${MONIME_API_KEY}`,
+        'Monime-Space-Id': MONIME_SPACE_ID,
+        'Accept': '*/*'
+      }
+    });
+
+    if (monimeRes.ok) {
+      const monimeData = await monimeRes.json();
+      const accounts = monimeData.result || monimeData.data || (Array.isArray(monimeData) ? monimeData : []);
+      
+      const match = accounts.find((acc: any) => acc.reference === userId);
+      
+      if (match?.id) {
+        if (wallet?.id) {
+          await supabase.from('wallets').update({
+            metadata: { ...(wallet.metadata || {}), monime_account_id: match.id }
+          }).eq('id', wallet.id);
+        }
+        return match.id;
+      }
+    }
+  } catch (e) {
+    console.error('Monime resolution failed:', e);
+  }
+  return null;
+}
+
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -19,33 +58,10 @@ export default async function handler(req: any, res: any) {
   try {
     const { bookingId, riderId, driverId, amount } = req.body;
 
-    // 1. Fetch Wallet: Check both 'user_id' and 'id' columns
-    const { data: w1 } = await supabase.from('wallets').select('*').eq('user_id', riderId).limit(1);
-    const { data: w2 } = await supabase.from('wallets').select('*').eq('id', riderId).limit(1);
-    const riderWallet = w1?.[0] || w2?.[0];
-
-    let riderAccountId = riderWallet?.metadata?.monime_account_id || riderWallet?.monime_account_id;
-
-    // 2. Monime Fallback if DB lookup fails
-    if (!riderAccountId || !String(riderAccountId).startsWith('fac-')) {
-      const { data: profiles } = await supabase.from('profiles').select('*').eq('id', riderId).limit(1);
-      const phone = profiles?.[0]?.phone || profiles?.[0]?.phone_number || '';
-      
-      const monimeRes = await fetch('https://api.monime.io/v1/financial-accounts', {
-        headers: { 'Authorization': `Bearer ${MONIME_API_KEY}`, 'Monime-Space-Id': MONIME_SPACE_ID }
-      });
-
-      if (monimeRes.ok) {
-        const monimeData = await monimeRes.json();
-        // FIX: Extract from 'result' array
-        const accounts = monimeData.result || monimeData.data || [];
-        const match = accounts.find((acc: any) => phone && String(acc.name || '').includes(phone));
-        if (match?.id) riderAccountId = match.id;
-      }
-    }
+    const riderAccountId = await resolveMonimeAccountId(riderId);
 
     if (!riderAccountId) {
-      return res.status(400).json({ error: `Rider Account not found. Database and Monime fallback failed.` });
+      return res.status(400).json({ error: `Missing Rider Wallet Account. Rider ID: ${riderId}` });
     }
 
     const headers = {
@@ -62,7 +78,6 @@ export default async function handler(req: any, res: any) {
       description: `Escrow Hold for Booking ${bookingId}`
     };
 
-    // 3. Monime Internal Transfer to Escrow
     let monimeResponse = await fetch('https://api.monime.io/v1/internal-transfers', {
       method: 'POST', headers, body: JSON.stringify(payload)
     });
@@ -78,7 +93,7 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: `Transfer failed: ${monimeResponse.status} - ${errText}` });
     }
 
-    // 4. Success! Mark as accepted.
+    // Success! Mark as accepted.
     await supabase.from('bookings').update({ status: 'accepted', driver_id: driverId }).eq('id', bookingId);
     return res.status(200).json({ success: true, riderAccountId });
 
