@@ -9,7 +9,6 @@ const MONIME_API_KEY = process.env.VITE_MONIME_API_KEY || process.env.MONIME_API
 const MONIME_SPACE_ID = process.env.VITE_MONIME_SPACE_ID || process.env.MONIME_SPACE_ID!;
 const ADMIN_MASTER_ESCROW_ID = 'fac-k6V1AXPbAjLxDw9rnsDxWqYpjXp';
 
-// 100% ACCURATE RESOLVER: Maps the Driver to their Monime Account using the exact "reference" field
 async function resolveMonimeAccountId(userId: string) {
   const { data: w1 } = await supabase.from('wallets').select('*').eq('user_id', userId).limit(1);
   const { data: w2 } = await supabase.from('wallets').select('*').eq('id', userId).limit(1);
@@ -74,7 +73,6 @@ export default async function handler(req: any, res: any) {
 
     const driverEarnings = Math.round((Number(amount) * 0.85) * 100);
 
-    // FIX: Added the Idempotency-Key to satisfy Monime's security requirement
     const headers = {
       'Content-Type': 'application/json',
       'Accept': '*/*',
@@ -83,10 +81,11 @@ export default async function handler(req: any, res: any) {
       'Idempotency-Key': `payout-${bookingId}-${Date.now()}`
     };
 
+    // EXACT PAYLOAD KEYS AS DEMANDED BY MONIME LOGS
     const payload = {
       amount: { currency: "SLE", value: driverEarnings },
-      sourceAccountId: ADMIN_MASTER_ESCROW_ID,
-      destinationAccountId: driverAccountId,
+      sourceFinancialAccount: ADMIN_MASTER_ESCROW_ID,
+      destinationFinancialAccount: driverAccountId,
       description: `Trip Earnings Payout for Booking ${bookingId}`
     };
 

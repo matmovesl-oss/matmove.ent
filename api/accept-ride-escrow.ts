@@ -63,7 +63,6 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: `Missing Rider Wallet Account. Rider ID: ${riderId}` });
     }
 
-    // FIX: Added the Idempotency-Key to satisfy Monime's security requirement
     const headers = {
       'Content-Type': 'application/json',
       'Accept': '*/*',
@@ -72,10 +71,11 @@ export default async function handler(req: any, res: any) {
       'Idempotency-Key': `hold-${bookingId}-${Date.now()}`
     };
 
+    // EXACT PAYLOAD KEYS AS DEMANDED BY MONIME LOGS
     const payload = {
       amount: { currency: "SLE", value: Math.round(Number(amount) * 100) },
-      sourceAccountId: riderAccountId,
-      destinationAccountId: ADMIN_MASTER_ESCROW_ID,
+      sourceFinancialAccount: riderAccountId,
+      destinationFinancialAccount: ADMIN_MASTER_ESCROW_ID,
       description: `Escrow Hold for Booking ${bookingId}`
     };
 
