@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Enforce Service Role Key to bypass RLS securely
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY!
@@ -12,7 +11,6 @@ const ADMIN_MASTER_ESCROW_ID = 'fac-k6V1AXPbAjLxDw9rnsDxWqYpjXp';
 
 // 100% ACCURATE RESOLVER: Maps the Driver to their Monime Account using the exact "reference" field
 async function resolveMonimeAccountId(userId: string) {
-  // 1. Check database first to prevent unnecessary API calls
   const { data: w1 } = await supabase.from('wallets').select('*').eq('user_id', userId).limit(1);
   const { data: w2 } = await supabase.from('wallets').select('*').eq('id', userId).limit(1);
   const wallet = w1?.[0] || w2?.[0];
@@ -20,7 +18,6 @@ async function resolveMonimeAccountId(userId: string) {
   let accountId = wallet?.metadata?.monime_account_id || wallet?.monime_account_id;
   if (accountId && String(accountId).startsWith('fac-')) return accountId;
 
-  // 2. Exact Match via Monime API (No guessing: using the "reference" field proven in logs)
   try {
     const monimeRes = await fetch('https://api.monime.io/v1/financial-accounts', {
       headers: {
@@ -34,11 +31,9 @@ async function resolveMonimeAccountId(userId: string) {
       const monimeData = await monimeRes.json();
       const accounts = monimeData.result || monimeData.data || (Array.isArray(monimeData) ? monimeData : []);
       
-      // EXACT MATCH: Find the account where the reference equals the Supabase User ID
       const match = accounts.find((acc: any) => acc.reference === userId);
       
       if (match?.id) {
-        // Heal the database so we don't have to query Monime next time
         if (wallet?.id) {
           await supabase.from('wallets').update({
             metadata: { ...(wallet.metadata || {}), monime_account_id: match.id }
@@ -64,7 +59,6 @@ export default async function handler(req: any, res: any) {
     const { bookingId, amount } = req.body;
     let { driverId } = req.body;
 
-    // Fetch driver ID from booking if the frontend failed to send it
     if (!driverId) {
       const { data: booking } = await supabase.from('bookings').select('driver_id').eq('id', bookingId).single();
       driverId = booking?.driver_id;
@@ -72,21 +66,21 @@ export default async function handler(req: any, res: any) {
 
     if (!driverId) return res.status(400).json({ error: 'Driver ID is missing.' });
 
-    // Use the 100% accurate resolver to get the exact fac- ID
     const driverAccountId = await resolveMonimeAccountId(driverId);
 
     if (!driverAccountId) {
       return res.status(400).json({ error: `Missing Driver Wallet Account. Driver ID: ${driverId}` });
     }
 
-    // Driver gets 85% of fare (in minor units / cents)
     const driverEarnings = Math.round((Number(amount) * 0.85) * 100);
 
+    // FIX: Added the Idempotency-Key to satisfy Monime's security requirement
     const headers = {
       'Content-Type': 'application/json',
       'Accept': '*/*',
       'Authorization': `Bearer ${MONIME_API_KEY}`,
-      'Monime-Space-Id': MONIME_SPACE_ID
+      'Monime-Space-Id': MONIME_SPACE_ID,
+      'Idempotency-Key': `payout-${bookingId}-${Date.now()}`
     };
 
     const payload = {
@@ -96,7 +90,6 @@ export default async function handler(req: any, res: any) {
       description: `Trip Earnings Payout for Booking ${bookingId}`
     };
 
-    // Release Escrow to Driver's Monime Account
     let monimeResponse = await fetch('https://api.monime.io/v1/internal-transfers', {
       method: 'POST', headers, body: JSON.stringify(payload)
     });
@@ -112,7 +105,6 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: `Transfer failed: ${monimeResponse.status} - ${errText}` });
     }
 
-    // Success! Mark trip as completed.
     await supabase.from('bookings').update({ status: 'completed' }).eq('id', bookingId);
     return res.status(200).json({ success: true, driverAccountId });
 

@@ -9,7 +9,6 @@ const MONIME_API_KEY = process.env.VITE_MONIME_API_KEY || process.env.MONIME_API
 const MONIME_SPACE_ID = process.env.VITE_MONIME_SPACE_ID || process.env.MONIME_SPACE_ID!;
 const ADMIN_MASTER_ESCROW_ID = 'fac-k6V1AXPbAjLxDw9rnsDxWqYpjXp';
 
-// 100% ACCURATE RESOLVER for Riders
 async function resolveMonimeAccountId(userId: string) {
   const { data: w1 } = await supabase.from('wallets').select('*').eq('user_id', userId).limit(1);
   const { data: w2 } = await supabase.from('wallets').select('*').eq('id', userId).limit(1);
@@ -64,11 +63,13 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: `Missing Rider Wallet Account. Rider ID: ${riderId}` });
     }
 
+    // FIX: Added the Idempotency-Key to satisfy Monime's security requirement
     const headers = {
       'Content-Type': 'application/json',
       'Accept': '*/*',
       'Authorization': `Bearer ${MONIME_API_KEY}`,
-      'Monime-Space-Id': MONIME_SPACE_ID
+      'Monime-Space-Id': MONIME_SPACE_ID,
+      'Idempotency-Key': `hold-${bookingId}-${Date.now()}`
     };
 
     const payload = {
@@ -93,7 +94,6 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: `Transfer failed: ${monimeResponse.status} - ${errText}` });
     }
 
-    // Success! Mark as accepted.
     await supabase.from('bookings').update({ status: 'accepted', driver_id: driverId }).eq('id', bookingId);
     return res.status(200).json({ success: true, riderAccountId });
 
