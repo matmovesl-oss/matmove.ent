@@ -2,10 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowUpRight, Users, ArrowDownLeft } from 'lucide-react';
+import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowDownLeft } from 'lucide-react';
 
 const WHATSAPP_NUMBER = "23290330362";
-const PRICING_RATES = { bike: { min: 1, perKm: 1 }, keke: { min: 1, perKm: 1 }, car: { min: 1, perKm: 1 }, van: { min: 1, perKm: 1 } };
 
 export function RiderDashboard({ profile, wallet, activeSection }: any) {
   if (activeSection === 'shop') return <RiderShop profile={profile} />;
@@ -13,6 +12,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 
   const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pricingRates, setPricingRates] = useState<any>({ bike: { min: 15, perKm: 3 }, keke: { min: 20, perKm: 5 }, car: { min: 30, perKm: 8 }, van: { min: 50, perKm: 15 } });
+  
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
@@ -35,64 +36,35 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessingLoad, setIsProcessingLoad] = useState(false);
 
-  const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
-  const [payoutAmount, setPayoutAmount] = useState('');
-  const [payoutPhone, setPayoutPhone] = useState('');
-  const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
-  const [isProcessingPayout, setIsProcessingPayout] = useState(false);
-
-  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-  const [transferAmount, setTransferAmount] = useState('');
-  const [transferRecipient, setTransferRecipient] = useState('');
-  const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
-
-  const isApproved = profile?.kyc_status === 'approved' || profile?.role === 'rider';
   const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
 
-  // 🔴 FIX: HYBRID SYNC LOGIC (WebSockets + 3-Second Polling)
+  // Fetch dynamic pricing from Supabase
+  useEffect(() => {
+    supabase.from('pricing_settings').select('*').then(({ data }) => {
+      if (data && data.length > 0) {
+        const rates: any = {};
+        data.forEach(r => rates[r.vehicle_type] = { min: Number(r.min_fare), perKm: Number(r.per_km_rate) });
+        setPricingRates(rates);
+      }
+    });
+  }, []);
+
   useEffect(() => {
     if (!profile?.id) return;
-    
     const checkActiveTrip = async () => {
-      const { data } = await supabase
-        .from('bookings')
-        .select('*, driver:driver_id(full_name, phone)')
-        .eq('rider_id', profile.id)
-        .in('status', ['pending', 'pending_admin', 'accepted', 'in_progress'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-        
-      if (data) {
-         setActiveBooking(data);
-      } else {
-         setActiveBooking(null);
-         setPickup(''); setDestination('');
-      }
+      const { data } = await supabase.from('bookings').select('*, driver:driver_id(full_name, phone)').eq('rider_id', profile.id).in('status', ['pending', 'pending_admin', 'accepted', 'in_progress']).order('created_at', { ascending: false }).limit(1).single();
+      if (data) setActiveBooking(data); else { setActiveBooking(null); setPickup(''); setDestination(''); }
     };
-    
     checkActiveTrip();
-
-    const channel = supabase.channel('rider-active-booking')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `rider_id=eq.${profile.id}` }, () => {
-         checkActiveTrip();
-      })
-      .subscribe();
-      
-    // Bulletproof Fallback: Sync every 3 seconds to catch driver updates
+    const channel = supabase.channel('rider-active-booking').on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `rider_id=eq.${profile.id}` }, checkActiveTrip).subscribe();
     const syncInterval = setInterval(checkActiveTrip, 3000);
-      
-    return () => { 
-      supabase.removeChannel(channel); 
-      clearInterval(syncInterval);
-    };
+    return () => { supabase.removeChannel(channel); clearInterval(syncInterval); };
   }, [profile?.id]);
 
   useEffect(() => {
-    // @ts-ignore
     if (!window.google) {
       const script = document.createElement('script');
       script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`;
@@ -105,9 +77,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     if (!profile?.id) return;
     setIsRefreshing(true);
     try {
-      const res = await fetch('/api/get-live-wallet', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: profile.id })
-      });
+      const res = await fetch('/api/get-live-wallet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: profile.id }) });
       const data = await res.json();
       if (data.balance !== undefined) setLiveBalance(Number(data.balance));
     } catch (err) {} finally { setIsRefreshing(false); }
@@ -126,8 +96,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const searchPlaces = (query: string, type: 'pickup' | 'destination') => {
     if (type === 'pickup') { setPickup(query); setPickupCoords(null); } else { setDestination(query); setDestinationCoords(null); }
     if (query.trim().length < 3) { type === 'pickup' ? setPickupSuggestions([]) : setDestinationSuggestions([]); return; }
-    // @ts-ignore
-    if (!window.google) return;
     // @ts-ignore
     const autocomplete = new window.google.maps.places.AutocompleteService();
     autocomplete.getPlacePredictions({ input: query, componentRestrictions: { country: 'sl' } }, (predictions: any, status: any) => {
@@ -169,7 +137,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         if (route) {
           const distKm = route.distance / 1000;
           setTripDistanceKm(distKm);
-          const rate = PRICING_RATES[vehicleType];
+          const rate = pricingRates[vehicleType] || { min: 15, perKm: 3 };
           setOfferAmount(Math.max(rate.min, Math.ceil((rate.min + (distKm * rate.perKm)) / 5) * 5).toString());
           map.current.addSource('route', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: route.geometry } });
           map.current.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#2563EB', 'line-width': 4 } });
@@ -186,7 +154,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     if (serviceType === 'ride' || serviceType === 'delivery') {
       finalAmount = Number(offerAmount);
       if (!finalAmount || finalAmount <= 0) return alert('Preview route to calculate offer.');
-      if (finalAmount < 1) return alert(`Minimum test fare is SLE 1`); 
+      const minFare = pricingRates[vehicleType]?.min || 1;
+      if (finalAmount < minFare) return alert(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minFare}`); 
     } else { finalStatus = 'pending_admin'; }
 
     if (liveBalance < finalAmount) {
@@ -206,12 +175,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     try { await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', activeBooking.id); setActiveBooking(null); } catch (err) {}
   };
 
-  const closeModals = () => {
-    setIsLoadModalOpen(false); setIsPayoutModalOpen(false); setIsTransferModalOpen(false);
-    setIsProcessingLoad(false); setIsProcessingPayout(false); setIsProcessingTransfer(false);
-    setLoadAmount(''); setPayoutAmount(''); setTransferAmount(''); setTransferRecipient(''); setPayoutPhone('');
-  };
-
   const executeLoad = async () => {
     if (!loadAmount || Number(loadAmount) <= 0) return alert('Enter a valid amount.');
     setIsProcessingLoad(true);
@@ -223,50 +186,12 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     } catch (err: any) { alert(err.message); setIsProcessingLoad(false); }
   };
 
-  const executePayout = async () => {
-    const amt = Number(payoutAmount);
-    if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (!payoutPhone.trim()) return alert('Enter recipient mobile money number');
-
-    setIsProcessingPayout(true);
-    try {
-      const res = await fetch('/api/create-monime-payout', { 
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: payoutPhone, networkProvider }) 
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Payout failed');
-      alert(`Payout requested successfully!`);
-      closeModals(); fetchLiveBalance();
-    } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
-  };
-
-  const executeTransfer = async () => {
-    const amt = Number(transferAmount);
-    if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID (starts with fac-)');
-
-    setIsProcessingTransfer(true);
-    try {
-      const res = await fetch('/api/create-monime-transfer', { 
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient.trim() }) 
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Transfer failed');
-      alert(`Internal transfer successful!`);
-      closeModals(); fetchLiveBalance();
-    } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
-  };
-
   return (
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋</h1></div>
         <div className="flex gap-2">
-          <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm">Load</button>
-          <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm">Payout</button>
-          <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm">Transfer</button>
+          <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm">Load Wallet</button>
         </div>
       </header>
 
@@ -331,13 +256,22 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                   </div>
 
                   {(serviceType === 'ride' || serviceType === 'delivery') && (
-                    <div className="flex items-center gap-2 border border-slate-200 bg-slate-50 p-2 rounded-xl">
-                      <span className="text-slate-500 font-bold text-sm px-2">SLE</span>
-                      <input type="number" placeholder="Offer" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-center" />
-                      <div className="flex gap-1">
-                        <button onClick={() => setOfferAmount(prev => Math.max(1, (Number(prev)||1) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16}/></button>
-                        <button onClick={() => setOfferAmount(prev => ((Number(prev)||1) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
+                    <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-slate-500 font-bold text-sm px-2">Total Fare (SLE)</span>
+                        <input type="number" placeholder="Amount" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-right pr-2" />
+                        <div className="flex gap-1">
+                          <button onClick={() => setOfferAmount(prev => Math.max(pricingRates[vehicleType]?.min || 1, (Number(prev)||1) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16}/></button>
+                          <button onClick={() => setOfferAmount(prev => ((Number(prev)||1) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
+                        </div>
                       </div>
+                      {/* FEE BREAKDOWN UI */}
+                      {Number(offerAmount) > 0 && (
+                        <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 shadow-sm mt-2">
+                          <div className="text-[11px] font-bold text-emerald-600">Driver Earns: SLE {(Number(offerAmount) * 0.85).toFixed(2)}</div>
+                          <div className="text-[11px] font-bold text-rose-500">Platform Fee: SLE {(Number(offerAmount) * 0.15).toFixed(2)}</div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -378,7 +312,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                              if (!res.ok) throw new Error(data.error);
                              alert('Payment released to Driver! Trip Complete.');
                              fetchLiveBalance();
-                             setActiveBooking(null); // Clear booking manually so UI resets immediately
+                             setActiveBooking(null);
                            } catch (err: any) { alert(err.message); } finally { setIsRequesting(false); }
                          }}
                          disabled={isRequesting}
@@ -407,16 +341,51 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
           </div>
         </div>
       </div>
-      
-      {/* ... [Modals Unchanged] ... */}
+
+      {isLoadModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
+            <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
+            <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
+            <button onClick={executeLoad} disabled={isProcessingLoad || !loadAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessingLoad ? <Loader2 className="animate-spin" size={20} /> : <><ArrowDownLeft size={20} /> Checkout</>}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function RiderShop({ profile }: any) {
-  return <div>Shop UI Hidden</div>;
+  return <div className="p-12 text-center text-slate-500"><ShoppingBag className="mx-auto mb-4" size={48} /> Shop Marketplace coming soon...</div>;
 }
 
+// 🔴 RESTORED TRIPS UI FOR RIDER
 function RiderTrips({ profile }: any) {
-  return <div>Trips UI Hidden</div>;
+  const [trips, setTrips] = useState<any[]>([]);
+  useEffect(() => { 
+    supabase.from('bookings').select('*, driver:driver_id(full_name)').eq('rider_id', profile.id).order('created_at', { ascending: false }).then(({data}) => { if(data) setTrips(data); }); 
+  }, [profile.id]);
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto space-y-4">
+      <h1 className="text-3xl font-bold text-slate-900 mb-6">Trip History</h1>
+      {trips.length === 0 ? <div className="text-center text-slate-500 py-10">No trips found.</div> : trips.map(t => (
+        <div key={t.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
+          <div>
+            <div className="font-bold text-slate-900 capitalize">{t.service_type} {t.vehicle_type ? `(${t.vehicle_type})` : ''}</div>
+            <div className="text-xs text-slate-500 mt-1">{new Date(t.created_at).toLocaleString()}</div>
+            <div className="text-xs font-mono text-slate-400 mt-2">{t.pickup_location?.slice(0,25)}... <ArrowRight size={10} className="inline"/> {t.destination_location?.slice(0,25)}...</div>
+          </div>
+          <div className="text-right">
+            <div className="font-bold text-lg text-slate-900">SLE {t.fare_amount}</div>
+            <div className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded mt-1 inline-block ${t.status==='completed'?'bg-emerald-100 text-emerald-700':t.status==='cancelled'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{t.status}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
