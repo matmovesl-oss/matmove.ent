@@ -1,21 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY!
-);
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-const MONIME_API_KEY = process.env.VITE_MONIME_API_KEY || process.env.MONIME_API_KEY!;
-const MONIME_SPACE_ID = process.env.VITE_MONIME_SPACE_ID || process.env.MONIME_SPACE_ID!;
+const MONIME_API_KEY = process.env.VITE_MONIME_API_KEY || process.env.MONIME_API_KEY || '';
+const MONIME_SPACE_ID = process.env.VITE_MONIME_SPACE_ID || process.env.MONIME_SPACE_ID || '';
 
 async function resolveMonimeAccountId(userId: string) {
   try {
-    const { data: w1 } = await supabase.from('wallets').select('*').eq('user_id', userId).limit(1);
-    const { data: w2 } = await supabase.from('wallets').select('*').eq('id', userId).limit(1);
-    const wallet = w1?.[0] || w2?.[0];
+    const { data: wallets } = await supabase.from('wallets').select('*').eq('user_id', userId).limit(1);
+    const wallet = wallets?.[0];
     
     let accountId = wallet?.metadata?.monime_account_id || wallet?.monime_account_id;
-    if (accountId && String(accountId).startsWith('fac-')) return accountId;
+    if (accountId && String(accountId).startsWith('fac-')) {
+      return accountId;
+    }
 
     const monimeRes = await fetch('https://api.monime.io/v1/financial-accounts', {
       headers: {
@@ -27,9 +27,11 @@ async function resolveMonimeAccountId(userId: string) {
 
     if (monimeRes.ok) {
       const monimeData = await monimeRes.json();
-      const accounts = monimeData.result || monimeData.data || (Array.isArray(monimeData) ? monimeData : []);
+      const accounts = monimeData.result || monimeData.data || [];
       const match = accounts.find((acc: any) => acc.reference === userId);
-      if (match?.id) return match.id;
+      if (match?.id) {
+        return match.id;
+      }
     }
   } catch (e) {
     console.error('Monime resolution error:', e);
@@ -38,14 +40,23 @@ async function resolveMonimeAccountId(userId: string) {
 }
 
 export default async function handler(req: any, res: any) {
+  // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+  
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
 
   try {
-    const { amount, userId, role } = req.body || {};
+    const amount = req.body?.amount;
+    const userId = req.body?.userId;
+    const role = req.body?.role || 'user';
     
     if (!amount || !userId) {
       return res.status(400).json({ error: 'Missing amount or userId.' });
@@ -56,13 +67,14 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: `User Monime Account could not be resolved for ID: ${userId}` });
     }
 
+    // Convert amount to minor units (cents)
     const loadAmountMinor = Math.round(Number(amount) * 100);
     const hostUrl = req.headers?.origin || 'https://matmoveent.vercel.app';
 
     const payload = {
-      name: `MatMove ${String(role || 'User').toUpperCase()} Wallet Top-up`,
-      successUrl: `${hostUrl}/customer/${role || 'rider'}?load=success`,
-      cancelUrl: `${hostUrl}/customer/${role || 'rider'}?load=cancelled`,
+      name: `MatMove Wallet Top-up`,
+      successUrl: `${hostUrl}/customer/${role}?load=success`,
+      cancelUrl: `${hostUrl}/customer/${role}?load=cancelled`,
       financialAccountId: targetAccountId,
       lineItems: [
         {
@@ -72,7 +84,7 @@ export default async function handler(req: any, res: any) {
           quantity: 1
         }
       ],
-      metadata: { userId, role }
+      metadata: { userId: userId, role: role }
     };
 
     const monimeResponse = await fetch('https://api.monime.io/v1/checkout-sessions', {
@@ -89,10 +101,15 @@ export default async function handler(req: any, res: any) {
 
     const resText = await monimeResponse.text();
     let sessionData: any = {};
-    try { sessionData = JSON.parse(resText); } catch (e) {}
+    
+    try { 
+      sessionData = JSON.parse(resText); 
+    } catch (e) {
+      console.error("Failed to parse JSON:", resText);
+    }
 
     if (!monimeResponse.ok) {
-      return res.status(400).json({ error: `Checkout Creation Failed: ${monimeResponse.status} - ${sessionData.message || resText}` });
+      return res.status(400).json({ error: `Checkout Creation Failed: ${sessionData.message || resText}` });
     }
 
     const result = sessionData.result || sessionData;
@@ -102,6 +119,7 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Monime did not return a valid checkout URL.' });
     }
 
+    // Send URL to frontend to redirect
     return res.status(200).json({ link: checkoutUrl });
 
   } catch (error: any) {
