@@ -29,7 +29,6 @@ async function resolveMonimeAccountId(userId: string) {
     if (monimeRes.ok) {
       const monimeData = await monimeRes.json();
       const accounts = monimeData.result || monimeData.data || (Array.isArray(monimeData) ? monimeData : []);
-      
       const match = accounts.find((acc: any) => acc.reference === userId);
       
       if (match?.id) {
@@ -81,7 +80,6 @@ export default async function handler(req: any, res: any) {
       'Idempotency-Key': `payout-${bookingId}-${Date.now()}`
     };
 
-    // EXACT PAYLOAD STRUCTURE DEMANDED BY THE ERROR LOG
     const payload = {
       amount: { currency: "SLE", value: driverEarnings },
       sourceFinancialAccount: { id: ADMIN_MASTER_ESCROW_ID },
@@ -101,11 +99,20 @@ export default async function handler(req: any, res: any) {
 
     if (!monimeResponse.ok) {
       const errText = await monimeResponse.text();
-      return res.status(400).json({ error: `Transfer failed: ${monimeResponse.status} - ${errText}` });
+      return res.status(400).json({ error: `Transfer API Error: ${monimeResponse.status} - ${errText}` });
+    }
+
+    // 🔴 CRITICAL FIX: Monime returns HTTP 200 even if the transfer fails. We MUST check the JSON status.
+    const transferResult = await monimeResponse.json();
+    const transferData = transferResult.result || transferResult;
+    
+    if (transferData.status === 'failed') {
+      const failureReason = transferData.failureDetail?.message || transferData.failureDetail?.code || 'Unknown error';
+      return res.status(400).json({ error: `Monime Transfer Failed: ${failureReason}` });
     }
 
     await supabase.from('bookings').update({ status: 'completed' }).eq('id', bookingId);
-    return res.status(200).json({ success: true, driverAccountId });
+    return res.status(200).json({ success: true, driverAccountId, transferData });
 
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
