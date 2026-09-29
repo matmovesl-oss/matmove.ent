@@ -120,15 +120,15 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payout failed');
-      alert(`Payout requested successfully!`);
-      closeModals(); fetchLiveBalance();
+      alert(`Payout requested successfully! Redirecting for security...`);
+      window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
     } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
   };
 
   const executeTransfer = async () => {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID (starts with fac-)');
+    if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID');
 
     setIsProcessingTransfer(true);
     try {
@@ -138,8 +138,8 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
-      alert(`Internal transfer successful!`);
-      closeModals(); fetchLiveBalance();
+      alert(`Internal transfer successful! Redirecting for security...`);
+      window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
@@ -152,7 +152,6 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           </button>
           <div><h2 className="font-bold text-slate-900 text-lg">{isOnline ? 'You are Online' : 'You are Offline'}</h2></div>
         </div>
-        {/* ALL 3 ACTION BUTTONS RESTORED */}
         <div className="flex gap-2">
           <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
           <button onClick={() => isApproved ? setIsPayoutModalOpen(true) : alert('KYC Approval required')} className={`px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Payout</button>
@@ -238,7 +237,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
@@ -292,7 +291,6 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   );
 }
 
-// 🔴 RESTORED TRIPS UI FOR DRIVER
 function DriverTrips({ profile }: any) {
   const [trips, setTrips] = useState<any[]>([]);
   useEffect(() => { 

@@ -56,26 +56,14 @@ export default async function handler(req, res) {
 
     let monimeResponse = await fetch('https://api.monime.io/v1/internal-transfers', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': '*/*',
-        'Authorization': `Bearer ${MONIME_API_KEY}`,
-        'Monime-Space-Id': MONIME_SPACE_ID,
-        'Idempotency-Key': `transfer-${userId}-${Date.now()}`
-      },
+      headers: { 'Content-Type': 'application/json', 'Accept': '*/*', 'Authorization': `Bearer ${MONIME_API_KEY}`, 'Monime-Space-Id': MONIME_SPACE_ID, 'Idempotency-Key': `transfer-${userId}-${Date.now()}` },
       body: JSON.stringify(payload)
     });
 
     if (monimeResponse.status === 404) {
       monimeResponse = await fetch('https://api.monime.io/v1/internal_transfers', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': '*/*',
-          'Authorization': `Bearer ${MONIME_API_KEY}`,
-          'Monime-Space-Id': MONIME_SPACE_ID,
-          'Idempotency-Key': `transfer-${userId}-${Date.now()}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Accept': '*/*', 'Authorization': `Bearer ${MONIME_API_KEY}`, 'Monime-Space-Id': MONIME_SPACE_ID, 'Idempotency-Key': `transfer-${userId}-${Date.now()}` },
         body: JSON.stringify(payload)
       });
     }
@@ -88,7 +76,7 @@ export default async function handler(req, res) {
 
     const result = transferData.result || transferData;
     if (result.status === 'failed') {
-      const reason = result.failureDetail?.message || result.failureDetail?.code || 'Unknown error';
+      const reason = (result.failureDetail && (result.failureDetail.message || result.failureDetail.code)) || 'Unknown error';
       return res.status(400).json({ error: `Transfer failed: ${reason}` });
     }
 

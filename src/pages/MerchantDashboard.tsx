@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, Minus, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ArrowRight } from 'lucide-react';
+import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, Minus, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ArrowRight, Trash2 } from 'lucide-react';
 
 type ServiceType = 'delivery' | 'ride' | 'scheduled';
 type VehicleType = 'keke' | 'bike' | 'car' | 'van';
@@ -31,7 +31,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [isRouting, setIsRouting] = useState(false);
   const [activeBooking, setActiveBooking] = useState<any>(null);
 
-  // Modals
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessingLoad, setIsProcessingLoad] = useState(false);
@@ -218,15 +217,15 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payout failed');
-      alert(`Payout requested successfully!`);
-      closeModals(); fetchLiveBalance();
+      alert(`Payout requested successfully! Redirecting for security...`);
+      window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
     } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
   };
 
   const executeTransfer = async () => {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID (starts with fac-)');
+    if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID');
 
     setIsProcessingTransfer(true);
     try {
@@ -236,8 +235,8 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
-      alert(`Internal transfer successful!`);
-      closeModals(); fetchLiveBalance();
+      alert(`Internal transfer successful! Redirecting for security...`);
+      window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
@@ -248,9 +247,8 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
           <div className="p-2 bg-orange-100 text-orange-600 rounded-xl"><Store size={20} /></div>
           <div><h2 className="font-bold text-slate-900 leading-tight">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
         </div>
-        {/* ALL 3 ACTION BUTTONS RESTORED */}
         <div className="flex gap-2">
-          <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load Wallet</button>
+          <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
           <button onClick={() => isApproved ? setIsPayoutModalOpen(true) : alert('KYC Approval required')} className={`px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Payout</button>
           <button onClick={() => isApproved ? setIsTransferModalOpen(true) : alert('KYC Approval required')} className={`px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Transfer</button>
         </div>
@@ -328,7 +326,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                           <button onClick={() => setOfferAmount(prev => ((Number(prev)||1) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
                         </div>
                       </div>
-                      {/* FEE BREAKDOWN UI */}
                       {Number(offerAmount) > 0 && (
                         <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 shadow-sm mt-2">
                           <div className="text-[11px] font-bold text-emerald-600">Driver Earns: SLE {(Number(offerAmount) * 0.85).toFixed(2)}</div>
@@ -368,18 +365,17 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                      {activeBooking.status === 'in_progress' && (
                        <button 
                          onClick={async () => {
-                           setIsRequesting(true);
-                           try {
-                             const res = await fetch('/api/complete-ride-payout', {
-                               method: 'POST', headers: { 'Content-Type': 'application/json' },
-                               body: JSON.stringify({ bookingId: activeBooking.id, driverId: activeBooking.driver_id, amount: activeBooking.fare_amount })
-                             });
-                             const data = await res.json();
-                             if (!res.ok) throw new Error(data.error);
-                             alert('Payment released to Driver! Trip Complete.');
-                             fetchLiveBalance();
-                             setActiveBooking(null);
-                           } catch (err: any) { alert(err.message); } finally { setIsRequesting(false); }
+                             setIsRequesting(true);
+                             try {
+                               const res = await fetch('/api/complete-ride-payout', {
+                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                 body: JSON.stringify({ bookingId: activeBooking.id, driverId: activeBooking.driver_id, amount: activeBooking.fare_amount })
+                               });
+                               const data = await res.json();
+                               if (!res.ok) throw new Error(data.error);
+                               alert('Payment released! Redirecting to verify access.');
+                               window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
+                             } catch (err: any) { alert(err.message); setIsRequesting(false); }
                          }}
                          disabled={isRequesting}
                          className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2"
@@ -413,7 +409,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
@@ -468,27 +464,60 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
 }
 
 function MerchantInventory({ profile }: any) {
-  const [trips, setTrips] = useState<any[]>([]);
-  useEffect(() => { 
-    supabase.from('bookings').select('*, driver:driver_id(full_name)').eq('rider_id', profile.id).order('created_at', { ascending: false }).then(({data}) => { if(data) setTrips(data); }); 
-  }, [profile.id]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [desc, setDesc] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+
+  useEffect(() => { fetchProducts(); }, [profile.id]);
+
+  const fetchProducts = async () => {
+    const { data } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
+    if (data) setProducts(data);
+  };
+
+  const handleAddProduct = async () => {
+    if (!name || !price) return alert('Name and Price are required');
+    setIsAdding(true);
+    try {
+      await supabase.from('products').insert({ merchant_id: profile.id, name, price: Number(price), description: desc });
+      setName(''); setPrice(''); setDesc(''); fetchProducts();
+    } catch (e: any) { alert(e.message); } finally { setIsAdding(false); }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this product?')) return;
+    await supabase.from('products').delete().eq('id', id);
+    fetchProducts();
+  };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-4">
-      <h1 className="text-3xl font-bold text-slate-900 mb-6">Dispatch History</h1>
-      {trips.length === 0 ? <div className="text-center text-slate-500 py-10">No dispatches found.</div> : trips.map(t => (
-        <div key={t.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
-          <div>
-            <div className="font-bold text-slate-900 capitalize">{t.service_type} {t.vehicle_type ? `(${t.vehicle_type})` : ''}</div>
-            <div className="text-xs text-slate-500 mt-1">{new Date(t.created_at).toLocaleString()}</div>
-            <div className="text-xs font-mono text-slate-400 mt-2">{t.pickup_location?.slice(0,25)}... <ArrowRight size={10} className="inline"/> {t.destination_location?.slice(0,25)}...</div>
-          </div>
-          <div className="text-right">
-            <div className="font-bold text-lg text-slate-900">SLE {t.fare_amount}</div>
-            <div className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded mt-1 inline-block ${t.status==='completed'?'bg-emerald-100 text-emerald-700':t.status==='cancelled'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{t.status}</div>
-          </div>
+    <div className="p-6 max-w-4xl mx-auto space-y-8">
+      <h1 className="text-3xl font-bold text-slate-900 mb-2">Store Inventory</h1>
+      
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <h3 className="font-bold text-lg">Add New Product</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <input type="text" placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} className="border p-3 rounded-xl outline-none" />
+          <input type="number" placeholder="Price (SLE)" value={price} onChange={e => setPrice(e.target.value)} className="border p-3 rounded-xl outline-none" />
         </div>
-      ))}
+        <input type="text" placeholder="Description (Optional)" value={desc} onChange={e => setDesc(e.target.value)} className="w-full border p-3 rounded-xl outline-none" />
+        <button onClick={handleAddProduct} disabled={isAdding} className="bg-orange-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-orange-700 transition">
+          {isAdding ? 'Adding...' : 'Add to Catalog'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {products.map(p => (
+          <div key={p.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative">
+            <button onClick={() => handleDelete(p.id)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><Trash2 size={18} /></button>
+            <h4 className="font-bold text-lg text-slate-900">{p.name}</h4>
+            <p className="text-emerald-600 font-bold mt-1">SLE {p.price}</p>
+            <p className="text-sm text-slate-500 mt-2">{p.description || 'No description'}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

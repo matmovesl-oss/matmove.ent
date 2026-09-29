@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     const amount = req.body && req.body.amount;
     const userId = req.body && req.body.userId;
     const destinationPhone = req.body && req.body.destinationPhone;
-    const networkProvider = req.body && req.body.networkProvider; // 'orange' or 'afrimoney'
+    const networkProvider = req.body && req.body.networkProvider;
 
     if (!amount || !userId || !destinationPhone) return res.status(400).json({ error: 'Missing required fields.' });
 
@@ -47,28 +47,17 @@ export default async function handler(req, res) {
     if (!sourceAccountId) return res.status(400).json({ error: 'Your Source Wallet Account was not found.' });
 
     const payoutAmountMinor = Math.round(Number(amount) * 100);
-    // Orange = m17, Afrimoney = m18 based on Monime Docs
     const providerId = networkProvider === 'afrimoney' ? 'm18' : 'm17';
 
     const payload = {
       amount: { currency: "SLE", value: payoutAmountMinor },
       source: { financialAccountId: sourceAccountId },
-      destination: {
-        type: "momo",
-        providerId: providerId,
-        phoneNumber: destinationPhone
-      }
+      destination: { type: "momo", providerId: providerId, phoneNumber: destinationPhone }
     };
 
     const monimeResponse = await fetch('https://api.monime.io/v1/payouts', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': '*/*',
-        'Authorization': `Bearer ${MONIME_API_KEY}`,
-        'Monime-Space-Id': MONIME_SPACE_ID,
-        'Idempotency-Key': `payout-${userId}-${Date.now()}`
-      },
+      headers: { 'Content-Type': 'application/json', 'Accept': '*/*', 'Authorization': `Bearer ${MONIME_API_KEY}`, 'Monime-Space-Id': MONIME_SPACE_ID, 'Idempotency-Key': `payout-${userId}-${Date.now()}` },
       body: JSON.stringify(payload)
     });
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowDownLeft, ArrowUpRight, Users } from 'lucide-react';
+import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ShoppingCart } from 'lucide-react';
 
 export function RiderDashboard({ profile, wallet, activeSection }: any) {
   if (activeSection === 'shop') return <RiderShop profile={profile} />;
@@ -30,7 +30,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [isRequesting, setIsRequesting] = useState(false);
   const [activeBooking, setActiveBooking] = useState<any>(null);
 
-  // Modal States
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessingLoad, setIsProcessingLoad] = useState(false);
@@ -197,6 +196,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: 'rider' }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment failed');
+      // The backend successUrl redirects to '/', requiring them to re-enter passcode
       if (data.link) window.location.href = data.link;
     } catch (err: any) { alert(err.message); setIsProcessingLoad(false); }
   };
@@ -214,15 +214,15 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payout failed');
-      alert(`Payout requested successfully!`);
-      closeModals(); fetchLiveBalance();
+      alert(`Payout completed! Redirecting for security...`);
+      window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
     } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
   };
 
   const executeTransfer = async () => {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID (starts with fac-)');
+    if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID');
 
     setIsProcessingTransfer(true);
     try {
@@ -232,8 +232,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
-      alert(`Internal transfer successful!`);
-      closeModals(); fetchLiveBalance();
+      alert(`Transfer completed! Redirecting for security...`);
+      window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
@@ -241,7 +241,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋</h1></div>
-        {/* ALL 3 ACTION BUTTONS RESTORED */}
         <div className="flex gap-2">
           <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load Wallet</button>
           <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition">Payout</button>
@@ -355,18 +354,17 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                      {activeBooking.status === 'in_progress' && (
                        <button 
                          onClick={async () => {
-                           setIsRequesting(true);
-                           try {
-                             const res = await fetch('/api/complete-ride-payout', {
-                               method: 'POST', headers: { 'Content-Type': 'application/json' },
-                               body: JSON.stringify({ bookingId: activeBooking.id, driverId: activeBooking.driver_id, amount: activeBooking.fare_amount })
-                             });
-                             const data = await res.json();
-                             if (!res.ok) throw new Error(data.error);
-                             alert('Payment released to Driver! Trip Complete.');
-                             fetchLiveBalance();
-                             setActiveBooking(null);
-                           } catch (err: any) { alert(err.message); } finally { setIsRequesting(false); }
+                             setIsRequesting(true);
+                             try {
+                               const res = await fetch('/api/complete-ride-payout', {
+                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                 body: JSON.stringify({ bookingId: activeBooking.id, driverId: activeBooking.driver_id, amount: activeBooking.fare_amount })
+                               });
+                               const data = await res.json();
+                               if (!res.ok) throw new Error(data.error);
+                               alert('Payment released! Redirecting to verify access.');
+                               window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
+                             } catch (err: any) { alert(err.message); setIsRequesting(false); }
                          }}
                          disabled={isRequesting}
                          className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2"
@@ -395,11 +393,10 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         </div>
       </div>
 
-      {/* LOAD MODAL */}
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
@@ -410,7 +407,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         </div>
       )}
 
-      {/* PAYOUT MODAL */}
       {isPayoutModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
@@ -432,7 +428,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         </div>
       )}
 
-      {/* TRANSFER MODAL */}
       {isTransferModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
@@ -454,7 +449,37 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 }
 
 function RiderShop({ profile }: any) {
-  return <div className="p-12 text-center text-slate-500"><ShoppingBag className="mx-auto mb-4" size={48} /> Shop Marketplace coming soon...</div>;
+  const [products, setProducts] = useState<any[]>([]);
+  useEffect(() => { 
+    supabase.from('products').select('*, merchant:merchant_id(business_name)').order('created_at', { ascending: false }).then(({data}) => { if(data) setProducts(data); }); 
+  }, []);
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div className="flex items-center gap-3 mb-8">
+        <ShoppingCart size={28} className="text-blue-600" />
+        <h1 className="text-3xl font-bold text-slate-900">Shop Marketplace</h1>
+      </div>
+      
+      {products.length === 0 ? <div className="text-center text-slate-500 py-10">No products listed yet.</div> : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {products.map(p => (
+            <div key={p.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+              <div>
+                <h4 className="font-bold text-lg text-slate-900">{p.name}</h4>
+                <div className="text-xs text-slate-500 mt-1 uppercase tracking-wider">{p.merchant?.business_name || 'Verified Merchant'}</div>
+                <p className="text-sm text-slate-600 mt-3">{p.description || 'No description available.'}</p>
+              </div>
+              <div className="mt-6 flex items-center justify-between">
+                <p className="text-blue-600 font-bold text-xl">SLE {p.price}</p>
+                <button onClick={() => alert(`Please return to the Ride tab and request a Delivery for ${p.name} from ${p.merchant?.business_name || 'the merchant'}.`)} className="bg-slate-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-slate-800 transition">Request Delivery</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function RiderTrips({ profile }: any) {

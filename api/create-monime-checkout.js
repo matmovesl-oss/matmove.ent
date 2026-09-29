@@ -12,23 +12,19 @@ async function resolveMonimeAccountId(userId) {
   try {
     const { data: wallets } = await supabase.from('wallets').select('*').eq('user_id', userId).limit(1);
     const wallet = wallets && wallets[0];
-    
     let accountId = (wallet && wallet.metadata && wallet.metadata.monime_account_id) || (wallet && wallet.monime_account_id);
     if (accountId && String(accountId).startsWith('fac-')) return accountId;
 
     const monimeRes = await fetch('https://api.monime.io/v1/financial-accounts', {
       headers: { 'Authorization': `Bearer ${MONIME_API_KEY}`, 'Monime-Space-Id': MONIME_SPACE_ID, 'Accept': '*/*' }
     });
-
     if (monimeRes.ok) {
       const monimeData = await monimeRes.json();
       const accounts = monimeData.result || monimeData.data || [];
       const match = accounts.find(acc => acc.reference === userId);
       if (match && match.id) return match.id;
     }
-  } catch (e) {
-    console.error('Monime resolution error:', e);
-  }
+  } catch (e) { console.error(e); }
   return null;
 }
 
@@ -42,7 +38,6 @@ export default async function handler(req, res) {
   try {
     const amount = req.body && req.body.amount;
     const userId = req.body && req.body.userId;
-    const role = (req.body && req.body.role) || 'user';
     
     if (!amount || !userId) return res.status(400).json({ error: 'Missing amount or userId.' });
 
@@ -54,29 +49,17 @@ export default async function handler(req, res) {
 
     const payload = {
       name: `MatMove Wallet Top-up`,
-      successUrl: `${hostUrl}/customer/${role}?load=success`,
-      cancelUrl: `${hostUrl}/customer/${role}?load=cancelled`,
+      // 🔴 REDIRECT TO ROOT: This ensures that when the user finishes paying on Monime, they are sent to the app login/passcode screen
+      successUrl: `${hostUrl}/`,
+      cancelUrl: `${hostUrl}/`,
       financialAccountId: targetAccountId,
-      lineItems: [
-        {
-          type: "custom",
-          name: "Wallet Load",
-          price: { currency: "SLE", value: loadAmountMinor },
-          quantity: 1
-        }
-      ],
-      metadata: { userId: userId, role: role }
+      lineItems: [{ type: "custom", name: "Wallet Load", price: { currency: "SLE", value: loadAmountMinor }, quantity: 1 }],
+      metadata: { userId: userId }
     };
 
     const monimeResponse = await fetch('https://api.monime.io/v1/checkout-sessions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': '*/*',
-        'Authorization': `Bearer ${MONIME_API_KEY}`,
-        'Monime-Space-Id': MONIME_SPACE_ID,
-        'Idempotency-Key': `load-${userId}-${Date.now()}`
-      },
+      headers: { 'Content-Type': 'application/json', 'Accept': '*/*', 'Authorization': `Bearer ${MONIME_API_KEY}`, 'Monime-Space-Id': MONIME_SPACE_ID, 'Idempotency-Key': `load-${userId}-${Date.now()}` },
       body: JSON.stringify(payload)
     });
 
@@ -84,17 +67,13 @@ export default async function handler(req, res) {
     let sessionData = {};
     try { sessionData = JSON.parse(resText); } catch (e) {}
 
-    if (!monimeResponse.ok) {
-      return res.status(400).json({ error: sessionData.message || resText });
-    }
+    if (!monimeResponse.ok) return res.status(400).json({ error: sessionData.message || resText });
 
     const result = sessionData.result || sessionData;
     const checkoutUrl = result.redirectUrl || result.url;
-
     if (!checkoutUrl) return res.status(400).json({ error: 'Monime did not return a valid checkout URL.' });
 
     return res.status(200).json({ link: checkoutUrl });
-
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
