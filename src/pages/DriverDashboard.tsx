@@ -17,9 +17,21 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
 
+  // Modals
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [loadAmount, setLoadAmount] = useState('');
   const [isProcessingLoad, setIsProcessingLoad] = useState(false);
+
+  const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState('');
+  const [payoutPhone, setPayoutPhone] = useState(''); 
+  const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
+  const [isProcessingPayout, setIsProcessingPayout] = useState(false);
+
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferRecipient, setTransferRecipient] = useState('');
+  const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -78,6 +90,12 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
     } catch (err: any) { alert('Failed: ' + err.message); } finally { setAcceptingId(null); }
   };
 
+  const closeModals = () => {
+    setIsLoadModalOpen(false); setIsPayoutModalOpen(false); setIsTransferModalOpen(false);
+    setIsProcessingLoad(false); setIsProcessingPayout(false); setIsProcessingTransfer(false);
+    setLoadAmount(''); setPayoutAmount(''); setTransferAmount(''); setTransferRecipient(''); setPayoutPhone('');
+  };
+
   const executeLoad = async () => {
     if (!loadAmount || Number(loadAmount) <= 0) return alert('Enter a valid amount');
     setIsProcessingLoad(true);
@@ -89,6 +107,42 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
     } catch (err: any) { alert(err.message); setIsProcessingLoad(false); }
   };
 
+  const executePayout = async () => {
+    const amt = Number(payoutAmount);
+    if (!amt || amt <= 0) return alert('Enter valid amount');
+    if (!payoutPhone.trim()) return alert('Enter recipient mobile money number');
+
+    setIsProcessingPayout(true);
+    try {
+      const res = await fetch('/api/create-monime-payout', { 
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ amount: amt, userId: profile.id, destinationPhone: payoutPhone, networkProvider }) 
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payout failed');
+      alert(`Payout requested successfully!`);
+      closeModals(); fetchLiveBalance();
+    } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
+  };
+
+  const executeTransfer = async () => {
+    const amt = Number(transferAmount);
+    if (!amt || amt <= 0) return alert('Enter valid amount');
+    if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID (starts with fac-)');
+
+    setIsProcessingTransfer(true);
+    try {
+      const res = await fetch('/api/create-monime-transfer', { 
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient.trim() }) 
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Transfer failed');
+      alert(`Internal transfer successful!`);
+      closeModals(); fetchLiveBalance();
+    } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
+  };
+
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
@@ -98,8 +152,11 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           </button>
           <div><h2 className="font-bold text-slate-900 text-lg">{isOnline ? 'You are Online' : 'You are Offline'}</h2></div>
         </div>
+        {/* ALL 3 ACTION BUTTONS RESTORED */}
         <div className="flex gap-2">
-          <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm">Load</button>
+          <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
+          <button onClick={() => isApproved ? setIsPayoutModalOpen(true) : alert('KYC Approval required')} className={`px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Payout</button>
+          <button onClick={() => isApproved ? setIsTransferModalOpen(true) : alert('KYC Approval required')} className={`px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Transfer</button>
         </div>
       </header>
 
@@ -177,15 +234,56 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
         </div>
       </div>
 
+      {/* LOAD MODAL */}
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
             <button onClick={executeLoad} disabled={isProcessingLoad || !loadAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
               {isProcessingLoad ? <Loader2 className="animate-spin" size={20} /> : <><ArrowDownLeft size={20} /> Checkout</>}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* PAYOUT MODAL */}
+      {isPayoutModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Mobile Payout</h2>
+            <p className="text-sm text-slate-500 mb-6">Cashout to Mobile Money.</p>
+            <div className="space-y-4 mb-6">
+              <input type="number" placeholder="Amount (SLE)" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-emerald-500" />
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => setNetworkProvider('orange')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
+                <button onClick={() => setNetworkProvider('afrimoney')} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
+              </div>
+              <input type="tel" placeholder="e.g. 077123456 or 030123456" value={payoutPhone} onChange={(e) => setPayoutPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500" />
+            </div>
+            <button onClick={executePayout} disabled={isProcessingPayout || !payoutAmount || !payoutPhone} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessingPayout ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Payout
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* TRANSFER MODAL */}
+      {isTransferModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Internal Transfer</h2>
+            <p className="text-sm text-slate-500 mb-6">Paste the recipient's exact MatMove Account ID.</p>
+            <div className="space-y-4 mb-6">
+              <input type="number" placeholder="Amount (SLE)" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-purple-500" />
+              <input type="text" placeholder="Recipient ID (e.g. fac-k6V8...)" value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500" />
+            </div>
+            <button onClick={executeTransfer} disabled={isProcessingTransfer || !transferAmount || !transferRecipient} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessingTransfer ? <Loader2 className="animate-spin" size={20} /> : <Users size={20} />} Send Transfer
             </button>
           </div>
         </div>
