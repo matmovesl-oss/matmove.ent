@@ -66,7 +66,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     if (!profile?.id) return;
     const checkActiveTrip = async () => {
       const { data } = await supabase.from('bookings').select('*, driver:driver_id(full_name, phone)').eq('rider_id', profile.id).in('status', ['pending', 'pending_admin', 'accepted', 'in_progress']).order('created_at', { ascending: false }).limit(1).single();
-      if (data) setActiveBooking(data); else { setActiveBooking(null); setPickup(''); setDestination(''); }
+      if (data) setActiveBooking(data); else setActiveBooking(null); // Fix: Removed input wiping
     };
     checkActiveTrip();
     const channel = supabase.channel('rider-active-booking').on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `rider_id=eq.${profile.id}` }, checkActiveTrip).subscribe();
@@ -198,7 +198,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: 'rider' }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment failed');
-      if (data.link) window.location.href = data.link; // The API is now wired to redirect back here
+      if (data.link) window.location.href = data.link;
     } catch (err: any) { alert(err.message); setIsProcessingLoad(false); }
   };
 
@@ -215,8 +215,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payout failed');
-      alert(`Payout requested successfully! Locking app for security.`);
-      window.location.reload(); // 🔴 Trigger Native PIN Lock
+      alert(`Payout requested successfully!`);
+      window.location.reload(); // Redirects to native PIN lock
     } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
   };
 
@@ -233,8 +233,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
-      alert(`Transfer completed! Locking app for security.`);
-      window.location.reload(); // 🔴 Trigger Native PIN Lock
+      alert(`Transfer completed!`);
+      window.location.reload(); // Redirects to native PIN lock
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
@@ -364,7 +364,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                                const data = await res.json();
                                if (!res.ok) throw new Error(data.error);
                                alert('Payment released! Locking app for security.');
-                               window.location.reload(); // 🔴 TRIGGER NATIVE PIN LOCK
+                               window.location.reload(); // 🔴 NATIVE PIN LOCK
                              } catch (err: any) { alert(err.message); setIsRequesting(false); }
                          }}
                          disabled={isRequesting}
@@ -449,7 +449,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   );
 }
 
-// 🔴 SHOP WITH IMAGES AND WHATSAPP
 function RiderShop({ profile }: any) {
   const [products, setProducts] = useState<any[]>([]);
   

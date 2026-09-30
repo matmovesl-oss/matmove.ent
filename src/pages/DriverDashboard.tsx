@@ -103,7 +103,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: profile.role }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment gateway failed');
-      if (data.link) window.location.href = data.link; // Redirects via Monime backend link
+      if (data.link) window.location.href = data.link; // Redirects via Monime
     } catch (err: any) { alert(err.message); setIsProcessingLoad(false); }
   };
 

@@ -66,7 +66,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     if (!profile?.id) return;
     const checkActiveTrip = async () => {
       const { data } = await supabase.from('bookings').select('*, driver:driver_id(full_name, phone)').eq('rider_id', profile.id).in('status', ['pending', 'pending_admin', 'accepted', 'in_progress']).order('created_at', { ascending: false }).limit(1).single();
-      if (data) setActiveBooking(data); else { setActiveBooking(null); setPickup(''); setDestination(''); }
+      if (data) setActiveBooking(data); else setActiveBooking(null); // Fix: Removed input wiping
     };
     checkActiveTrip();
     const channel = supabase.channel('merchant-active-booking').on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `rider_id=eq.${profile.id}` }, checkActiveTrip).subscribe();
@@ -200,7 +200,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: 'merchant' }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment failed');
-      if (data.link) window.location.href = data.link; // Redirects via Monime backend link
+      if (data.link) window.location.href = data.link;
     } catch (err: any) { alert(err.message); setIsProcessingLoad(false); }
   };
 
@@ -217,8 +217,8 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payout failed');
-      alert(`Payout requested successfully! Locking app for security.`);
-      window.location.reload(); // 🔴 Trigger Native PIN Lock
+      alert(`Payout requested successfully!`);
+      window.location.reload(); // Redirects to native PIN lock
     } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
   };
 
@@ -235,8 +235,8 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
-      alert(`Internal transfer successful! Locking app for security.`);
-      window.location.reload(); // 🔴 Trigger Native PIN Lock
+      alert(`Transfer completed!`);
+      window.location.reload(); // Redirects to native PIN lock
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
@@ -373,8 +373,8 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                                });
                                const data = await res.json();
                                if (!res.ok) throw new Error(data.error);
-                               alert('Payment released! Locking app for security.');
-                               window.location.reload(); // 🔴 TRIGGER NATIVE PIN LOCK
+                               alert('Payment released!');
+                               window.location.reload(); // 🔴 NATIVE PIN LOCK
                              } catch (err: any) { alert(err.message); setIsRequesting(false); }
                          }}
                          disabled={isRequesting}
@@ -463,7 +463,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   );
 }
 
-// 🔴 MERCHANT INVENTORY: Added Image URL
 function MerchantInventory({ profile }: any) {
   const [products, setProducts] = useState<any[]>([]);
   const [name, setName] = useState('');
