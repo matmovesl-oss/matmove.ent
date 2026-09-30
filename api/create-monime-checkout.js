@@ -38,6 +38,7 @@ export default async function handler(req, res) {
   try {
     const amount = req.body && req.body.amount;
     const userId = req.body && req.body.userId;
+    const role = (req.body && req.body.role) || 'rider';
     
     if (!amount || !userId) return res.status(400).json({ error: 'Missing amount or userId.' });
 
@@ -49,12 +50,12 @@ export default async function handler(req, res) {
 
     const payload = {
       name: `MatMove Wallet Top-up`,
-      // 🔴 REDIRECT TO ROOT: This ensures that when the user finishes paying on Monime, they are sent to the app login/passcode screen
-      successUrl: `${hostUrl}/`,
-      cancelUrl: `${hostUrl}/`,
+      // 🔴 REDIRECTS TO DASHBOARD TO TRIGGER PIN LOCK INSTEAD OF ROOT
+      successUrl: `${hostUrl}/customer/${role}`,
+      cancelUrl: `${hostUrl}/customer/${role}`,
       financialAccountId: targetAccountId,
       lineItems: [{ type: "custom", name: "Wallet Load", price: { currency: "SLE", value: loadAmountMinor }, quantity: 1 }],
-      metadata: { userId: userId }
+      metadata: { userId: userId, role: role }
     };
 
     const monimeResponse = await fetch('https://api.monime.io/v1/checkout-sessions', {

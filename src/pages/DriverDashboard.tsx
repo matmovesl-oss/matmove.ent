@@ -103,7 +103,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: profile.role }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment gateway failed');
-      if (data.link) window.location.href = data.link;
+      if (data.link) window.location.href = data.link; // Redirects via Monime backend link
     } catch (err: any) { alert(err.message); setIsProcessingLoad(false); }
   };
 
@@ -120,8 +120,8 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payout failed');
-      alert(`Payout requested successfully! Redirecting for security...`);
-      window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
+      alert(`Payout requested successfully! Locking app for security.`);
+      window.location.reload(); // 🔴 Trigger Native PIN Lock
     } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
   };
 
@@ -138,8 +138,8 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
-      alert(`Internal transfer successful! Redirecting for security...`);
-      window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
+      alert(`Internal transfer successful! Locking app for security.`);
+      window.location.reload(); // 🔴 Trigger Native PIN Lock
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 

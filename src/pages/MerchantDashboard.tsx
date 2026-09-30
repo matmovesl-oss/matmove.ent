@@ -200,7 +200,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: 'merchant' }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment failed');
-      if (data.link) window.location.href = data.link;
+      if (data.link) window.location.href = data.link; // Redirects via Monime backend link
     } catch (err: any) { alert(err.message); setIsProcessingLoad(false); }
   };
 
@@ -217,8 +217,8 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payout failed');
-      alert(`Payout requested successfully! Redirecting for security...`);
-      window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
+      alert(`Payout requested successfully! Locking app for security.`);
+      window.location.reload(); // 🔴 Trigger Native PIN Lock
     } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
   };
 
@@ -235,8 +235,8 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
-      alert(`Internal transfer successful! Redirecting for security...`);
-      window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
+      alert(`Internal transfer successful! Locking app for security.`);
+      window.location.reload(); // 🔴 Trigger Native PIN Lock
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
@@ -373,8 +373,8 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                                });
                                const data = await res.json();
                                if (!res.ok) throw new Error(data.error);
-                               alert('Payment released! Redirecting to verify access.');
-                               window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
+                               alert('Payment released! Locking app for security.');
+                               window.location.reload(); // 🔴 TRIGGER NATIVE PIN LOCK
                              } catch (err: any) { alert(err.message); setIsRequesting(false); }
                          }}
                          disabled={isRequesting}
@@ -463,11 +463,13 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   );
 }
 
+// 🔴 MERCHANT INVENTORY: Added Image URL
 function MerchantInventory({ profile }: any) {
   const [products, setProducts] = useState<any[]>([]);
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [desc, setDesc] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [isAdding, setIsAdding] = useState(false);
 
   useEffect(() => { fetchProducts(); }, [profile.id]);
@@ -481,8 +483,8 @@ function MerchantInventory({ profile }: any) {
     if (!name || !price) return alert('Name and Price are required');
     setIsAdding(true);
     try {
-      await supabase.from('products').insert({ merchant_id: profile.id, name, price: Number(price), description: desc });
-      setName(''); setPrice(''); setDesc(''); fetchProducts();
+      await supabase.from('products').insert({ merchant_id: profile.id, name, price: Number(price), description: desc, image_url: imageUrl });
+      setName(''); setPrice(''); setDesc(''); setImageUrl(''); fetchProducts();
     } catch (e: any) { alert(e.message); } finally { setIsAdding(false); }
   };
 
@@ -498,23 +500,33 @@ function MerchantInventory({ profile }: any) {
       
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
         <h3 className="font-bold text-lg">Add New Product</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <input type="text" placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} className="border p-3 rounded-xl outline-none" />
-          <input type="number" placeholder="Price (SLE)" value={price} onChange={e => setPrice(e.target.value)} className="border p-3 rounded-xl outline-none" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <input type="text" placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} className="border p-3 rounded-xl outline-none focus:border-orange-500" />
+          <input type="number" placeholder="Price (SLE)" value={price} onChange={e => setPrice(e.target.value)} className="border p-3 rounded-xl outline-none focus:border-orange-500" />
         </div>
-        <input type="text" placeholder="Description (Optional)" value={desc} onChange={e => setDesc(e.target.value)} className="w-full border p-3 rounded-xl outline-none" />
+        <div className="grid grid-cols-1 gap-4">
+          <input type="text" placeholder="Image URL (e.g., https://example.com/image.png)" value={imageUrl} onChange={e => setImageUrl(e.target.value)} className="w-full border p-3 rounded-xl outline-none focus:border-orange-500" />
+          <textarea placeholder="Description (Optional)" value={desc} onChange={e => setDesc(e.target.value)} className="w-full border p-3 rounded-xl outline-none resize-none focus:border-orange-500" rows={2} />
+        </div>
         <button onClick={handleAddProduct} disabled={isAdding} className="bg-orange-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-orange-700 transition">
           {isAdding ? 'Adding...' : 'Add to Catalog'}
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {products.map(p => (
-          <div key={p.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative">
-            <button onClick={() => handleDelete(p.id)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><Trash2 size={18} /></button>
-            <h4 className="font-bold text-lg text-slate-900">{p.name}</h4>
-            <p className="text-emerald-600 font-bold mt-1">SLE {p.price}</p>
-            <p className="text-sm text-slate-500 mt-2">{p.description || 'No description'}</p>
+          <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden relative flex flex-col">
+            <button onClick={() => handleDelete(p.id)} className="absolute top-3 right-3 p-2 bg-white/80 backdrop-blur rounded-full text-slate-500 hover:text-red-500 hover:bg-white shadow-sm transition z-10"><Trash2 size={16} /></button>
+            {p.image_url ? (
+              <div className="h-40 w-full bg-slate-100"><img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /></div>
+            ) : (
+              <div className="h-40 w-full bg-slate-100 flex items-center justify-center"><Package size={40} className="text-slate-300" /></div>
+            )}
+            <div className="p-5 flex-1 flex flex-col">
+              <h4 className="font-bold text-lg text-slate-900 leading-tight">{p.name}</h4>
+              <p className="text-orange-600 font-bold mt-1 text-xl">SLE {p.price}</p>
+              <p className="text-sm text-slate-500 mt-2 line-clamp-2">{p.description || 'No description'}</p>
+            </div>
           </div>
         ))}
       </div>

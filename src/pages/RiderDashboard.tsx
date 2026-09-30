@@ -4,6 +4,8 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ShoppingCart } from 'lucide-react';
 
+const WHATSAPP_NUMBER = "23290330362";
+
 export function RiderDashboard({ profile, wallet, activeSection }: any) {
   if (activeSection === 'shop') return <RiderShop profile={profile} />;
   if (activeSection === 'trips') return <RiderTrips profile={profile} />;
@@ -196,8 +198,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: 'rider' }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment failed');
-      // The backend successUrl redirects to '/', requiring them to re-enter passcode
-      if (data.link) window.location.href = data.link;
+      if (data.link) window.location.href = data.link; // The API is now wired to redirect back here
     } catch (err: any) { alert(err.message); setIsProcessingLoad(false); }
   };
 
@@ -214,8 +215,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payout failed');
-      alert(`Payout completed! Redirecting for security...`);
-      window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
+      alert(`Payout requested successfully! Locking app for security.`);
+      window.location.reload(); // 🔴 Trigger Native PIN Lock
     } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
   };
 
@@ -232,8 +233,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
-      alert(`Transfer completed! Redirecting for security...`);
-      window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
+      alert(`Transfer completed! Locking app for security.`);
+      window.location.reload(); // 🔴 Trigger Native PIN Lock
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
@@ -362,8 +363,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                                });
                                const data = await res.json();
                                if (!res.ok) throw new Error(data.error);
-                               alert('Payment released! Redirecting to verify access.');
-                               window.location.href = '/'; // 🔴 REDIRECT TO LOGIN/PASSCODE
+                               alert('Payment released! Locking app for security.');
+                               window.location.reload(); // 🔴 TRIGGER NATIVE PIN LOCK
                              } catch (err: any) { alert(err.message); setIsRequesting(false); }
                          }}
                          disabled={isRequesting}
@@ -448,11 +449,18 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   );
 }
 
+// 🔴 SHOP WITH IMAGES AND WHATSAPP
 function RiderShop({ profile }: any) {
   const [products, setProducts] = useState<any[]>([]);
+  
   useEffect(() => { 
     supabase.from('products').select('*, merchant:merchant_id(business_name)').order('created_at', { ascending: false }).then(({data}) => { if(data) setProducts(data); }); 
   }, []);
+
+  const handleWhatsAppRedirect = (product: any) => {
+    const message = encodeURIComponent(`Hello! I would like to request a delivery for: *${product.name}* (SLE ${product.price}) listed by ${product.merchant?.business_name || 'your store'}.`);
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank');
+  };
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -464,15 +472,27 @@ function RiderShop({ profile }: any) {
       {products.length === 0 ? <div className="text-center text-slate-500 py-10">No products listed yet.</div> : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {products.map(p => (
-            <div key={p.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-              <div>
-                <h4 className="font-bold text-lg text-slate-900">{p.name}</h4>
+            <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col hover:shadow-md transition duration-200">
+              {p.image_url ? (
+                <div className="h-48 w-full bg-slate-100"><img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /></div>
+              ) : (
+                <div className="h-48 w-full bg-slate-100 flex items-center justify-center"><ShoppingBag size={48} className="text-slate-300" /></div>
+              )}
+              
+              <div className="p-5 flex flex-col flex-1">
+                <h4 className="font-bold text-lg text-slate-900 leading-tight">{p.name}</h4>
                 <div className="text-xs text-slate-500 mt-1 uppercase tracking-wider">{p.merchant?.business_name || 'Verified Merchant'}</div>
-                <p className="text-sm text-slate-600 mt-3">{p.description || 'No description available.'}</p>
-              </div>
-              <div className="mt-6 flex items-center justify-between">
-                <p className="text-blue-600 font-bold text-xl">SLE {p.price}</p>
-                <button onClick={() => alert(`Please return to the Ride tab and request a Delivery for ${p.name} from ${p.merchant?.business_name || 'the merchant'}.`)} className="bg-slate-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-slate-800 transition">Request Delivery</button>
+                <p className="text-sm text-slate-600 mt-3 line-clamp-2">{p.description || 'No description available.'}</p>
+                
+                <div className="mt-auto pt-6 flex items-center justify-between">
+                  <p className="text-blue-600 font-bold text-xl">SLE {p.price}</p>
+                  <button 
+                    onClick={() => handleWhatsAppRedirect(p)} 
+                    className="bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-emerald-700 transition shadow-sm flex items-center gap-2"
+                  >
+                    <Smartphone size={14} /> Request Delivery
+                  </button>
+                </div>
               </div>
             </div>
           ))}
