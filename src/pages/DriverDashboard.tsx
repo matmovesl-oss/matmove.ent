@@ -36,6 +36,21 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // 🔴 SLRSA POLICY STATE
+  const [showPolicy, setShowPolicy] = useState(false);
+
+  useEffect(() => {
+    if (profile?.id) {
+      const accepted = localStorage.getItem(`matmove_policy_${profile.id}`);
+      if (!accepted) setShowPolicy(true);
+    }
+  }, [profile?.id]);
+
+  const handleAcceptPolicy = () => {
+    localStorage.setItem(`matmove_policy_${profile.id}`, 'true');
+    setShowPolicy(false);
+  };
+
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
     setIsRefreshing(true);
@@ -153,9 +168,15 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           <div><h2 className="font-bold text-slate-900 text-lg">{isOnline ? 'You are Online' : 'You are Offline'}</h2></div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
-          <button onClick={() => isApproved ? setIsPayoutModalOpen(true) : alert('KYC Approval required')} className={`px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Payout</button>
-          <button onClick={() => isApproved ? setIsTransferModalOpen(true) : alert('KYC Approval required')} className={`px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${isApproved ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Transfer</button>
+          {wallet?.is_frozen ? (
+            <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">Wallet Frozen by Admin</span>
+          ) : (
+            <>
+              <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
+              {isApproved && <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition">Payout</button>}
+              <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800 transition">Transfer</button>
+            </>
+          )}
         </div>
       </header>
 
@@ -287,6 +308,8 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           </div>
         </div>
       )}
+
+      {showPolicy && <PolicyModal onAccept={handleAcceptPolicy} />}
     </div>
   );
 }
@@ -313,6 +336,31 @@ function DriverTrips({ profile }: any) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function PolicyModal({ onAccept }: { onAccept: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="bg-slate-900 p-6 text-white shrink-0">
+          <h2 className="text-xl font-bold">MatMove Safety & Compliance Policy</h2>
+          <p className="text-xs text-slate-400 mt-1">Sierra Leone Road Safety Authority (SLRSA) Guidelines</p>
+        </div>
+        <div className="p-6 overflow-y-auto flex-1 text-sm text-slate-600 space-y-4">
+          <p><strong>1. Compliance with SLRSA:</strong> All users (Drivers, Riders, and Merchants) must strictly adhere to the traffic rules and regulations set forth by the Sierra Leone Road Safety Authority (SLRSA).</p>
+          <p><strong>2. Liability & Accidents:</strong> MatMove Enterprise acts solely as a technology platform connecting users. MatMove is not liable for any road traffic accidents, injuries, loss of property, or damages that occur during transit.</p>
+          <p><strong>3. Vehicle Safety:</strong> Drivers must ensure their vehicles (Keke, Bike, Car, Van) are roadworthy, insured, and licensed.</p>
+          <p><strong>4. Account Suspension:</strong> Any violation of these safety policies or reports of reckless behavior will result in immediate wallet freezing and account suspension.</p>
+          <p className="font-bold text-slate-900 pt-2 border-t">By clicking "I Accept", you acknowledge that you have read, understood, and agree to be bound by this policy. All rights reserved by MatMove Enterprise.</p>
+        </div>
+        <div className="p-4 border-t bg-slate-50 shrink-0">
+          <button onClick={onAccept} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl transition shadow-md">
+            I Accept & Agree
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

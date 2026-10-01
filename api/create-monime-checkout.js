@@ -50,8 +50,9 @@ export default async function handler(req, res) {
 
     const payload = {
       name: `MatMove Wallet Top-up`,
-      successUrl: `${hostUrl}/customer/${role}`, // Redirects to dashboard to trigger PIN lock
-      cancelUrl: `${hostUrl}/customer/${role}`,
+      // 🔴 REDIRECT TO ROOT TO FIX 405 AND TRIGGER PIN LOCK
+      successUrl: `${hostUrl}/`, 
+      cancelUrl: `${hostUrl}/`,
       financialAccountId: targetAccountId,
       lineItems: [{ type: "custom", name: "Wallet Load", price: { currency: "SLE", value: loadAmountMinor }, quantity: 1 }],
       metadata: { userId: userId, role: role }
