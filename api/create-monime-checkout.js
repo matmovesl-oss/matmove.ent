@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     const amount = req.body && req.body.amount;
     const userId = req.body && req.body.userId;
     const role = (req.body && req.body.role) || 'rider';
-    
+
     if (!amount || !userId) return res.status(400).json({ error: 'Missing amount or userId.' });
 
     const targetAccountId = await resolveMonimeAccountId(userId);
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
 
     const payload = {
       name: `MatMove Wallet Top-up`,
-      // 🔴 FIX: Points to the new success handler to prevent the 405 error
+      // 🔴 REDIRECTS TO THE SUCCESS CATCHER TO BYPASS THE 405 ERROR
       successUrl: `${hostUrl}/api/checkout-success`, 
       cancelUrl: `${hostUrl}/api/checkout-success`,
       financialAccountId: targetAccountId,
