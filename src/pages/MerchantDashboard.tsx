@@ -46,14 +46,15 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
-  // 🔴 SLRSA POLICY STATE
-  const [showPolicy, setShowPolicy] = useState(false);
-
   const isApproved = profile?.kyc_status === 'approved';
   const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
+
+  // 🔴 SLRSA POLICY & LIVE FREEZE STATE
+  const [showPolicy, setShowPolicy] = useState(false);
+  const [isFrozen, setIsFrozen] = useState(wallet?.is_frozen || false);
 
   useEffect(() => {
     supabase.from('pricing_settings').select('*').then(({ data }) => {
@@ -69,6 +70,11 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     if (profile?.id) {
       const accepted = localStorage.getItem(`matmove_policy_${profile.id}`);
       if (!accepted) setShowPolicy(true);
+
+      // Live fetch freeze status
+      supabase.from('wallets').select('is_frozen').eq('user_id', profile.id).single().then(({data}) => {
+        if (data) setIsFrozen(data.is_frozen);
+      });
     }
   }, [profile?.id]);
 
@@ -105,6 +111,10 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       const res = await fetch('/api/get-live-wallet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: profile.id }) });
       const data = await res.json();
       if (data.balance !== undefined) setLiveBalance(Number(data.balance));
+
+      // Fetch frozen status on refresh too
+      const { data: wData } = await supabase.from('wallets').select('is_frozen').eq('user_id', profile.id).single();
+      if (wData) setIsFrozen(wData.is_frozen);
     } catch (err) {} finally { setIsRefreshing(false); }
   };
 
@@ -263,7 +273,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
           <div><h2 className="font-bold text-slate-900 leading-tight">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
         </div>
         <div className="flex gap-2">
-          {wallet?.is_frozen ? (
+          {isFrozen ? (
             <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">Wallet Frozen by Admin</span>
           ) : (
             <>

@@ -47,8 +47,10 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
-  // 🔴 SLRSA POLICY STATE
   const [showPolicy, setShowPolicy] = useState(false);
+  
+  // 🔴 LIVE FREEZE CHECK
+  const [isFrozen, setIsFrozen] = useState(wallet?.is_frozen || false);
 
   const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -69,6 +71,11 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     if (profile?.id) {
       const accepted = localStorage.getItem(`matmove_policy_${profile.id}`);
       if (!accepted) setShowPolicy(true);
+      
+      // Live fetch freeze status
+      supabase.from('wallets').select('is_frozen').eq('user_id', profile.id).single().then(({data}) => {
+        if (data) setIsFrozen(data.is_frozen);
+      });
     }
   }, [profile?.id]);
 
@@ -105,6 +112,10 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       const res = await fetch('/api/get-live-wallet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: profile.id }) });
       const data = await res.json();
       if (data.balance !== undefined) setLiveBalance(Number(data.balance));
+      
+      // Live fetch freeze status
+      const { data: wData } = await supabase.from('wallets').select('is_frozen').eq('user_id', profile.id).single();
+      if (wData) setIsFrozen(wData.is_frozen);
     } catch (err) {} finally { setIsRefreshing(false); }
   };
 
@@ -258,13 +269,13 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋</h1></div>
         <div className="flex gap-2">
-          {wallet?.is_frozen ? (
+          {isFrozen ? (
             <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">Wallet Frozen by Admin</span>
           ) : (
             <>
-              <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700">Load</button>
-              <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700">Payout</button>
-              <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800">Transfer</button>
+              <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
+              <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition">Payout</button>
+              <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800 transition">Transfer</button>
             </>
           )}
         </div>
@@ -415,7 +426,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         </div>
       </div>
 
-      {/* LOAD MODAL */}
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
@@ -430,7 +440,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         </div>
       )}
 
-      {/* PAYOUT MODAL */}
       {isPayoutModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
@@ -452,7 +461,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         </div>
       )}
 
-      {/* TRANSFER MODAL */}
       {isTransferModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">

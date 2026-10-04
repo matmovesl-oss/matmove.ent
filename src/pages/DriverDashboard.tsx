@@ -36,13 +36,19 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // 🔴 SLRSA POLICY STATE
+  // 🔴 SLRSA POLICY & LIVE FREEZE STATE
   const [showPolicy, setShowPolicy] = useState(false);
+  const [isFrozen, setIsFrozen] = useState(wallet?.is_frozen || false);
 
   useEffect(() => {
     if (profile?.id) {
       const accepted = localStorage.getItem(`matmove_policy_${profile.id}`);
       if (!accepted) setShowPolicy(true);
+
+      // Live fetch freeze status
+      supabase.from('wallets').select('is_frozen').eq('user_id', profile.id).single().then(({data}) => {
+        if (data) setIsFrozen(data.is_frozen);
+      });
     }
   }, [profile?.id]);
 
@@ -58,6 +64,10 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       const res = await fetch('/api/get-live-wallet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: profile.id }) });
       const data = await res.json();
       if (data.balance !== undefined) setLiveBalance(Number(data.balance));
+
+      // Fetch frozen status on refresh too
+      const { data: wData } = await supabase.from('wallets').select('is_frozen').eq('user_id', profile.id).single();
+      if (wData) setIsFrozen(wData.is_frozen);
     } catch (err) {} finally { setIsRefreshing(false); }
   };
 
@@ -136,7 +146,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payout failed');
       alert(`Payout requested successfully! Locking app for security.`);
-      window.location.reload(); // 🔴 Trigger Native PIN Lock
+      window.location.reload(); 
     } catch (err: any) { alert(err.message); setIsProcessingPayout(false); }
   };
 
@@ -154,7 +164,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
       alert(`Internal transfer successful! Locking app for security.`);
-      window.location.reload(); // 🔴 Trigger Native PIN Lock
+      window.location.reload(); 
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
@@ -168,7 +178,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           <div><h2 className="font-bold text-slate-900 text-lg">{isOnline ? 'You are Online' : 'You are Offline'}</h2></div>
         </div>
         <div className="flex gap-2">
-          {wallet?.is_frozen ? (
+          {isFrozen ? (
             <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">Wallet Frozen by Admin</span>
           ) : (
             <>

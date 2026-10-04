@@ -8,7 +8,7 @@ const supabase = createClient(
 const MONIME_API_KEY = process.env.VITE_MONIME_API_KEY || process.env.MONIME_API_KEY || '';
 const MONIME_SPACE_ID = process.env.VITE_MONIME_SPACE_ID || process.env.MONIME_SPACE_ID || '';
 
-async function resolveMonimeAccountId(userId) {
+async function resolveMonimeAccountId(userId: string) {
   try {
     const { data: wallets } = await supabase.from('wallets').select('*').eq('user_id', userId).limit(1);
     const wallet = wallets && wallets[0];
@@ -21,14 +21,14 @@ async function resolveMonimeAccountId(userId) {
     if (monimeRes.ok) {
       const monimeData = await monimeRes.json();
       const accounts = monimeData.result || monimeData.data || [];
-      const match = accounts.find(acc => acc.reference === userId);
+      const match = accounts.find((acc: any) => acc.reference === userId);
       if (match && match.id) return match.id;
     }
   } catch (e) { console.error(e); }
   return null;
 }
 
-export default async function handler(req, res) {
+export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     const amount = req.body && req.body.amount;
     const userId = req.body && req.body.userId;
     const role = (req.body && req.body.role) || 'rider';
-
+    
     if (!amount || !userId) return res.status(400).json({ error: 'Missing amount or userId.' });
 
     const targetAccountId = await resolveMonimeAccountId(userId);
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
 
     const payload = {
       name: `MatMove Wallet Top-up`,
-      // 🔴 REDIRECTS TO THE SUCCESS CATCHER TO BYPASS THE 405 ERROR
+      // 🔴 Redirect to our new handler which bounces to /dashboard
       successUrl: `${hostUrl}/api/checkout-success`, 
       cancelUrl: `${hostUrl}/api/checkout-success`,
       financialAccountId: targetAccountId,
@@ -65,7 +65,7 @@ export default async function handler(req, res) {
     });
 
     const resText = await monimeResponse.text();
-    let sessionData = {};
+    let sessionData: any = {};
     try { sessionData = JSON.parse(resText); } catch (e) {}
 
     if (!monimeResponse.ok) return res.status(400).json({ error: sessionData.message || resText });
@@ -75,7 +75,7 @@ export default async function handler(req, res) {
     if (!checkoutUrl) return res.status(400).json({ error: 'Monime did not return a valid checkout URL.' });
 
     return res.status(200).json({ link: checkoutUrl });
-  } catch (error) {
+  } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 }
