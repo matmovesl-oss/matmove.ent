@@ -12,7 +12,6 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // Fetch all wallets for the user
     const { data: wallets } = await supabase.from('wallets').select('*').eq('user_id', userId);
     
     if (!wallets || wallets.length === 0) {

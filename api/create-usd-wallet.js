@@ -12,8 +12,8 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // 1. Check if USD wallet already exists
-    const { data: existing } = await supabase.from('wallets').select('*').eq('user_id', userId).eq('currency', 'USD').single();
+    // 🔴 CRITICAL FIX: Use maybeSingle() so it doesn't crash when 0 rows are found!
+    const { data: existing } = await supabase.from('wallets').select('*').eq('user_id', userId).eq('currency', 'USD').maybeSingle();
     if (existing) return res.status(200).json({ wallet: existing });
 
     // 2. Create the Account in Monime

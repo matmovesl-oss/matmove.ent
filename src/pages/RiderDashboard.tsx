@@ -10,7 +10,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   if (activeSection === 'shop') return <RiderShop profile={profile} />;
   if (activeSection === 'trips') return <RiderTrips profile={profile} />;
 
-  // 🔴 WALLET STATES
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [usdWallet, setUsdWallet] = useState<any>(null);
   const [isCreatingUsd, setIsCreatingUsd] = useState(false);
@@ -54,7 +53,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [showPolicy, setShowPolicy] = useState(false);
   const [isFrozen, setIsFrozen] = useState(wallet?.is_frozen || false);
 
-  const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
+  const monimeAccountId = sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || 'Pending Setup';
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
@@ -306,14 +305,15 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
             <div>
               <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">SLE Operating Wallet</span>
               <div className="text-3xl font-bold mt-1 text-blue-400">SLE {Number(sleWallet?.balance || 0).toFixed(2)}</div>
-              <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">ID: {sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || 'Pending Setup'}</div>
+              <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">ID: {monimeAccountId}</div>
             </div>
             <Wallet size={32} className="text-slate-700 mr-2 md:mr-6 pointer-events-none" />
           </div>
 
           {/* USD WALLET */}
           <div className="bg-slate-800 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl border border-slate-700 relative">
-            {usdWallet ? (
+            {/* 🔴 CRITICAL FIX: Explicitly check for monime_account_id so ghost rows don't break the UI */}
+            {usdWallet?.monime_account_id ? (
               <>
                 <div>
                   <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">USD Reserve Wallet</span>
