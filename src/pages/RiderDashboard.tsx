@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ShoppingCart, Activity } from 'lucide-react';
+import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ShoppingCart, Activity, Copy, Check } from 'lucide-react';
 
 const WHATSAPP_NUMBER = "23290330362";
 
@@ -13,8 +13,10 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [usdWallet, setUsdWallet] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [txFilter, setTxFilter] = useState<'recent' | 'all'>('recent');
   const [isCreatingUsd, setIsCreatingUsd] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   
   const [pricingRates, setPricingRates] = useState<any>({ bike: { min: 15, perKm: 3 }, keke: { min: 20, perKm: 5 }, car: { min: 30, perKm: 8 }, van: { min: 50, perKm: 15 } });
 
@@ -51,6 +53,10 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
+  const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
+  const [convertAmount, setConvertAmount] = useState('');
+  const [isProcessingConvert, setIsProcessingConvert] = useState(false);
+
   const [showPolicy, setShowPolicy] = useState(false);
   const [isFrozen, setIsFrozen] = useState(wallet?.is_frozen || false);
 
@@ -58,6 +64,12 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
+
+  const handleCopy = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   useEffect(() => {
     supabase.from('pricing_settings').select('*').then(({ data }) => {
@@ -226,9 +238,9 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   };
 
   const closeModals = () => {
-    setIsLoadModalOpen(false); setIsPayoutModalOpen(false); setIsTransferModalOpen(false);
-    setIsProcessingLoad(false); setIsProcessingPayout(false); setIsProcessingTransfer(false);
-    setLoadAmount(''); setPayoutAmount(''); setTransferAmount(''); setTransferRecipient(''); setPayoutPhone('');
+    setIsLoadModalOpen(false); setIsPayoutModalOpen(false); setIsTransferModalOpen(false); setIsConvertModalOpen(false);
+    setIsProcessingLoad(false); setIsProcessingPayout(false); setIsProcessingTransfer(false); setIsProcessingConvert(false);
+    setLoadAmount(''); setPayoutAmount(''); setTransferAmount(''); setTransferRecipient(''); setPayoutPhone(''); setConvertAmount('');
   };
 
   const executeLoad = async () => {
@@ -278,6 +290,22 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
+  const executeConvert = async () => {
+    if (!convertAmount || Number(convertAmount) <= 0) return alert('Enter a valid USD amount');
+    setIsProcessingConvert(true);
+    try {
+      const res = await fetch('/api/convert-currency', { 
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ amountUsd: convertAmount, userId: profile.id }) 
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Conversion failed');
+      alert(`Successfully converted USD to SLE!`);
+      closeModals();
+      fetchLiveBalance(); 
+    } catch (err: any) { alert(err.message); setIsProcessingConvert(false); }
+  };
+
   const WalletCards = (
     <div className={`grid grid-cols-1 ${activeSection === 'wallet' ? 'md:grid-cols-2' : ''} gap-4`}>
       <div className="bg-slate-900 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
@@ -287,7 +315,12 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         <div>
           <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">SLE Operating Wallet</span>
           <div className="text-3xl font-bold mt-1 text-blue-400">SLE {Number(sleWallet?.balance || 0).toFixed(2)}</div>
-          <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">ID: {monimeAccountId}</div>
+          <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-flex items-center gap-2 px-2 py-1 rounded">
+             ID: {monimeAccountId}
+             <button onClick={() => handleCopy(monimeAccountId)} className="hover:text-white transition">
+                {copiedId === monimeAccountId ? <Check size={12} className="text-emerald-400"/> : <Copy size={12}/>}
+             </button>
+          </div>
         </div>
         <Wallet size={32} className="text-slate-700 mr-2 md:mr-6 pointer-events-none" />
       </div>
@@ -298,7 +331,12 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
             <div>
               <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">USD Reserve Wallet</span>
               <div className="text-3xl font-bold mt-1 text-emerald-400">USD {Number(usdWallet.balance || 0).toFixed(2)}</div>
-              <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-block px-2 py-1 rounded">ID: {usdWallet.monime_account_id}</div>
+              <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-flex items-center gap-2 px-2 py-1 rounded">
+                 ID: {usdWallet.monime_account_id}
+                 <button onClick={() => handleCopy(usdWallet.monime_account_id)} className="hover:text-white transition">
+                    {copiedId === usdWallet.monime_account_id ? <Check size={12} className="text-emerald-400"/> : <Copy size={12}/>}
+                 </button>
+              </div>
             </div>
             <Wallet size={32} className="text-slate-600 mr-2 md:mr-6 pointer-events-none" />
           </>
@@ -308,17 +346,16 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
               {isCreatingUsd ? <Loader2 className="animate-spin text-emerald-400" size={24} /> : <Plus size={24} className="text-emerald-400" />}
             </button>
             <span className="text-sm font-bold text-slate-300">Create USD Wallet</span>
-            <span className="text-[10px] text-slate-500 mt-1">Hold and transfer US Dollars securely</span>
           </div>
         )}
       </div>
     </div>
   );
 
+  const displayedTx = txFilter === 'recent' ? transactions.slice(0, 5) : transactions;
+
   return (
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
-      
-      {/* 🔴 HEADER */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
         <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋</h1></div>
         <div className="flex gap-2">
@@ -335,8 +372,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
-        
-        {/* 🔴 HOME TAB */}
         {activeSection === 'home' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit z-20">
@@ -477,15 +512,44 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
              <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">My Wallets</h2>
              {WalletCards}
              
-             {/* TRANSACTIONS LIST */}
+             <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm flex flex-col items-center text-center mt-6">
+               <h3 className="text-xl font-bold text-slate-900 mb-2">Wallet Actions</h3>
+               <p className="text-sm text-slate-500 mb-8">Manage and convert your funds securely</p>
+               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
+                  <button onClick={() => setIsLoadModalOpen(true)} disabled={isFrozen} className="p-4 sm:p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                    <div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24}/></div> Load
+                  </button>
+                  <button onClick={() => setIsPayoutModalOpen(true)} disabled={isFrozen} className="p-4 sm:p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                    <div className="p-3 bg-white rounded-full shadow-sm"><ArrowUpRight size={24}/></div> Withdraw
+                  </button>
+                  <button onClick={() => setIsTransferModalOpen(true)} disabled={isFrozen} className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                    <div className="p-3 bg-white rounded-full shadow-sm"><Users size={24}/></div> Transfer
+                  </button>
+                  <button onClick={() => setIsConvertModalOpen(true)} disabled={!usdWallet?.monime_account_id || isFrozen} className="p-4 sm:p-6 rounded-2xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                    <div className="p-3 bg-white rounded-full shadow-sm"><RefreshCw size={24}/></div> Convert
+                  </button>
+               </div>
+             </div>
+
              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm w-full">
-                <h3 className="font-bold text-lg text-slate-900 mb-4 flex items-center gap-2"><Activity size={20} className="text-blue-600"/> Recent Transactions</h3>
-                {transactions.length === 0 ? (
-                    <div className="text-center text-slate-500 py-6">No recent transactions found.</div>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2"><Activity size={20} className="text-blue-600"/> Transactions</h3>
+                  <div className="flex bg-slate-100 p-1 rounded-lg">
+                    <button onClick={()=>setTxFilter('recent')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter==='recent'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>Recent</button>
+                    <button onClick={()=>setTxFilter('all')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter==='all'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>All Time</button>
+                  </div>
+                </div>
+
+                {displayedTx.length === 0 ? (
+                    <div className="text-center text-slate-500 py-6">No transactions found.</div>
                 ) : (
                     <div className="space-y-3">
-                        {transactions.map(tx => {
+                        {displayedTx.map(tx => {
                             const isCredit = tx.balanceImpact === 'CREDIT';
+                            const dateStr = tx.createdAt || tx.created_at || tx.date;
+                            const isValidDate = dateStr && !isNaN(new Date(dateStr).getTime());
+                            const formattedDate = isValidDate ? new Date(dateStr).toLocaleString() : 'Date pending';
+
                             return (
                                 <div key={tx.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition">
                                     <div className="flex items-center gap-3">
@@ -494,7 +558,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                                         </div>
                                         <div>
                                             <p className="font-bold text-slate-900 text-sm">{tx.description || tx.type || 'Transfer'}</p>
-                                            <p className="text-xs text-slate-500 mt-0.5">{new Date(tx.createdAt).toLocaleString()}</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">{formattedDate}</p>
                                         </div>
                                     </div>
                                     <div className="text-right">
@@ -513,11 +577,26 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         )}
       </div>
 
+      {/* CONVERT MODAL */}
+      {isConvertModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Convert Currency</h2>
+            <p className="text-sm text-slate-500 mb-6">Move funds from USD to SLE instantly.</p>
+            <input type="number" placeholder="Amount (USD)" value={convertAmount} onChange={(e) => setConvertAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-indigo-500" />
+            <button onClick={executeConvert} disabled={isProcessingConvert || !convertAmount} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isProcessingConvert ? <Loader2 className="animate-spin" size={20} /> : <><RefreshCw size={20} /> Convert to SLE</>}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* LOAD MODAL */}
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />

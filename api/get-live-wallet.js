@@ -12,10 +12,7 @@ export default async function handler(req, res) {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { data: wallets } = await supabase.from('wallets').select('*').eq('user_id', userId);
-    
-    if (!wallets || wallets.length === 0) {
-      return res.status(200).json({ sleWallet: null, usdWallet: null, transactions: [] });
-    }
+    if (!wallets || wallets.length === 0) return res.status(200).json({ sleWallet: null, usdWallet: null, transactions: [] });
 
     let sleWallet = wallets.find(w => w.currency === 'SLE') || wallets[0];
     let usdWallet = wallets.find(w => w.currency === 'USD') || null;
@@ -33,7 +30,6 @@ export default async function handler(req, res) {
               'Monime-Version': 'caph.2025-08-23'
           };
 
-          // Fetch Balance
           const monimeRes = await fetch(`https://api.monime.io/v1/financial-accounts/${accountId}?withBalance=true`, { headers: authHeaders });
           if (monimeRes.ok) {
             const monimeData = (await monimeRes.json()).result || {};
@@ -44,9 +40,9 @@ export default async function handler(req, res) {
             }
           }
 
-          // Fetch Transactions for main wallet
+          // Fetch 50 Transactions for filtering
           if (fetchTx) {
-              const txRes = await fetch(`https://api.monime.io/v1/financial-transactions?financialAccountId=${accountId}&limit=10`, { headers: authHeaders });
+              const txRes = await fetch(`https://api.monime.io/v1/financial-transactions?financialAccountId=${accountId}&limit=50`, { headers: authHeaders });
               if (txRes.ok) {
                   const txData = await txRes.json();
                   transactions = txData.result?.items || txData.result || [];
@@ -62,7 +58,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ sleWallet, usdWallet, transactions });
   } catch (error) {
-    console.error('Live Sync Error:', error.message);
     return res.status(500).json({ error: error.message });
   }
 }
