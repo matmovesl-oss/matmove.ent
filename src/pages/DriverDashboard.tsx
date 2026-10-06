@@ -2,13 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, MapPin, Navigation, Power, User, Phone, Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft, Users, RefreshCw, Plus, Wallet } from 'lucide-react';
+import { Car, MapPin, Navigation, Power, User, Phone, Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft, Users, RefreshCw, Plus, Wallet, Activity } from 'lucide-react';
 
 export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }: any) {
   if (activeSection === 'trips') return <DriverTrips profile={profile} />;
 
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [usdWallet, setUsdWallet] = useState<any>(null);
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [isCreatingUsd, setIsCreatingUsd] = useState(false);
 
   const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
@@ -66,6 +67,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       const data = await res.json();
       if (data.sleWallet) setSleWallet(data.sleWallet);
       if (data.usdWallet) setUsdWallet(data.usdWallet);
+      if (data.transactions) setTransactions(data.transactions);
 
       const { data: wData } = await supabase.from('wallets').select('is_frozen').eq('user_id', profile.id).eq('currency', 'SLE').single();
       if (wData) setIsFrozen(wData.is_frozen);
@@ -181,10 +183,8 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
-  // 🔴 SHARED WALLET CARDS
   const WalletCards = (
     <div className={`grid grid-cols-1 ${activeSection === 'wallet' ? 'md:grid-cols-2' : ''} gap-4`}>
-      {/* SLE WALLET */}
       <div className="bg-slate-900 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
         <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
           <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
@@ -197,7 +197,6 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
         <Wallet size={32} className="text-slate-700 mr-2 md:mr-6 pointer-events-none" />
       </div>
 
-      {/* USD WALLET */}
       <div className="bg-slate-800 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl border border-slate-700 relative">
         {usdWallet?.monime_account_id ? (
           <>
@@ -222,6 +221,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
+      {/* 🔴 HEADER ALWAYS SHOWS ACTIONS */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-4">
           <button onClick={() => setIsOnline(!isOnline)} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}>
@@ -230,7 +230,15 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           <div><h2 className="font-bold text-slate-900 text-lg">{isOnline ? 'You are Online' : 'You are Offline'}</h2></div>
         </div>
         <div className="flex gap-2">
-          {isFrozen && <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">Wallet Frozen by Admin</span>}
+          {isFrozen ? (
+            <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">Wallet Frozen</span>
+          ) : (
+            <>
+              <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
+              {isApproved && <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition">Payout</button>}
+              <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800 transition">Transfer</button>
+            </>
+          )}
         </div>
       </header>
 
@@ -300,25 +308,43 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
         </div>
       )}
 
-      {/* 🔴 WALLET TAB ONLY: BIG ACTIONS INSTEAD OF MAP */}
+      {/* 🔴 WALLET TAB ONLY: TRANSACTIONS & FULL WIDTH ACTIONS */}
       {activeSection === 'wallet' && (
         <div className="p-6 max-w-4xl mx-auto w-full space-y-6">
-           <h2 className="text-2xl font-bold text-slate-900 mb-4">My Wallets</h2>
+           <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">My Wallets</h2>
            {WalletCards}
-           <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm flex flex-col items-center text-center mt-6">
-             <h3 className="text-xl font-bold text-slate-900 mb-2">Wallet Actions</h3>
-             <p className="text-sm text-slate-500 mb-8">Manage your earnings securely</p>
-             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
-                <button onClick={() => setIsLoadModalOpen(true)} disabled={isFrozen} className="p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
-                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24}/></div> Load Funds
-                </button>
-                <button onClick={() => setIsPayoutModalOpen(true)} disabled={!isApproved || isFrozen} className="p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
-                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowUpRight size={24}/></div> Withdraw {isApproved ? '' : '(KYC Required)'}
-                </button>
-                <button onClick={() => setIsTransferModalOpen(true)} disabled={isFrozen} className="p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
-                  <div className="p-3 bg-white rounded-full shadow-sm"><Users size={24}/></div> Transfer
-                </button>
-             </div>
+           
+           {/* TRANSACTIONS LIST */}
+           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm w-full">
+              <h3 className="font-bold text-lg text-slate-900 mb-4 flex items-center gap-2"><Activity size={20} className="text-blue-600"/> Recent Transactions</h3>
+              {transactions.length === 0 ? (
+                  <div className="text-center text-slate-500 py-6">No recent transactions found.</div>
+              ) : (
+                  <div className="space-y-3">
+                      {transactions.map(tx => {
+                          const isCredit = tx.balanceImpact === 'CREDIT';
+                          return (
+                              <div key={tx.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition">
+                                  <div className="flex items-center gap-3">
+                                      <div className={`p-2 rounded-full ${isCredit ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                                          {isCredit ? <ArrowDownLeft size={18}/> : <ArrowUpRight size={18}/>}
+                                      </div>
+                                      <div>
+                                          <p className="font-bold text-slate-900 text-sm">{tx.description || tx.type || 'Transfer'}</p>
+                                          <p className="text-xs text-slate-500 mt-0.5">{new Date(tx.createdAt).toLocaleString()}</p>
+                                      </div>
+                                  </div>
+                                  <div className="text-right">
+                                      <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>
+                                          {isCredit ? '+' : '-'} {tx.amount?.currency} {(tx.amount?.value / 100).toFixed(2)}
+                                      </p>
+                                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tx.status}</span>
+                                  </div>
+                              </div>
+                          );
+                      })}
+                  </div>
+              )}
            </div>
         </div>
       )}
