@@ -281,189 +281,204 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
         <div><h1 className="text-xl font-bold text-slate-900">Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋</h1></div>
         <div className="flex gap-2">
-          {isFrozen ? (
-            <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">Wallet Frozen by Admin</span>
-          ) : (
-            <>
-              <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
-              <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition">Payout</button>
-              <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800 transition">Transfer</button>
-            </>
-          )}
+          {isFrozen && <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">Wallet Frozen by Admin</span>}
         </div>
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
         
-        {/* 🔴 MULTI-CURRENCY WALLET SECTION */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* SLE WALLET */}
-          <div className="bg-slate-900 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
-            <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
-              <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
-            </button>
-            <div>
-              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">SLE Operating Wallet</span>
-              <div className="text-3xl font-bold mt-1 text-blue-400">SLE {Number(sleWallet?.balance || 0).toFixed(2)}</div>
-              <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">ID: {monimeAccountId}</div>
-            </div>
-            <Wallet size={32} className="text-slate-700 mr-2 md:mr-6 pointer-events-none" />
-          </div>
-
-          {/* USD WALLET */}
-          <div className="bg-slate-800 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl border border-slate-700 relative">
-            {/* 🔴 CRITICAL FIX: Explicitly check for monime_account_id so ghost rows don't break the UI */}
-            {usdWallet?.monime_account_id ? (
-              <>
-                <div>
-                  <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">USD Reserve Wallet</span>
-                  <div className="text-3xl font-bold mt-1 text-emerald-400">USD {Number(usdWallet.balance || 0).toFixed(2)}</div>
-                  <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-block px-2 py-1 rounded">ID: {usdWallet.monime_account_id}</div>
-                </div>
-                <Wallet size={32} className="text-slate-600 mr-2 md:mr-6 pointer-events-none" />
-              </>
-            ) : (
-              <div className="w-full flex flex-col items-center justify-center text-center py-1">
-                <button onClick={handleCreateUsdWallet} disabled={isCreatingUsd} className="bg-slate-700 hover:bg-slate-600 transition p-3 rounded-full mb-2 shadow-inner">
-                  {isCreatingUsd ? <Loader2 className="animate-spin text-emerald-400" size={24} /> : <Plus size={24} className="text-emerald-400" />}
-                </button>
-                <span className="text-sm font-bold text-slate-300">Create USD Wallet</span>
-                <span className="text-[10px] text-slate-500 mt-1">Hold and transfer US Dollars securely</span>
+        {/* 🔴 WALLETS ARE VISIBLE ON BOTH RIDE AND WALLET TABS */}
+        {(activeSection === 'home' || activeSection === 'wallet') && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* SLE WALLET */}
+            <div className="bg-slate-900 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
+              <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
+                <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
+              </button>
+              <div>
+                <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">SLE Operating Wallet</span>
+                <div className="text-3xl font-bold mt-1 text-blue-400">SLE {Number(sleWallet?.balance || 0).toFixed(2)}</div>
+                <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">ID: {monimeAccountId}</div>
               </div>
-            )}
-          </div>
-        </div>
+              <Wallet size={32} className="text-slate-700 mr-2 md:mr-6 pointer-events-none" />
+            </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit z-20">
-            <h3 className="font-bold text-lg">Request Service</h3>
-            
-            {!activeBooking ? (
-              <>
-                <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
-                  <button onClick={() => setServiceType('ride')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16}/> Ride</button>
-                  <button onClick={() => setServiceType('delivery')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Package size={16}/> Delivery</button>
-                  <button onClick={() => setServiceType('scheduled')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size={16}/> Schedule</button>
+            {/* USD WALLET */}
+            <div className="bg-slate-800 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl border border-slate-700 relative">
+              {usdWallet?.monime_account_id ? (
+                <>
+                  <div>
+                    <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">USD Reserve Wallet</span>
+                    <div className="text-3xl font-bold mt-1 text-emerald-400">USD {Number(usdWallet.balance || 0).toFixed(2)}</div>
+                    <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-block px-2 py-1 rounded">ID: {usdWallet.monime_account_id}</div>
+                  </div>
+                  <Wallet size={32} className="text-slate-600 mr-2 md:mr-6 pointer-events-none" />
+                </>
+              ) : (
+                <div className="w-full flex flex-col items-center justify-center text-center py-1">
+                  <button onClick={handleCreateUsdWallet} disabled={isCreatingUsd} className="bg-slate-700 hover:bg-slate-600 transition p-3 rounded-full mb-2 shadow-inner">
+                    {isCreatingUsd ? <Loader2 className="animate-spin text-emerald-400" size={24} /> : <Plus size={24} className="text-emerald-400" />}
+                  </button>
+                  <span className="text-sm font-bold text-slate-300">Create USD Wallet</span>
+                  <span className="text-[10px] text-slate-500 mt-1">Hold and transfer US Dollars securely</span>
                 </div>
-                <div className="space-y-3">
-                  {(serviceType === 'ride' || serviceType === 'delivery') && (
-                    <div className="grid grid-cols-4 gap-2 mb-2">
-                      {(['keke', 'bike', 'car', 'van'] as const).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}
-                    </div>
-                  )}
+              )}
+            </div>
+          </div>
+        )}
 
-                  <div className="relative z-30" onClick={e => e.stopPropagation()}>
-                    <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'pickup' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
-                      <MapPin size={16} className="text-emerald-600 shrink-0" />
-                      <input type="text" placeholder="Where are you?" value={pickup} onChange={e => searchPlaces(e.target.value, 'pickup')} onFocus={() => setActiveInput('pickup')} className="w-full outline-none text-sm bg-transparent" />
-                    </div>
-                    {activeInput === 'pickup' && pickupSuggestions.length > 0 && (
-                      <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-[9999]">
-                        {pickupSuggestions.map((s, i) => <button key={i} onClick={() => handleSelectPlace(s.place_id, s.description, 'pickup')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100"><div className="text-sm font-bold text-slate-900">{s.structured_formatting?.main_text || s.description}</div></button>)}
+        {/* 🔴 HOME TAB ONLY: MAP AND REQUEST FORM */}
+        {activeSection === 'home' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit z-20">
+              <h3 className="font-bold text-lg">Request Service</h3>
+              
+              {!activeBooking ? (
+                <>
+                  <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
+                    <button onClick={() => setServiceType('ride')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16}/> Ride</button>
+                    <button onClick={() => setServiceType('delivery')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Package size={16}/> Delivery</button>
+                    <button onClick={() => setServiceType('scheduled')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size={16}/> Schedule</button>
+                  </div>
+                  <div className="space-y-3">
+                    {(serviceType === 'ride' || serviceType === 'delivery') && (
+                      <div className="grid grid-cols-4 gap-2 mb-2">
+                        {(['keke', 'bike', 'car', 'van'] as const).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}
                       </div>
                     )}
-                  </div>
 
-                  <div className="relative z-20" onClick={e => e.stopPropagation()}>
-                    <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'destination' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
-                      <Navigation size={16} className="text-blue-600 shrink-0" />
-                      <input type="text" placeholder="Where to?" value={destination} onChange={e => searchPlaces(e.target.value, 'destination')} onFocus={() => setActiveInput('destination')} className="w-full outline-none text-sm bg-transparent" />
-                    </div>
-                    {activeInput === 'destination' && destinationSuggestions.length > 0 && (
-                      <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-[9999]">
-                        {destinationSuggestions.map((s, i) => <button key={i} onClick={() => handleSelectPlace(s.place_id, s.description, 'destination')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100"><div className="text-sm font-bold text-slate-900">{s.structured_formatting?.main_text || s.description}</div></button>)}
+                    <div className="relative z-30" onClick={e => e.stopPropagation()}>
+                      <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'pickup' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
+                        <MapPin size={16} className="text-emerald-600 shrink-0" />
+                        <input type="text" placeholder="Where are you?" value={pickup} onChange={e => searchPlaces(e.target.value, 'pickup')} onFocus={() => setActiveInput('pickup')} className="w-full outline-none text-sm bg-transparent" />
                       </div>
-                    )}
-                  </div>
-
-                  <div className="flex justify-between items-center px-1 mt-1">
-                    <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Route: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
-                    <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">{isRouting ? <Loader2 size={12} className="animate-spin"/> : <MapPin size={12} />} Preview Route</button>
-                  </div>
-
-                  {(serviceType === 'ride' || serviceType === 'delivery') && (
-                    <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-slate-500 font-bold text-sm px-2">Total Fare (SLE)</span>
-                        <input type="number" placeholder="Amount" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-right pr-2" />
-                        <div className="flex gap-1">
-                          <button onClick={() => setOfferAmount(prev => Math.max(pricingRates[vehicleType]?.min || 1, (Number(prev)||1) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16}/></button>
-                          <button onClick={() => setOfferAmount(prev => ((Number(prev)||1) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
-                        </div>
-                      </div>
-                      {Number(offerAmount) > 0 && (
-                        <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 shadow-sm mt-2">
-                          <div className="text-[11px] font-bold text-emerald-600">Driver Earns: SLE {(Number(offerAmount) * 0.85).toFixed(2)}</div>
-                          <div className="text-[11px] font-bold text-rose-500">Platform Fee: SLE {(Number(offerAmount) * 0.15).toFixed(2)}</div>
+                      {activeInput === 'pickup' && pickupSuggestions.length > 0 && (
+                        <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-[9999]">
+                          {pickupSuggestions.map((s, i) => <button key={i} onClick={() => handleSelectPlace(s.place_id, s.description, 'pickup')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100"><div className="text-sm font-bold text-slate-900">{s.structured_formatting?.main_text || s.description}</div></button>)}
                         </div>
                       )}
                     </div>
-                  )}
 
-                  {serviceType === 'scheduled' && (
-                    <div className="flex items-center gap-2 border p-3 rounded-xl"><CalendarClock size={16} className="text-emerald-600" /><input type="datetime-local" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="w-full outline-none text-sm bg-transparent" /></div>
+                    <div className="relative z-20" onClick={e => e.stopPropagation()}>
+                      <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'destination' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'}`}>
+                        <Navigation size={16} className="text-blue-600 shrink-0" />
+                        <input type="text" placeholder="Where to?" value={destination} onChange={e => searchPlaces(e.target.value, 'destination')} onFocus={() => setActiveInput('destination')} className="w-full outline-none text-sm bg-transparent" />
+                      </div>
+                      {activeInput === 'destination' && destinationSuggestions.length > 0 && (
+                        <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-[9999]">
+                          {destinationSuggestions.map((s, i) => <button key={i} onClick={() => handleSelectPlace(s.place_id, s.description, 'destination')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100"><div className="text-sm font-bold text-slate-900">{s.structured_formatting?.main_text || s.description}</div></button>)}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-between items-center px-1 mt-1">
+                      <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Route: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
+                      <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">{isRouting ? <Loader2 size={12} className="animate-spin"/> : <MapPin size={12} />} Preview Route</button>
+                    </div>
+
+                    {(serviceType === 'ride' || serviceType === 'delivery') && (
+                      <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-slate-500 font-bold text-sm px-2">Total Fare (SLE)</span>
+                          <input type="number" placeholder="Amount" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-right pr-2" />
+                          <div className="flex gap-1">
+                            <button onClick={() => setOfferAmount(prev => Math.max(pricingRates[vehicleType]?.min || 1, (Number(prev)||1) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16}/></button>
+                            <button onClick={() => setOfferAmount(prev => ((Number(prev)||1) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
+                          </div>
+                        </div>
+                        {Number(offerAmount) > 0 && (
+                          <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 shadow-sm mt-2">
+                            <div className="text-[11px] font-bold text-emerald-600">Driver Earns: SLE {(Number(offerAmount) * 0.85).toFixed(2)}</div>
+                            <div className="text-[11px] font-bold text-rose-500">Platform Fee: SLE {(Number(offerAmount) * 0.15).toFixed(2)}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {serviceType === 'scheduled' && (
+                      <div className="flex items-center gap-2 border p-3 rounded-xl"><CalendarClock size={16} className="text-emerald-600" /><input type="datetime-local" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="w-full outline-none text-sm bg-transparent" /></div>
+                    )}
+                  </div>
+                  <button onClick={handleRequest} disabled={isRequesting} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4">{isRequesting ? <Loader2 className="animate-spin mx-auto" /> : `Confirm Request`}</button>
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  {activeBooking.status === 'accepted' || activeBooking.status === 'in_progress' ? (
+                    <>
+                       <Car className="text-emerald-600 mx-auto mb-4" size={48} />
+                       <h4 className="font-bold text-xl text-slate-900">
+                         {activeBooking.status === 'in_progress' ? 'Trip in Progress!' : 'Driver is on the way!'}
+                       </h4>
+                       <p className="text-sm text-slate-500 mt-2">Your fare (SLE {activeBooking.fare_amount}) is held securely in Escrow.</p>
+                       
+                       {activeBooking.driver && (
+                          <div className="mt-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-left mb-6">
+                             <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Your Driver</div>
+                             <div className="font-bold text-slate-900">{activeBooking.driver.full_name}</div>
+                             <div className="text-sm text-slate-600 flex items-center gap-1 mt-1"><Smartphone size={14}/> {activeBooking.driver.phone}</div>
+                          </div>
+                       )}
+
+                       {activeBooking.status === 'in_progress' && (
+                         <button 
+                           onClick={async () => {
+                               setIsRequesting(true);
+                               try {
+                                 const res = await fetch('/api/complete-ride-payout', {
+                                   method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                   body: JSON.stringify({ bookingId: activeBooking.id, driverId: activeBooking.driver_id, amount: activeBooking.fare_amount })
+                                 });
+                                 const data = await res.json();
+                                 if (!res.ok) throw new Error(data.error);
+                                 alert('Payment released!');
+                                 window.location.reload(); 
+                               } catch (err: any) { alert(err.message); setIsRequesting(false); }
+                           }}
+                           disabled={isRequesting}
+                           className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2"
+                         >
+                           {isRequesting ? <Loader2 className="animate-spin" size={20} /> : `Pay SLE ${activeBooking.fare_amount} & Complete Trip`}
+                         </button>
+                       )}
+                    </>
+                  ) : (
+                    <>
+                       <Loader2 className="animate-spin text-blue-600 mx-auto mb-4" size={40} />
+                       <h4 className="font-bold text-lg text-slate-900">{activeBooking.status === 'pending_admin' ? 'Request sent to Dispatch...' : 'Broadcasting request...'}</h4>
+                       <p className="text-sm text-slate-500 mt-2">Please wait while we assign a driver to your trip.</p>
+                       
+                       {(activeBooking.status === 'pending' || activeBooking.status === 'pending_admin') && (
+                         <button onClick={cancelTrip} className="text-red-500 text-sm font-bold hover:underline mt-4">Cancel Request</button>
+                       )}
+                    </>
                   )}
                 </div>
-                <button onClick={handleRequest} disabled={isRequesting} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4">{isRequesting ? <Loader2 className="animate-spin mx-auto" /> : `Confirm Request`}</button>
-              </>
-            ) : (
-              <div className="text-center py-8">
-                {activeBooking.status === 'accepted' || activeBooking.status === 'in_progress' ? (
-                  <>
-                     <Car className="text-emerald-600 mx-auto mb-4" size={48} />
-                     <h4 className="font-bold text-xl text-slate-900">
-                       {activeBooking.status === 'in_progress' ? 'Trip in Progress!' : 'Driver is on the way!'}
-                     </h4>
-                     <p className="text-sm text-slate-500 mt-2">Your fare (SLE {activeBooking.fare_amount}) is held securely in Escrow.</p>
-                     
-                     {activeBooking.driver && (
-                        <div className="mt-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-left mb-6">
-                           <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Your Driver</div>
-                           <div className="font-bold text-slate-900">{activeBooking.driver.full_name}</div>
-                           <div className="text-sm text-slate-600 flex items-center gap-1 mt-1"><Smartphone size={14}/> {activeBooking.driver.phone}</div>
-                        </div>
-                     )}
+              )}
+            </div>
+            <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] border border-slate-200 shadow-inner z-0">
+              <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
+            </div>
+          </div>
+        )}
 
-                     {activeBooking.status === 'in_progress' && (
-                       <button 
-                         onClick={async () => {
-                             setIsRequesting(true);
-                             try {
-                               const res = await fetch('/api/complete-ride-payout', {
-                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                 body: JSON.stringify({ bookingId: activeBooking.id, driverId: activeBooking.driver_id, amount: activeBooking.fare_amount })
-                               });
-                               const data = await res.json();
-                               if (!res.ok) throw new Error(data.error);
-                               alert('Payment released!');
-                               window.location.reload(); 
-                             } catch (err: any) { alert(err.message); setIsRequesting(false); }
-                         }}
-                         disabled={isRequesting}
-                         className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2"
-                       >
-                         {isRequesting ? <Loader2 className="animate-spin" size={20} /> : `Pay SLE ${activeBooking.fare_amount} & Complete Trip`}
-                       </button>
-                     )}
-                  </>
-                ) : (
-                  <>
-                     <Loader2 className="animate-spin text-blue-600 mx-auto mb-4" size={40} />
-                     <h4 className="font-bold text-lg text-slate-900">{activeBooking.status === 'pending_admin' ? 'Request sent to Dispatch...' : 'Broadcasting request...'}</h4>
-                     <p className="text-sm text-slate-500 mt-2">Please wait while we assign a driver to your trip.</p>
-                     
-                     {(activeBooking.status === 'pending' || activeBooking.status === 'pending_admin') && (
-                       <button onClick={cancelTrip} className="text-red-500 text-sm font-bold hover:underline mt-4">Cancel Request</button>
-                     )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] border border-slate-200 shadow-inner z-0">
-            <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
-          </div>
-        </div>
+        {/* 🔴 WALLET TAB ONLY: BIG ACTIONS INSTEAD OF MAP */}
+        {activeSection === 'wallet' && (
+           <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm flex flex-col items-center text-center mt-6">
+             <h3 className="text-xl font-bold text-slate-900 mb-2">Wallet Actions</h3>
+             <p className="text-sm text-slate-500 mb-8">Manage your funds securely</p>
+             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
+                <button onClick={() => setIsLoadModalOpen(true)} disabled={isFrozen} className="p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24}/></div> Load Funds
+                </button>
+                <button onClick={() => setIsPayoutModalOpen(true)} disabled={isFrozen} className="p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowUpRight size={24}/></div> Withdraw
+                </button>
+                <button onClick={() => setIsTransferModalOpen(true)} disabled={isFrozen} className="p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <div className="p-3 bg-white rounded-full shadow-sm"><Users size={24}/></div> Transfer
+                </button>
+             </div>
+           </div>
+        )}
       </div>
 
       {/* LOAD MODAL */}

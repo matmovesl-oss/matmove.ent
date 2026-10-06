@@ -279,6 +279,45 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
+  // 🔴 SHARED WALLET CARDS
+  const WalletCards = (
+    <div className={`grid grid-cols-1 ${activeSection === 'wallet' ? 'md:grid-cols-2' : ''} gap-4`}>
+      {/* SLE WALLET */}
+      <div className="bg-orange-600 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
+        <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
+          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
+        </button>
+        <div>
+          <span className="text-orange-200 text-xs font-bold uppercase tracking-wider">SLE Operating Wallet</span>
+          <div className="text-3xl font-bold mt-1 text-white">SLE {Number(sleWallet?.balance || 0).toFixed(2)}</div>
+          <div className="text-[10px] font-mono text-white/70 mt-2 bg-black/20 inline-block px-2 py-1 rounded">ID: {monimeAccountId}</div>
+        </div>
+        <Wallet size={32} className="text-orange-300 mr-2 md:mr-6 pointer-events-none" />
+      </div>
+
+      {/* USD WALLET */}
+      <div className="bg-slate-800 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl border border-slate-700 relative">
+        {usdWallet?.monime_account_id ? (
+          <>
+            <div>
+              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">USD Reserve</span>
+              <div className="text-3xl font-bold mt-1 text-blue-400">USD {Number(usdWallet.balance || 0).toFixed(2)}</div>
+              <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-block px-2 py-1 rounded">ID: {usdWallet.monime_account_id}</div>
+            </div>
+            <Wallet size={32} className="text-slate-600 mr-2 md:mr-6 pointer-events-none" />
+          </>
+        ) : (
+          <div className="w-full flex flex-col items-center justify-center text-center py-1">
+            <button onClick={handleCreateUsdWallet} disabled={isCreatingUsd} className="bg-slate-700 hover:bg-slate-600 transition p-3 rounded-full mb-2 shadow-inner">
+              {isCreatingUsd ? <Loader2 className="animate-spin text-emerald-400" size={24} /> : <Plus size={24} className="text-emerald-400" />}
+            </button>
+            <span className="text-sm font-bold text-slate-300">Create USD Wallet</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
@@ -287,61 +326,15 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
           <div><h2 className="font-bold text-slate-900 leading-tight">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
         </div>
         <div className="flex gap-2">
-          {isFrozen ? (
-            <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">Wallet Frozen by Admin</span>
-          ) : (
-            <>
-              <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
-              {isApproved && <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition">Payout</button>}
-              <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800 transition">Transfer</button>
-            </>
-          )}
+          {isFrozen && <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">Wallet Frozen by Admin</span>}
         </div>
       </header>
 
-      <div className="p-6 max-w-4xl mx-auto space-y-6">
-        
-        {/* 🔴 MULTI-CURRENCY WALLET SECTION */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* SLE WALLET */}
-          <div className="bg-orange-600 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
-            <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
-              <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
-            </button>
-            <div>
-              <span className="text-orange-200 text-xs font-bold uppercase tracking-wider">SLE Operating Wallet</span>
-              <div className="text-3xl font-bold mt-1 text-white">SLE {Number(sleWallet?.balance || 0).toFixed(2)}</div>
-              <div className="text-[10px] font-mono text-white/70 mt-2 bg-black/20 inline-block px-2 py-1 rounded">ID: {monimeAccountId}</div>
-            </div>
-            <Wallet size={32} className="text-orange-300 mr-2 md:mr-6 pointer-events-none" />
-          </div>
-
-          {/* USD WALLET */}
-          <div className="bg-slate-800 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl border border-slate-700 relative">
-            {/* 🔴 CRITICAL FIX: Explicitly check for monime_account_id so ghost rows don't break the UI */}
-            {usdWallet?.monime_account_id ? (
-              <>
-                <div>
-                  <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">USD Reserve Wallet</span>
-                  <div className="text-3xl font-bold mt-1 text-blue-400">USD {Number(usdWallet.balance || 0).toFixed(2)}</div>
-                  <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-block px-2 py-1 rounded">ID: {usdWallet.monime_account_id}</div>
-                </div>
-                <Wallet size={32} className="text-slate-600 mr-2 md:mr-6 pointer-events-none" />
-              </>
-            ) : (
-              <div className="w-full flex flex-col items-center justify-center text-center py-1">
-                <button onClick={handleCreateUsdWallet} disabled={isCreatingUsd} className="bg-slate-700 hover:bg-slate-600 transition p-3 rounded-full mb-2 shadow-inner">
-                  {isCreatingUsd ? <Loader2 className="animate-spin text-emerald-400" size={24} /> : <Plus size={24} className="text-emerald-400" />}
-                </button>
-                <span className="text-sm font-bold text-slate-300">Create USD Wallet</span>
-                <span className="text-[10px] text-slate-500 mt-1">Hold and transfer US Dollars securely</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit">
+      {/* 🔴 HOME TAB ONLY: MAP AND RADAR SIDEBAR */}
+      {activeSection === 'home' && (
+        <div className="flex-1 flex flex-col lg:flex-row">
+          <div className="w-full lg:w-[450px] bg-white border-r border-slate-200 flex flex-col p-6 space-y-6 overflow-y-auto">
+            {WalletCards}
             <h3 className="font-bold text-lg">Dispatch Request</h3>
             
             {!activeBooking ? (
@@ -471,11 +464,34 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
             )}
           </div>
 
-          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[400px] border border-slate-200 shadow-inner">
+          <div className="flex-1 bg-slate-200 relative min-h-[450px]">
             <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
           </div>
         </div>
-      </div>
+      )}
+
+      {/* 🔴 WALLET TAB ONLY: BIG ACTIONS INSTEAD OF MAP */}
+      {activeSection === 'wallet' && (
+        <div className="p-6 max-w-4xl mx-auto w-full space-y-6">
+           <h2 className="text-2xl font-bold text-slate-900 mb-4">My Wallets</h2>
+           {WalletCards}
+           <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm flex flex-col items-center text-center mt-6">
+             <h3 className="text-xl font-bold text-slate-900 mb-2">Wallet Actions</h3>
+             <p className="text-sm text-slate-500 mb-8">Manage your earnings securely</p>
+             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
+                <button onClick={() => setIsLoadModalOpen(true)} disabled={isFrozen} className="p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24}/></div> Load Funds
+                </button>
+                <button onClick={() => setIsPayoutModalOpen(true)} disabled={!isApproved || isFrozen} className="p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowUpRight size={24}/></div> Withdraw {isApproved ? '' : '(KYC Required)'}
+                </button>
+                <button onClick={() => setIsTransferModalOpen(true)} disabled={isFrozen} className="p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <div className="p-3 bg-white rounded-full shadow-sm"><Users size={24}/></div> Transfer
+                </button>
+             </div>
+           </div>
+        </div>
+      )}
 
       {/* LOAD MODAL */}
       {isLoadModalOpen && (

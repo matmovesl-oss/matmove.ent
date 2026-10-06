@@ -141,7 +141,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
       const res = await fetch('/api/create-monime-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: loadAmount, userId: profile.id, role: profile.role }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment gateway failed');
-      if (data.link) window.location.href = data.link; // Redirects via Monime
+      if (data.link) window.location.href = data.link; 
     } catch (err: any) { alert(err.message); setIsProcessingLoad(false); }
   };
 
@@ -181,6 +181,45 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
     } catch (err: any) { alert(err.message); setIsProcessingTransfer(false); }
   };
 
+  // 🔴 SHARED WALLET CARDS
+  const WalletCards = (
+    <div className={`grid grid-cols-1 ${activeSection === 'wallet' ? 'md:grid-cols-2' : ''} gap-4`}>
+      {/* SLE WALLET */}
+      <div className="bg-slate-900 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
+        <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
+          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
+        </button>
+        <div>
+          <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">SLE Ledger</span>
+          <div className="text-3xl font-bold mt-1 text-emerald-400">SLE {Number(sleWallet?.balance || 0).toFixed(2)}</div>
+          <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">ID: {monimeAccountId}</div>
+        </div>
+        <Wallet size={32} className="text-slate-700 mr-2 md:mr-6 pointer-events-none" />
+      </div>
+
+      {/* USD WALLET */}
+      <div className="bg-slate-800 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl border border-slate-700 relative">
+        {usdWallet?.monime_account_id ? (
+          <>
+            <div>
+              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">USD Reserve</span>
+              <div className="text-3xl font-bold mt-1 text-blue-400">USD {Number(usdWallet.balance || 0).toFixed(2)}</div>
+              <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-block px-2 py-1 rounded">ID: {usdWallet.monime_account_id}</div>
+            </div>
+            <Wallet size={32} className="text-slate-600 mr-2 md:mr-6 pointer-events-none" />
+          </>
+        ) : (
+          <div className="w-full flex flex-col items-center justify-center text-center py-1">
+            <button onClick={handleCreateUsdWallet} disabled={isCreatingUsd} className="bg-slate-700 hover:bg-slate-600 transition p-3 rounded-full mb-2 shadow-inner">
+              {isCreatingUsd ? <Loader2 className="animate-spin text-emerald-400" size={24} /> : <Plus size={24} className="text-emerald-400" />}
+            </button>
+            <span className="text-sm font-bold text-slate-300">Create USD Wallet</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
@@ -191,118 +230,98 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           <div><h2 className="font-bold text-slate-900 text-lg">{isOnline ? 'You are Online' : 'You are Offline'}</h2></div>
         </div>
         <div className="flex gap-2">
-          {isFrozen ? (
-            <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">Wallet Frozen by Admin</span>
-          ) : (
-            <>
-              <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
-              {isApproved && <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition">Payout</button>}
-              <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800 transition">Transfer</button>
-            </>
-          )}
+          {isFrozen && <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">Wallet Frozen by Admin</span>}
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col lg:flex-row">
-        <div className="w-full lg:w-[450px] bg-white border-r border-slate-200 flex flex-col p-6 space-y-6 overflow-y-auto">
-          
-          {/* 🔴 MULTI-CURRENCY WALLET SECTION */}
-          <div className="grid grid-cols-1 gap-4">
-            {/* SLE WALLET */}
-            <div className="bg-slate-900 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
-              <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
-                <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
-              </button>
-              <div>
-                <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">SLE Ledger</span>
-                <div className="text-3xl font-bold mt-1 text-emerald-400">SLE {Number(sleWallet?.balance || 0).toFixed(2)}</div>
-                <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">ID: {monimeAccountId}</div>
+      {/* 🔴 HOME TAB ONLY: MAP AND RADAR SIDEBAR */}
+      {activeSection === 'home' && (
+        <div className="flex-1 flex flex-col lg:flex-row">
+          <div className="w-full lg:w-[450px] bg-white border-r border-slate-200 flex flex-col p-6 space-y-6 overflow-y-auto">
+            {WalletCards}
+            <h3 className="font-bold text-xl text-slate-900 pt-2">Dispatch Radar</h3>
+            {!isOnline ? (
+              <div className="border-2 border-dashed border-slate-300 bg-slate-100 rounded-3xl p-12 text-center text-slate-400">
+                <Power size={48} className="mx-auto mb-4" />
+                <p>Go online to receive live ride and delivery requests.</p>
               </div>
-              <Wallet size={32} className="text-slate-700 mr-2 md:mr-6 pointer-events-none" />
-            </div>
+            ) : activeRequests.length === 0 ? (
+              <div className="border-2 border-dashed border-emerald-300 bg-emerald-50 rounded-3xl p-12 text-center text-emerald-600 animate-pulse">
+                 <Car size={48} className="mx-auto mb-4" />
+                 <p className="font-bold">Listening for nearby requests...</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {activeRequests.map(r => (
+                  <div key={r.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-md space-y-3">
+                     <div className="flex justify-between items-start">
+                       <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider">{r.service_type}</span>
+                       <div>
+                         <span className="text-2xl font-bold text-slate-900 block text-right">SLE {r.fare_amount}</span>
+                         <span className="text-[10px] font-bold text-emerald-600 block text-right bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mt-1">Take-Home: SLE {(r.fare_amount * 0.85).toFixed(2)}</span>
+                       </div>
+                     </div>
 
-            {/* USD WALLET */}
-            <div className="bg-slate-800 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl border border-slate-700 relative">
-              {/* 🔴 CRITICAL FIX: Explicitly check for monime_account_id so ghost rows don't break the UI */}
-              {usdWallet?.monime_account_id ? (
-                <>
-                  <div>
-                    <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">USD Reserve</span>
-                    <div className="text-3xl font-bold mt-1 text-blue-400">USD {Number(usdWallet.balance || 0).toFixed(2)}</div>
-                    <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-block px-2 py-1 rounded">ID: {usdWallet.monime_account_id}</div>
+                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs space-y-2">
+                       <div className="flex items-center gap-2 font-semibold text-slate-800"><MapPin size={14} className="text-emerald-500 shrink-0"/> Pickup: {r.pickup_location}</div>
+                       <div className="flex items-center gap-2 font-semibold text-slate-800"><Navigation size={14} className="text-blue-500 shrink-0"/> Dropoff: {r.destination_location}</div>
+                     </div>
+
+                     <div className="flex items-center justify-between text-xs font-bold text-slate-600 pt-1 border-t border-slate-100">
+                       <span className="flex items-center gap-1.5"><User size={14} className="text-slate-400"/> {r.rider?.full_name || 'Rider Customer'}</span>
+                       <span className="flex items-center gap-1.5"><Phone size={14} className="text-slate-400"/> {r.rider?.phone || r.rider?.phone_number || 'No Phone'}</span>
+                     </div>
+
+                     {r.status === 'pending' && (
+                       <button onClick={() => handleAcceptBooking(r)} disabled={acceptingId === r.id} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 disabled:opacity-50">
+                         {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Accept Request'}
+                       </button>
+                     )}
+                     
+                     {r.status === 'accepted' && r.driver_id === profile.id && (
+                       <button onClick={() => handleStartRide(r)} disabled={acceptingId === r.id} className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50">
+                         {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Arrived / Start Ride'}
+                       </button>
+                     )}
+
+                     {r.status === 'in_progress' && r.driver_id === profile.id && (
+                       <div className="w-full bg-amber-100 text-amber-800 font-bold py-3.5 rounded-xl text-center text-sm border border-amber-200 flex items-center justify-center gap-2 shadow-inner">
+                         <Loader2 size={16} className="animate-spin" /> Waiting for Rider to Pay...
+                       </div>
+                     )}
                   </div>
-                  <Wallet size={32} className="text-slate-600 mr-2 md:mr-6 pointer-events-none" />
-                </>
-              ) : (
-                <div className="w-full flex flex-col items-center justify-center text-center py-1">
-                  <button onClick={handleCreateUsdWallet} disabled={isCreatingUsd} className="bg-slate-700 hover:bg-slate-600 transition p-3 rounded-full mb-2 shadow-inner">
-                    {isCreatingUsd ? <Loader2 className="animate-spin text-emerald-400" size={24} /> : <Plus size={24} className="text-emerald-400" />}
-                  </button>
-                  <span className="text-sm font-bold text-slate-300">Create USD Wallet</span>
-                </div>
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
-
-          <h3 className="font-bold text-xl text-slate-900 pt-2">Dispatch Radar</h3>
-          {!isOnline ? (
-            <div className="border-2 border-dashed border-slate-300 bg-slate-100 rounded-3xl p-12 text-center text-slate-400">
-              <Power size={48} className="mx-auto mb-4" />
-              <p>Go online to receive live ride and delivery requests.</p>
-            </div>
-          ) : activeRequests.length === 0 ? (
-            <div className="border-2 border-dashed border-emerald-300 bg-emerald-50 rounded-3xl p-12 text-center text-emerald-600 animate-pulse">
-               <Car size={48} className="mx-auto mb-4" />
-               <p className="font-bold">Listening for nearby requests...</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {activeRequests.map(r => (
-                <div key={r.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-md space-y-3">
-                   <div className="flex justify-between items-start">
-                     <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider">{r.service_type}</span>
-                     <div>
-                       <span className="text-2xl font-bold text-slate-900 block text-right">SLE {r.fare_amount}</span>
-                       <span className="text-[10px] font-bold text-emerald-600 block text-right bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mt-1">Take-Home: SLE {(r.fare_amount * 0.85).toFixed(2)}</span>
-                     </div>
-                   </div>
-
-                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs space-y-2">
-                     <div className="flex items-center gap-2 font-semibold text-slate-800"><MapPin size={14} className="text-emerald-500 shrink-0"/> Pickup: {r.pickup_location}</div>
-                     <div className="flex items-center gap-2 font-semibold text-slate-800"><Navigation size={14} className="text-blue-500 shrink-0"/> Dropoff: {r.destination_location}</div>
-                   </div>
-
-                   <div className="flex items-center justify-between text-xs font-bold text-slate-600 pt-1 border-t border-slate-100">
-                     <span className="flex items-center gap-1.5"><User size={14} className="text-slate-400"/> {r.rider?.full_name || 'Rider Customer'}</span>
-                     <span className="flex items-center gap-1.5"><Phone size={14} className="text-slate-400"/> {r.rider?.phone || r.rider?.phone_number || 'No Phone'}</span>
-                   </div>
-
-                   {r.status === 'pending' && (
-                     <button onClick={() => handleAcceptBooking(r)} disabled={acceptingId === r.id} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 disabled:opacity-50">
-                       {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Accept Request'}
-                     </button>
-                   )}
-                   
-                   {r.status === 'accepted' && r.driver_id === profile.id && (
-                     <button onClick={() => handleStartRide(r)} disabled={acceptingId === r.id} className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50">
-                       {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Arrived / Start Ride'}
-                     </button>
-                   )}
-
-                   {r.status === 'in_progress' && r.driver_id === profile.id && (
-                     <div className="w-full bg-amber-100 text-amber-800 font-bold py-3.5 rounded-xl text-center text-sm border border-amber-200 flex items-center justify-center gap-2 shadow-inner">
-                       <Loader2 size={16} className="animate-spin" /> Waiting for Rider to Pay...
-                     </div>
-                   )}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="flex-1 bg-slate-200 relative min-h-[450px]">
+            <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
+          </div>
         </div>
-        <div className="flex-1 bg-slate-200 relative min-h-[450px]">
-          <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
+      )}
+
+      {/* 🔴 WALLET TAB ONLY: BIG ACTIONS INSTEAD OF MAP */}
+      {activeSection === 'wallet' && (
+        <div className="p-6 max-w-4xl mx-auto w-full space-y-6">
+           <h2 className="text-2xl font-bold text-slate-900 mb-4">My Wallets</h2>
+           {WalletCards}
+           <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm flex flex-col items-center text-center mt-6">
+             <h3 className="text-xl font-bold text-slate-900 mb-2">Wallet Actions</h3>
+             <p className="text-sm text-slate-500 mb-8">Manage your earnings securely</p>
+             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
+                <button onClick={() => setIsLoadModalOpen(true)} disabled={isFrozen} className="p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24}/></div> Load Funds
+                </button>
+                <button onClick={() => setIsPayoutModalOpen(true)} disabled={!isApproved || isFrozen} className="p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowUpRight size={24}/></div> Withdraw {isApproved ? '' : '(KYC Required)'}
+                </button>
+                <button onClick={() => setIsTransferModalOpen(true)} disabled={isFrozen} className="p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <div className="p-3 bg-white rounded-full shadow-sm"><Users size={24}/></div> Transfer
+                </button>
+             </div>
+           </div>
         </div>
-      </div>
+      )}
 
       {/* LOAD MODAL */}
       {isLoadModalOpen && (
