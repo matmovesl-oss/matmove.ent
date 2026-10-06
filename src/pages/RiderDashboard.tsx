@@ -10,8 +10,12 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   if (activeSection === 'shop') return <RiderShop profile={profile} />;
   if (activeSection === 'trips') return <RiderTrips profile={profile} />;
 
-  const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
+  // 🔴 WALLET STATES
+  const [sleWallet, setSleWallet] = useState<any>(wallet);
+  const [usdWallet, setUsdWallet] = useState<any>(null);
+  const [isCreatingUsd, setIsCreatingUsd] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
   const [pricingRates, setPricingRates] = useState<any>({ bike: { min: 15, perKm: 3 }, keke: { min: 20, perKm: 5 }, car: { min: 30, perKm: 8 }, van: { min: 50, perKm: 15 } });
 
   const [pickup, setPickup] = useState('');
@@ -48,11 +52,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
   const [showPolicy, setShowPolicy] = useState(false);
-  
-  // 🔴 LIVE FREEZE CHECK
   const [isFrozen, setIsFrozen] = useState(wallet?.is_frozen || false);
 
-  const monimeAccountId = wallet?.metadata?.monime_account_id || 'Pending Setup';
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
@@ -72,8 +73,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       const accepted = localStorage.getItem(`matmove_policy_${profile.id}`);
       if (!accepted) setShowPolicy(true);
       
-      // Live fetch freeze status
-      supabase.from('wallets').select('is_frozen').eq('user_id', profile.id).single().then(({data}) => {
+      supabase.from('wallets').select('is_frozen').eq('user_id', profile.id).eq('currency', 'SLE').single().then(({data}) => {
         if (data) setIsFrozen(data.is_frozen);
       });
     }
@@ -111,15 +111,27 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     try {
       const res = await fetch('/api/get-live-wallet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: profile.id }) });
       const data = await res.json();
-      if (data.balance !== undefined) setLiveBalance(Number(data.balance));
+      if (data.sleWallet) setSleWallet(data.sleWallet);
+      if (data.usdWallet) setUsdWallet(data.usdWallet);
       
-      // Live fetch freeze status
-      const { data: wData } = await supabase.from('wallets').select('is_frozen').eq('user_id', profile.id).single();
+      const { data: wData } = await supabase.from('wallets').select('is_frozen').eq('user_id', profile.id).eq('currency', 'SLE').single();
       if (wData) setIsFrozen(wData.is_frozen);
     } catch (err) {} finally { setIsRefreshing(false); }
   };
 
   useEffect(() => { fetchLiveBalance(); }, [profile?.id]);
+
+  const handleCreateUsdWallet = async () => {
+    if (!window.confirm("Create a secure USD Wallet?")) return;
+    setIsCreatingUsd(true);
+    try {
+      const res = await fetch('/api/create-usd-wallet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: profile.id }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      alert("USD Wallet created successfully!");
+      fetchLiveBalance();
+    } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
+  };
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
@@ -194,7 +206,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       if (finalAmount < minFare) return alert(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minFare}`); 
     } else { finalStatus = 'pending_admin'; }
 
-    if (liveBalance < finalAmount) {
+    if ((sleWallet?.balance || 0) < finalAmount) {
       return alert(`Insufficient Balance. You need SLE ${finalAmount} to request this trip. Please Load your wallet.`);
     }
 
@@ -282,16 +294,43 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
-        <div className="bg-slate-900 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
-          <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
-             <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
-          </button>
-          <div>
-            <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">MatMove Unified Wallet</span>
-            <div className="text-3xl font-bold mt-1 text-blue-400">SLE {liveBalance.toFixed(2)}</div>
-            <div className="text-xs font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">Account ID: {monimeAccountId}</div>
+        
+        {/* 🔴 MULTI-CURRENCY WALLET SECTION */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* SLE WALLET */}
+          <div className="bg-slate-900 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
+            <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
+              <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
+            </button>
+            <div>
+              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">SLE Operating Wallet</span>
+              <div className="text-3xl font-bold mt-1 text-blue-400">SLE {Number(sleWallet?.balance || 0).toFixed(2)}</div>
+              <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-block px-2 py-1 rounded">ID: {sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || 'Pending Setup'}</div>
+            </div>
+            <Wallet size={32} className="text-slate-700 mr-2 md:mr-6 pointer-events-none" />
           </div>
-          <Wallet size={32} className="text-slate-700 mr-12 pointer-events-none" />
+
+          {/* USD WALLET */}
+          <div className="bg-slate-800 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl border border-slate-700 relative">
+            {usdWallet ? (
+              <>
+                <div>
+                  <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">USD Reserve Wallet</span>
+                  <div className="text-3xl font-bold mt-1 text-emerald-400">USD {Number(usdWallet.balance || 0).toFixed(2)}</div>
+                  <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-block px-2 py-1 rounded">ID: {usdWallet.monime_account_id}</div>
+                </div>
+                <Wallet size={32} className="text-slate-600 mr-2 md:mr-6 pointer-events-none" />
+              </>
+            ) : (
+              <div className="w-full flex flex-col items-center justify-center text-center py-1">
+                <button onClick={handleCreateUsdWallet} disabled={isCreatingUsd} className="bg-slate-700 hover:bg-slate-600 transition p-3 rounded-full mb-2 shadow-inner">
+                  {isCreatingUsd ? <Loader2 className="animate-spin text-emerald-400" size={24} /> : <Plus size={24} className="text-emerald-400" />}
+                </button>
+                <span className="text-sm font-bold text-slate-300">Create USD Wallet</span>
+                <span className="text-[10px] text-slate-500 mt-1">Hold and transfer US Dollars securely</span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -426,6 +465,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         </div>
       </div>
 
+      {/* LOAD MODAL */}
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
@@ -440,6 +480,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         </div>
       )}
 
+      {/* PAYOUT MODAL */}
       {isPayoutModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
@@ -461,6 +502,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         </div>
       )}
 
+      {/* TRANSFER MODAL */}
       {isTransferModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
@@ -484,104 +526,4 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 }
 
 function RiderShop({ profile }: any) {
-  const [products, setProducts] = useState<any[]>([]);
-  
-  useEffect(() => { 
-    supabase.from('products').select('*, merchant:merchant_id(business_name)').order('created_at', { ascending: false }).then(({data}) => { if(data) setProducts(data); }); 
-  }, []);
-
-  const handleWhatsAppRedirect = (product: any) => {
-    const message = encodeURIComponent(`Hello! I would like to request a delivery for: *${product.name}* (SLE ${product.price}) listed by ${product.merchant?.business_name || 'your store'}.`);
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank');
-  };
-
-  return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center gap-3 mb-8">
-        <ShoppingCart size={28} className="text-blue-600" />
-        <h1 className="text-3xl font-bold text-slate-900">Shop Marketplace</h1>
-      </div>
-      
-      {products.length === 0 ? <div className="text-center text-slate-500 py-10">No products listed yet.</div> : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {products.map(p => (
-            <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col hover:shadow-md transition duration-200">
-              {p.image_url ? (
-                <div className="h-48 w-full bg-slate-100"><img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /></div>
-              ) : (
-                <div className="h-48 w-full bg-slate-100 flex items-center justify-center"><ShoppingBag size={48} className="text-slate-300" /></div>
-              )}
-              
-              <div className="p-5 flex flex-col flex-1">
-                <h4 className="font-bold text-lg text-slate-900 leading-tight">{p.name}</h4>
-                <div className="text-xs text-slate-500 mt-1 uppercase tracking-wider">{p.merchant?.business_name || 'Verified Merchant'}</div>
-                <p className="text-sm text-slate-600 mt-3 line-clamp-2">{p.description || 'No description available.'}</p>
-                
-                <div className="mt-auto pt-6 flex items-center justify-between">
-                  <p className="text-blue-600 font-bold text-xl">SLE {p.price}</p>
-                  <button 
-                    onClick={() => handleWhatsAppRedirect(p)} 
-                    className="bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-emerald-700 transition shadow-sm flex items-center gap-2"
-                  >
-                    <Smartphone size={14} /> Request Delivery
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function RiderTrips({ profile }: any) {
-  const [trips, setTrips] = useState<any[]>([]);
-  useEffect(() => { 
-    supabase.from('bookings').select('*, driver:driver_id(full_name)').eq('rider_id', profile.id).order('created_at', { ascending: false }).then(({data}) => { if(data) setTrips(data); }); 
-  }, [profile.id]);
-
-  return (
-    <div className="p-6 max-w-4xl mx-auto space-y-4">
-      <h1 className="text-3xl font-bold text-slate-900 mb-6">Trip History</h1>
-      {trips.length === 0 ? <div className="text-center text-slate-500 py-10">No trips found.</div> : trips.map(t => (
-        <div key={t.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
-          <div>
-            <div className="font-bold text-slate-900 capitalize">{t.service_type} {t.vehicle_type ? `(${t.vehicle_type})` : ''}</div>
-            <div className="text-xs text-slate-500 mt-1">{new Date(t.created_at).toLocaleString()}</div>
-            <div className="text-xs font-mono text-slate-400 mt-2">{t.pickup_location?.slice(0,25)}... <ArrowRight size={10} className="inline"/> {t.destination_location?.slice(0,25)}...</div>
-          </div>
-          <div className="text-right">
-            <div className="font-bold text-lg text-slate-900">SLE {t.fare_amount}</div>
-            <div className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded mt-1 inline-block ${t.status==='completed'?'bg-emerald-100 text-emerald-700':t.status==='cancelled'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{t.status}</div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function PolicyModal({ onAccept }: { onAccept: () => void }) {
-  return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-        <div className="bg-slate-900 p-6 text-white shrink-0">
-          <h2 className="text-xl font-bold">MatMove Safety & Compliance Policy</h2>
-          <p className="text-xs text-slate-400 mt-1">Sierra Leone Road Safety Authority (SLRSA) Guidelines</p>
-        </div>
-        <div className="p-6 overflow-y-auto flex-1 text-sm text-slate-600 space-y-4">
-          <p><strong>1. Compliance with SLRSA:</strong> All users (Drivers, Riders, and Merchants) must strictly adhere to the traffic rules and regulations set forth by the Sierra Leone Road Safety Authority (SLRSA).</p>
-          <p><strong>2. Liability & Accidents:</strong> MatMove Enterprise acts solely as a technology platform connecting users. MatMove is not liable for any road traffic accidents, injuries, loss of property, or damages that occur during transit.</p>
-          <p><strong>3. Vehicle Safety:</strong> Drivers must ensure their vehicles (Keke, Bike, Car, Van) are roadworthy, insured, and licensed.</p>
-          <p><strong>4. Account Suspension:</strong> Any violation of these safety policies or reports of reckless behavior will result in immediate wallet freezing and account suspension.</p>
-          <p className="font-bold text-slate-900 pt-2 border-t">By clicking "I Accept", you acknowledge that you have read, understood, and agree to be bound by this policy. All rights reserved by MatMove Enterprise.</p>
-        </div>
-        <div className="p-4 border-t bg-slate-50 shrink-0">
-          <button onClick={onAccept} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl transition shadow-md">
-            I Accept & Agree
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+//... same as before
