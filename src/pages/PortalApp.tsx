@@ -4,7 +4,6 @@ import { supabase } from '@/lib/supabase';
 import { RiderDashboard } from './RiderDashboard';
 import { DriverDashboard } from './DriverDashboard';
 import { MerchantDashboard } from './MerchantDashboard';
-import { WalletPage } from './WalletPage';
 import { UserCircle, LogOut, MessageSquare, ShieldAlert, Home, Wallet, Navigation, ShoppingBag, Store, LockKeyhole, Delete } from 'lucide-react';
 
 type PortalSection = 'home' | 'wallet' | 'trips' | 'shop' | 'inventory' | 'account';
@@ -160,15 +159,8 @@ export function PortalApp() {
     );
   }
 
-  if (activeSection === 'wallet') {
-    return (
-      <div className="relative min-h-screen bg-slate-50 pb-28">
-        <WalletPage profile={profile} wallet={wallet} onClose={() => setActiveSection('home')} />
-        <PortalNavigation activeSection={activeSection} onNavigate={setActiveSection} role={role} />
-      </div>
-    );
-  }
-
+  // If activeSection === 'wallet', it naturally falls through to the Dashboard
+  // which contains the new Multi-Currency Wallet UI at the top!
   return (
     <div className="relative min-h-screen bg-slate-50 pb-24">
       {role === 'rider' && <RiderDashboard profile={profile} wallet={wallet} activeSection={activeSection} />}
