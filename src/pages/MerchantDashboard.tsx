@@ -208,7 +208,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       if (finalAmount < minFare) return alert(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minFare}`); 
     }
 
-    if (liveBalance < finalAmount) {
+    if ((sleWallet?.balance || 0) < finalAmount) {
       return alert(`Insufficient Balance. You need SLE ${finalAmount} to request this trip. Please Load your wallet.`);
     }
 
@@ -538,4 +538,96 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
 }
 
 function MerchantInventory({ profile }: any) {
-//... same as before
+  const [products, setProducts] = useState<any[]>([]);
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [desc, setDesc] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+
+  useEffect(() => { fetchProducts(); }, [profile.id]);
+
+  const fetchProducts = async () => {
+    const { data } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
+    if (data) setProducts(data);
+  };
+
+  const handleAddProduct = async () => {
+    if (!name || !price) return alert('Name and Price are required');
+    setIsAdding(true);
+    try {
+      await supabase.from('products').insert({ merchant_id: profile.id, name, price: Number(price), description: desc, image_url: imageUrl });
+      setName(''); setPrice(''); setDesc(''); setImageUrl(''); fetchProducts();
+    } catch (e: any) { alert(e.message); } finally { setIsAdding(false); }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this product?')) return;
+    await supabase.from('products').delete().eq('id', id);
+    fetchProducts();
+  };
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto space-y-8">
+      <h1 className="text-3xl font-bold text-slate-900 mb-2">Store Inventory</h1>
+      
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <h3 className="font-bold text-lg">Add New Product</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <input type="text" placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} className="border p-3 rounded-xl outline-none focus:border-orange-500" />
+          <input type="number" placeholder="Price (SLE)" value={price} onChange={e => setPrice(e.target.value)} className="border p-3 rounded-xl outline-none focus:border-orange-500" />
+        </div>
+        <div className="grid grid-cols-1 gap-4">
+          <input type="text" placeholder="Image URL (e.g., https://example.com/image.png)" value={imageUrl} onChange={e => setImageUrl(e.target.value)} className="w-full border p-3 rounded-xl outline-none focus:border-orange-500" />
+          <textarea placeholder="Description (Optional)" value={desc} onChange={e => setDesc(e.target.value)} className="w-full border p-3 rounded-xl outline-none resize-none focus:border-orange-500" rows={2} />
+        </div>
+        <button onClick={handleAddProduct} disabled={isAdding} className="bg-orange-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-orange-700 transition">
+          {isAdding ? 'Adding...' : 'Add to Catalog'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {products.map(p => (
+          <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden relative flex flex-col">
+            <button onClick={() => handleDelete(p.id)} className="absolute top-3 right-3 p-2 bg-white/80 backdrop-blur rounded-full text-slate-500 hover:text-red-500 hover:bg-white shadow-sm transition z-10"><Trash2 size={16} /></button>
+            {p.image_url ? (
+              <div className="h-40 w-full bg-slate-100"><img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /></div>
+            ) : (
+              <div className="h-40 w-full bg-slate-100 flex items-center justify-center"><Package size={40} className="text-slate-300" /></div>
+            )}
+            <div className="p-5 flex-1 flex flex-col">
+              <h4 className="font-bold text-lg text-slate-900 leading-tight">{p.name}</h4>
+              <p className="text-orange-600 font-bold mt-1 text-xl">SLE {p.price}</p>
+              <p className="text-sm text-slate-500 mt-2 line-clamp-2">{p.description || 'No description'}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PolicyModal({ onAccept }: { onAccept: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="bg-slate-900 p-6 text-white shrink-0">
+          <h2 className="text-xl font-bold">MatMove Safety & Compliance Policy</h2>
+          <p className="text-xs text-slate-400 mt-1">Sierra Leone Road Safety Authority (SLRSA) Guidelines</p>
+        </div>
+        <div className="p-6 overflow-y-auto flex-1 text-sm text-slate-600 space-y-4">
+          <p><strong>1. Compliance with SLRSA:</strong> All users (Drivers, Riders, and Merchants) must strictly adhere to the traffic rules and regulations set forth by the Sierra Leone Road Safety Authority (SLRSA).</p>
+          <p><strong>2. Liability & Accidents:</strong> MatMove Enterprise acts solely as a technology platform connecting users. MatMove is not liable for any road traffic accidents, injuries, loss of property, or damages that occur during transit.</p>
+          <p><strong>3. Vehicle Safety:</strong> Drivers must ensure their vehicles (Keke, Bike, Car, Van) are roadworthy, insured, and licensed.</p>
+          <p><strong>4. Account Suspension:</strong> Any violation of these safety policies or reports of reckless behavior will result in immediate wallet freezing and account suspension.</p>
+          <p className="font-bold text-slate-900 pt-2 border-t">By clicking "I Accept", you acknowledge that you have read, understood, and agree to be bound by this policy. All rights reserved by MatMove Enterprise.</p>
+        </div>
+        <div className="p-4 border-t bg-slate-50 shrink-0">
+          <button onClick={onAccept} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl transition shadow-md">
+            I Accept & Agree
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
