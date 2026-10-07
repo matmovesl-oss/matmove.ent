@@ -2,13 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, Minus, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ArrowRight, Trash2, Wallet, Activity, Copy, Check, Share2, ArrowLeftRight } from 'lucide-react';
+import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, Minus, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ArrowRight, Trash2, Wallet, Activity, Copy, Check, Share2, ArrowLeftRight, Image as ImageIcon } from 'lucide-react';
 
 type ServiceType = 'delivery' | 'ride' | 'scheduled';
 type VehicleType = 'keke' | 'bike' | 'car' | 'van';
 
 export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet }: any) {
-  if (activeSection === 'inventory') return <MerchantInventory profile={profile} />;
+  if (activeSection === 'inventory') return <MerchantInventory profile="{profile}"/>;
+  if (activeSection === 'trips') return <MerchantTrips profile="{profile}"/>;
 
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [usdWallet, setUsdWallet] = useState<any>(null);
@@ -69,12 +70,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
 
-  useEffect(() => {
-    supabase.from('exchange_rates').select('*').eq('from_currency', 'USD').eq('to_currency', 'SLE').maybeSingle().then(({data}) => {
-      if (data) setExchangeRateUsdToSle(Number(data.rate));
-    });
-  }, []);
-
   const handleCopy = (id: string) => {
     navigator.clipboard.writeText(id);
     setCopiedId(id);
@@ -100,6 +95,9 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   };
 
   useEffect(() => {
+    supabase.from('exchange_rates').select('*').eq('from_currency', 'USD').eq('to_currency', 'SLE').maybeSingle().then(({data}) => {
+      if (data) setExchangeRateUsdToSle(Number(data.rate));
+    });
     supabase.from('pricing_settings').select('*').then(({ data }) => {
       if (data && data.length > 0) {
         const rates: any = {};
@@ -107,23 +105,11 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
         setPricingRates(rates);
       }
     });
-  }, []);
-
-  useEffect(() => {
     if (profile?.id) {
-      const accepted = localStorage.getItem(`matmove_policy_${profile.id}`);
-      if (!accepted) setShowPolicy(true);
-
-      supabase.from('wallets').select('is_frozen').eq('user_id', profile.id).eq('currency', 'SLE').single().then(({data}) => {
-        if (data) setIsFrozen(data.is_frozen);
-      });
+      if (!localStorage.getItem(`matmove_policy_${profile.id}`)) setShowPolicy(true);
+      supabase.from('wallets').select('is_frozen').eq('user_id', profile.id).eq('currency', 'SLE').single().then(({data}) => { if (data) setIsFrozen(data.is_frozen); });
     }
   }, [profile?.id]);
-
-  const handleAcceptPolicy = () => {
-    localStorage.setItem(`matmove_policy_${profile.id}`, 'true');
-    setShowPolicy(false);
-  };
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -136,15 +122,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     const syncInterval = setInterval(checkActiveTrip, 3000);
     return () => { supabase.removeChannel(channel); clearInterval(syncInterval); };
   }, [profile?.id]);
-
-  useEffect(() => {
-    if (!window.google) {
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`;
-      script.async = true;
-      document.head.appendChild(script);
-    }
-  }, []);
 
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
@@ -175,13 +152,51 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
   };
 
+  // 🔴 Initialize Mapbox & Auto-Locate User
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
     try {
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
       map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 12 });
-    } catch (e) { console.error(e); }
+
+      if (navigator.geolocation) {
+         navigator.geolocation.getCurrentPosition(async (pos) => {
+            const { longitude, latitude } = pos.coords;
+            setPickupCoords([longitude, latitude]);
+            map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
+            
+            // Auto-reverse geocode
+            try {
+               const res = await fetch(`[https://api.mapbox.com/geocoding/v5/mapbox.places/$](https://api.mapbox.com/geocoding/v5/mapbox.places/$){longitude},${latitude}.json?access_token=${mapboxgl.accessToken}`);
+               const data = await res.json();
+               if (data.features && data.features.length > 0) {
+                  setPickup(data.features[0].place_name);
+               }
+            } catch (e) {}
+
+            // Set Draggable Marker
+            const marker = new mapboxgl.Marker({ color: '#10B981', draggable: true }).setLngLat([longitude, latitude]).addTo(map.current!);
+            marker.on('dragend', async () => {
+               const lngLat = marker.getLngLat();
+               setPickupCoords([lngLat.lng, lngLat.lat]);
+               try {
+                  const res = await fetch(`[https://api.mapbox.com/geocoding/v5/mapbox.places/$](https://api.mapbox.com/geocoding/v5/mapbox.places/$){lngLat.lng},${lngLat.lat}.json?access_token=${mapboxgl.accessToken}`);
+                  const data = await res.json();
+                  if (data.features && data.features.length > 0) setPickup(data.features[0].place_name);
+               } catch (e) {}
+            });
+            markers.current.push(marker);
+         });
+      }
+    } catch (e) { console.error('Mapbox error:', e); }
   }, []);
+
+  // 🔴 Force web layout map resize 
+  useEffect(() => {
+    if (activeSection === 'home' && map.current) {
+        setTimeout(() => map.current?.resize(), 300);
+    }
+  }, [activeSection]);
 
   const searchPlaces = (query: string, type: 'pickup' | 'destination') => {
     if (type === 'pickup') { setPickup(query); setPickupCoords(null); } else { setDestination(query); setDestinationCoords(null); }
@@ -204,7 +219,24 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
         const coords: [number, number] = [results[0].geometry.location.lng(), results[0].geometry.location.lat()];
         if (type === 'pickup') { setPickup(description); setPickupCoords(coords); setPickupSuggestions([]); } 
         else { setDestination(description); setDestinationCoords(coords); setDestinationSuggestions([]); }
-        if (map.current) map.current.flyTo({ center: coords, zoom: 14 });
+        
+        if (map.current) {
+            map.current.flyTo({ center: coords, zoom: 14 });
+            const color = type === 'pickup' ? '#10B981' : '#3B82F6';
+            const marker = new mapboxgl.Marker({ color, draggable: true }).setLngLat(coords).addTo(map.current);
+            marker.on('dragend', async () => {
+               const lngLat = marker.getLngLat();
+               if (type === 'pickup') setPickupCoords([lngLat.lng, lngLat.lat]); else setDestinationCoords([lngLat.lng, lngLat.lat]);
+               try {
+                  const res = await fetch(`[https://api.mapbox.com/geocoding/v5/mapbox.places/$](https://api.mapbox.com/geocoding/v5/mapbox.places/$){lngLat.lng},${lngLat.lat}.json?access_token=${mapboxgl.accessToken}`);
+                  const data = await res.json();
+                  if (data.features && data.features.length > 0) {
+                     if (type === 'pickup') setPickup(data.features[0].place_name); else setDestination(data.features[0].place_name);
+                  }
+               } catch (e) {}
+            });
+            markers.current.push(marker);
+        }
       }
     });
     setActiveInput(null);
@@ -221,7 +253,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       map.current.fitBounds(new mapboxgl.LngLatBounds(pickupCoords, pickupCoords).extend(destinationCoords), { padding: 50 });
 
       if (serviceType === 'ride' || serviceType === 'delivery') {
-        const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${pickupCoords[0]},${pickupCoords[1]};${destinationCoords[0]},${destinationCoords[1]}?geometries=geojson&access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`);
+        const dirRes = await fetch(`[https://api.mapbox.com/directions/v5/mapbox/driving/$](https://api.mapbox.com/directions/v5/mapbox/driving/$){pickupCoords[0]},${pickupCoords[1]};${destinationCoords[0]},${destinationCoords[1]}?geometries=geojson&access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`);
         const dirData = await dirRes.json();
         const route = dirData.routes?.[0];
         if (route) {
@@ -309,8 +341,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
 
     if (usdWallet?.monime_account_id && recipient === usdWallet.monime_account_id) {
        alert("To move funds between your SLE and USD wallets, please use the Convert button.");
-       setIsTransferModalOpen(false);
-       setIsConvertModalOpen(true);
+       setIsTransferModalOpen(false); setIsConvertModalOpen(true);
        return;
     }
 
@@ -354,7 +385,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     <div className={`grid grid-cols-1 ${activeSection === 'wallet' ? 'md:grid-cols-2' : ''} gap-4`}>
       <div className="bg-orange-600 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
         <button onClick={fetchLiveBalance} disabled={isRefreshing} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10">
-          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Syncing...' : 'Refresh'}
+          <RefreshCw ''} 'animate-spin' : ? className="{isRefreshing" size="{14}"/> {isRefreshing ? 'Syncing...' : 'Refresh'}
         </button>
         <div>
           <span className="text-orange-200 text-xs font-bold uppercase tracking-wider">SLE Operating Wallet</span>
@@ -362,11 +393,11 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
           <div className="text-[10px] font-mono text-white/70 mt-2 bg-black/20 inline-flex items-center gap-2 px-2 py-1 rounded">
              ID: {monimeAccountId}
              <button onClick={() => handleCopy(monimeAccountId)} className="hover:text-white transition">
-                {copiedId === monimeAccountId ? <Check size={12} className="text-emerald-400"/> : <Copy size={12}/>}
+                {copiedId === monimeAccountId ? <Check className="text-emerald-400" size="{12}"/> : <Copy size="{12}"/>}
              </button>
           </div>
         </div>
-        <Wallet size={32} className="text-orange-300 mr-2 md:mr-6 pointer-events-none" />
+        <Wallet className="text-orange-300 mr-2 md:mr-6 pointer-events-none" size="{32}"/>
       </div>
 
       <div className="bg-slate-800 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl border border-slate-700 relative">
@@ -378,16 +409,16 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
               <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-flex items-center gap-2 px-2 py-1 rounded">
                  ID: {usdWallet.monime_account_id}
                  <button onClick={() => handleCopy(usdWallet.monime_account_id)} className="hover:text-white transition">
-                    {copiedId === usdWallet.monime_account_id ? <Check size={12} className="text-emerald-400"/> : <Copy size={12}/>}
+                    {copiedId === usdWallet.monime_account_id ? <Check className="text-emerald-400" size="{12}"/> : <Copy size="{12}"/>}
                  </button>
               </div>
             </div>
-            <Wallet size={32} className="text-slate-600 mr-2 md:mr-6 pointer-events-none" />
+            <Wallet className="text-slate-600 mr-2 md:mr-6 pointer-events-none" size="{32}"/>
           </>
         ) : (
           <div className="w-full flex flex-col items-center justify-center text-center py-1">
             <button onClick={handleCreateUsdWallet} disabled={isCreatingUsd} className="bg-slate-700 hover:bg-slate-600 transition p-3 rounded-full mb-2 shadow-inner">
-              {isCreatingUsd ? <Loader2 className="animate-spin text-emerald-400" size={24} /> : <Plus size={24} className="text-emerald-400" />}
+              {isCreatingUsd ? <Loader2 className="animate-spin text-emerald-400" size="{24}"/> : <Plus className="text-emerald-400" size="{24}"/>}
             </button>
             <span className="text-sm font-bold text-slate-300">Create USD Wallet</span>
           </div>
@@ -402,7 +433,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-100 text-orange-600 rounded-xl"><Store size={20} /></div>
+          <div className="p-2 bg-orange-100 text-orange-600 rounded-xl"><Store size="{20}"/></div>
           <div><h2 className="font-bold text-slate-900 leading-tight">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
         </div>
         <div className="flex gap-2">
@@ -418,227 +449,226 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
         </div>
       </header>
 
-      <div className="p-6 max-w-4xl mx-auto space-y-6">
-        {activeSection === 'home' && (
-          <div className="flex-1 flex flex-col lg:flex-row">
-            <div className="w-full lg:w-[450px] bg-white border-r border-slate-200 flex flex-col p-6 space-y-6 overflow-y-auto">
-              {WalletCards}
-              <h3 className="font-bold text-lg mt-6">Dispatch Request</h3>
-              
-              {!activeBooking ? (
-                <>
-                  <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
-                    <button onClick={() => setServiceType('delivery')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Package size={16}/> Delivery</button>
-                    <button onClick={() => setServiceType('ride')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16}/> Ride</button>
-                    <button onClick={() => setServiceType('scheduled')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size={16}/> Schedule</button>
-                  </div>
-                  
-                  <div className="space-y-3">
-                     {(serviceType === 'ride' || serviceType === 'delivery') && (
-                       <div className="grid grid-cols-4 gap-2 mb-2">
-                         {(['keke', 'bike', 'car', 'van'] as VehicleType[]).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-orange-100 text-orange-700 ring-2 ring-orange-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}
+      {/* 🔴 HOME TAB ONLY: MAP AND REQUEST FORM */}
+      {activeSection === 'home' && (
+        <div className="flex-1 flex flex-col lg:flex-row">
+          <div className="w-full lg:w-[450px] bg-white border-r border-slate-200 flex flex-col p-6 space-y-6 overflow-y-auto">
+            {WalletCards}
+            <h3 className="font-bold text-lg mt-6">Dispatch Request</h3>
+            
+            {!activeBooking ? (
+              <>
+                <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
+                  <button onClick={() => setServiceType('delivery')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Package size="{16}"/> Delivery</button>
+                  <button onClick={() => setServiceType('ride')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size="{16}"/> Ride</button>
+                  <button onClick={() => setServiceType('scheduled')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size="{16}"/> Schedule</button>
+                </div>
+                
+                <div className="space-y-3">
+                   {(serviceType === 'ride' || serviceType === 'delivery') && (
+                     <div className="grid grid-cols-4 gap-2 mb-2">
+                       {(['keke', 'bike', 'car', 'van'] as VehicleType[]).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-orange-100 text-orange-700 ring-2 ring-orange-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}
+                     </div>
+                   )}
+
+                   <div className="relative z-30" onClick={e => e.stopPropagation()}>
+                     <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'pickup' ? 'border-orange-500 ring-2 ring-orange-100' : 'border-slate-200'}`}>
+                       <MapPin className="text-emerald-600 shrink-0" size="{16}"/>
+                       <input type="text" placeholder="Store Pickup Location" value={pickup} onChange={e => searchPlaces(e.target.value, 'pickup')} onFocus={() => setActiveInput('pickup')} className="w-full outline-none text-sm bg-transparent" />
+                     </div>
+                     {activeInput === 'pickup' && pickupSuggestions.length > 0 && (
+                       <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-[9999]">
+                         {pickupSuggestions.map((s, i) => <button key={i} onClick={() => handleSelectPlace(s.place_id, s.description, 'pickup')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100"><div className="text-sm font-bold text-slate-900">{s.structured_formatting?.main_text || s.description}</div></button>)}
                        </div>
                      )}
+                   </div>
 
-                     <div className="relative z-30" onClick={e => e.stopPropagation()}>
-                       <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'pickup' ? 'border-orange-500 ring-2 ring-orange-100' : 'border-slate-200'}`}>
-                         <MapPin size={16} className="text-emerald-600 shrink-0" />
-                         <input type="text" placeholder="Store Pickup Location" value={pickup} onChange={e => searchPlaces(e.target.value, 'pickup')} onFocus={() => setActiveInput('pickup')} className="w-full outline-none text-sm bg-transparent" />
+                   <div className="relative z-20" onClick={e => e.stopPropagation()}>
+                     <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'destination' ? 'border-orange-500 ring-2 ring-orange-100' : 'border-slate-200'}`}>
+                       <Navigation className="text-blue-600 shrink-0" size="{16}"/>
+                       <input type="text" placeholder="Customer Dropoff Location" value={destination} onChange={e => searchPlaces(e.target.value, 'destination')} onFocus={() => setActiveInput('destination')} className="w-full outline-none text-sm bg-transparent" />
+                     </div>
+                     {activeInput === 'destination' && destinationSuggestions.length > 0 && (
+                       <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-[9999]">
+                         {destinationSuggestions.map((s, i) => <button key={i} onClick={() => handleSelectPlace(s.place_id, s.description, 'destination')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100"><div className="text-sm font-bold text-slate-900">{s.structured_formatting?.main_text || s.description}</div></button>)}
                        </div>
-                       {activeInput === 'pickup' && pickupSuggestions.length > 0 && (
-                         <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-[9999]">
-                           {pickupSuggestions.map((s, i) => <button key={i} onClick={() => handleSelectPlace(s.place_id, s.description, 'pickup')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100"><div className="text-sm font-bold text-slate-900">{s.structured_formatting?.main_text || s.description}</div></button>)}
-                         </div>
-                       )}
-                     </div>
+                     )}
+                   </div>
 
-                     <div className="relative z-20" onClick={e => e.stopPropagation()}>
-                       <div className={`flex items-center gap-2 border p-3 rounded-xl transition ${activeInput === 'destination' ? 'border-orange-500 ring-2 ring-orange-100' : 'border-slate-200'}`}>
-                         <Navigation size={16} className="text-blue-600 shrink-0" />
-                         <input type="text" placeholder="Customer Dropoff Location" value={destination} onChange={e => searchPlaces(e.target.value, 'destination')} onFocus={() => setActiveInput('destination')} className="w-full outline-none text-sm bg-transparent" />
-                       </div>
-                       {activeInput === 'destination' && destinationSuggestions.length > 0 && (
-                         <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-[9999]">
-                           {destinationSuggestions.map((s, i) => <button key={i} onClick={() => handleSelectPlace(s.place_id, s.description, 'destination')} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100"><div className="text-sm font-bold text-slate-900">{s.structured_formatting?.main_text || s.description}</div></button>)}
-                         </div>
-                       )}
-                     </div>
+                   <div className="flex justify-between items-center px-1 mt-1">
+                     <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Route: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
+                     <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">{isRouting ? <Loader2 className="animate-spin" size="{12}"/> : <MapPin size="{12}"/>} Preview Route</button>
+                   </div>
 
-                     <div className="flex justify-between items-center px-1 mt-1">
-                       <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Route: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
-                       <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">{isRouting ? <Loader2 size={12} className="animate-spin"/> : <MapPin size={12} />} Preview Route</button>
-                     </div>
-
-                     {(serviceType === 'ride' || serviceType === 'delivery') && (
-                      <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-slate-500 font-bold text-sm px-2">Total Fare (SLE)</span>
-                          <input type="number" placeholder="Amount" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-right pr-2" />
-                          <div className="flex gap-1">
-                            <button onClick={() => setOfferAmount(prev => Math.max(pricingRates[vehicleType]?.min || 1, (Number(prev)||1) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16}/></button>
-                            <button onClick={() => setOfferAmount(prev => ((Number(prev)||1) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
-                          </div>
+                   {(serviceType === 'ride' || serviceType === 'delivery') && (
+                    <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-slate-500 font-bold text-sm px-2">Total Fare (SLE)</span>
+                        <input type="number" placeholder="Amount" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-right pr-2" />
+                        <div className="flex gap-1">
+                          <button onClick={() => setOfferAmount(prev => Math.max(pricingRates[vehicleType]?.min || 1, (Number(prev)||1) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size="{16}"/></button>
+                          <button onClick={() => setOfferAmount(prev => ((Number(prev)||1) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size="{16}"/></button>
                         </div>
-                        {Number(offerAmount) > 0 && (
-                          <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 shadow-sm mt-2">
-                            <div className="text-[11px] font-bold text-emerald-600">Driver Earns: SLE {(Number(offerAmount) * 0.85).toFixed(2)}</div>
-                            <div className="text-[11px] font-bold text-rose-500">Platform Fee: SLE {(Number(offerAmount) * 0.15).toFixed(2)}</div>
-                          </div>
-                        )}
                       </div>
-                    )}
+                      {Number(offerAmount) > 0 && (
+                        <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 shadow-sm mt-2">
+                          <div className="text-[11px] font-bold text-emerald-600">Driver Earns: SLE {(Number(offerAmount) * 0.85).toFixed(2)}</div>
+                          <div className="text-[11px] font-bold text-rose-500">Platform Fee: SLE {(Number(offerAmount) * 0.15).toFixed(2)}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-                     {serviceType === 'scheduled' && (
-                       <div className="flex items-center gap-2 border p-3 rounded-xl"><CalendarClock size={16} className="text-emerald-600" /><input type="datetime-local" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="w-full outline-none text-sm bg-transparent" /></div>
+                   {serviceType === 'scheduled' && (
+                     <div className="flex items-center gap-2 border p-3 rounded-xl"><CalendarClock className="text-emerald-600" size="{16}"/><input type="datetime-local" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="w-full outline-none text-sm bg-transparent" /></div>
+                   )}
+
+                   <button onClick={handleDispatchDelivery} disabled={isRequesting} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4">
+                     {isRequesting ? <Loader2 className="animate-spin mx-auto"/> : 'Request Dispatch'}
+                   </button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-8">
+                {activeBooking.status === 'accepted' || activeBooking.status === 'in_progress' ? (
+                  <>
+                     <Car className="text-emerald-600 mx-auto mb-4" size="{48}"/>
+                     <h4 className="font-bold text-xl text-slate-900">
+                       {activeBooking.status === 'in_progress' ? 'Trip in Progress!' : 'Driver is on the way!'}
+                     </h4>
+                     <p className="text-sm text-slate-500 mt-2">Your fare (SLE {activeBooking.fare_amount}) is held securely in Escrow.</p>
+                     
+                     {activeBooking.driver && (
+                        <div className="mt-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-left mb-6">
+                           <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Your Driver</div>
+                           <div className="font-bold text-slate-900">{activeBooking.driver.full_name}</div>
+                           <div className="text-sm text-slate-600 flex items-center gap-1 mt-1"><Smartphone size="{14}"/> {activeBooking.driver.phone}</div>
+                        </div>
                      )}
 
-                     <button onClick={handleDispatchDelivery} disabled={isRequesting} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4">
-                       {isRequesting ? <Loader2 className="animate-spin mx-auto"/> : 'Request Dispatch'}
-                     </button>
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-8">
-                  {activeBooking.status === 'accepted' || activeBooking.status === 'in_progress' ? (
-                    <>
-                       <Car className="text-emerald-600 mx-auto mb-4" size={48} />
-                       <h4 className="font-bold text-xl text-slate-900">
-                         {activeBooking.status === 'in_progress' ? 'Trip in Progress!' : 'Driver is on the way!'}
-                       </h4>
-                       <p className="text-sm text-slate-500 mt-2">Your fare (SLE {activeBooking.fare_amount}) is held securely in Escrow.</p>
-                       
-                       {activeBooking.driver && (
-                          <div className="mt-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-left mb-6">
-                             <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Your Driver</div>
-                             <div className="font-bold text-slate-900">{activeBooking.driver.full_name}</div>
-                             <div className="text-sm text-slate-600 flex items-center gap-1 mt-1"><Smartphone size={14}/> {activeBooking.driver.phone}</div>
-                          </div>
-                       )}
-
-                       {activeBooking.status === 'in_progress' && (
-                         <button 
-                           onClick={async () => {
-                               setIsRequesting(true);
-                               try {
-                                 const res = await fetch('/api/complete-ride-payout', {
-                                   method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                   body: JSON.stringify({ bookingId: activeBooking.id, driverId: activeBooking.driver_id, amount: activeBooking.fare_amount })
-                                 });
-                                 const data = await res.json();
-                                 if (!res.ok) throw new Error(data.error);
-                                 alert('Payment released!');
-                                 window.location.reload(); 
-                               } catch (err: any) { alert(err.message); setIsRequesting(false); }
-                           }}
-                           disabled={isRequesting}
-                           className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2"
-                         >
-                           {isRequesting ? <Loader2 className="animate-spin" size={20} /> : `Pay SLE ${activeBooking.fare_amount} & Complete Trip`}
-                         </button>
-                       )}
-                    </>
-                  ) : (
-                    <>
-                       <Loader2 className="animate-spin text-orange-600 mx-auto mb-4" size={40} />
-                       <h4 className="font-bold text-lg text-slate-900">{activeBooking.status === 'pending_admin' ? 'Request sent to Dispatch...' : 'Broadcasting request...'}</h4>
-                       <p className="text-sm text-slate-500 mt-2">Please wait while we assign a driver to your delivery.</p>
-                       
-                       {(activeBooking.status === 'pending' || activeBooking.status === 'pending_admin') && (
-                         <button onClick={cancelTrip} className="text-red-500 text-sm font-bold hover:underline mt-4">Cancel Request</button>
-                       )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[400px] border border-slate-200 shadow-inner">
-              <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
-            </div>
-          </div>
-        )}
-
-        {/* 🔴 WALLET TAB */}
-        {activeSection === 'wallet' && (
-          <div className="w-full space-y-6">
-             <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">My Wallets</h2>
-             {WalletCards}
-             
-             <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm flex flex-col items-center text-center mt-6">
-               <h3 className="text-xl font-bold text-slate-900 mb-2">Wallet Actions</h3>
-               <p className="text-sm text-slate-500 mb-8">Manage and convert your funds securely</p>
-               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
-                  <button onClick={() => setIsLoadModalOpen(true)} disabled={isFrozen} className="p-4 sm:p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
-                    <div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24}/></div> Load
-                  </button>
-                  <button onClick={() => setIsPayoutModalOpen(true)} disabled={!isApproved || isFrozen} className="p-4 sm:p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
-                    <div className="p-3 bg-white rounded-full shadow-sm"><ArrowUpRight size={24}/></div> Withdraw
-                  </button>
-                  <button onClick={() => setIsTransferModalOpen(true)} disabled={isFrozen} className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
-                    <div className="p-3 bg-white rounded-full shadow-sm"><Users size={24}/></div> Transfer
-                  </button>
-                  <button onClick={() => setIsConvertModalOpen(true)} disabled={!usdWallet?.monime_account_id || isFrozen} className="p-4 sm:p-6 rounded-2xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
-                    <div className="p-3 bg-white rounded-full shadow-sm"><RefreshCw size={24}/></div> Convert
-                  </button>
-               </div>
-             </div>
-
-             <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm w-full">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2"><Activity size={20} className="text-blue-600"/> Transactions</h3>
-                  <div className="flex bg-slate-100 p-1 rounded-lg">
-                    <button onClick={()=>setTxFilter('recent')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter==='recent'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>Recent</button>
-                    <button onClick={()=>setTxFilter('all')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter==='all'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>All Time</button>
-                  </div>
-                </div>
-
-                {displayedTx.length === 0 ? (
-                    <div className="text-center text-slate-500 py-6">No transactions found.</div>
+                     {activeBooking.status === 'in_progress' && (
+                       <button 
+                         onClick={async () => {
+                             setIsRequesting(true);
+                             try {
+                               const res = await fetch('/api/complete-ride-payout', {
+                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                 body: JSON.stringify({ bookingId: activeBooking.id, driverId: activeBooking.driver_id, amount: activeBooking.fare_amount })
+                               });
+                               const data = await res.json();
+                               if (!res.ok) throw new Error(data.error);
+                               alert('Payment released!');
+                               window.location.reload(); 
+                             } catch (err: any) { alert(err.message); setIsRequesting(false); }
+                         }}
+                         disabled={isRequesting}
+                         className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2"
+                       >
+                         {isRequesting ? <Loader2 className="animate-spin" size="{20}"/> : `Pay SLE ${activeBooking.fare_amount} & Complete Trip`}
+                       </button>
+                     )}
+                  </>
                 ) : (
-                    <div className="space-y-3">
-                        {displayedTx.map(tx => {
-                            const isCredit = tx.balanceImpact === 'CREDIT';
-                            const dateStr = tx.createdAt || tx.created_at || tx.timestamp || tx.date || tx.createdOn;
-                            const isValidDate = dateStr && !isNaN(new Date(dateStr).getTime());
-                            const formattedDate = isValidDate ? new Date(dateStr).toLocaleString() : 'Date pending';
-
-                            return (
-                                <div key={tx.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition group">
-                                    <div className="flex items-center gap-3">
-                                        <div className={`p-2 rounded-full ${isCredit ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                                            {isCredit ? <ArrowDownLeft size={18}/> : <ArrowUpRight size={18}/>}
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-slate-900 text-sm">{tx.description || tx.type || 'Transfer'}</p>
-                                            <p className="text-xs text-slate-500 mt-0.5">{formattedDate}</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right flex items-center gap-4">
-                                        <div>
-                                            <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>
-                                                {isCredit ? '+' : '-'} {tx.amount?.currency} {(tx.amount?.value / 100).toFixed(2)}
-                                            </p>
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tx.status}</span>
-                                        </div>
-                                        <button onClick={() => handleShareReceipt(tx)} className="text-slate-400 hover:text-blue-600 transition p-2 rounded-full hover:bg-white" title="Copy Receipt">
-                                            <Share2 size={16} />
-                                        </button>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                  <>
+                     <Loader2 className="animate-spin text-orange-600 mx-auto mb-4" size="{40}"/>
+                     <h4 className="font-bold text-lg text-slate-900">{activeBooking.status === 'pending_admin' ? 'Request sent to Dispatch...' : 'Broadcasting request...'}</h4>
+                     <p className="text-sm text-slate-500 mt-2">Please wait while we assign a driver to your delivery.</p>
+                     
+                     {(activeBooking.status === 'pending' || activeBooking.status === 'pending_admin') && (
+                       <button onClick={cancelTrip} className="text-red-500 text-sm font-bold hover:underline mt-4">Cancel Request</button>
+                     )}
+                  </>
                 )}
-             </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+
+          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[400px] border border-slate-200 shadow-inner">
+            <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
+          </div>
+        </div>
+      )}
+
+      {/* 🔴 WALLET TAB */}
+      {activeSection === 'wallet' && (
+        <div className="p-6 max-w-4xl mx-auto w-full space-y-6">
+           <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">My Wallets</h2>
+           {WalletCards}
+           
+           <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm flex flex-col items-center text-center mt-6">
+             <h3 className="text-xl font-bold text-slate-900 mb-2">Wallet Actions</h3>
+             <p className="text-sm text-slate-500 mb-8">Manage and convert your funds securely</p>
+             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
+                <button onClick={() => setIsLoadModalOpen(true)} disabled={isFrozen} className="p-4 sm:p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size="{24}"/></div> Load
+                </button>
+                <button onClick={() => setIsPayoutModalOpen(true)} disabled={!isApproved || isFrozen} className="p-4 sm:p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowUpRight size="{24}"/></div> Withdraw
+                </button>
+                <button onClick={() => setIsTransferModalOpen(true)} disabled={isFrozen} className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <div className="p-3 bg-white rounded-full shadow-sm"><Users size="{24}"/></div> Transfer
+                </button>
+                <button onClick={() => setIsConvertModalOpen(true)} disabled={!usdWallet?.monime_account_id || isFrozen} className="p-4 sm:p-6 rounded-2xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <div className="p-3 bg-white rounded-full shadow-sm"><RefreshCw size="{24}"/></div> Convert
+                </button>
+             </div>
+           </div>
+
+           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm w-full">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2"><Activity className="text-blue-600" size="{20}"/> Transactions</h3>
+                <div className="flex bg-slate-100 p-1 rounded-lg">
+                  <button onClick={()=>setTxFilter('recent')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter==='recent'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>Recent</button>
+                  <button onClick={()=>setTxFilter('all')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter==='all'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>All Time</button>
+                </div>
+              </div>
+
+              {displayedTx.length === 0 ? (
+                  <div className="text-center text-slate-500 py-6">No transactions found.</div>
+              ) : (
+                  <div className="space-y-3">
+                      {displayedTx.map(tx => {
+                          const isCredit = tx.balanceImpact === 'CREDIT';
+                          const dateStr = tx.createdAt || tx.created_at || tx.timestamp || tx.date || tx.createdOn;
+                          const isValidDate = dateStr && !isNaN(new Date(dateStr).getTime());
+                          const formattedDate = isValidDate ? new Date(dateStr).toLocaleString() : 'Date pending';
+
+                          return (
+                              <div key={tx.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition group">
+                                  <div className="flex items-center gap-3">
+                                      <div className={`p-2 rounded-full ${isCredit ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                                          {isCredit ? <ArrowDownLeft size="{18}"/> : <ArrowUpRight size="{18}"/>}
+                                      </div>
+                                      <div>
+                                          <p className="font-bold text-slate-900 text-sm">{tx.description || tx.type || 'Transfer'}</p>
+                                          <p className="text-xs text-slate-500 mt-0.5">{formattedDate}</p>
+                                      </div>
+                                  </div>
+                                  <div className="text-right flex items-center gap-4">
+                                      <div>
+                                          <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>
+                                              {isCredit ? '+' : '-'} {tx.amount?.currency} {(tx.amount?.value / 100).toFixed(2)}
+                                          </p>
+                                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tx.status}</span>
+                                      </div>
+                                      <button onClick={() => handleShareReceipt(tx)} className="text-slate-400 hover:text-blue-600 transition p-2 rounded-full hover:bg-white" title="Copy Receipt">
+                                          <Share2 size="{16}"/>
+                                      </button>
+                                  </div>
+                              </div>
+                          );
+                      })}
+                  </div>
+              )}
+           </div>
+        </div>
+      )}
 
       {/* 🔴 2-WAY CONVERT MODAL */}
       {isConvertModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size="{20}"/></button>
             <h2 className="text-2xl font-bold mb-1">Convert Currency</h2>
             <p className="text-sm text-slate-500 mb-4">Rate: 1 USD = SLE {exchangeRateUsdToSle}</p>
             
@@ -666,7 +696,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
             )}
 
             <button onClick={executeConvert} disabled={isProcessingConvert || !convertAmount} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessingConvert ? <Loader2 className="animate-spin" size={20} /> : <><ArrowLeftRight size={20} /> Convert Now</>}
+              {isProcessingConvert ? <Loader2 className="animate-spin" size="{20}"/> : <><ArrowLeftRight size="{20}"/> Convert Now</>}
             </button>
           </div>
         </div>
@@ -676,12 +706,12 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       {isLoadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={() => setIsLoadModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size="{20}"/></button>
             <h2 className="text-2xl font-bold mb-1">Load Wallet</h2>
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
             <button onClick={executeLoad} disabled={isProcessingLoad || !loadAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessingLoad ? <Loader2 className="animate-spin" size={20} /> : <><ArrowDownLeft size={20} /> Checkout</>}
+              {isProcessingLoad ? <Loader2 className="animate-spin" size="{20}"/> : <><ArrowDownLeft size="{20}"/> Checkout</>}
             </button>
           </div>
         </div>
@@ -691,7 +721,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       {isPayoutModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size="{20}"/></button>
             <h2 className="text-2xl font-bold mb-1">Mobile Payout</h2>
             <p className="text-sm text-slate-500 mb-6">Cashout to Mobile Money.</p>
             <div className="space-y-4 mb-6">
@@ -703,7 +733,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
               <input type="tel" placeholder="e.g. 077123456 or 030123456" value={payoutPhone} onChange={(e) => setPayoutPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500" />
             </div>
             <button onClick={executePayout} disabled={isProcessingPayout || !payoutAmount || !payoutPhone} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessingPayout ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Payout
+              {isProcessingPayout ? <Loader2 className="animate-spin" size="{20}"/> : <ArrowUpRight size="{20}"/>} Confirm Payout
             </button>
           </div>
         </div>
@@ -713,7 +743,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       {isTransferModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
+            <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size="{20}"/></button>
             <h2 className="text-2xl font-bold mb-1">Internal Transfer</h2>
             <p className="text-sm text-slate-500 mb-6">Paste the recipient's exact MatMove Account ID.</p>
             <div className="space-y-4 mb-6">
@@ -721,37 +751,72 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
               <input type="text" placeholder="Recipient ID (e.g. fac-k6V8...)" value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500" />
             </div>
             <button onClick={executeTransfer} disabled={isProcessingTransfer || !transferAmount || !transferRecipient} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessingTransfer ? <Loader2 className="animate-spin" size={20} /> : <Users size={20} />} Send Transfer
+              {isProcessingTransfer ? <Loader2 className="animate-spin" size="{20}"/> : <Users size="{20}"/>} Send Transfer
             </button>
           </div>
         </div>
       )}
 
-      {showPolicy && <PolicyModal onAccept={handleAcceptPolicy} />}
+      {showPolicy && <PolicyModal onAccept="{handleAcceptPolicy}"/>}
     </div>
   );
 }
 
 function MerchantInventory({ profile }: any) {
+  const [activeTab, setActiveTab] = useState<'products' | 'orders'>('products');
   const [products, setProducts] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [desc, setDesc] = useState('');
+  const [whatsappNumber, setWhatsappNumber] = useState('+232');
   const [imageUrl, setImageUrl] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
-  useEffect(() => { fetchProducts(); }, [profile.id]);
+  useEffect(() => { fetchProducts(); fetchOrders(); }, [profile.id]);
 
   const fetchProducts = async () => {
     const { data } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
     if (data) setProducts(data);
   };
 
+  const fetchOrders = async () => {
+    const { data } = await supabase.from('app_orders').select('*, rider:rider_id(full_name, phone)').eq('merchant_id', profile.id).order('created_at', { ascending: false });
+    if (data) setOrders(data);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      setIsUploading(true);
+      try {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${profile.id}-${Date.now()}.${fileExt}`;
+          const { error } = await supabase.storage.from('product_images').upload(fileName, file);
+          if (error) {
+              const reader = new FileReader();
+              reader.onloadend = () => { setImageUrl(reader.result as string); setIsUploading(false); };
+              reader.readAsDataURL(file);
+              return;
+          }
+          const { data: { publicUrl } } = supabase.storage.from('product_images').getPublicUrl(fileName);
+          setImageUrl(publicUrl);
+      } catch (err) {
+          const reader = new FileReader();
+          reader.onloadend = () => { setImageUrl(reader.result as string); setIsUploading(false); };
+          reader.readAsDataURL(file);
+      } finally {
+          setIsUploading(false);
+      }
+  };
+
   const handleAddProduct = async () => {
     if (!name || !price) return alert('Name and Price are required');
     setIsAdding(true);
     try {
-      await supabase.from('products').insert({ merchant_id: profile.id, name, price: Number(price), description: desc, image_url: imageUrl });
+      await supabase.from('products').insert({ merchant_id: profile.id, name, price: Number(price), description: desc, image_url: imageUrl, whatsapp_number: whatsappNumber });
       setName(''); setPrice(''); setDesc(''); setImageUrl(''); fetchProducts();
     } catch (e: any) { alert(e.message); } finally { setIsAdding(false); }
   };
@@ -762,42 +827,113 @@ function MerchantInventory({ profile }: any) {
     fetchProducts();
   };
 
-  return (
-    <div className="p-6 max-w-4xl mx-auto space-y-8">
-      <h1 className="text-3xl font-bold text-slate-900 mb-2">Store Inventory</h1>
-      
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-        <h3 className="font-bold text-lg">Add New Product</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <input type="text" placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} className="border p-3 rounded-xl outline-none focus:border-orange-500" />
-          <input type="number" placeholder="Price (SLE)" value={price} onChange={e => setPrice(e.target.value)} className="border p-3 rounded-xl outline-none focus:border-orange-500" />
-        </div>
-        <div className="grid grid-cols-1 gap-4">
-          <input type="text" placeholder="Image URL (e.g., https://example.com/image.png)" value={imageUrl} onChange={e => setImageUrl(e.target.value)} className="w-full border p-3 rounded-xl outline-none focus:border-orange-500" />
-          <textarea placeholder="Description (Optional)" value={desc} onChange={e => setDesc(e.target.value)} className="w-full border p-3 rounded-xl outline-none resize-none focus:border-orange-500" rows={2} />
-        </div>
-        <button onClick={handleAddProduct} disabled={isAdding} className="bg-orange-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-orange-700 transition">
-          {isAdding ? 'Adding...' : 'Add to Catalog'}
-        </button>
-      </div>
+  const handleCompleteOrder = async (orderId: string) => {
+      await supabase.from('app_orders').update({ status: 'completed' }).eq('id', orderId);
+      fetchOrders();
+  };
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {products.map(p => (
-          <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden relative flex flex-col">
-            <button onClick={() => handleDelete(p.id)} className="absolute top-3 right-3 p-2 bg-white/80 backdrop-blur rounded-full text-slate-500 hover:text-red-500 hover:bg-white shadow-sm transition z-10"><Trash2 size={16} /></button>
-            {p.image_url ? (
-              <div className="h-40 w-full bg-slate-100"><img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /></div>
-            ) : (
-              <div className="h-40 w-full bg-slate-100 flex items-center justify-center"><Package size={40} className="text-slate-300" /></div>
-            )}
-            <div className="p-5 flex-1 flex flex-col">
-              <h4 className="font-bold text-lg text-slate-900 leading-tight">{p.name}</h4>
-              <p className="text-orange-600 font-bold mt-1 text-xl">SLE {p.price}</p>
-              <p className="text-sm text-slate-500 mt-2 line-clamp-2">{p.description || 'No description'}</p>
-            </div>
-          </div>
-        ))}
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-8">
+      <div className="flex justify-between items-end mb-6 border-b pb-4">
+         <h1 className="text-3xl font-bold text-slate-900">Inventory & Orders</h1>
+         <div className="flex bg-slate-100 p-1 rounded-xl">
+            <button onClick={()=>setActiveTab('products')} className={`px-4 py-2 text-sm font-bold rounded-lg transition ${activeTab==='products'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>My Catalog</button>
+            <button onClick={()=>setActiveTab('orders')} className={`px-4 py-2 text-sm font-bold rounded-lg transition ${activeTab==='orders'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>In-App Orders</button>
+         </div>
       </div>
+      
+      {activeTab === 'products' ? (
+          <>
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <h3 className="font-bold text-lg">Add New Product</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <input type="text" placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} className="border p-3 rounded-xl outline-none focus:border-orange-500" />
+              <input type="number" placeholder="Price (SLE)" value={price} onChange={e => setPrice(e.target.value)} className="border p-3 rounded-xl outline-none focus:border-orange-500" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex items-center border rounded-xl overflow-hidden focus-within:border-orange-500">
+                 <span className="bg-slate-100 text-slate-500 font-bold px-4 py-3 border-r">+232</span>
+                 <input type="tel" placeholder="WhatsApp Number" value={whatsappNumber.replace(/^\+?232/, '')} onChange={e => setWhatsappNumber(`+232${e.target.value.replace(/\D/g, '')}`)} className="w-full p-3 outline-none" />
+              </div>
+              <div className="flex items-center border p-2 rounded-xl">
+                 <label className="flex items-center justify-center w-full cursor-pointer text-slate-500 hover:text-orange-600 font-bold text-sm">
+                    {isUploading ? <Loader2 className="animate-spin mr-2" size="{18}"/> : <ImageIcon className="mr-2" size="{18}"/>}
+                    {imageUrl ? 'Image Uploaded' : 'Upload Product Image'}
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                 </label>
+              </div>
+            </div>
+            <textarea placeholder="Description (Optional)" value={desc} onChange={e => setDesc(e.target.value)} className="w-full border p-3 rounded-xl outline-none resize-none focus:border-orange-500" rows={2} />
+            <button onClick={handleAddProduct} disabled={isAdding || isUploading} className="bg-orange-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-orange-700 transition">
+              {isAdding ? 'Adding...' : 'Add to Catalog'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {products.map(p => (
+              <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden relative flex flex-col">
+                <button onClick={() => handleDelete(p.id)} className="absolute top-3 right-3 p-2 bg-white/80 backdrop-blur rounded-full text-slate-500 hover:text-red-500 hover:bg-white shadow-sm transition z-10"><Trash2 size="{16}"/></button>
+                {p.image_url ? (
+                  <div className="h-40 w-full bg-slate-100"><img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /></div>
+                ) : (
+                  <div className="h-40 w-full bg-slate-100 flex items-center justify-center"><Package className="text-slate-300" size="{40}"/></div>
+                )}
+                <div className="p-5 flex-1 flex flex-col">
+                  <h4 className="font-bold text-lg text-slate-900 leading-tight">{p.name}</h4>
+                  <p className="text-orange-600 font-bold mt-1 text-xl">SLE {p.price}</p>
+                  <p className="text-sm text-slate-500 mt-2 line-clamp-2">{p.description || 'No description'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
+      ) : (
+          <div className="space-y-4">
+              {orders.length === 0 ? <p className="text-slate-500 text-center py-10">No orders received yet.</p> : orders.map(o => (
+                  <div key={o.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
+                     <div>
+                        <div className="font-bold text-slate-900 text-lg">{o.product_name}</div>
+                        <div className="text-sm text-slate-600 flex items-center gap-2 mt-1"><User size="{14}"/> {o.rider?.full_name} • <Phone size="{14}"/> {o.rider?.phone}</div>
+                        <div className="text-xs text-slate-400 mt-1">{new Date(o.created_at).toLocaleString()}</div>
+                     </div>
+                     <div className="text-right flex flex-col items-end">
+                        <div className="font-bold text-xl text-orange-600">SLE {o.price}</div>
+                        {o.status === 'pending' ? (
+                            <button onClick={() => handleCompleteOrder(o.id)} className="mt-2 text-xs font-bold bg-slate-900 text-white px-3 py-1.5 rounded-lg hover:bg-slate-800">Mark as Completed</button>
+                        ) : (
+                            <span className="mt-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Completed</span>
+                        )}
+                     </div>
+                  </div>
+              ))}
+          </div>
+      )}
+    </div>
+  );
+}
+
+function MerchantTrips({ profile }: any) {
+  const [trips, setTrips] = useState<any[]>([]);
+  useEffect(() => { 
+    supabase.from('bookings').select('*, driver:driver_id(full_name)').eq('rider_id', profile.id).order('created_at', { ascending: false }).then(({data}) => { if(data) setTrips(data); }); 
+  }, [profile.id]);
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto space-y-4">
+      <h1 className="text-3xl font-bold text-slate-900 mb-6">Delivery History</h1>
+      {trips.length === 0 ? <div className="text-center text-slate-500 py-10">No requests found.</div> : trips.map(t => (
+        <div key={t.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
+          <div>
+            <div className="font-bold text-slate-900 capitalize">{t.service_type} {t.vehicle_type ? `(${t.vehicle_type})` : ''}</div>
+            <div className="text-xs text-slate-500 mt-1">{new Date(t.created_at).toLocaleString()}</div>
+            <div className="text-xs font-mono text-slate-400 mt-2">{t.pickup_location?.slice(0,25)}... <ArrowRight className="inline" size="{10}"/> {t.destination_location?.slice(0,25)}...</div>
+          </div>
+          <div className="text-right">
+            <div className="font-bold text-lg text-slate-900">SLE {t.fare_amount}</div>
+            <div className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded mt-1 inline-block ${t.status==='completed'?'bg-emerald-100 text-emerald-700':t.status==='cancelled'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{t.status}</div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
