@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ShoppingCart, Activity, Copy, Check, Share2, ArrowLeftRight, MessageCircle } from 'lucide-react';
+import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, Plus, Minus, ArrowRight, Wallet, RefreshCw, X, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ShoppingCart, Activity, Copy, Check, Share2, ArrowLeftRight, MessageCircle, User, Phone } from 'lucide-react';
 
 const WHATSAPP_NUMBER = "23290330362";
 
@@ -62,6 +62,9 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 
   const [showPolicy, setShowPolicy] = useState(false);
   const [isFrozen, setIsFrozen] = useState(wallet?.is_frozen || false);
+  
+  // 🔴 FATAL CRASH FIX: Added missing isApproved variable
+  const isApproved = profile?.kyc_status === 'approved' || profile?.role === 'rider';
 
   const monimeAccountId = sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || 'Pending Setup';
   const mapContainer = useRef<HTMLDivElement>(null);
