@@ -433,7 +433,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     </div>
   );
 
-  const displayedTx = txFilter === 'recent' ? transactions.slice(0, 5) : transactions;
+  const displayedTx = txFilter === 'recent' ? (transactions || []).slice(0, 5) : (transactions || []);
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
@@ -453,6 +453,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
+        
         {/* 🔴 HOME TAB ONLY: MAP AND REQUEST FORM */}
         {activeSection === 'home' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -500,7 +501,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 
                     <div className="flex justify-between items-center px-1 mt-1">
                       <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Route: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
-                      <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">{isRouting ? <Loader2 size={12} className="animate-spin"/> : <MapPin size={12} />} Preview Route</button>
+                      <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">{isRouting ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />} Preview Route</button>
                     </div>
 
                     {(serviceType === 'ride' || serviceType === 'delivery') && (
@@ -588,7 +589,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
           </div>
         )}
 
-        {/* 🔴 WALLET TAB */}
+        {/* 🔴 WALLET TAB ONLY: TRANSACTIONS & FULL WIDTH ACTIONS */}
         {activeSection === 'wallet' && (
           <div className="w-full space-y-6">
              <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">My Wallets</h2>
@@ -646,7 +647,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                                     <div className="text-right flex items-center gap-4">
                                         <div>
                                             <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>
-                                                {isCredit ? '+' : '-'} {tx.amount?.currency} {(tx.amount?.value / 100).toFixed(2)}
+                                                {isCredit ? '+' : '-'} {tx.amount?.currency} {((tx.amount?.value || 0) / 100).toFixed(2)}
                                             </p>
                                             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tx.status}</span>
                                         </div>

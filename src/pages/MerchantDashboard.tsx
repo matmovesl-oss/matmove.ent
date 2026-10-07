@@ -55,6 +55,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
+  // 🔴 2-WAY CONVERT STATES
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [convertDirection, setConvertDirection] = useState<'USD_TO_SLE' | 'SLE_TO_USD'>('USD_TO_SLE');
   const [convertAmount, setConvertAmount] = useState('');
@@ -160,6 +161,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
   };
 
+  // 🔴 Initialize Mapbox & Auto-Locate User
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
     try {
@@ -172,6 +174,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
             setPickupCoords([longitude, latitude]);
             map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
             
+            // Auto-reverse geocode
             try {
                const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxgl.accessToken}`);
                const data = await res.json();
@@ -180,6 +183,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                }
             } catch (e) {}
 
+            // Set Draggable Marker
             const marker = new mapboxgl.Marker({ color: '#10B981', draggable: true }).setLngLat([longitude, latitude]).addTo(map.current!);
             marker.on('dragend', async () => {
                const lngLat = marker.getLngLat();
@@ -196,9 +200,10 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     } catch (e) { console.error('Mapbox error:', e); }
   }, []);
 
+  // 🔴 Force web layout map resize 
   useEffect(() => {
     if (activeSection === 'home' && map.current) {
-        setTimeout(() => map.current?.resize(), 300); 
+        setTimeout(() => map.current?.resize(), 300); // Critical Fix: Forces map to render correctly in Web Flexbox
     }
   }, [activeSection]);
 
@@ -343,9 +348,11 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     if (!amt || amt <= 0) return alert('Enter valid amount');
     const recipient = transferRecipient.trim();
 
+    // 🔴 CHECK: Direct user to Convert if transferring to their own USD ID or cross-currency ID
     if (usdWallet?.monime_account_id && recipient === usdWallet.monime_account_id) {
        alert("To move funds between your SLE and USD wallets, please use the Convert button.");
-       setIsTransferModalOpen(false); setIsConvertModalOpen(true);
+       setIsTransferModalOpen(false);
+       setIsConvertModalOpen(true);
        return;
     }
 
@@ -431,7 +438,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     </div>
   );
 
-  const displayedTx = txFilter === 'recent' ? transactions.slice(0, 5) : transactions;
+  const displayedTx = txFilter === 'recent' ? (transactions || []).slice(0, 5) : (transactions || []);
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
@@ -587,13 +594,13 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
             )}
           </div>
 
-          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[400px] border border-slate-200 shadow-inner z-0">
+          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[400px] border border-slate-200 shadow-inner">
             <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
           </div>
         </div>
       )}
 
-      {/* 🔴 WALLET TAB */}
+      {/* 🔴 WALLET TAB ONLY: TRANSACTIONS & FULL WIDTH ACTIONS */}
       {activeSection === 'wallet' && (
         <div className="p-6 max-w-4xl mx-auto w-full space-y-6">
            <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">My Wallets</h2>
@@ -651,7 +658,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                                   <div className="text-right flex items-center gap-4">
                                       <div>
                                           <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>
-                                              {isCredit ? '+' : '-'} {tx.amount?.currency} {(tx.amount?.value / 100).toFixed(2)}
+                                              {isCredit ? '+' : '-'} {tx.amount?.currency} {((tx.amount?.value || 0) / 100).toFixed(2)}
                                           </p>
                                           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tx.status}</span>
                                       </div>
