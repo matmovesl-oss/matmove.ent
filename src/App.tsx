@@ -28,7 +28,6 @@ function CustomerPortal() {
     );
   }
 
-  // Intercept unauthorized users and send them explicitly to the Landing Page (Root)
   if (!session) {
     return <Navigate to="/" replace />;
   }
@@ -43,11 +42,9 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
 
-      {/* SECURE PASSWORD ROUTES */}
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<UpdatePassword />} /> 
 
-      {/* ONBOARDING ROUTES */}
       <Route path="/select-role" element={<RoleSelectionPage />} />
       <Route path="/onboarding/personal" element={<PersonalInfoPage />} />
       <Route path="/onboarding/identity" element={<IdentityPage />} />
@@ -58,13 +55,11 @@ export default function App() {
       <Route path="/onboarding/submitted" element={<SubmittedPage />} />
       <Route path="/verification" element={<VerificationPage />} />
 
-      {/* CUSTOMER PORTAL */}
       <Route path="/customer/*" element={<CustomerPortal />} />
       <Route path="/customer/rider/*" element={<CustomerPortal />} />
       <Route path="/customer/driver/*" element={<CustomerPortal />} />
       <Route path="/customer/merchant/*" element={<CustomerPortal />} />
 
-      {/* FALLBACK -> Redirect to Landing Page */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

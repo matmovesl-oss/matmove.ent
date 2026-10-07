@@ -264,7 +264,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-flex items-center gap-2 px-2 py-1 rounded">
              ID: {monimeAccountId}
              <button onClick={() => handleCopy(monimeAccountId)} className="hover:text-white transition">
-                {copiedId === monimeAccountId ? <Check size={12} className="text-emerald-400"/> : <Copy size={12}/>}
+                {copiedId === monimeAccountId ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
              </button>
           </div>
         </div>
@@ -280,7 +280,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
               <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-flex items-center gap-2 px-2 py-1 rounded">
                  ID: {usdWallet.monime_account_id}
                  <button onClick={() => handleCopy(usdWallet.monime_account_id)} className="hover:text-white transition">
-                    {copiedId === usdWallet.monime_account_id ? <Check size={12} className="text-emerald-400"/> : <Copy size={12}/>}
+                    {copiedId === usdWallet.monime_account_id ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
                  </button>
               </div>
             </div>
@@ -289,7 +289,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
         ) : (
           <div className="w-full flex flex-col items-center justify-center text-center py-1">
             <button onClick={handleCreateUsdWallet} disabled={isCreatingUsd} className="bg-slate-700 hover:bg-slate-600 transition p-3 rounded-full mb-2 shadow-inner">
-              {isCreatingUsd ? <Loader2 className="animate-spin text-emerald-400" size={24} /> : <Plus size={24} className="text-emerald-400" />}
+              {isCreatingUsd ? <Loader2 size={24} className="animate-spin text-emerald-400" /> : <Plus size={24} className="text-emerald-400" />}
             </button>
             <span className="text-sm font-bold text-slate-300">Create USD Wallet</span>
           </div>
@@ -302,6 +302,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
+      {/* 🔴 HEADER ALWAYS SHOWS ACTIONS */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-4">
           <button onClick={() => setIsOnline(!isOnline)} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}>
@@ -322,6 +323,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
         </div>
       </header>
 
+      {/* 🔴 HOME TAB ONLY: MAP AND RADAR SIDEBAR */}
       {activeSection === 'home' && (
         <div className="flex-1 flex flex-col lg:flex-row">
           <div className="w-full lg:w-[450px] bg-white border-r border-slate-200 flex flex-col p-6 space-y-6 overflow-y-auto">
@@ -387,6 +389,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
         </div>
       )}
 
+      {/* 🔴 WALLET TAB ONLY: TRANSACTIONS & FULL WIDTH ACTIONS */}
       {activeSection === 'wallet' && (
         <div className="p-6 max-w-4xl mx-auto w-full space-y-6">
            <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">My Wallets</h2>
@@ -397,23 +400,23 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
              <p className="text-sm text-slate-500 mb-8">Manage and convert your funds securely</p>
              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
                 <button onClick={() => setIsLoadModalOpen(true)} disabled={isFrozen} className="p-4 sm:p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
-                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24}/></div> Load
+                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24} /></div> Load
                 </button>
                 <button onClick={() => setIsPayoutModalOpen(true)} disabled={!isApproved || isFrozen} className="p-4 sm:p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
-                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowUpRight size={24}/></div> Withdraw
+                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowUpRight size={24} /></div> Withdraw
                 </button>
                 <button onClick={() => setIsTransferModalOpen(true)} disabled={isFrozen} className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
-                  <div className="p-3 bg-white rounded-full shadow-sm"><Users size={24}/></div> Transfer
+                  <div className="p-3 bg-white rounded-full shadow-sm"><Users size={24} /></div> Transfer
                 </button>
                 <button onClick={() => setIsConvertModalOpen(true)} disabled={!usdWallet?.monime_account_id || isFrozen} className="p-4 sm:p-6 rounded-2xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
-                  <div className="p-3 bg-white rounded-full shadow-sm"><RefreshCw size={24}/></div> Convert
+                  <div className="p-3 bg-white rounded-full shadow-sm"><RefreshCw size={24} /></div> Convert
                 </button>
              </div>
            </div>
 
            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm w-full">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2"><Activity size={20} className="text-blue-600"/> Transactions</h3>
+                <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2"><Activity size={20} className="text-blue-600" /> Transactions</h3>
                 <div className="flex bg-slate-100 p-1 rounded-lg">
                   <button onClick={()=>setTxFilter('recent')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter==='recent'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>Recent</button>
                   <button onClick={()=>setTxFilter('all')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter==='all'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>All Time</button>
@@ -434,7 +437,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
                               <div key={tx.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition group">
                                   <div className="flex items-center gap-3">
                                       <div className={`p-2 rounded-full ${isCredit ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                                          {isCredit ? <ArrowDownLeft size={18}/> : <ArrowUpRight size={18}/>}
+                                          {isCredit ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
                                       </div>
                                       <div>
                                           <p className="font-bold text-slate-900 text-sm">{tx.description || tx.type || 'Transfer'}</p>
@@ -493,7 +496,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
             )}
 
             <button onClick={executeConvert} disabled={isProcessingConvert || !convertAmount} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessingConvert ? <Loader2 className="animate-spin" size={20} /> : <><ArrowLeftRight size={20} /> Convert Now</>}
+              {isProcessingConvert ? <Loader2 size={20} className="animate-spin" /> : <><ArrowLeftRight size={20} /> Convert Now</>}
             </button>
           </div>
         </div>
@@ -508,7 +511,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
             <p className="text-sm text-slate-500 mb-6">Top up via Mobile Money.</p>
             <input type="number" placeholder="Amount (SLE)" value={loadAmount} onChange={(e) => setLoadAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-blue-500" />
             <button onClick={executeLoad} disabled={isProcessingLoad || !loadAmount} className="w-full bg-slate-900 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessingLoad ? <Loader2 className="animate-spin" size={20} /> : <><ArrowDownLeft size={20} /> Checkout</>}
+              {isProcessingLoad ? <Loader2 size={20} className="animate-spin" /> : <><ArrowDownLeft size={20} /> Checkout</>}
             </button>
           </div>
         </div>
@@ -530,7 +533,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
               <input type="tel" placeholder="e.g. 077123456 or 030123456" value={payoutPhone} onChange={(e) => setPayoutPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500" />
             </div>
             <button onClick={executePayout} disabled={isProcessingPayout || !payoutAmount || !payoutPhone} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessingPayout ? <Loader2 className="animate-spin" size={20} /> : <ArrowUpRight size={20} />} Confirm Payout
+              {isProcessingPayout ? <Loader2 size={20} className="animate-spin" /> : <ArrowUpRight size={20} />} Confirm Payout
             </button>
           </div>
         </div>
@@ -548,7 +551,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
               <input type="text" placeholder="Recipient ID (e.g. fac-k6V8...)" value={transferRecipient} onChange={(e) => setTransferRecipient(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500" />
             </div>
             <button onClick={executeTransfer} disabled={isProcessingTransfer || !transferAmount || !transferRecipient} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessingTransfer ? <Loader2 className="animate-spin" size={20} /> : <Users size={20} />} Send Transfer
+              {isProcessingTransfer ? <Loader2 size={20} className="animate-spin" /> : <Users size={20} />} Send Transfer
             </button>
           </div>
         </div>
