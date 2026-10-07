@@ -54,6 +54,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
+  // 🔴 2-WAY CONVERT STATES
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [convertDirection, setConvertDirection] = useState<'USD_TO_SLE' | 'SLE_TO_USD'>('USD_TO_SLE');
   const [convertAmount, setConvertAmount] = useState('');
@@ -164,6 +165,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
   };
 
+  // 🔴 Initialize Mapbox & Auto-Locate User
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
     try {
@@ -176,6 +178,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
             setPickupCoords([longitude, latitude]);
             map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
             
+            // Auto-reverse geocode
             try {
                const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxgl.accessToken}`);
                const data = await res.json();
@@ -184,6 +187,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                }
             } catch (e) {}
 
+            // Set Draggable Marker
             const marker = new mapboxgl.Marker({ color: '#10B981', draggable: true }).setLngLat([longitude, latitude]).addTo(map.current!);
             marker.on('dragend', async () => {
                const lngLat = marker.getLngLat();
@@ -339,6 +343,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     if (!amt || amt <= 0) return alert('Enter valid amount');
     const recipient = transferRecipient.trim();
 
+    // 🔴 CHECK: Direct user to Convert if transferring to their own USD ID or cross-currency ID
     if (usdWallet?.monime_account_id && recipient === usdWallet.monime_account_id) {
        alert("To move funds between your SLE and USD wallets, please use the Convert button.");
        setIsTransferModalOpen(false);
@@ -394,7 +399,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
           <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-flex items-center gap-2 px-2 py-1 rounded">
              ID: {monimeAccountId}
              <button onClick={() => handleCopy(monimeAccountId)} className="hover:text-white transition">
-                {copiedId === monimeAccountId ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                {copiedId === monimeAccountId ? <Check size={12} className="text-emerald-400"/> : <Copy size={12}/>}
              </button>
           </div>
         </div>
@@ -410,7 +415,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
               <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-flex items-center gap-2 px-2 py-1 rounded">
                  ID: {usdWallet.monime_account_id}
                  <button onClick={() => handleCopy(usdWallet.monime_account_id)} className="hover:text-white transition">
-                    {copiedId === usdWallet.monime_account_id ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                    {copiedId === usdWallet.monime_account_id ? <Check size={12} className="text-emerald-400"/> : <Copy size={12}/>}
                  </button>
               </div>
             </div>
@@ -448,6 +453,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
+        {/* 🔴 HOME TAB ONLY: MAP AND REQUEST FORM */}
         {activeSection === 'home' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit z-20">
@@ -457,9 +463,9 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
               {!activeBooking ? (
                 <>
                   <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
-                    <button onClick={() => setServiceType('ride')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16} /> Ride</button>
-                    <button onClick={() => setServiceType('delivery')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Package size={16} /> Delivery</button>
-                    <button onClick={() => setServiceType('scheduled')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size={16} /> Schedule</button>
+                    <button onClick={() => setServiceType('ride')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16}/> Ride</button>
+                    <button onClick={() => setServiceType('delivery')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Package size={16}/> Delivery</button>
+                    <button onClick={() => setServiceType('scheduled')} className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size={16}/> Schedule</button>
                   </div>
                   <div className="space-y-3">
                     {(serviceType === 'ride' || serviceType === 'delivery') && (
@@ -494,7 +500,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 
                     <div className="flex justify-between items-center px-1 mt-1">
                       <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Route: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
-                      <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">{isRouting ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />} Preview Route</button>
+                      <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">{isRouting ? <Loader2 size={12} className="animate-spin"/> : <MapPin size={12} />} Preview Route</button>
                     </div>
 
                     {(serviceType === 'ride' || serviceType === 'delivery') && (
@@ -503,8 +509,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                           <span className="text-slate-500 font-bold text-sm px-2">Total Fare (SLE)</span>
                           <input type="number" placeholder="Amount" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-right pr-2" />
                           <div className="flex gap-1">
-                            <button onClick={() => setOfferAmount(prev => Math.max(pricingRates[vehicleType]?.min || 1, (Number(prev)||1) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16} /></button>
-                            <button onClick={() => setOfferAmount(prev => ((Number(prev)||1) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16} /></button>
+                            <button onClick={() => setOfferAmount(prev => Math.max(pricingRates[vehicleType]?.min || 1, (Number(prev)||1) - 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16}/></button>
+                            <button onClick={() => setOfferAmount(prev => ((Number(prev)||1) + 5).toString())} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
                           </div>
                         </div>
                         {Number(offerAmount) > 0 && (
@@ -582,7 +588,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
           </div>
         )}
 
-        {/* 🔴 WALLET TAB ONLY: TRANSACTIONS & FULL WIDTH ACTIONS */}
+        {/* 🔴 WALLET TAB */}
         {activeSection === 'wallet' && (
           <div className="w-full space-y-6">
              <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">My Wallets</h2>
@@ -595,7 +601,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                   <button onClick={() => setIsLoadModalOpen(true)} disabled={isFrozen} className="p-4 sm:p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
                     <div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24} /></div> Load
                   </button>
-                  <button onClick={() => setIsPayoutModalOpen(true)} disabled={isFrozen} className="p-4 sm:p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
+                  <button onClick={() => setIsPayoutModalOpen(true)} disabled={!isApproved || isFrozen} className="p-4 sm:p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
                     <div className="p-3 bg-white rounded-full shadow-sm"><ArrowUpRight size={24} /></div> Withdraw
                   </button>
                   <button onClick={() => setIsTransferModalOpen(true)} disabled={isFrozen} className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50">
@@ -609,7 +615,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 
              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm w-full">
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2"><Activity size={20} className="text-blue-600" /> Transactions</h3>
+                  <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2"><Activity size={20} className="text-blue-600"/> Transactions</h3>
                   <div className="flex bg-slate-100 p-1 rounded-lg">
                     <button onClick={()=>setTxFilter('recent')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter==='recent'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>Recent</button>
                     <button onClick={()=>setTxFilter('all')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter==='all'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>All Time</button>
@@ -658,13 +664,13 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         )}
       </div>
 
-      {/* CONVERT MODAL */}
+      {/* 🔴 2-WAY CONVERT MODAL */}
       {isConvertModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Convert Currency</h2>
-            <p className="text-sm text-slate-500 mb-6">Current Rate: 1 USD = SLE {exchangeRateUsdToSle}</p>
+            <p className="text-sm text-slate-500 mb-4">Rate: 1 USD = SLE {exchangeRateUsdToSle}</p>
             
             <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
                <button onClick={() => setConvertDirection('USD_TO_SLE')} className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${convertDirection === 'USD_TO_SLE' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>
@@ -812,7 +818,7 @@ function RiderShop({ profile, wallet }: any) {
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <ShoppingCart size={28} className="text-blue-600" />
+          <ShoppingCart className="text-blue-600" size={28} />
           <h1 className="text-3xl font-bold text-slate-900">Shop Marketplace</h1>
         </div>
       </div>
@@ -830,7 +836,7 @@ function RiderShop({ profile, wallet }: any) {
                 </div>
               ) : (
                 <div className="h-48 w-full bg-slate-100 flex items-center justify-center relative">
-                  <ShoppingBag size={48} className="text-slate-300" />
+                  <ShoppingBag className="text-slate-300" size={48} />
                   <button onClick={() => handleShare(p)} className="absolute top-3 right-3 p-2 bg-white/80 backdrop-blur rounded-full text-slate-600 hover:text-blue-600 transition shadow-sm">
                     <Share2 size={16} />
                   </button>
@@ -882,7 +888,7 @@ function RiderTrips({ profile }: any) {
           <div>
             <div className="font-bold text-slate-900 capitalize">{t.service_type} {t.vehicle_type ? `(${t.vehicle_type})` : ''}</div>
             <div className="text-xs text-slate-500 mt-1">{new Date(t.created_at).toLocaleString()}</div>
-            <div className="text-xs font-mono text-slate-400 mt-2">{t.pickup_location?.slice(0,25)}... <ArrowRight size={10} className="inline" /> {t.destination_location?.slice(0,25)}...</div>
+            <div className="text-xs font-mono text-slate-400 mt-2">{t.pickup_location?.slice(0,25)}... <ArrowRight className="inline" size={10} /> {t.destination_location?.slice(0,25)}...</div>
           </div>
           <div className="text-right">
             <div className="font-bold text-lg text-slate-900">SLE {t.fare_amount}</div>

@@ -132,6 +132,14 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
     try {
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
       map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 13 });
+
+      if (navigator.geolocation) {
+         navigator.geolocation.getCurrentPosition(async (pos) => {
+            const { longitude, latitude } = pos.coords;
+            map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
+            new mapboxgl.Marker({ color: '#10B981' }).setLngLat([longitude, latitude]).addTo(map.current!);
+         });
+      }
     } catch (e) { console.error(e); }
   }, []);
 
@@ -264,7 +272,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-flex items-center gap-2 px-2 py-1 rounded">
              ID: {monimeAccountId}
              <button onClick={() => handleCopy(monimeAccountId)} className="hover:text-white transition">
-                {copiedId === monimeAccountId ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                {copiedId === monimeAccountId ? <Check size={12} className="text-emerald-400"/> : <Copy size={12}/>}
              </button>
           </div>
         </div>
@@ -280,7 +288,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
               <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-flex items-center gap-2 px-2 py-1 rounded">
                  ID: {usdWallet.monime_account_id}
                  <button onClick={() => handleCopy(usdWallet.monime_account_id)} className="hover:text-white transition">
-                    {copiedId === usdWallet.monime_account_id ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                    {copiedId === usdWallet.monime_account_id ? <Check size={12} className="text-emerald-400"/> : <Copy size={12}/>}
                  </button>
               </div>
             </div>
@@ -416,7 +424,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
 
            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm w-full">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2"><Activity size={20} className="text-blue-600" /> Transactions</h3>
+                <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2"><Activity size={20} className="text-blue-600"/> Transactions</h3>
                 <div className="flex bg-slate-100 p-1 rounded-lg">
                   <button onClick={()=>setTxFilter('recent')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter==='recent'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>Recent</button>
                   <button onClick={()=>setTxFilter('all')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter==='all'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>All Time</button>
