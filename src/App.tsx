@@ -52,6 +52,8 @@ export function PortalApp() {
   useEffect(() => {
     if (location.search.includes('payment=')) {
       const cleanPath = location.pathname;
+      // 🔴 FIX: Force Passcode lock by setting last active timer to 0
+      localStorage.setItem('matmove_last_active', '0');
       window.history.replaceState({}, document.title, cleanPath);
       window.location.reload();
       return;
