@@ -54,7 +54,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
-  // 🔴 2-WAY CONVERT STATES
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [convertDirection, setConvertDirection] = useState<'USD_TO_SLE' | 'SLE_TO_USD'>('USD_TO_SLE');
   const [convertAmount, setConvertAmount] = useState('');
@@ -81,6 +80,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   };
 
   const handleShareReceipt = (tx: any) => {
+    if (!tx) return;
     const isCredit = tx.balanceImpact === 'CREDIT';
     const amount = (tx.amount?.value / 100).toFixed(2);
     const currency = tx.amount?.currency || 'SLE';
@@ -165,12 +165,18 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
   };
 
-  // 🔴 Initialize Mapbox & Auto-Locate User
+  // 🔴 Initialize Mapbox & Auto-Locate User with ResizeObserver Fix
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
     try {
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
       map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 12 });
+
+      // FORCE MAP TO RESIZE PROPERLY ON WEB
+      const resizeObserver = new ResizeObserver(() => {
+          map.current?.resize();
+      });
+      resizeObserver.observe(mapContainer.current);
 
       if (navigator.geolocation) {
          navigator.geolocation.getCurrentPosition(async (pos) => {
@@ -178,7 +184,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
             setPickupCoords([longitude, latitude]);
             map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
             
-            // Auto-reverse geocode
             try {
                const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxgl.accessToken}`);
                const data = await res.json();
@@ -187,7 +192,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                }
             } catch (e) {}
 
-            // Set Draggable Marker
             const marker = new mapboxgl.Marker({ color: '#10B981', draggable: true }).setLngLat([longitude, latitude]).addTo(map.current!);
             marker.on('dragend', async () => {
                const lngLat = marker.getLngLat();
@@ -433,7 +437,9 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     </div>
   );
 
-  const displayedTx = txFilter === 'recent' ? (transactions || []).slice(0, 5) : (transactions || []);
+  // 🔴 FAILSAFE: Protect against Monime returning an object instead of an array
+  const validTransactions = Array.isArray(transactions) ? transactions : [];
+  const displayedTx = txFilter === 'recent' ? validTransactions.slice(0, 5) : validTransactions;
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
@@ -453,8 +459,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
-        
-        {/* 🔴 HOME TAB ONLY: MAP AND REQUEST FORM */}
         {activeSection === 'home' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit z-20">
@@ -583,8 +587,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                 </div>
               )}
             </div>
-            <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] border border-slate-200 shadow-inner z-0">
-              <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
+            <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] border border-slate-200 shadow-inner z-0 flex flex-col">
+              <div ref={mapContainer} className="absolute inset-0 w-full h-full flex-1" />
             </div>
           </div>
         )}
@@ -628,6 +632,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                 ) : (
                     <div className="space-y-3">
                         {displayedTx.map(tx => {
+                            if (!tx) return null;
                             const isCredit = tx.balanceImpact === 'CREDIT';
                             const dateStr = tx.createdAt || tx.created_at || tx.timestamp || tx.date || tx.createdOn;
                             const isValidDate = dateStr && !isNaN(new Date(dateStr).getTime());
@@ -647,7 +652,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                                     <div className="text-right flex items-center gap-4">
                                         <div>
                                             <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>
-                                                {isCredit ? '+' : '-'} {tx.amount?.currency} {((tx.amount?.value || 0) / 100).toFixed(2)}
+                                                {isCredit ? '+' : '-'} {tx.amount?.currency || 'SLE'} {((tx.amount?.value || 0) / 100).toFixed(2)}
                                             </p>
                                             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tx.status}</span>
                                         </div>
@@ -768,7 +773,10 @@ function RiderShop({ profile, wallet }: any) {
   const [products, setProducts] = useState<any[]>([]);
 
   useEffect(() => { 
-    supabase.from('products').select('*, merchant:merchant_id(business_name, whatsapp_number)').order('created_at', { ascending: false }).then(({data}) => { if(data) setProducts(data); }); 
+    supabase.from('products').select('*, merchant:merchant_id(business_name, whatsapp_number)').order('created_at', { ascending: false }).then(({data}) => { 
+       const validProducts = Array.isArray(data) ? data : [];
+       setProducts(validProducts); 
+    }); 
   }, []);
 
   const handleWhatsAppRedirect = (product: any) => {

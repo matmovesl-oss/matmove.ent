@@ -55,7 +55,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
-  // 🔴 2-WAY CONVERT STATES
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [convertDirection, setConvertDirection] = useState<'USD_TO_SLE' | 'SLE_TO_USD'>('USD_TO_SLE');
   const [convertAmount, setConvertAmount] = useState('');
@@ -77,6 +76,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   };
 
   const handleShareReceipt = (tx: any) => {
+    if (!tx) return;
     const isCredit = tx.balanceImpact === 'CREDIT';
     const amount = (tx.amount?.value / 100).toFixed(2);
     const currency = tx.amount?.currency || 'SLE';
@@ -123,15 +123,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     return () => { supabase.removeChannel(channel); clearInterval(syncInterval); };
   }, [profile?.id]);
 
-  useEffect(() => {
-    if (!window.google) {
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`;
-      script.async = true;
-      document.head.appendChild(script);
-    }
-  }, []);
-
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
     setIsRefreshing(true);
@@ -161,12 +152,18 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
   };
 
-  // 🔴 Initialize Mapbox & Auto-Locate User
+  // 🔴 Initialize Mapbox & Auto-Locate User with ResizeObserver Fix
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
     try {
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
       map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 12 });
+
+      // FORCE MAP TO RESIZE PROPERLY ON WEB
+      const resizeObserver = new ResizeObserver(() => {
+          map.current?.resize();
+      });
+      resizeObserver.observe(mapContainer.current);
 
       if (navigator.geolocation) {
          navigator.geolocation.getCurrentPosition(async (pos) => {
@@ -174,7 +171,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
             setPickupCoords([longitude, latitude]);
             map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
             
-            // Auto-reverse geocode
             try {
                const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxgl.accessToken}`);
                const data = await res.json();
@@ -183,7 +179,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                }
             } catch (e) {}
 
-            // Set Draggable Marker
             const marker = new mapboxgl.Marker({ color: '#10B981', draggable: true }).setLngLat([longitude, latitude]).addTo(map.current!);
             marker.on('dragend', async () => {
                const lngLat = marker.getLngLat();
@@ -199,13 +194,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       }
     } catch (e) { console.error('Mapbox error:', e); }
   }, []);
-
-  // 🔴 Force web layout map resize 
-  useEffect(() => {
-    if (activeSection === 'home' && map.current) {
-        setTimeout(() => map.current?.resize(), 300); // Critical Fix: Forces map to render correctly in Web Flexbox
-    }
-  }, [activeSection]);
 
   const searchPlaces = (query: string, type: 'pickup' | 'destination') => {
     if (type === 'pickup') { setPickup(query); setPickupCoords(null); } else { setDestination(query); setDestinationCoords(null); }
@@ -348,11 +336,9 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     if (!amt || amt <= 0) return alert('Enter valid amount');
     const recipient = transferRecipient.trim();
 
-    // 🔴 CHECK: Direct user to Convert if transferring to their own USD ID or cross-currency ID
     if (usdWallet?.monime_account_id && recipient === usdWallet.monime_account_id) {
        alert("To move funds between your SLE and USD wallets, please use the Convert button.");
-       setIsTransferModalOpen(false);
-       setIsConvertModalOpen(true);
+       setIsTransferModalOpen(false); setIsConvertModalOpen(true);
        return;
     }
 
@@ -438,7 +424,9 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     </div>
   );
 
-  const displayedTx = txFilter === 'recent' ? (transactions || []).slice(0, 5) : (transactions || []);
+  // 🔴 FAILSAFE: Protect against Monime returning an object instead of an array
+  const validTransactions = Array.isArray(transactions) ? transactions : [];
+  const displayedTx = txFilter === 'recent' ? validTransactions.slice(0, 5) : validTransactions;
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen" onClick={() => setActiveInput(null)}>
@@ -508,7 +496,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
 
                    <div className="flex justify-between items-center px-1 mt-1">
                      <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Route: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
-                     <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">{isRouting ? <Loader2 size={12} className="animate-spin"/> : <MapPin size={12} />} Preview Route</button>
+                     <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">{isRouting ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />} Preview Route</button>
                    </div>
 
                    {(serviceType === 'ride' || serviceType === 'delivery') && (
@@ -594,13 +582,14 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
             )}
           </div>
 
-          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[400px] border border-slate-200 shadow-inner">
-            <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
+          {/* 🔴 MAP CONTAINER WITH FLEX-1 SO IT EXPANDS CORRECTLY ON WEB */}
+          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] w-full border border-slate-200 shadow-inner z-0 flex flex-col">
+            <div ref={mapContainer} className="absolute inset-0 w-full h-full flex-1" />
           </div>
         </div>
       )}
 
-      {/* 🔴 WALLET TAB ONLY: TRANSACTIONS & FULL WIDTH ACTIONS */}
+      {/* 🔴 WALLET TAB */}
       {activeSection === 'wallet' && (
         <div className="p-6 max-w-4xl mx-auto w-full space-y-6">
            <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">My Wallets</h2>
@@ -639,6 +628,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
               ) : (
                   <div className="space-y-3">
                       {displayedTx.map(tx => {
+                          if (!tx) return null;
                           const isCredit = tx.balanceImpact === 'CREDIT';
                           const dateStr = tx.createdAt || tx.created_at || tx.timestamp || tx.date || tx.createdOn;
                           const isValidDate = dateStr && !isNaN(new Date(dateStr).getTime());
@@ -658,7 +648,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
                                   <div className="text-right flex items-center gap-4">
                                       <div>
                                           <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>
-                                              {isCredit ? '+' : '-'} {tx.amount?.currency} {((tx.amount?.value || 0) / 100).toFixed(2)}
+                                              {isCredit ? '+' : '-'} {tx.amount?.currency || 'SLE'} {((tx.amount?.value || 0) / 100).toFixed(2)}
                                           </p>
                                           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tx.status}</span>
                                       </div>
@@ -790,12 +780,12 @@ function MerchantInventory({ profile }: any) {
 
   const fetchProducts = async () => {
     const { data } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
-    if (data) setProducts(data);
+    if (data) setProducts(Array.isArray(data) ? data : []);
   };
 
   const fetchOrders = async () => {
     const { data } = await supabase.from('app_orders').select('*, rider:rider_id(full_name, phone)').eq('merchant_id', profile.id).order('created_at', { ascending: false });
-    if (data) setOrders(data);
+    if (data) setOrders(Array.isArray(data) ? data : []);
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

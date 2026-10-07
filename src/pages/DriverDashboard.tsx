@@ -65,6 +65,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   };
 
   const handleShareReceipt = (tx: any) => {
+    if (!tx) return;
     const isCredit = tx.balanceImpact === 'CREDIT';
     const amount = (tx.amount?.value / 100).toFixed(2);
     const currency = tx.amount?.currency || 'SLE';
@@ -127,11 +128,18 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
     } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
   };
 
+  // 🔴 Initialize Mapbox & Auto-Locate User with ResizeObserver Fix
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
     try {
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
       map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 13 });
+
+      // FORCE MAP TO RESIZE PROPERLY ON WEB
+      const resizeObserver = new ResizeObserver(() => {
+          map.current?.resize();
+      });
+      resizeObserver.observe(mapContainer.current);
 
       if (navigator.geolocation) {
          navigator.geolocation.getCurrentPosition(async (pos) => {
@@ -306,11 +314,12 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
     </div>
   );
 
-  const displayedTx = txFilter === 'recent' ? transactions.slice(0, 5) : transactions;
+  // 🔴 FAILSAFE: Protect against Monime returning an object instead of an array
+  const validTransactions = Array.isArray(transactions) ? transactions : [];
+  const displayedTx = txFilter === 'recent' ? validTransactions.slice(0, 5) : validTransactions;
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
-      {/* 🔴 HEADER ALWAYS SHOWS ACTIONS */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-4">
           <button onClick={() => setIsOnline(!isOnline)} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}>
@@ -331,7 +340,6 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
         </div>
       </header>
 
-      {/* 🔴 HOME TAB ONLY: MAP AND RADAR SIDEBAR */}
       {activeSection === 'home' && (
         <div className="flex-1 flex flex-col lg:flex-row">
           <div className="w-full lg:w-[450px] bg-white border-r border-slate-200 flex flex-col p-6 space-y-6 overflow-y-auto">
@@ -391,8 +399,10 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
               </div>
             )}
           </div>
-          <div className="flex-1 bg-slate-200 relative min-h-[450px]">
-            <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
+          
+          {/* 🔴 MAP CONTAINER WITH FLEX-1 SO IT EXPANDS CORRECTLY ON WEB */}
+          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[450px] flex-1 w-full border border-slate-200 shadow-inner">
+            <div ref={mapContainer} className="absolute inset-0 w-full h-full flex-1" />
           </div>
         </div>
       )}
@@ -436,6 +446,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
               ) : (
                   <div className="space-y-3">
                       {displayedTx.map(tx => {
+                          if (!tx) return null;
                           const isCredit = tx.balanceImpact === 'CREDIT';
                           const dateStr = tx.createdAt || tx.created_at || tx.timestamp || tx.date || tx.createdOn;
                           const isValidDate = dateStr && !isNaN(new Date(dateStr).getTime());
@@ -455,7 +466,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
                                   <div className="text-right flex items-center gap-4">
                                       <div>
                                           <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>
-                                              {isCredit ? '+' : '-'} {tx.amount?.currency} {(tx.amount?.value / 100).toFixed(2)}
+                                              {isCredit ? '+' : '-'} {tx.amount?.currency || 'SLE'} {((tx.amount?.value || 0) / 100).toFixed(2)}
                                           </p>
                                           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tx.status}</span>
                                       </div>
