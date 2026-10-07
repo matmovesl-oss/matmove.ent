@@ -24,11 +24,11 @@ export default async function handler(req, res) {
     const loadAmountMinor = Math.round(Number(amount) * 100);
     const hostUrl = req.headers.origin || 'https://matmoveent.vercel.app';
 
-    // 🔴 CRITICAL FIX: Direct URL routing to trigger App passcode lock instead of 500 error API
+    // 🔴 CRITICAL FIX: Route success and cancel to the new bouncer API
     const payload = {
       name: `MatMove Wallet Top-up`,
-      successUrl: `${hostUrl}/?payment=success`, 
-      cancelUrl: `${hostUrl}/?payment=cancelled`,
+      successUrl: `${hostUrl}/api/monime-return?status=success`, 
+      cancelUrl: `${hostUrl}/api/monime-return?status=cancelled`,
       financialAccountId: targetAccountId,
       lineItems: [{ type: "custom", name: "Wallet Load", price: { currency: "SLE", value: loadAmountMinor }, quantity: 1 }],
       metadata: { userId: userId, role: role }

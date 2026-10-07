@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, MapPin, Navigation, Power, User, Phone, Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft, Users, RefreshCw, Plus, Wallet, Activity, Copy, Check } from 'lucide-react';
+import { Car, MapPin, Navigation, Power, User, Phone, Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft, Users, RefreshCw, Plus, Wallet, Activity, Copy, Check, Share2 } from 'lucide-react';
 
 export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }: any) {
   if (activeSection === 'trips') return <DriverTrips profile={profile} />;
@@ -13,6 +13,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const [txFilter, setTxFilter] = useState<'recent' | 'all'>('recent');
   const [isCreatingUsd, setIsCreatingUsd] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [exchangeRate, setExchangeRate] = useState(24.68);
 
   const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
   const [isOnline, setIsOnline] = useState(false);
@@ -49,10 +50,34 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const [showPolicy, setShowPolicy] = useState(false);
   const [isFrozen, setIsFrozen] = useState(wallet?.is_frozen || false);
 
+  useEffect(() => {
+    supabase.from('exchange_rates').select('*').eq('from_currency', 'USD').eq('to_currency', 'SLE').maybeSingle().then(({data}) => {
+      if (data) setExchangeRate(data.rate);
+    });
+  }, []);
+
   const handleCopy = (id: string) => {
     navigator.clipboard.writeText(id);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleShareReceipt = (tx: any) => {
+    const isCredit = tx.balanceImpact === 'CREDIT';
+    const amount = (tx.amount?.value / 100).toFixed(2);
+    const currency = tx.amount?.currency || 'SLE';
+    const dateStr = tx.createdAt || tx.created_at || tx.timestamp || tx.date || tx.createdOn;
+    const formattedDate = dateStr && !isNaN(new Date(dateStr).getTime()) ? new Date(dateStr).toLocaleString() : 'Recent';
+    
+    const receiptText = `MatMove Receipt\n----------------\nType: ${tx.description || tx.type || 'Transaction'}\nStatus: ${tx.status}\nDate: ${formattedDate}\nAmount: ${isCredit ? '+' : '-'}${currency} ${amount}\nTxID: ${tx.id}\n----------------\nSecurely processed by MatMove.`;
+    
+    if (navigator.share) {
+       navigator.share({ title: 'MatMove Receipt', text: receiptText }).catch(() => {
+          navigator.clipboard.writeText(receiptText); alert('Receipt copied to clipboard!');
+       });
+    } else {
+       navigator.clipboard.writeText(receiptText); alert('Receipt copied to clipboard!');
+    }
   };
 
   useEffect(() => {
@@ -346,7 +371,6 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
         </div>
       )}
 
-      {/* 🔴 WALLET TAB ONLY: TRANSACTIONS & FULL WIDTH ACTIONS */}
       {activeSection === 'wallet' && (
         <div className="p-6 max-w-4xl mx-auto w-full space-y-6">
            <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">My Wallets</h2>
@@ -386,12 +410,12 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
                   <div className="space-y-3">
                       {displayedTx.map(tx => {
                           const isCredit = tx.balanceImpact === 'CREDIT';
-                          const dateStr = tx.createdAt || tx.created_at || tx.date;
+                          const dateStr = tx.createdAt || tx.created_at || tx.timestamp || tx.date || tx.createdOn;
                           const isValidDate = dateStr && !isNaN(new Date(dateStr).getTime());
                           const formattedDate = isValidDate ? new Date(dateStr).toLocaleString() : 'Date pending';
 
                           return (
-                              <div key={tx.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition">
+                              <div key={tx.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition group">
                                   <div className="flex items-center gap-3">
                                       <div className={`p-2 rounded-full ${isCredit ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
                                           {isCredit ? <ArrowDownLeft size={18}/> : <ArrowUpRight size={18}/>}
@@ -401,11 +425,16 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
                                           <p className="text-xs text-slate-500 mt-0.5">{formattedDate}</p>
                                       </div>
                                   </div>
-                                  <div className="text-right">
-                                      <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>
-                                          {isCredit ? '+' : '-'} {tx.amount?.currency} {(tx.amount?.value / 100).toFixed(2)}
-                                      </p>
-                                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tx.status}</span>
+                                  <div className="text-right flex items-center gap-4">
+                                      <div>
+                                          <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>
+                                              {isCredit ? '+' : '-'} {tx.amount?.currency} {(tx.amount?.value / 100).toFixed(2)}
+                                          </p>
+                                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tx.status}</span>
+                                      </div>
+                                      <button onClick={() => handleShareReceipt(tx)} className="text-slate-400 hover:text-blue-600 transition p-2 rounded-full hover:bg-white" title="Copy Receipt">
+                                          <Share2 size={16} />
+                                      </button>
                                   </div>
                               </div>
                           );
@@ -422,8 +451,17 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Convert Currency</h2>
-            <p className="text-sm text-slate-500 mb-6">Move funds from USD to SLE instantly.</p>
-            <input type="number" placeholder="Amount (USD)" value={convertAmount} onChange={(e) => setConvertAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-6 outline-none focus:border-indigo-500" />
+            <p className="text-sm text-slate-500 mb-6">Current Rate: 1 USD = SLE {exchangeRate}</p>
+            
+            <input type="number" placeholder="Amount (USD)" value={convertAmount} onChange={(e) => setConvertAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-4 outline-none focus:border-indigo-500" />
+            
+            {convertAmount && Number(convertAmount) > 0 && (
+              <div className="bg-indigo-50 text-indigo-800 p-4 rounded-xl mb-6 text-center shadow-inner">
+                 <span className="text-xs font-bold uppercase tracking-wider opacity-70 block mb-1">You will receive</span>
+                 <span className="text-xl font-bold">SLE {(Number(convertAmount) * exchangeRate).toFixed(2)}</span>
+              </div>
+            )}
+
             <button onClick={executeConvert} disabled={isProcessingConvert || !convertAmount} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
               {isProcessingConvert ? <Loader2 className="animate-spin" size={20} /> : <><RefreshCw size={20} /> Convert to SLE</>}
             </button>
