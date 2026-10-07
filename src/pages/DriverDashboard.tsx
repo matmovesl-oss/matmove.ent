@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Car, MapPin, Navigation, Power, User, Phone, Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft, Users, RefreshCw, Plus, Wallet, Activity, Copy, Check, Share2 } from 'lucide-react';
+import { Car, MapPin, Navigation, Power, User, Phone, Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft, Users, RefreshCw, Plus, Wallet, Activity, Copy, Check, Share2, ArrowLeftRight } from 'lucide-react';
 
 export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }: any) {
   if (activeSection === 'trips') return <DriverTrips profile={profile} />;
@@ -13,7 +13,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const [txFilter, setTxFilter] = useState<'recent' | 'all'>('recent');
   const [isCreatingUsd, setIsCreatingUsd] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [exchangeRate, setExchangeRate] = useState(24.68);
+  const [exchangeRateUsdToSle, setExchangeRateUsdToSle] = useState(24.68);
 
   const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
   const [isOnline, setIsOnline] = useState(false);
@@ -40,7 +40,9 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
+  // 🔴 2-WAY CONVERT STATES
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
+  const [convertDirection, setConvertDirection] = useState<'USD_TO_SLE' | 'SLE_TO_USD'>('USD_TO_SLE');
   const [convertAmount, setConvertAmount] = useState('');
   const [isProcessingConvert, setIsProcessingConvert] = useState(false);
 
@@ -52,7 +54,7 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
 
   useEffect(() => {
     supabase.from('exchange_rates').select('*').eq('from_currency', 'USD').eq('to_currency', 'SLE').maybeSingle().then(({data}) => {
-      if (data) setExchangeRate(data.rate);
+      if (data) setExchangeRateUsdToSle(Number(data.rate));
     });
   }, []);
 
@@ -205,13 +207,22 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   const executeTransfer = async () => {
     const amt = Number(transferAmount);
     if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (!transferRecipient.trim() || !transferRecipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID');
+    const recipient = transferRecipient.trim();
+
+    if (usdWallet?.monime_account_id && recipient === usdWallet.monime_account_id) {
+       alert("To move funds between your SLE and USD wallets, please use the Convert button.");
+       setIsTransferModalOpen(false);
+       setIsConvertModalOpen(true);
+       return;
+    }
+
+    if (!recipient || !recipient.startsWith('fac-')) return alert('Enter a valid MatMove Account ID');
 
     setIsProcessingTransfer(true);
     try {
       const res = await fetch('/api/create-monime-transfer', { 
         method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: transferRecipient.trim() }) 
+        body: JSON.stringify({ amount: amt, userId: profile.id, recipientAccountId: recipient }) 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
@@ -221,16 +232,21 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
   };
 
   const executeConvert = async () => {
-    if (!convertAmount || Number(convertAmount) <= 0) return alert('Enter a valid USD amount');
+    const amt = Number(convertAmount);
+    if (!amt || amt <= 0) return alert('Enter a valid amount');
     setIsProcessingConvert(true);
+
+    const fromCurrency = convertDirection === 'USD_TO_SLE' ? 'USD' : 'SLE';
+    const toCurrency = convertDirection === 'USD_TO_SLE' ? 'SLE' : 'USD';
+
     try {
       const res = await fetch('/api/convert-currency', { 
         method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ amountUsd: convertAmount, userId: profile.id }) 
+        body: JSON.stringify({ userId: profile.id, fromCurrency, toCurrency, amount: amt }) 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Conversion failed');
-      alert(`Successfully converted USD to SLE!`);
+      alert(`Successfully converted ${fromCurrency} to ${toCurrency}!`);
       closeModals();
       fetchLiveBalance(); 
     } catch (err: any) { alert(err.message); setIsProcessingConvert(false); }
@@ -445,25 +461,39 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
         </div>
       )}
 
-      {/* CONVERT MODAL */}
+      {/* 🔴 2-WAY CONVERT MODAL */}
       {isConvertModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Convert Currency</h2>
-            <p className="text-sm text-slate-500 mb-6">Current Rate: 1 USD = SLE {exchangeRate}</p>
+            <p className="text-sm text-slate-500 mb-4">Rate: 1 USD = SLE {exchangeRateUsdToSle}</p>
             
-            <input type="number" placeholder="Amount (USD)" value={convertAmount} onChange={(e) => setConvertAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-4 outline-none focus:border-indigo-500" />
+            <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
+               <button onClick={() => setConvertDirection('USD_TO_SLE')} className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${convertDirection === 'USD_TO_SLE' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>
+                  USD ➔ SLE
+               </button>
+               <button onClick={() => setConvertDirection('SLE_TO_USD')} className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${convertDirection === 'SLE_TO_USD' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>
+                  SLE ➔ USD
+               </button>
+            </div>
+
+            <input type="number" placeholder={`Amount (${convertDirection === 'USD_TO_SLE' ? 'USD' : 'SLE'})`} value={convertAmount} onChange={(e) => setConvertAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-2xl text-center mb-4 outline-none focus:border-indigo-500" />
             
             {convertAmount && Number(convertAmount) > 0 && (
               <div className="bg-indigo-50 text-indigo-800 p-4 rounded-xl mb-6 text-center shadow-inner">
                  <span className="text-xs font-bold uppercase tracking-wider opacity-70 block mb-1">You will receive</span>
-                 <span className="text-xl font-bold">SLE {(Number(convertAmount) * exchangeRate).toFixed(2)}</span>
+                 <span className="text-xl font-bold">
+                    {convertDirection === 'USD_TO_SLE' 
+                      ? `SLE ${(Number(convertAmount) * exchangeRateUsdToSle).toFixed(2)}`
+                      : `USD ${(Number(convertAmount) / exchangeRateUsdToSle).toFixed(2)}`
+                    }
+                 </span>
               </div>
             )}
 
             <button onClick={executeConvert} disabled={isProcessingConvert || !convertAmount} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessingConvert ? <Loader2 className="animate-spin" size={20} /> : <><RefreshCw size={20} /> Convert to SLE</>}
+              {isProcessingConvert ? <Loader2 className="animate-spin" size={20} /> : <><ArrowLeftRight size={20} /> Convert Now</>}
             </button>
           </div>
         </div>

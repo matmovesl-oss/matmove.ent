@@ -4,46 +4,85 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   try {
-    const { userId, amountUsd } = req.body;
-    if (!userId || !amountUsd) return res.status(400).json({ error: 'Missing parameters' });
+    const { userId, fromCurrency = 'USD', toCurrency = 'SLE', amount } = req.body;
+    const numAmount = Number(amount);
+
+    if (!userId || !numAmount || numAmount <= 0) {
+      return res.status(400).json({ error: 'Invalid conversion parameters.' });
+    }
+
+    const sourceCurr = String(fromCurrency).toUpperCase();
+    const targetCurr = String(toCurrency).toUpperCase();
+
+    if (sourceCurr === targetCurr) {
+      return res.status(400).json({ error: 'Source and target currencies must be different.' });
+    }
 
     const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch both wallets
-    const { data: wallets } = await supabase.from('wallets').select('*').eq('user_id', userId);
-    const sleWallet = wallets.find(w => w.currency === 'SLE');
-    const usdWallet = wallets.find(w => w.currency === 'USD');
+    // 1. Fetch live rate from exchange_rates table
+    const { data: rateData } = await supabase
+      .from('exchange_rates')
+      .select('*')
+      .eq('from_currency', sourceCurr)
+      .eq('to_currency', targetCurr)
+      .maybeSingle();
 
-    if (!sleWallet?.monime_account_id || !usdWallet?.monime_account_id) {
-       return res.status(400).json({ error: 'Both SLE and USD wallets must be active.' });
+    let rate = sourceCurr === 'USD' ? 24.68 : (1 / 24.68);
+    if (rateData && rateData.rate) {
+      rate = Number(rateData.rate);
     }
 
-    // Hit Monime Transfer endpoint to handle the internal FX swap
-    const transferPayload = {
-        sourceAccountId: usdWallet.monime_account_id,
-        destinationAccountId: sleWallet.monime_account_id,
-        amount: { currency: 'USD', value: Math.round(Number(amountUsd) * 100) },
-        description: 'Internal Wallet Conversion (USD to SLE)'
-    };
+    const convertedAmount = numAmount * rate;
 
-    const monimeRes = await fetch('https://api.monime.io/v1/transfers', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${process.env.MONIME_API_KEY || process.env.VITE_MONIME_API_KEY}`,
-            'Monime-Space-Id': process.env.MONIME_SPACE_ID || process.env.VITE_MONIME_SPACE_ID,
-            'Content-Type': 'application/json',
-            'Idempotency-Key': `convert-${userId}-${Date.now()}`
-        },
-        body: JSON.stringify(transferPayload)
+    // 2. Fetch user wallets
+    const { data: wallets, error: wErr } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (wErr || !wallets || wallets.length === 0) {
+      return res.status(400).json({ error: 'Wallets not found for user.' });
+    }
+
+    const sourceWallet = wallets.find(w => String(w.currency).toUpperCase() === sourceCurr);
+    const targetWallet = wallets.find(w => String(w.currency).toUpperCase() === targetCurr);
+
+    if (!sourceWallet || !targetWallet) {
+      return res.status(400).json({ error: `Both ${sourceCurr} and ${targetCurr} wallets must be active.` });
+    }
+
+    if (Number(sourceWallet.balance || 0) < numAmount) {
+      return res.status(400).json({ error: `Insufficient ${sourceCurr} balance. Available: ${sourceCurr} ${Number(sourceWallet.balance || 0).toFixed(2)}` });
+    }
+
+    // 3. Update Supabase balances
+    const newSourceBal = Number(sourceWallet.balance) - numAmount;
+    const newTargetBal = Number(targetWallet.balance) + convertedAmount;
+
+    const { error: srcErr } = await supabase
+      .from('wallets')
+      .update({ balance: newSourceBal, updated_at: new Date().toISOString() })
+      .eq('id', sourceWallet.id);
+    if (srcErr) throw srcErr;
+
+    const { error: tgtErr } = await supabase
+      .from('wallets')
+      .update({ balance: newTargetBal, updated_at: new Date().toISOString() })
+      .eq('id', targetWallet.id);
+    if (tgtErr) throw tgtErr;
+
+    return res.status(200).json({
+      success: true,
+      convertedAmount: convertedAmount.toFixed(2),
+      rate: rate,
+      sourceBalance: newSourceBal.toFixed(2),
+      targetBalance: newTargetBal.toFixed(2)
     });
-
-    const data = await monimeRes.json();
-    if (!monimeRes.ok) throw new Error(data.message || 'Conversion failed at gateway');
-
-    return res.status(200).json({ success: true, result: data });
-  } catch(e) {
-    return res.status(500).json({ error: e.message });
+  } catch (error) {
+    console.error('Convert API Error:', error);
+    return res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 }
