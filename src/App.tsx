@@ -20,7 +20,7 @@ import {
 import { RiderDashboard } from '@/pages/RiderDashboard';
 import { DriverDashboard } from '@/pages/DriverDashboard';
 import { MerchantDashboard } from '@/pages/MerchantDashboard';
-import { UserCircle, LogOut, MessageSquare, ShieldAlert, Home, Wallet, Navigation, ShoppingBag, Store, LockKeyhole, Delete, ShoppingCart, ArrowRight, Loader2 } from 'lucide-react';
+import { UserCircle, LogOut, MessageSquare, ShieldAlert, Home, Wallet, Navigation, ShoppingBag, Store, LockKeyhole, Delete, ShoppingCart, ArrowRight, Loader2, Trash2 } from 'lucide-react';
 
 type PortalSection = 'home' | 'wallet' | 'trips' | 'shop' | 'inventory' | 'account';
 type CustomerRole = 'rider' | 'driver' | 'merchant';
@@ -190,7 +190,7 @@ function AccountSection({ profile, wallet, loggingOut, onLogout, onBack }: any) 
   const fetchCart = async () => {
     if (profile.role !== 'rider') return;
     const { data } = await supabase.from('cart_items').select('*, product:product_id(*)').eq('rider_id', profile.id);
-    if (data) setCartItems(data);
+    if (data) setCartItems(Array.isArray(data) ? data : []);
   };
 
   useEffect(() => { fetchCart(); }, [profile.id]);

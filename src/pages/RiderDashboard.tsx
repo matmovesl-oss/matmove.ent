@@ -54,6 +54,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
+  // 🔴 2-WAY CONVERT STATES
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [convertDirection, setConvertDirection] = useState<'USD_TO_SLE' | 'SLE_TO_USD'>('USD_TO_SLE');
   const [convertAmount, setConvertAmount] = useState('');
@@ -176,7 +177,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       const resizeObserver = new ResizeObserver(() => {
           map.current?.resize();
       });
-      resizeObserver.observe(mapContainer.current);
+      if (mapContainer.current) resizeObserver.observe(mapContainer.current);
 
       if (navigator.geolocation) {
          navigator.geolocation.getCurrentPosition(async (pos) => {
@@ -459,6 +460,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
+        
+        {/* 🔴 HOME TAB ONLY: MAP AND REQUEST FORM */}
         {activeSection === 'home' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit z-20">
@@ -587,7 +590,9 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                 </div>
               )}
             </div>
-            <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] border border-slate-200 shadow-inner z-0 flex flex-col">
+            
+            {/* 🔴 MAP CONTAINER WITH EXPLICIT PIXEL HEIGHT SO MAPBOX WEB ALWAYS RENDERS */}
+            <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] h-[500px] lg:h-[700px] w-full border border-slate-200 shadow-inner z-0 flex flex-col">
               <div ref={mapContainer} className="absolute inset-0 w-full h-full flex-1" />
             </div>
           </div>
@@ -768,19 +773,26 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   );
 }
 
-// 🔴 SHOP ENGINE: CART, IN-APP ORDERS, WHATSAPP, AND SHARE
+// 🔴 SHOP ENGINE: SMART FALLBACK TO FIX "EMPTY SHOP" ERROR
 function RiderShop({ profile, wallet }: any) {
   const [products, setProducts] = useState<any[]>([]);
 
-  useEffect(() => { 
-    supabase.from('products').select('*, merchant:merchant_id(business_name, whatsapp_number)').order('created_at', { ascending: false }).then(({data}) => { 
-       const validProducts = Array.isArray(data) ? data : [];
-       setProducts(validProducts); 
-    }); 
-  }, []);
+  const fetchShopProducts = async () => {
+     // Smart fallback logic to bypass strict foreign key issues in Supabase
+     const { data, error } = await supabase.from('products').select('*, merchant:merchant_id(business_name, whatsapp_number)').order('created_at', { ascending: false });
+     if (error || !data) {
+        // Fallback: If relation fails, just get the products directly
+        const fallback = await supabase.from('products').select('*').order('created_at', { ascending: false });
+        if (fallback.data) setProducts(Array.isArray(fallback.data) ? fallback.data : []);
+     } else {
+        setProducts(Array.isArray(data) ? data : []);
+     }
+  };
+
+  useEffect(() => { fetchShopProducts(); }, []);
 
   const handleWhatsAppRedirect = (product: any) => {
-    const merchantPhone = product.merchant?.whatsapp_number || WHATSAPP_NUMBER;
+    const merchantPhone = product.merchant?.whatsapp_number || product.whatsapp_number || WHATSAPP_NUMBER;
     const message = encodeURIComponent(`Hello! I would like to order: *${product.name}* (SLE ${product.price}).`);
     window.open(`https://wa.me/${merchantPhone}?text=${message}`, '_blank');
   };
