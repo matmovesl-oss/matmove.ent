@@ -20,7 +20,7 @@ import {
 import { RiderDashboard } from '@/pages/RiderDashboard';
 import { DriverDashboard } from '@/pages/DriverDashboard';
 import { MerchantDashboard } from '@/pages/MerchantDashboard';
-import { UserCircle, LogOut, MessageSquare, ShieldAlert, Home, Wallet, Navigation, ShoppingBag, Store, LockKeyhole, Delete, ShoppingCart, ArrowRight, Loader2, Trash2, BarChart2, MapPin, Phone, Clock } from 'lucide-react';
+import { UserCircle, LogOut, MessageSquare, ShieldAlert, Home, Wallet, Navigation, ShoppingBag, Store, LockKeyhole, Delete, ShoppingCart, ArrowRight, Loader2, Trash2, BarChart2, MapPin, Phone, Clock, TrendingUp, DollarSign, CheckCircle2, AlertCircle } from 'lucide-react';
 
 type PortalSection = 'home' | 'wallet' | 'trips' | 'shop' | 'inventory' | 'account';
 type CustomerRole = 'rider' | 'driver' | 'merchant';
@@ -184,68 +184,93 @@ function AccountSection({ profile, wallet, loggingOut, onLogout, onBack }: any) 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePin, setDeletePin] = useState('');
   
-  // 🔴 CART & ORDERS SYSTEM (Rider)
+  // 🔴 CLICK-THROUGH OVERLAY STATES
+  const [viewingAnalytics, setViewingAnalytics] = useState(false);
+  const [analyticsTimeframe, setAnalyticsTimeframe] = useState<'daily'|'weekly'|'monthly'>('daily');
+  const [analyticsData, setAnalyticsData] = useState<any>({ primaryMetric: 0, completed: 0, pending: 0, totalCount: 0 });
+
+  // Rider Cart/Orders Overlay States
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [riderOrders, setRiderOrders] = useState<any[]>([]);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
-  
-  // Rider "Click Through" Page States
   const [viewingCartOrders, setViewingCartOrders] = useState(false);
   const [cartOrderTab, setCartOrderTab] = useState<'cart'|'orders'>('cart');
   const [orderFilter, setOrderFilter] = useState<'all'|'pending'|'completed'>('all');
-  
-  // Cart Checkout Form States
   const [cartLocation, setCartLocation] = useState('');
   const [cartPhone, setCartPhone] = useState(profile?.phone || profile?.phone_number || '');
 
-  // 🔴 MERCHANT ANALYTICS STATE
-  const [timeframe, setTimeframe] = useState<'daily'|'weekly'|'monthly'>('daily');
-  const [analytics, setAnalytics] = useState({ revenue: 0, completedOrders: 0, pendingOrders: 0 });
-
   const fetchCartAndOrders = async () => {
     if (profile.role !== 'rider') return;
-    
-    // Fetch Cart
     const { data: cartData } = await supabase.from('cart_items').select('*, product:product_id(*)').eq('rider_id', profile.id);
     if (cartData) setCartItems(Array.isArray(cartData) ? cartData : []);
 
-    // Fetch Orders for the Rider
     const { data: orderData } = await supabase.from('app_orders').select('*, merchant:merchant_id(business_name, full_name)').eq('rider_id', profile.id).order('created_at', { ascending: false });
     if (orderData) setRiderOrders(Array.isArray(orderData) ? orderData : []);
   };
 
-  const fetchMerchantAnalytics = async () => {
-    if (profile.role !== 'merchant') return;
-    
+  const fetchAnalytics = async () => {
     const now = new Date();
     let timeLimit = new Date();
-    if (timeframe === 'daily') timeLimit.setHours(0,0,0,0);
-    if (timeframe === 'weekly') timeLimit.setDate(now.getDate() - 7);
-    if (timeframe === 'monthly') timeLimit.setDate(1);
+    if (analyticsTimeframe === 'daily') timeLimit.setHours(0,0,0,0);
+    if (analyticsTimeframe === 'weekly') timeLimit.setDate(now.getDate() - 7);
+    if (analyticsTimeframe === 'monthly') timeLimit.setDate(1);
 
-    const { data } = await supabase.from('app_orders')
-      .select('*')
-      .eq('merchant_id', profile.id)
-      .gte('created_at', timeLimit.toISOString());
+    if (profile.role === 'merchant') {
+      const { data } = await supabase.from('app_orders')
+        .select('*')
+        .eq('merchant_id', profile.id)
+        .gte('created_at', timeLimit.toISOString());
 
-    if (data && Array.isArray(data)) {
-      let rev = 0, comp = 0, pend = 0;
-      data.forEach((o: any) => {
-        if (o.status === 'completed') {
-          rev += Number(o.price || 0);
-          comp += 1;
-        } else {
-          pend += 1;
-        }
+      if (data && Array.isArray(data)) {
+        let rev = 0, comp = 0, pend = 0;
+        data.forEach((o: any) => {
+          if (o.status === 'completed') { rev += Number(o.price || 0); comp += 1; }
+          else { pend += 1; }
+        });
+        setAnalyticsData({ primaryMetric: rev, completed: comp, pending: pend, totalCount: data.length });
+      }
+    } else if (profile.role === 'driver') {
+      const { data } = await supabase.from('bookings')
+        .select('*')
+        .eq('driver_id', profile.id)
+        .gte('created_at', timeLimit.toISOString());
+
+      if (data && Array.isArray(data)) {
+        let earnings = 0, comp = 0, pend = 0;
+        data.forEach((b: any) => {
+          if (b.status === 'completed') { earnings += (Number(b.fare_amount || 0) * 0.85); comp += 1; }
+          else if (b.status === 'accepted' || b.status === 'in_progress') { pend += 1; }
+        });
+        setAnalyticsData({ primaryMetric: earnings, completed: comp, pending: pend, totalCount: data.length });
+      }
+    } else if (profile.role === 'rider') {
+      const { data: orders } = await supabase.from('app_orders')
+        .select('*')
+        .eq('rider_id', profile.id)
+        .gte('created_at', timeLimit.toISOString());
+
+      const { data: bookings } = await supabase.from('bookings')
+        .select('*')
+        .eq('rider_id', profile.id)
+        .gte('created_at', timeLimit.toISOString());
+
+      let spent = 0, comp = 0, pend = 0;
+      (orders || []).forEach((o: any) => {
+        if (o.status === 'completed') { spent += Number(o.price || 0); comp += 1; }
+        else { pend += 1; }
       });
-      setAnalytics({ revenue: rev, completedOrders: comp, pendingOrders: pend });
+      (bookings || []).forEach((b: any) => {
+        if (b.status === 'completed') { spent += Number(b.fare_amount || 0); comp += 1; }
+        else if (b.status === 'pending' || b.status === 'accepted' || b.status === 'in_progress') { pend += 1; }
+      });
+      setAnalyticsData({ primaryMetric: spent, completed: comp, pending: pend, totalCount: (orders?.length || 0) + (bookings?.length || 0) });
     }
   };
 
   useEffect(() => { 
     if (profile.role === 'rider') fetchCartAndOrders(); 
-    if (profile.role === 'merchant') fetchMerchantAnalytics();
-  }, [profile.id, timeframe, viewingCartOrders]);
+    if (viewingAnalytics) fetchAnalytics();
+  }, [profile.id, analyticsTimeframe, viewingAnalytics, viewingCartOrders]);
 
   const handleDeleteAccount = () => {
     if (deletePin !== profile.passcode) return alert("Incorrect Passcode");
@@ -264,7 +289,6 @@ function AccountSection({ profile, wallet, loggingOut, onLogout, onBack }: any) 
 
     setIsCheckingOut(true);
     try {
-      // Create orders for each cart item WITHOUT deducting from the wallet instantly
       for (const item of cartItems) {
          await supabase.from('app_orders').insert({
             rider_id: profile.id,
@@ -278,13 +302,11 @@ function AccountSection({ profile, wallet, loggingOut, onLogout, onBack }: any) 
          });
       }
       
-      // Clear the cart
       await supabase.from('cart_items').delete().eq('rider_id', profile.id);
       alert('Orders successfully submitted to the merchants!');
-      
       setCartLocation('');
       await fetchCartAndOrders();
-      setCartOrderTab('orders'); // Auto-switch to the orders tab so they can see it
+      setCartOrderTab('orders');
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -295,11 +317,53 @@ function AccountSection({ profile, wallet, loggingOut, onLogout, onBack }: any) 
   const cartTotal = cartItems.reduce((sum, item) => sum + (Number(item.product?.price) * (item.quantity || 1)), 0);
   const filteredRiderOrders = riderOrders.filter(o => orderFilter === 'all' ? true : o.status === orderFilter);
 
-  // 🔴 RIDER: CLICK-THROUGH NEW PAGE FOR CART & ORDERS
+  // 🔴 DEDICATED ANALYTICS SCREEN OVERLAY
+  if (viewingAnalytics) {
+    const title = profile.role === 'merchant' ? 'Business Analytics' : profile.role === 'driver' ? 'Driving Analytics' : 'Rider Activity Analytics';
+    const primaryLabel = profile.role === 'merchant' ? 'Total Revenue' : profile.role === 'driver' ? 'Take-Home Earnings' : 'Total Spent';
+
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+        <button onClick={() => setViewingAnalytics(false)} className="text-sm font-semibold text-slate-500 hover:text-blue-600 transition mb-5 flex items-center gap-2">← Back to Profile</button>
+        <div className="flex justify-between items-center mb-6">
+           <h1 className="text-3xl font-bold text-slate-900">{title}</h1>
+           <select value={analyticsTimeframe} onChange={(e: any) => setAnalyticsTimeframe(e.target.value)} className="bg-white border border-slate-200 text-sm font-bold p-2.5 rounded-xl outline-none cursor-pointer text-slate-700 shadow-sm">
+             <option value="daily">Today</option>
+             <option value="weekly">This Week</option>
+             <option value="monthly">This Month</option>
+           </select>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+           <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl">
+             <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-2"><DollarSign size={16} className="text-emerald-400"/> {primaryLabel}</div>
+             <div className="text-3xl font-bold text-emerald-400">SLE {analyticsData.primaryMetric.toFixed(2)}</div>
+           </div>
+           <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm">
+             <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider mb-2"><CheckCircle2 size={16} className="text-emerald-600"/> Completed</div>
+             <div className="text-3xl font-bold text-slate-900">{analyticsData.completed}</div>
+           </div>
+           <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm">
+             <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wider mb-2"><AlertCircle size={16} className="text-amber-500"/> Pending / Active</div>
+             <div className="text-3xl font-bold text-slate-900">{analyticsData.pending}</div>
+           </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+           <h3 className="font-bold text-slate-900 text-lg mb-4 flex items-center gap-2"><TrendingUp size={20} className="text-blue-600"/> Summary Breakdown</h3>
+           <p className="text-sm text-slate-500">
+             During this {analyticsTimeframe} period, you processed a total of <strong>{analyticsData.totalCount}</strong> transactions across the MatMove platform.
+           </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔴 RIDER CART & ORDERS SCREEN OVERLAY
   if (viewingCartOrders && profile.role === 'rider') {
      return (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-           <button onClick={() => setViewingCartOrders(false)} className="text-sm font-semibold text-slate-500 hover:text-blue-600 transition mb-5 flex items-center gap-2">← Back to Account Profile</button>
+           <button onClick={() => setViewingCartOrders(false)} className="text-sm font-semibold text-slate-500 hover:text-blue-600 transition mb-5 flex items-center gap-2">← Back to Profile</button>
            <h1 className="text-3xl font-bold text-slate-900 mb-6">Shop Activity</h1>
 
            <div className="flex bg-slate-200 p-1 rounded-xl mb-6 w-full sm:w-fit">
@@ -409,35 +473,21 @@ function AccountSection({ profile, wallet, loggingOut, onLogout, onBack }: any) 
         </div>
       </div>
 
-      {/* 🔴 MERCHANT DASHBOARD WIDGET */}
-      {profile.role === 'merchant' && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 mb-6 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2"><BarChart2 className="text-blue-600" size={20} /> Business Analytics</h2>
-             <select value={timeframe} onChange={(e: any) => setTimeframe(e.target.value)} className="bg-slate-50 border border-slate-200 text-sm font-bold p-2 rounded-lg outline-none cursor-pointer text-slate-700">
-               <option value="daily">Today</option>
-               <option value="weekly">This Week</option>
-               <option value="monthly">This Month</option>
-             </select>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-             <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-               <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-1">Total Revenue</p>
-               <p className="text-2xl font-bold text-slate-900">SLE {analytics.revenue.toFixed(2)}</p>
-             </div>
-             <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
-               <p className="text-xs text-emerald-600 font-bold uppercase tracking-wider mb-1">Completed Orders</p>
-               <p className="text-2xl font-bold text-slate-900">{analytics.completedOrders}</p>
-             </div>
-             <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 col-span-2 md:col-span-1">
-               <p className="text-xs text-amber-600 font-bold uppercase tracking-wider mb-1">Pending Orders</p>
-               <p className="text-2xl font-bold text-slate-900">{analytics.pendingOrders}</p>
-             </div>
-          </div>
-        </div>
-      )}
+      {/* 🔴 ROLE-SPECIFIC ANALYTICS CLICK-THROUGH BUTTON */}
+      <button onClick={() => setViewingAnalytics(true)} className="w-full bg-white border border-slate-200 rounded-3xl p-6 mb-6 flex justify-between items-center hover:bg-slate-50 transition shadow-sm group">
+         <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform"><BarChart2 size={24} /></div>
+            <div className="text-left">
+               <h2 className="text-lg font-bold text-slate-900">
+                 {profile.role === 'merchant' ? 'Business Analytics' : profile.role === 'driver' ? 'Driving Analytics' : 'Rider Analytics'}
+               </h2>
+               <p className="text-sm text-slate-500 mt-0.5">View full performance breakdown, earnings & reports</p>
+            </div>
+         </div>
+         <ArrowRight className="text-slate-400 group-hover:text-blue-600 transition" />
+      </button>
 
-      {/* 🔴 RIDER CART WIDGET - NOW A CLICK THROUGH BUTTON */}
+      {/* 🔴 RIDER CART & ORDERS CLICK-THROUGH BUTTON */}
       {profile.role === 'rider' && (
         <button onClick={() => setViewingCartOrders(true)} className="w-full bg-white border border-slate-200 rounded-3xl p-6 mb-6 flex justify-between items-center hover:bg-slate-50 transition shadow-sm group">
            <div className="flex items-center gap-4">
