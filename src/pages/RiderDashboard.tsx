@@ -7,9 +7,6 @@ import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, 
 const WHATSAPP_NUMBER = "23290330362";
 
 export function RiderDashboard({ profile, wallet, activeSection }: any) {
-  if (activeSection === 'shop') return <RiderShop profile={profile} wallet={wallet} />;
-  if (activeSection === 'trips') return <RiderTrips profile={profile} />;
-
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [usdWallet, setUsdWallet] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -68,6 +65,10 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
+
+  useEffect(() => {
+    setSleWallet(wallet);
+  }, [wallet]);
 
   useEffect(() => {
     supabase.from('exchange_rates').select('*').eq('from_currency', 'USD').eq('to_currency', 'SLE').maybeSingle().then(({data}) => {
@@ -167,7 +168,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
   };
 
-  // 🔴 SAFE Geolocation + Responsive Map Fixes
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
     try {
@@ -202,19 +202,20 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                });
                markers.current.push(marker);
             },
-            (error) => {
-               console.warn("Geolocation blocked or failed. Using default Freetown location.", error);
-            },
+            (error) => { console.warn("Geolocation blocked/failed. Using default Freetown location.", error); },
             { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
          );
       }
     } catch (e) { console.error('Mapbox error:', e); }
   }, []);
 
+  if (activeSection === 'shop') return <RiderShop profile={profile} wallet={sleWallet || wallet} />;
+  if (activeSection === 'trips') return <RiderTrips profile={profile} />;
+
   const searchPlaces = (query: string, type: 'pickup' | 'destination') => {
     if (type === 'pickup') { setPickup(query); setPickupCoords(null); } else { setDestination(query); setDestinationCoords(null); }
     if (query.trim().length < 3) { type === 'pickup' ? setPickupSuggestions([]) : setDestinationSuggestions([]); return; }
-    if (!window.google) return; // 🔴 MOBILE SAFETY FIX
+    if (!window.google) return;
     // @ts-ignore
     const autocomplete = new window.google.maps.places.AutocompleteService();
     autocomplete.getPlacePredictions({ input: query, componentRestrictions: { country: 'sl' } }, (predictions: any, status: any) => {
@@ -226,7 +227,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   };
 
   const handleSelectPlace = (placeId: string, description: string, type: 'pickup' | 'destination') => {
-    if (!window.google) return; // 🔴 MOBILE SAFETY FIX
+    if (!window.google) return;
     // @ts-ignore
     const geocoder = new window.google.maps.Geocoder();
     geocoder.geocode({ placeId }, (results: any, status: any) => {
@@ -462,8 +463,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
-        
-        {/* 🔴 HOME TAB ONLY: MAP AND REQUEST FORM */}
         {activeSection === 'home' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit z-20">
@@ -593,7 +592,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
               )}
             </div>
             
-            {/* 🔴 RESPONSIVE MAP CONTAINER FIX FOR ALL MOBILE SIZES */}
             <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[300px] h-[350px] md:h-[450px] lg:h-[600px] w-full border border-slate-200 shadow-inner z-0 flex flex-col">
               <div ref={mapContainer} className="absolute inset-0 w-full h-full flex-1" />
             </div>
@@ -775,15 +773,26 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   );
 }
 
-// 🔴 SHOP ENGINE: SMART FALLBACK TO FIX "EMPTY SHOP" ERROR
+// 🔴 SHOP ENGINE: DEBITS RIDER SLE WALLET & CREDITS MERCHANT SLE WALLET IN SUPABASE
 function RiderShop({ profile, wallet }: any) {
   const [products, setProducts] = useState<any[]>([]);
+  const [liveWallet, setLiveWallet] = useState<any>(wallet);
+
+  useEffect(() => {
+    setLiveWallet(wallet);
+  }, [wallet]);
+
+  useEffect(() => {
+    if (profile?.id) {
+      supabase.from('wallets').select('*').eq('user_id', profile.id).eq('currency', 'SLE').maybeSingle().then(({ data }) => {
+        if (data) setLiveWallet(data);
+      });
+    }
+  }, [profile?.id]);
 
   const fetchShopProducts = async () => {
-     // Smart fallback logic to bypass strict foreign key issues in Supabase
      const { data, error } = await supabase.from('products').select('*, merchant:merchant_id(business_name, whatsapp_number)').order('created_at', { ascending: false });
      if (error || !data) {
-        // Fallback: If relation fails, just get the products directly
         const fallback = await supabase.from('products').select('*').order('created_at', { ascending: false });
         if (fallback.data) setProducts(Array.isArray(fallback.data) ? fallback.data : []);
      } else {
@@ -816,25 +825,61 @@ function RiderShop({ profile, wallet }: any) {
   };
 
   const handleOrderInApp = async (product: any) => {
-    if (!wallet || (wallet.balance || 0) < Number(product.price)) {
-      return alert(`Insufficient SLE balance to buy ${product.name}. Please load your wallet.`);
+    const currentBalance = Number(liveWallet?.balance || 0);
+    const itemPrice = Number(product.price || 0);
+
+    if (currentBalance < itemPrice) {
+      return alert(`Insufficient SLE balance to buy ${product.name}. Available: SLE ${currentBalance.toFixed(2)}. Please load your wallet.`);
     }
-    if (!confirm(`Are you sure you want to purchase ${product.name} for SLE ${product.price}? Funds will be securely held in Escrow.`)) return;
-    
+
+    if (!confirm(`Are you sure you want to purchase ${product.name} for SLE ${itemPrice.toFixed(2)}? Funds will be deducted from your wallet.`)) return;
+
     try {
-      await supabase.from('app_orders').insert({
+      // 1. Record the order in app_orders
+      const { error: orderErr } = await supabase.from('app_orders').insert({
         rider_id: profile.id,
         merchant_id: product.merchant_id,
         product_name: product.name,
-        price: Number(product.price),
+        price: itemPrice,
         quantity: 1,
         status: 'pending'
       });
-      const newBal = Number(wallet.balance) - Number(product.price);
-      await supabase.from('wallets').update({ balance: newBal }).eq('id', wallet.id);
-      alert('Order placed successfully! The merchant has been notified.');
+
+      if (orderErr) throw orderErr;
+
+      // 2. Debit Rider SLE Wallet in Supabase
+      const newRiderBal = currentBalance - itemPrice;
+      if (liveWallet?.id) {
+        const { error: walletErr } = await supabase
+          .from('wallets')
+          .update({ balance: newRiderBal, updated_at: new Date().toISOString() })
+          .eq('id', liveWallet.id);
+        if (walletErr) throw walletErr;
+      }
+
+      // 3. Credit Merchant SLE Wallet in Supabase
+      if (product.merchant_id) {
+        const { data: merchantWallet } = await supabase
+          .from('wallets')
+          .select('*')
+          .eq('user_id', product.merchant_id)
+          .eq('currency', 'SLE')
+          .maybeSingle();
+
+        if (merchantWallet) {
+          const newMerchantBal = Number(merchantWallet.balance || 0) + itemPrice;
+          await supabase
+            .from('wallets')
+            .update({ balance: newMerchantBal, updated_at: new Date().toISOString() })
+            .eq('id', merchantWallet.id);
+        }
+      }
+
+      alert(`Order placed successfully! SLE ${itemPrice.toFixed(2)} transferred to merchant.`);
       window.location.reload();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) {
+      alert(`Order failed: ${e.message}`);
+    }
   };
 
   return (
