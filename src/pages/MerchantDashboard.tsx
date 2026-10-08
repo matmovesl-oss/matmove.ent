@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, Minus, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ArrowRight, Trash2, Wallet, Activity, Copy, Check, Share2, ArrowLeftRight, Image as ImageIcon, User } from 'lucide-react';
+import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, Minus, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ArrowRight, Trash2, Wallet, Activity, Copy, Check, Share2, ArrowLeftRight, Image as ImageIcon, User, MessageCircle } from 'lucide-react';
 
 type ServiceType = 'delivery' | 'ride' | 'scheduled';
 type VehicleType = 'keke' | 'bike' | 'car' | 'van';
@@ -123,6 +123,15 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     return () => { supabase.removeChannel(channel); clearInterval(syncInterval); };
   }, [profile?.id]);
 
+  useEffect(() => {
+    if (!window.google) {
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`;
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  }, []);
+
   const fetchLiveBalance = async () => {
     if (!profile?.id) return;
     setIsRefreshing(true);
@@ -152,18 +161,14 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
   };
 
-  // 🔴 Initialize Mapbox & Auto-Locate User with ResizeObserver Fix
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
     try {
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
       map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 12 });
 
-      // FORCE MAP TO RESIZE PROPERLY ON WEB
-      const resizeObserver = new ResizeObserver(() => {
-          map.current?.resize();
-      });
-      resizeObserver.observe(mapContainer.current);
+      const resizeObserver = new ResizeObserver(() => { map.current?.resize(); });
+      if (mapContainer.current) resizeObserver.observe(mapContainer.current);
 
       if (navigator.geolocation) {
          navigator.geolocation.getCurrentPosition(async (pos) => {
@@ -194,6 +199,13 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       }
     } catch (e) { console.error('Mapbox error:', e); }
   }, []);
+
+  useEffect(() => {
+    if (activeSection === 'home' && map.current) {
+        setTimeout(() => map.current?.resize(), 200);
+        setTimeout(() => map.current?.resize(), 1000);
+    }
+  }, [activeSection]);
 
   const searchPlaces = (query: string, type: 'pickup' | 'destination') => {
     if (type === 'pickup') { setPickup(query); setPickupCoords(null); } else { setDestination(query); setDestinationCoords(null); }
@@ -497,7 +509,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
 
                    <div className="flex justify-between items-center px-1 mt-1">
                      <span className="text-xs text-slate-500 font-bold">{tripDistanceKm ? `Route: ${tripDistanceKm.toFixed(1)} km` : ''}</span>
-                     <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">{isRouting ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />} Preview Route</button>
+                     <button onClick={previewRoute} disabled={isRouting} className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">{isRouting ? <Loader2 size={12} className="animate-spin"/> : <MapPin size={12} />} Preview Route</button>
                    </div>
 
                    {(serviceType === 'ride' || serviceType === 'delivery') && (
@@ -582,7 +594,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
               </div>
             )}
           </div>
-          
+
           <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[300px] h-[350px] md:h-[450px] lg:h-[600px] w-full border border-slate-200 shadow-inner z-0 flex flex-col">
             <div ref={mapContainer} className="absolute inset-0 w-full h-full flex-1" />
           </div>
@@ -763,10 +775,12 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   );
 }
 
+// 🔴 MERCHANT INVENTORY: ADDED ORDER FILTER, WHATSAPP CUSTOMER, AND STATUS TOGGLES
 function MerchantInventory({ profile }: any) {
   const [activeTab, setActiveTab] = useState<'products' | 'orders'>('products');
   const [products, setProducts] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
+  const [orderFilter, setOrderFilter] = useState<'all' | 'pending' | 'completed'>('all');
   
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -776,35 +790,17 @@ function MerchantInventory({ profile }: any) {
   const [isAdding, setIsAdding] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
+  useEffect(() => { fetchProducts(); fetchOrders(); }, [profile.id]);
+
   const fetchProducts = async () => {
-    const { data, error } = await supabase.from('products').select('*, merchant:merchant_id(business_name, whatsapp_number)').order('created_at', { ascending: false });
-    if (error || !data) {
-        const fallback = await supabase.from('products').select('*').order('created_at', { ascending: false });
-        if (fallback.data) setProducts(Array.isArray(fallback.data) ? fallback.data : []);
-    } else {
-        setProducts(Array.isArray(data) ? data : []);
-    }
+    const { data, error } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
+    if (data) setProducts(Array.isArray(data) ? data : []);
   };
 
   const fetchOrders = async () => {
     const { data } = await supabase.from('app_orders').select('*, rider:rider_id(full_name, phone)').eq('merchant_id', profile.id).order('created_at', { ascending: false });
     if (data) setOrders(Array.isArray(data) ? data : []);
   };
-
-  useEffect(() => { 
-    fetchProducts(); 
-    fetchOrders(); 
-
-    // 🔴 REALTIME: Instantly notify merchant of new In-App Orders
-    const orderChannel = supabase.channel('merchant-orders-alerts')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'app_orders', filter: `merchant_id=eq.${profile.id}` }, payload => {
-         alert(`🛒 New Order Alert! You just received a request for ${payload.new.product_name}.`);
-         fetchOrders();
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(orderChannel); };
-  }, [profile.id]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -846,10 +842,20 @@ function MerchantInventory({ profile }: any) {
     fetchProducts();
   };
 
-  const handleCompleteOrder = async (orderId: string) => {
-      await supabase.from('app_orders').update({ status: 'completed' }).eq('id', orderId);
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+      await supabase.from('app_orders').update({ status: newStatus }).eq('id', orderId);
       fetchOrders();
   };
+
+  const handleWhatsAppCustomer = (order: any) => {
+      const phone = order.customer_phone || order.rider?.phone;
+      if (!phone) return alert('No phone number provided for this order.');
+      const formattedPhone = phone.startsWith('+') ? phone.substring(1) : phone;
+      const message = encodeURIComponent(`Hello ${order.rider?.full_name || 'there'}, regarding your MatMove order for ${order.product_name}...`);
+      window.open(`https://wa.me/${formattedPhone}?text=${message}`, '_blank');
+  };
+
+  const displayedOrders = orders.filter(o => orderFilter === 'all' ? true : o.status === orderFilter);
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8">
@@ -908,14 +914,19 @@ function MerchantInventory({ profile }: any) {
           </>
       ) : (
           <div className="space-y-4">
-              {orders.length === 0 ? <p className="text-slate-500 text-center py-10">No orders received yet.</p> : orders.map(o => (
-                  <div key={o.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                     <div>
+              <div className="flex bg-slate-100 p-1 rounded-lg w-fit mb-4">
+                 <button onClick={()=>setOrderFilter('all')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition ${orderFilter==='all'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>All</button>
+                 <button onClick={()=>setOrderFilter('pending')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition ${orderFilter==='pending'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>Pending</button>
+                 <button onClick={()=>setOrderFilter('completed')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition ${orderFilter==='completed'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>Completed</button>
+              </div>
+
+              {displayedOrders.length === 0 ? <p className="text-slate-500 text-center py-10">No orders found.</p> : displayedOrders.map(o => (
+                  <div key={o.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+                     <div className="flex-1">
                         <div className="font-bold text-slate-900 text-lg flex items-center gap-2">
                            {o.product_name} <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">Qty: {o.quantity || 1}</span>
                         </div>
                         
-                        {/* 🔴 MERCHANT NOW SEES LOCATION, PHONE, NAME, AND TIME */}
                         <div className="text-sm text-slate-600 space-y-1 mt-2">
                            <div className="flex items-center gap-2"><User size={14} className="text-slate-400" /> {o.rider?.full_name}</div>
                            <div className="flex items-center gap-2"><Phone size={14} className="text-slate-400" /> {o.customer_phone || o.rider?.phone || 'No phone provided'}</div>
@@ -925,13 +936,17 @@ function MerchantInventory({ profile }: any) {
                         
                         <div className="text-xs text-slate-400 mt-3">{new Date(o.created_at).toLocaleString()}</div>
                      </div>
+
                      <div className="text-left sm:text-right flex flex-col sm:items-end">
                         <div className="font-bold text-xl text-orange-600">SLE {o.price}</div>
-                        {o.status === 'pending' ? (
-                            <button onClick={() => handleCompleteOrder(o.id)} className="mt-2 text-xs font-bold bg-slate-900 text-white px-3 py-1.5 rounded-lg hover:bg-slate-800">Mark as Completed</button>
-                        ) : (
-                            <span className="mt-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">Completed</span>
-                        )}
+                        <div className="flex flex-wrap gap-2 mt-3 justify-start sm:justify-end">
+                           <button onClick={() => handleWhatsAppCustomer(o)} className="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg font-bold flex items-center gap-1 transition"><MessageCircle size={14} /> WhatsApp Rider</button>
+                           {o.status === 'pending' ? (
+                               <button onClick={() => handleUpdateOrderStatus(o.id, 'completed')} className="text-[11px] bg-slate-900 hover:bg-slate-800 text-white px-3 py-2 rounded-lg font-bold transition">Mark Completed</button>
+                           ) : (
+                               <button onClick={() => handleUpdateOrderStatus(o.id, 'pending')} className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg font-bold transition">Mark Pending</button>
+                           )}
+                        </div>
                      </div>
                   </div>
               ))}
