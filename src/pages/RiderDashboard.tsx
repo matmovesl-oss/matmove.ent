@@ -17,7 +17,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [isCreatingUsd, setIsCreatingUsd] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [exchangeRateUsdToSle, setExchangeRateUsdToSle] = useState(24.68);
+  const [exchangeRateUsdToSle, setExchangeRateUsdToSle] = useState(26.00);
   
   const [pricingRates, setPricingRates] = useState<any>({ bike: { min: 15, perKm: 3 }, keke: { min: 20, perKm: 5 }, car: { min: 30, perKm: 8 }, van: { min: 50, perKm: 15 } });
 
@@ -54,7 +54,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
-  // 🔴 2-WAY CONVERT STATES
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [convertDirection, setConvertDirection] = useState<'USD_TO_SLE' | 'SLE_TO_USD'>('USD_TO_SLE');
   const [convertAmount, setConvertAmount] = useState('');
@@ -72,7 +71,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 
   useEffect(() => {
     supabase.from('exchange_rates').select('*').eq('from_currency', 'USD').eq('to_currency', 'SLE').maybeSingle().then(({data}) => {
-      if (data) setExchangeRateUsdToSle(Number(data.rate));
+      if (data && data.rate) setExchangeRateUsdToSle(Number(data.rate));
     });
   }, []);
 
@@ -389,7 +388,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Conversion failed');
-      alert(`Successfully converted ${fromCurrency} to ${toCurrency}!`);
+      alert(`Successfully exchanged! Target Wallet received ${toCurrency} ${data.convertedAmount}`);
       closeModals();
       fetchLiveBalance(); 
     } catch (err: any) { alert(err.message); setIsProcessingConvert(false); }
@@ -463,7 +462,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
         
-        {/* 🔴 HOME TAB ONLY: MAP AND REQUEST FORM */}
         {activeSection === 'home' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit z-20">
@@ -676,14 +674,30 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
         )}
       </div>
 
-      {/* 🔴 2-WAY CONVERT MODAL */}
+      {/* 🔴 2-WAY CONVERT & TRANSFER MODAL WITH ACCOUNT IDs */}
       {isConvertModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Convert Currency</h2>
+            <h2 className="text-2xl font-bold mb-1">Convert & Transfer</h2>
             <p className="text-sm text-slate-500 mb-4">Rate: 1 USD = SLE {exchangeRateUsdToSle}</p>
             
+            {/* 🔴 ACCOUNT ID PREVIEW WIDGET */}
+            <div className="bg-slate-50 p-4 rounded-xl mb-6 border border-slate-200 space-y-3">
+               <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-500 uppercase">From ({convertDirection === 'USD_TO_SLE' ? 'USD' : 'SLE'})</span>
+                  <span className="text-xs font-mono text-slate-700 bg-white px-2 py-1 rounded border shadow-sm">
+                     {convertDirection === 'USD_TO_SLE' ? usdWallet?.monime_account_id : monimeAccountId}
+                  </span>
+               </div>
+               <div className="flex justify-between items-center pt-3 border-t border-slate-200">
+                  <span className="text-xs font-bold text-slate-500 uppercase">To ({convertDirection === 'USD_TO_SLE' ? 'SLE' : 'USD'})</span>
+                  <span className="text-xs font-mono text-slate-700 bg-white px-2 py-1 rounded border shadow-sm">
+                     {convertDirection === 'USD_TO_SLE' ? monimeAccountId : usdWallet?.monime_account_id}
+                  </span>
+               </div>
+            </div>
+
             <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
                <button onClick={() => setConvertDirection('USD_TO_SLE')} className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${convertDirection === 'USD_TO_SLE' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>
                   USD ➔ SLE
@@ -774,11 +788,10 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   );
 }
 
-// 🔴 SHOP ENGINE: OPENS AN ORDER FORM FIRST INSTEAD OF INSTANT PAYMENT
-function RiderShop({ profile }: any) {
+// 🔴 SHOP ENGINE
+function RiderShop({ profile, wallet }: any) {
   const [products, setProducts] = useState<any[]>([]);
 
-  // 🔴 ORDER MODAL STATES
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [orderQty, setOrderQty] = useState(1);
@@ -821,7 +834,6 @@ function RiderShop({ profile }: any) {
     } catch (e: any) { alert(e.message); }
   };
 
-  // 🔴 OPEN MODAL INSTEAD OF INSTANT ORDER
   const openOrderModal = (product: any) => {
     setSelectedProduct(product);
     setOrderQty(1);
@@ -831,7 +843,6 @@ function RiderShop({ profile }: any) {
     setOrderModalOpen(true);
   };
 
-  // 🔴 SUBMIT ORDER TO MERCHANT WITHOUT DEDUCTING WALLET
   const submitInAppOrder = async () => {
     if (!streetAddress.trim()) return alert("Street address is required.");
     if (!orderPhone.trim()) return alert("Contact phone number is required.");
@@ -851,7 +862,7 @@ function RiderShop({ profile }: any) {
         delivery_location: `Freetown - ${streetAddress}`,
         customer_phone: orderPhone,
         delivery_time: deliveryTime,
-        status: 'pending' // Order sits with Merchant
+        status: 'pending'
       });
 
       if (orderErr) throw orderErr;
@@ -922,7 +933,6 @@ function RiderShop({ profile }: any) {
         </div>
       )}
 
-      {/* 🔴 IN-APP ORDER MODAL - FORM ONLY, NO WALLET DEBIT */}
       {orderModalOpen && selectedProduct && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
@@ -931,7 +941,6 @@ function RiderShop({ profile }: any) {
             <p className="text-sm text-slate-500 mb-6">{selectedProduct.name}</p>
             
             <div className="space-y-4 mb-6">
-               {/* QTY */}
                <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
                   <span className="text-sm font-bold text-slate-700">Quantity</span>
                   <div className="flex items-center gap-3">
@@ -941,13 +950,11 @@ function RiderShop({ profile }: any) {
                   </div>
                </div>
 
-               {/* PHONE */}
                <div className="relative">
                   <Phone size={18} className="absolute left-3 top-3.5 text-slate-400" />
                   <input type="tel" placeholder="Your Phone Number" value={orderPhone} onChange={e => setOrderPhone(e.target.value)} className="w-full border p-3 pl-10 rounded-xl outline-none focus:border-blue-500 text-sm" />
                </div>
 
-               {/* ADDRESS */}
                <div className="flex gap-3">
                   <div className="w-1/3 relative">
                      <MapPin size={18} className="absolute left-3 top-3.5 text-slate-400" />
@@ -958,7 +965,6 @@ function RiderShop({ profile }: any) {
                   </div>
                </div>
 
-               {/* DELIVERY TIME */}
                <div className="relative">
                   <CalendarClock size={18} className="absolute left-3 top-3.5 text-slate-400" />
                   <input type="datetime-local" value={deliveryTime} onChange={e => setDeliveryTime(e.target.value)} className="w-full border p-3 pl-10 rounded-xl outline-none focus:border-blue-500 text-sm" />

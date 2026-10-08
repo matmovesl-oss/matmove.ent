@@ -17,7 +17,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const [txFilter, setTxFilter] = useState<'recent' | 'all'>('recent');
   const [isCreatingUsd, setIsCreatingUsd] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [exchangeRateUsdToSle, setExchangeRateUsdToSle] = useState(24.68);
+  const [exchangeRateUsdToSle, setExchangeRateUsdToSle] = useState(26.00);
 
   const [liveBalance, setLiveBalance] = useState<number>(wallet?.balance || 0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -96,7 +96,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
 
   useEffect(() => {
     supabase.from('exchange_rates').select('*').eq('from_currency', 'USD').eq('to_currency', 'SLE').maybeSingle().then(({data}) => {
-      if (data) setExchangeRateUsdToSle(Number(data.rate));
+      if (data && data.rate) setExchangeRateUsdToSle(Number(data.rate));
     });
     supabase.from('pricing_settings').select('*').then(({ data }) => {
       if (data && data.length > 0) {
@@ -386,7 +386,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Conversion failed');
-      alert(`Successfully converted ${fromCurrency} to ${toCurrency}!`);
+      alert(`Successfully exchanged! Target Wallet received ${toCurrency} ${data.convertedAmount}`);
       closeModals();
       fetchLiveBalance(); 
     } catch (err: any) { alert(err.message); setIsProcessingConvert(false); }
@@ -677,14 +677,30 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
         </div>
       )}
 
-      {/* 🔴 2-WAY CONVERT MODAL */}
+      {/* 🔴 2-WAY CONVERT & TRANSFER MODAL WITH ACCOUNT IDs */}
       {isConvertModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={closeModals} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Convert Currency</h2>
+            <h2 className="text-2xl font-bold mb-1">Convert & Transfer</h2>
             <p className="text-sm text-slate-500 mb-4">Rate: 1 USD = SLE {exchangeRateUsdToSle}</p>
             
+            {/* 🔴 ACCOUNT ID PREVIEW WIDGET */}
+            <div className="bg-slate-50 p-4 rounded-xl mb-6 border border-slate-200 space-y-3">
+               <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-500 uppercase">From ({convertDirection === 'USD_TO_SLE' ? 'USD' : 'SLE'})</span>
+                  <span className="text-xs font-mono text-slate-700 bg-white px-2 py-1 rounded border shadow-sm">
+                     {convertDirection === 'USD_TO_SLE' ? usdWallet?.monime_account_id : monimeAccountId}
+                  </span>
+               </div>
+               <div className="flex justify-between items-center pt-3 border-t border-slate-200">
+                  <span className="text-xs font-bold text-slate-500 uppercase">To ({convertDirection === 'USD_TO_SLE' ? 'SLE' : 'USD'})</span>
+                  <span className="text-xs font-mono text-slate-700 bg-white px-2 py-1 rounded border shadow-sm">
+                     {convertDirection === 'USD_TO_SLE' ? monimeAccountId : usdWallet?.monime_account_id}
+                  </span>
+               </div>
+            </div>
+
             <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
                <button onClick={() => setConvertDirection('USD_TO_SLE')} className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${convertDirection === 'USD_TO_SLE' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>
                   USD ➔ SLE
@@ -709,7 +725,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
             )}
 
             <button onClick={executeConvert} disabled={isProcessingConvert || !convertAmount} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
-              {isProcessingConvert ? <Loader2 size={20} className="animate-spin" /> : <><ArrowLeftRight size={20} /> Convert Now</>}
+              {isProcessingConvert ? <Loader2 size={20} className="animate-spin" /> : <><ArrowLeftRight size={20} /> Convert & Transfer</>}
             </button>
           </div>
         </div>
@@ -775,7 +791,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   );
 }
 
-// 🔴 MERCHANT INVENTORY: ADDED ORDER FILTER, WHATSAPP CUSTOMER, AND STATUS TOGGLES
 function MerchantInventory({ profile }: any) {
   const [activeTab, setActiveTab] = useState<'products' | 'orders'>('products');
   const [products, setProducts] = useState<any[]>([]);
@@ -916,40 +931,45 @@ function MerchantInventory({ profile }: any) {
           <div className="space-y-4">
               <div className="flex bg-slate-100 p-1 rounded-lg w-fit mb-4">
                  <button onClick={()=>setOrderFilter('all')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition ${orderFilter==='all'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>All</button>
-                 <button onClick={()=>setOrderFilter('pending')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition ${orderFilter==='pending'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>Pending</button>
-                 <button onClick={()=>setOrderFilter('completed')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition ${orderFilter==='completed'?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>Completed</button>
+                 <button onClick={()=>setOrderFilter('pending')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition ${orderFilter==='pending'?'bg-amber-50 text-amber-700':'bg-white text-slate-500 hover:bg-slate-50'}`}>Pending</button>
+                 <button onClick={()=>setOrderFilter('completed')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition ${orderFilter==='completed'?'bg-emerald-50 text-emerald-700':'bg-white text-slate-500 hover:bg-slate-50'}`}>Completed</button>
               </div>
 
-              {displayedOrders.length === 0 ? <p className="text-slate-500 text-center py-10">No orders found.</p> : displayedOrders.map(o => (
-                  <div key={o.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between sm:items-start gap-4">
-                     <div className="flex-1">
-                        <div className="font-bold text-slate-900 text-lg flex items-center gap-2">
-                           {o.product_name} <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">Qty: {o.quantity || 1}</span>
-                        </div>
-                        
-                        <div className="text-sm text-slate-600 space-y-1 mt-2">
-                           <div className="flex items-center gap-2"><User size={14} className="text-slate-400" /> {o.rider?.full_name}</div>
-                           <div className="flex items-center gap-2"><Phone size={14} className="text-slate-400" /> {o.customer_phone || o.rider?.phone || 'No phone provided'}</div>
-                           <div className="flex items-center gap-2"><MapPin size={14} className="text-slate-400" /> {o.delivery_location || 'No location provided'}</div>
-                           {o.delivery_time && <div className="flex items-center gap-2"><CalendarClock size={14} className="text-slate-400" /> Needed By: {new Date(o.delivery_time).toLocaleString()}</div>}
-                        </div>
-                        
-                        <div className="text-xs text-slate-400 mt-3">{new Date(o.created_at).toLocaleString()}</div>
-                     </div>
+              {displayedOrders.length === 0 ? <p className="text-center text-slate-500 py-10 bg-white rounded-3xl border border-slate-200">No orders found.</p> : (
+                 <div className="space-y-4">
+                    {displayedOrders.map(o => (
+                       <div key={o.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between sm:items-start gap-4 transition hover:shadow-md">
+                          <div className="flex-1">
+                             <div className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                                {o.product_name} 
+                                <span className="bg-slate-100 text-slate-600 text-xs px-2.5 py-0.5 rounded-full font-bold">Qty: {o.quantity || 1}</span>
+                             </div>
+                             
+                             <div className="text-sm text-slate-600 space-y-1 mt-2">
+                                <div className="flex items-center gap-2"><User size={14} className="text-slate-400" /> {o.rider?.full_name}</div>
+                                <div className="flex items-center gap-2"><Phone size={14} className="text-slate-400" /> {o.customer_phone || o.rider?.phone || 'No phone provided'}</div>
+                                <div className="flex items-center gap-2"><MapPin size={14} className="text-slate-400" /> {o.delivery_location || 'No location provided'}</div>
+                                {o.delivery_time && <div className="flex items-center gap-2"><CalendarClock size={14} className="text-slate-400" /> Needed By: {new Date(o.delivery_time).toLocaleString()}</div>}
+                             </div>
+                             
+                             <div className="text-xs text-slate-400 mt-3">{new Date(o.created_at).toLocaleString()}</div>
+                          </div>
 
-                     <div className="text-left sm:text-right flex flex-col sm:items-end">
-                        <div className="font-bold text-xl text-orange-600">SLE {o.price}</div>
-                        <div className="flex flex-wrap gap-2 mt-3 justify-start sm:justify-end">
-                           <button onClick={() => handleWhatsAppCustomer(o)} className="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg font-bold flex items-center gap-1 transition"><MessageCircle size={14} /> WhatsApp Rider</button>
-                           {o.status === 'pending' ? (
-                               <button onClick={() => handleUpdateOrderStatus(o.id, 'completed')} className="text-[11px] bg-slate-900 hover:bg-slate-800 text-white px-3 py-2 rounded-lg font-bold transition">Mark Completed</button>
-                           ) : (
-                               <button onClick={() => handleUpdateOrderStatus(o.id, 'pending')} className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg font-bold transition">Mark Pending</button>
-                           )}
-                        </div>
-                     </div>
-                  </div>
-              ))}
+                          <div className="text-left sm:text-right flex flex-col sm:items-end">
+                             <div className="font-bold text-xl text-orange-600">SLE {o.price}</div>
+                             <div className="flex flex-wrap gap-2 mt-3 justify-start sm:justify-end">
+                                <button onClick={() => handleWhatsAppCustomer(o)} className="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg font-bold flex items-center gap-1 transition"><MessageCircle size={14} /> WhatsApp Rider</button>
+                                {o.status === 'pending' ? (
+                                    <button onClick={() => handleUpdateOrderStatus(o.id, 'completed')} className="text-[11px] bg-slate-900 hover:bg-slate-800 text-white px-3 py-2 rounded-lg font-bold transition">Mark Completed</button>
+                                ) : (
+                                    <button onClick={() => handleUpdateOrderStatus(o.id, 'pending')} className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg font-bold transition">Mark Pending</button>
+                                )}
+                             </div>
+                          </div>
+                       </div>
+                    ))}
+                 </div>
+              )}
           </div>
       )}
     </div>
