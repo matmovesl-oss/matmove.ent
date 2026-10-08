@@ -128,25 +128,28 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
     } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
   };
 
-  // 🔴 Initialize Mapbox & Auto-Locate User with ResizeObserver Fix
+  // 🔴 SAFE Geolocation + Responsive Map Fixes
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
     try {
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
       map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 13 });
 
-      // FORCE MAP TO RESIZE PROPERLY ON WEB
-      const resizeObserver = new ResizeObserver(() => {
-          map.current?.resize();
-      });
-      resizeObserver.observe(mapContainer.current);
+      const resizeObserver = new ResizeObserver(() => { map.current?.resize(); });
+      if (mapContainer.current) resizeObserver.observe(mapContainer.current);
 
       if (navigator.geolocation) {
-         navigator.geolocation.getCurrentPosition(async (pos) => {
-            const { longitude, latitude } = pos.coords;
-            map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
-            new mapboxgl.Marker({ color: '#10B981' }).setLngLat([longitude, latitude]).addTo(map.current!);
-         });
+         navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+               const { longitude, latitude } = pos.coords;
+               map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
+               new mapboxgl.Marker({ color: '#10B981' }).setLngLat([longitude, latitude]).addTo(map.current!);
+            },
+            (error) => {
+               console.warn("Geolocation blocked or failed. Using default Freetown location.", error);
+            },
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+         );
       }
     } catch (e) { console.error(e); }
   }, []);
@@ -314,7 +317,6 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
     </div>
   );
 
-  // 🔴 FAILSAFE: Protect against Monime returning an object instead of an array
   const validTransactions = Array.isArray(transactions) ? transactions : [];
   const displayedTx = txFilter === 'recent' ? validTransactions.slice(0, 5) : validTransactions;
 
@@ -400,8 +402,8 @@ export function DriverDashboard({ profile, wallet, activeSection, onOpenWallet }
             )}
           </div>
           
-          {/* 🔴 MAP CONTAINER WITH FLEX-1 SO IT EXPANDS CORRECTLY ON WEB */}
-          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[450px] flex-1 w-full border border-slate-200 shadow-inner">
+          {/* 🔴 MAP CONTAINER WITH FLEXIBLE RESPONSIVE HEIGHT FOR ALL MOBILE SIZES */}
+          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[300px] h-[350px] md:h-[450px] lg:h-[600px] w-full border border-slate-200 shadow-inner z-0 flex flex-col">
             <div ref={mapContainer} className="absolute inset-0 w-full h-full flex-1" />
           </div>
         </div>

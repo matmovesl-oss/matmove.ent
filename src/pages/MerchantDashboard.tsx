@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, Minus, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ArrowRight, Trash2, Wallet, Activity, Copy, Check, Share2, ArrowLeftRight, Image as ImageIcon } from 'lucide-react';
+import { Store, Plus, Package, RefreshCw, X, Loader2, MapPin, Navigation, Car, CalendarClock, Phone, Minus, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ArrowRight, Trash2, Wallet, Activity, Copy, Check, Share2, ArrowLeftRight, Image as ImageIcon, User } from 'lucide-react';
 
 type ServiceType = 'delivery' | 'ride' | 'scheduled';
 type VehicleType = 'keke' | 'bike' | 'car' | 'van';
@@ -152,45 +152,48 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
   };
 
-  // 🔴 Initialize Mapbox & Auto-Locate User with ResizeObserver Fix
+  // 🔴 SAFE Geolocation + Responsive Map Fixes
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
     try {
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
       map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 12 });
 
-      // FORCE MAP TO RESIZE PROPERLY ON WEB
-      const resizeObserver = new ResizeObserver(() => {
-          map.current?.resize();
-      });
-      resizeObserver.observe(mapContainer.current);
+      const resizeObserver = new ResizeObserver(() => { map.current?.resize(); });
+      if (mapContainer.current) resizeObserver.observe(mapContainer.current);
 
       if (navigator.geolocation) {
-         navigator.geolocation.getCurrentPosition(async (pos) => {
-            const { longitude, latitude } = pos.coords;
-            setPickupCoords([longitude, latitude]);
-            map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
-            
-            try {
-               const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxgl.accessToken}`);
-               const data = await res.json();
-               if (data.features && data.features.length > 0) {
-                  setPickup(data.features[0].place_name);
-               }
-            } catch (e) {}
-
-            const marker = new mapboxgl.Marker({ color: '#10B981', draggable: true }).setLngLat([longitude, latitude]).addTo(map.current!);
-            marker.on('dragend', async () => {
-               const lngLat = marker.getLngLat();
-               setPickupCoords([lngLat.lng, lngLat.lat]);
+         navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+               const { longitude, latitude } = pos.coords;
+               setPickupCoords([longitude, latitude]);
+               map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
+               
                try {
-                  const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lngLat.lng},${lngLat.lat}.json?access_token=${mapboxgl.accessToken}`);
+                  const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxgl.accessToken}`);
                   const data = await res.json();
-                  if (data.features && data.features.length > 0) setPickup(data.features[0].place_name);
+                  if (data.features && data.features.length > 0) {
+                     setPickup(data.features[0].place_name);
+                  }
                } catch (e) {}
-            });
-            markers.current.push(marker);
-         });
+
+               const marker = new mapboxgl.Marker({ color: '#10B981', draggable: true }).setLngLat([longitude, latitude]).addTo(map.current!);
+               marker.on('dragend', async () => {
+                  const lngLat = marker.getLngLat();
+                  setPickupCoords([lngLat.lng, lngLat.lat]);
+                  try {
+                     const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lngLat.lng},${lngLat.lat}.json?access_token=${mapboxgl.accessToken}`);
+                     const data = await res.json();
+                     if (data.features && data.features.length > 0) setPickup(data.features[0].place_name);
+                  } catch (e) {}
+               });
+               markers.current.push(marker);
+            },
+            (error) => {
+               console.warn("Geolocation blocked or failed. Using default Freetown location.", error);
+            },
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+         );
       }
     } catch (e) { console.error('Mapbox error:', e); }
   }, []);
@@ -198,6 +201,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const searchPlaces = (query: string, type: 'pickup' | 'destination') => {
     if (type === 'pickup') { setPickup(query); setPickupCoords(null); } else { setDestination(query); setDestinationCoords(null); }
     if (query.trim().length < 3) { type === 'pickup' ? setPickupSuggestions([]) : setDestinationSuggestions([]); return; }
+    if (!window.google) return; // 🔴 MOBILE SAFETY FIX
     // @ts-ignore
     const autocomplete = new window.google.maps.places.AutocompleteService();
     autocomplete.getPlacePredictions({ input: query, componentRestrictions: { country: 'sl' } }, (predictions: any, status: any) => {
@@ -209,6 +213,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   };
 
   const handleSelectPlace = (placeId: string, description: string, type: 'pickup' | 'destination') => {
+    if (!window.google) return; // 🔴 MOBILE SAFETY FIX
     // @ts-ignore
     const geocoder = new window.google.maps.Geocoder();
     geocoder.geocode({ placeId }, (results: any, status: any) => {
@@ -581,15 +586,15 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
               </div>
             )}
           </div>
-
-          {/* 🔴 MAP CONTAINER WITH FLEX-1 SO IT EXPANDS CORRECTLY ON WEB */}
-          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] w-full border border-slate-200 shadow-inner z-0 flex flex-col">
+          
+          {/* 🔴 MAP CONTAINER WITH FLEXIBLE RESPONSIVE HEIGHT FOR ALL MOBILE SIZES */}
+          <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[300px] h-[350px] md:h-[450px] lg:h-[600px] w-full border border-slate-200 shadow-inner z-0 flex flex-col">
             <div ref={mapContainer} className="absolute inset-0 w-full h-full flex-1" />
           </div>
         </div>
       )}
 
-      {/* 🔴 WALLET TAB */}
+      {/* 🔴 WALLET TAB ONLY: TRANSACTIONS & FULL WIDTH ACTIONS */}
       {activeSection === 'wallet' && (
         <div className="p-6 max-w-4xl mx-auto w-full space-y-6">
            <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">My Wallets</h2>

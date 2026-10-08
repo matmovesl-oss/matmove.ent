@@ -54,7 +54,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
-  // 🔴 2-WAY CONVERT STATES
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [convertDirection, setConvertDirection] = useState<'USD_TO_SLE' | 'SLE_TO_USD'>('USD_TO_SLE');
   const [convertAmount, setConvertAmount] = useState('');
@@ -63,7 +62,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [showPolicy, setShowPolicy] = useState(false);
   const [isFrozen, setIsFrozen] = useState(wallet?.is_frozen || false);
   
-  // 🔴 FATAL CRASH FIX: Added missing isApproved variable
   const isApproved = profile?.kyc_status === 'approved' || profile?.role === 'rider';
 
   const monimeAccountId = sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || 'Pending Setup';
@@ -169,45 +167,46 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
   };
 
-  // 🔴 Initialize Mapbox & Auto-Locate User with ResizeObserver Fix
+  // 🔴 SAFE Geolocation + Responsive Map Fixes
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
     try {
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
       map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 12 });
 
-      // FORCE MAP TO RESIZE PROPERLY ON WEB
-      const resizeObserver = new ResizeObserver(() => {
-          map.current?.resize();
-      });
+      const resizeObserver = new ResizeObserver(() => { map.current?.resize(); });
       if (mapContainer.current) resizeObserver.observe(mapContainer.current);
 
       if (navigator.geolocation) {
-         navigator.geolocation.getCurrentPosition(async (pos) => {
-            const { longitude, latitude } = pos.coords;
-            setPickupCoords([longitude, latitude]);
-            map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
-            
-            try {
-               const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxgl.accessToken}`);
-               const data = await res.json();
-               if (data.features && data.features.length > 0) {
-                  setPickup(data.features[0].place_name);
-               }
-            } catch (e) {}
-
-            const marker = new mapboxgl.Marker({ color: '#10B981', draggable: true }).setLngLat([longitude, latitude]).addTo(map.current!);
-            marker.on('dragend', async () => {
-               const lngLat = marker.getLngLat();
-               setPickupCoords([lngLat.lng, lngLat.lat]);
+         navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+               const { longitude, latitude } = pos.coords;
+               setPickupCoords([longitude, latitude]);
+               map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
+               
                try {
-                  const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lngLat.lng},${lngLat.lat}.json?access_token=${mapboxgl.accessToken}`);
+                  const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxgl.accessToken}`);
                   const data = await res.json();
                   if (data.features && data.features.length > 0) setPickup(data.features[0].place_name);
                } catch (e) {}
-            });
-            markers.current.push(marker);
-         });
+
+               const marker = new mapboxgl.Marker({ color: '#10B981', draggable: true }).setLngLat([longitude, latitude]).addTo(map.current!);
+               marker.on('dragend', async () => {
+                  const lngLat = marker.getLngLat();
+                  setPickupCoords([lngLat.lng, lngLat.lat]);
+                  try {
+                     const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lngLat.lng},${lngLat.lat}.json?access_token=${mapboxgl.accessToken}`);
+                     const data = await res.json();
+                     if (data.features && data.features.length > 0) setPickup(data.features[0].place_name);
+                  } catch (e) {}
+               });
+               markers.current.push(marker);
+            },
+            (error) => {
+               console.warn("Geolocation blocked or failed. Using default Freetown location.", error);
+            },
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+         );
       }
     } catch (e) { console.error('Mapbox error:', e); }
   }, []);
@@ -215,6 +214,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const searchPlaces = (query: string, type: 'pickup' | 'destination') => {
     if (type === 'pickup') { setPickup(query); setPickupCoords(null); } else { setDestination(query); setDestinationCoords(null); }
     if (query.trim().length < 3) { type === 'pickup' ? setPickupSuggestions([]) : setDestinationSuggestions([]); return; }
+    if (!window.google) return; // 🔴 MOBILE SAFETY FIX
     // @ts-ignore
     const autocomplete = new window.google.maps.places.AutocompleteService();
     autocomplete.getPlacePredictions({ input: query, componentRestrictions: { country: 'sl' } }, (predictions: any, status: any) => {
@@ -226,6 +226,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   };
 
   const handleSelectPlace = (placeId: string, description: string, type: 'pickup' | 'destination') => {
+    if (!window.google) return; // 🔴 MOBILE SAFETY FIX
     // @ts-ignore
     const geocoder = new window.google.maps.Geocoder();
     geocoder.geocode({ placeId }, (results: any, status: any) => {
@@ -351,7 +352,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     if (!amt || amt <= 0) return alert('Enter valid amount');
     const recipient = transferRecipient.trim();
 
-    // 🔴 CHECK: Direct user to Convert if transferring to their own USD ID or cross-currency ID
     if (usdWallet?.monime_account_id && recipient === usdWallet.monime_account_id) {
        alert("To move funds between your SLE and USD wallets, please use the Convert button.");
        setIsTransferModalOpen(false);
@@ -441,7 +441,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
     </div>
   );
 
-  // 🔴 FAILSAFE: Protect against Monime returning an object instead of an array
   const validTransactions = Array.isArray(transactions) ? transactions : [];
   const displayedTx = txFilter === 'recent' ? validTransactions.slice(0, 5) : validTransactions;
 
@@ -594,8 +593,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
               )}
             </div>
             
-            {/* 🔴 MAP CONTAINER WITH EXPLICIT PIXEL HEIGHT SO MAPBOX WEB ALWAYS RENDERS */}
-            <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[500px] h-[500px] lg:h-[700px] w-full border border-slate-200 shadow-inner z-0 flex flex-col">
+            {/* 🔴 RESPONSIVE MAP CONTAINER FIX FOR ALL MOBILE SIZES */}
+            <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[300px] h-[350px] md:h-[450px] lg:h-[600px] w-full border border-slate-200 shadow-inner z-0 flex flex-col">
               <div ref={mapContainer} className="absolute inset-0 w-full h-full flex-1" />
             </div>
           </div>
