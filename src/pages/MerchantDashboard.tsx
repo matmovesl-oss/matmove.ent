@@ -152,48 +152,45 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
   };
 
-  // 🔴 SAFE Geolocation + Responsive Map Fixes
+  // 🔴 Initialize Mapbox & Auto-Locate User with ResizeObserver Fix
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
     try {
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
       map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/streets-v12', center: [-13.234, 8.484], zoom: 12 });
 
-      const resizeObserver = new ResizeObserver(() => { map.current?.resize(); });
-      if (mapContainer.current) resizeObserver.observe(mapContainer.current);
+      // FORCE MAP TO RESIZE PROPERLY ON WEB
+      const resizeObserver = new ResizeObserver(() => {
+          map.current?.resize();
+      });
+      resizeObserver.observe(mapContainer.current);
 
       if (navigator.geolocation) {
-         navigator.geolocation.getCurrentPosition(
-            async (pos) => {
-               const { longitude, latitude } = pos.coords;
-               setPickupCoords([longitude, latitude]);
-               map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
-               
-               try {
-                  const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxgl.accessToken}`);
-                  const data = await res.json();
-                  if (data.features && data.features.length > 0) {
-                     setPickup(data.features[0].place_name);
-                  }
-               } catch (e) {}
+         navigator.geolocation.getCurrentPosition(async (pos) => {
+            const { longitude, latitude } = pos.coords;
+            setPickupCoords([longitude, latitude]);
+            map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
+            
+            try {
+               const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxgl.accessToken}`);
+               const data = await res.json();
+               if (data.features && data.features.length > 0) {
+                  setPickup(data.features[0].place_name);
+               }
+            } catch (e) {}
 
-               const marker = new mapboxgl.Marker({ color: '#10B981', draggable: true }).setLngLat([longitude, latitude]).addTo(map.current!);
-               marker.on('dragend', async () => {
-                  const lngLat = marker.getLngLat();
-                  setPickupCoords([lngLat.lng, lngLat.lat]);
-                  try {
-                     const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lngLat.lng},${lngLat.lat}.json?access_token=${mapboxgl.accessToken}`);
-                     const data = await res.json();
-                     if (data.features && data.features.length > 0) setPickup(data.features[0].place_name);
-                  } catch (e) {}
-               });
-               markers.current.push(marker);
-            },
-            (error) => {
-               console.warn("Geolocation blocked or failed. Using default Freetown location.", error);
-            },
-            { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
-         );
+            const marker = new mapboxgl.Marker({ color: '#10B981', draggable: true }).setLngLat([longitude, latitude]).addTo(map.current!);
+            marker.on('dragend', async () => {
+               const lngLat = marker.getLngLat();
+               setPickupCoords([lngLat.lng, lngLat.lat]);
+               try {
+                  const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lngLat.lng},${lngLat.lat}.json?access_token=${mapboxgl.accessToken}`);
+                  const data = await res.json();
+                  if (data.features && data.features.length > 0) setPickup(data.features[0].place_name);
+               } catch (e) {}
+            });
+            markers.current.push(marker);
+         });
       }
     } catch (e) { console.error('Mapbox error:', e); }
   }, []);
@@ -201,7 +198,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   const searchPlaces = (query: string, type: 'pickup' | 'destination') => {
     if (type === 'pickup') { setPickup(query); setPickupCoords(null); } else { setDestination(query); setDestinationCoords(null); }
     if (query.trim().length < 3) { type === 'pickup' ? setPickupSuggestions([]) : setDestinationSuggestions([]); return; }
-    if (!window.google) return; // 🔴 MOBILE SAFETY FIX
+    if (!window.google) return;
     // @ts-ignore
     const autocomplete = new window.google.maps.places.AutocompleteService();
     autocomplete.getPlacePredictions({ input: query, componentRestrictions: { country: 'sl' } }, (predictions: any, status: any) => {
@@ -213,7 +210,7 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
   };
 
   const handleSelectPlace = (placeId: string, description: string, type: 'pickup' | 'destination') => {
-    if (!window.google) return; // 🔴 MOBILE SAFETY FIX
+    if (!window.google) return;
     // @ts-ignore
     const geocoder = new window.google.maps.Geocoder();
     geocoder.geocode({ placeId }, (results: any, status: any) => {
@@ -429,7 +426,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
     </div>
   );
 
-  // 🔴 FAILSAFE: Protect against Monime returning an object instead of an array
   const validTransactions = Array.isArray(transactions) ? transactions : [];
   const displayedTx = txFilter === 'recent' ? validTransactions.slice(0, 5) : validTransactions;
 
@@ -587,7 +583,6 @@ export function MerchantDashboard({ profile, wallet, activeSection, onOpenWallet
             )}
           </div>
           
-          {/* 🔴 MAP CONTAINER WITH FLEXIBLE RESPONSIVE HEIGHT FOR ALL MOBILE SIZES */}
           <div className="col-span-1 lg:col-span-2 bg-slate-200 rounded-3xl overflow-hidden relative min-h-[300px] h-[350px] md:h-[450px] lg:h-[600px] w-full border border-slate-200 shadow-inner z-0 flex flex-col">
             <div ref={mapContainer} className="absolute inset-0 w-full h-full flex-1" />
           </div>
@@ -781,17 +776,35 @@ function MerchantInventory({ profile }: any) {
   const [isAdding, setIsAdding] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  useEffect(() => { fetchProducts(); fetchOrders(); }, [profile.id]);
-
   const fetchProducts = async () => {
-    const { data } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
-    if (data) setProducts(Array.isArray(data) ? data : []);
+    const { data, error } = await supabase.from('products').select('*, merchant:merchant_id(business_name, whatsapp_number)').order('created_at', { ascending: false });
+    if (error || !data) {
+        const fallback = await supabase.from('products').select('*').order('created_at', { ascending: false });
+        if (fallback.data) setProducts(Array.isArray(fallback.data) ? fallback.data : []);
+    } else {
+        setProducts(Array.isArray(data) ? data : []);
+    }
   };
 
   const fetchOrders = async () => {
     const { data } = await supabase.from('app_orders').select('*, rider:rider_id(full_name, phone)').eq('merchant_id', profile.id).order('created_at', { ascending: false });
     if (data) setOrders(Array.isArray(data) ? data : []);
   };
+
+  useEffect(() => { 
+    fetchProducts(); 
+    fetchOrders(); 
+
+    // 🔴 REALTIME: Instantly notify merchant of new In-App Orders
+    const orderChannel = supabase.channel('merchant-orders-alerts')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'app_orders', filter: `merchant_id=eq.${profile.id}` }, payload => {
+         alert(`🛒 New Order Alert! You just received a request for ${payload.new.product_name}.`);
+         fetchOrders();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(orderChannel); };
+  }, [profile.id]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -896,18 +909,28 @@ function MerchantInventory({ profile }: any) {
       ) : (
           <div className="space-y-4">
               {orders.length === 0 ? <p className="text-slate-500 text-center py-10">No orders received yet.</p> : orders.map(o => (
-                  <div key={o.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
+                  <div key={o.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                      <div>
-                        <div className="font-bold text-slate-900 text-lg">{o.product_name}</div>
-                        <div className="text-sm text-slate-600 flex items-center gap-2 mt-1"><User size={14} /> {o.rider?.full_name} • <Phone size={14} /> {o.rider?.phone}</div>
-                        <div className="text-xs text-slate-400 mt-1">{new Date(o.created_at).toLocaleString()}</div>
+                        <div className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                           {o.product_name} <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">Qty: {o.quantity || 1}</span>
+                        </div>
+                        
+                        {/* 🔴 MERCHANT NOW SEES LOCATION, PHONE, NAME, AND TIME */}
+                        <div className="text-sm text-slate-600 space-y-1 mt-2">
+                           <div className="flex items-center gap-2"><User size={14} className="text-slate-400" /> {o.rider?.full_name}</div>
+                           <div className="flex items-center gap-2"><Phone size={14} className="text-slate-400" /> {o.customer_phone || o.rider?.phone || 'No phone provided'}</div>
+                           <div className="flex items-center gap-2"><MapPin size={14} className="text-slate-400" /> {o.delivery_location || 'No location provided'}</div>
+                           {o.delivery_time && <div className="flex items-center gap-2"><CalendarClock size={14} className="text-slate-400" /> Needed By: {new Date(o.delivery_time).toLocaleString()}</div>}
+                        </div>
+                        
+                        <div className="text-xs text-slate-400 mt-3">{new Date(o.created_at).toLocaleString()}</div>
                      </div>
-                     <div className="text-right flex flex-col items-end">
+                     <div className="text-left sm:text-right flex flex-col sm:items-end">
                         <div className="font-bold text-xl text-orange-600">SLE {o.price}</div>
                         {o.status === 'pending' ? (
                             <button onClick={() => handleCompleteOrder(o.id)} className="mt-2 text-xs font-bold bg-slate-900 text-white px-3 py-1.5 rounded-lg hover:bg-slate-800">Mark as Completed</button>
                         ) : (
-                            <span className="mt-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Completed</span>
+                            <span className="mt-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">Completed</span>
                         )}
                      </div>
                   </div>

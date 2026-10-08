@@ -7,6 +7,9 @@ import { Car, Package, MapPin, Navigation, ShoppingBag, Loader2, CalendarClock, 
 const WHATSAPP_NUMBER = "23290330362";
 
 export function RiderDashboard({ profile, wallet, activeSection }: any) {
+  if (activeSection === 'shop') return <RiderShop profile={profile} wallet={wallet} />;
+  if (activeSection === 'trips') return <RiderTrips profile={profile} />;
+
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [usdWallet, setUsdWallet] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -51,6 +54,7 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
+  // 🔴 2-WAY CONVERT STATES
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [convertDirection, setConvertDirection] = useState<'USD_TO_SLE' | 'SLE_TO_USD'>('USD_TO_SLE');
   const [convertAmount, setConvertAmount] = useState('');
@@ -65,10 +69,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
-
-  useEffect(() => {
-    setSleWallet(wallet);
-  }, [wallet]);
 
   useEffect(() => {
     supabase.from('exchange_rates').select('*').eq('from_currency', 'USD').eq('to_currency', 'SLE').maybeSingle().then(({data}) => {
@@ -187,7 +187,9 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
                try {
                   const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxgl.accessToken}`);
                   const data = await res.json();
-                  if (data.features && data.features.length > 0) setPickup(data.features[0].place_name);
+                  if (data.features && data.features.length > 0) {
+                     setPickup(data.features[0].place_name);
+                  }
                } catch (e) {}
 
                const marker = new mapboxgl.Marker({ color: '#10B981', draggable: true }).setLngLat([longitude, latitude]).addTo(map.current!);
@@ -208,9 +210,6 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       }
     } catch (e) { console.error('Mapbox error:', e); }
   }, []);
-
-  if (activeSection === 'shop') return <RiderShop profile={profile} wallet={sleWallet || wallet} />;
-  if (activeSection === 'trips') return <RiderTrips profile={profile} />;
 
   const searchPlaces = (query: string, type: 'pickup' | 'destination') => {
     if (type === 'pickup') { setPickup(query); setPickupCoords(null); } else { setDestination(query); setDestinationCoords(null); }
@@ -463,6 +462,8 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
       </header>
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
+        
+        {/* 🔴 HOME TAB ONLY: MAP AND REQUEST FORM */}
         {activeSection === 'home' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="col-span-1 bg-white p-6 rounded-3xl border shadow-sm space-y-4 h-fit z-20">
@@ -773,22 +774,18 @@ export function RiderDashboard({ profile, wallet, activeSection }: any) {
   );
 }
 
-// 🔴 SHOP ENGINE: DEBITS RIDER SLE WALLET & CREDITS MERCHANT SLE WALLET IN SUPABASE
-function RiderShop({ profile, wallet }: any) {
+// 🔴 SHOP ENGINE: OPENS AN ORDER FORM FIRST INSTEAD OF INSTANT PAYMENT
+function RiderShop({ profile }: any) {
   const [products, setProducts] = useState<any[]>([]);
-  const [liveWallet, setLiveWallet] = useState<any>(wallet);
 
-  useEffect(() => {
-    setLiveWallet(wallet);
-  }, [wallet]);
-
-  useEffect(() => {
-    if (profile?.id) {
-      supabase.from('wallets').select('*').eq('user_id', profile.id).eq('currency', 'SLE').maybeSingle().then(({ data }) => {
-        if (data) setLiveWallet(data);
-      });
-    }
-  }, [profile?.id]);
+  // 🔴 ORDER MODAL STATES
+  const [orderModalOpen, setOrderModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [orderQty, setOrderQty] = useState(1);
+  const [orderPhone, setOrderPhone] = useState(profile?.phone || profile?.phone_number || '');
+  const [streetAddress, setStreetAddress] = useState('');
+  const [deliveryTime, setDeliveryTime] = useState('');
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
   const fetchShopProducts = async () => {
      const { data, error } = await supabase.from('products').select('*, merchant:merchant_id(business_name, whatsapp_number)').order('created_at', { ascending: false });
@@ -824,61 +821,47 @@ function RiderShop({ profile, wallet }: any) {
     } catch (e: any) { alert(e.message); }
   };
 
-  const handleOrderInApp = async (product: any) => {
-    const currentBalance = Number(liveWallet?.balance || 0);
-    const itemPrice = Number(product.price || 0);
+  // 🔴 OPEN MODAL INSTEAD OF INSTANT ORDER
+  const openOrderModal = (product: any) => {
+    setSelectedProduct(product);
+    setOrderQty(1);
+    setOrderPhone(profile?.phone || profile?.phone_number || '');
+    setStreetAddress('');
+    setDeliveryTime('');
+    setOrderModalOpen(true);
+  };
 
-    if (currentBalance < itemPrice) {
-      return alert(`Insufficient SLE balance to buy ${product.name}. Available: SLE ${currentBalance.toFixed(2)}. Please load your wallet.`);
-    }
+  // 🔴 SUBMIT ORDER TO MERCHANT WITHOUT DEDUCTING WALLET
+  const submitInAppOrder = async () => {
+    if (!streetAddress.trim()) return alert("Street address is required.");
+    if (!orderPhone.trim()) return alert("Contact phone number is required.");
+    if (!deliveryTime) return alert("Delivery date and time are required.");
+    
+    const itemPrice = Number(selectedProduct.price || 0);
+    const totalPrice = itemPrice * orderQty;
 
-    if (!confirm(`Are you sure you want to purchase ${product.name} for SLE ${itemPrice.toFixed(2)}? Funds will be deducted from your wallet.`)) return;
-
+    setIsSubmittingOrder(true);
     try {
-      // 1. Record the order in app_orders
       const { error: orderErr } = await supabase.from('app_orders').insert({
         rider_id: profile.id,
-        merchant_id: product.merchant_id,
-        product_name: product.name,
-        price: itemPrice,
-        quantity: 1,
-        status: 'pending'
+        merchant_id: selectedProduct.merchant_id,
+        product_name: selectedProduct.name,
+        price: totalPrice,
+        quantity: orderQty,
+        delivery_location: `Freetown - ${streetAddress}`,
+        customer_phone: orderPhone,
+        delivery_time: deliveryTime,
+        status: 'pending' // Order sits with Merchant
       });
 
       if (orderErr) throw orderErr;
 
-      // 2. Debit Rider SLE Wallet in Supabase
-      const newRiderBal = currentBalance - itemPrice;
-      if (liveWallet?.id) {
-        const { error: walletErr } = await supabase
-          .from('wallets')
-          .update({ balance: newRiderBal, updated_at: new Date().toISOString() })
-          .eq('id', liveWallet.id);
-        if (walletErr) throw walletErr;
-      }
-
-      // 3. Credit Merchant SLE Wallet in Supabase
-      if (product.merchant_id) {
-        const { data: merchantWallet } = await supabase
-          .from('wallets')
-          .select('*')
-          .eq('user_id', product.merchant_id)
-          .eq('currency', 'SLE')
-          .maybeSingle();
-
-        if (merchantWallet) {
-          const newMerchantBal = Number(merchantWallet.balance || 0) + itemPrice;
-          await supabase
-            .from('wallets')
-            .update({ balance: newMerchantBal, updated_at: new Date().toISOString() })
-            .eq('id', merchantWallet.id);
-        }
-      }
-
-      alert(`Order placed successfully! SLE ${itemPrice.toFixed(2)} transferred to merchant.`);
-      window.location.reload();
+      alert(`Order submitted to merchant! They will review your request for SLE ${totalPrice.toFixed(2)}.`);
+      setOrderModalOpen(false);
     } catch (e: any) {
       alert(`Order failed: ${e.message}`);
+    } finally {
+      setIsSubmittingOrder(false);
     }
   };
 
@@ -925,7 +908,7 @@ function RiderShop({ profile, wallet }: any) {
                      <button onClick={() => handleAddToCart(p)} className="bg-slate-100 text-slate-700 text-[11px] font-bold py-2.5 rounded-lg hover:bg-slate-200 transition flex items-center justify-center gap-1.5">
                        <ShoppingCart size={14} /> Add to Cart
                      </button>
-                     <button onClick={() => handleOrderInApp(p)} className="bg-blue-600 text-white text-[11px] font-bold py-2.5 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-1.5">
+                     <button onClick={() => openOrderModal(p)} className="bg-blue-600 text-white text-[11px] font-bold py-2.5 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-1.5">
                        <ArrowRight size={14} /> Order In-App
                      </button>
                   </div>
@@ -936,6 +919,61 @@ function RiderShop({ profile, wallet }: any) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* 🔴 IN-APP ORDER MODAL - FORM ONLY, NO WALLET DEBIT */}
+      {orderModalOpen && selectedProduct && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+            <button onClick={() => setOrderModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Place Order</h2>
+            <p className="text-sm text-slate-500 mb-6">{selectedProduct.name}</p>
+            
+            <div className="space-y-4 mb-6">
+               {/* QTY */}
+               <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="text-sm font-bold text-slate-700">Quantity</span>
+                  <div className="flex items-center gap-3">
+                     <button onClick={() => setOrderQty(prev => Math.max(1, prev - 1))} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Minus size={16}/></button>
+                     <span className="font-bold text-lg w-4 text-center">{orderQty}</span>
+                     <button onClick={() => setOrderQty(prev => prev + 1)} className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"><Plus size={16}/></button>
+                  </div>
+               </div>
+
+               {/* PHONE */}
+               <div className="relative">
+                  <Phone size={18} className="absolute left-3 top-3.5 text-slate-400" />
+                  <input type="tel" placeholder="Your Phone Number" value={orderPhone} onChange={e => setOrderPhone(e.target.value)} className="w-full border p-3 pl-10 rounded-xl outline-none focus:border-blue-500 text-sm" />
+               </div>
+
+               {/* ADDRESS */}
+               <div className="flex gap-3">
+                  <div className="w-1/3 relative">
+                     <MapPin size={18} className="absolute left-3 top-3.5 text-slate-400" />
+                     <input type="text" value="Freetown" disabled className="w-full border p-3 pl-10 rounded-xl bg-slate-100 text-slate-500 font-bold text-sm cursor-not-allowed" />
+                  </div>
+                  <div className="w-2/3 relative">
+                     <input type="text" placeholder="Street Address (e.g. 15 Signal Hill Rd)" value={streetAddress} onChange={e => setStreetAddress(e.target.value)} className="w-full border p-3 rounded-xl outline-none focus:border-blue-500 text-sm" />
+                  </div>
+               </div>
+
+               {/* DELIVERY TIME */}
+               <div className="relative">
+                  <CalendarClock size={18} className="absolute left-3 top-3.5 text-slate-400" />
+                  <input type="datetime-local" value={deliveryTime} onChange={e => setDeliveryTime(e.target.value)} className="w-full border p-3 pl-10 rounded-xl outline-none focus:border-blue-500 text-sm" />
+               </div>
+            </div>
+
+            <div className="flex justify-between items-center mb-6 pt-4 border-t border-slate-100">
+               <span className="text-sm font-bold text-slate-500">Total Price</span>
+               <span className="text-2xl font-bold text-blue-600">SLE {(Number(selectedProduct.price) * orderQty).toFixed(2)}</span>
+            </div>
+
+            <button onClick={submitInAppOrder} disabled={isSubmittingOrder} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50">
+              {isSubmittingOrder ? <Loader2 size={20} className="animate-spin" /> : <>Submit Order (SLE {(Number(selectedProduct.price) * orderQty).toFixed(2)})</>}
+            </button>
+          </div>
         </div>
       )}
     </div>
