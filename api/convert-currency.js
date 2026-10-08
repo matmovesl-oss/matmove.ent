@@ -70,18 +70,42 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Server configuration error: Monime API keys missing.' });
     }
 
-    // 3. Execute Monime Financial Transaction (Let Monime validate the true balance)
+    // 3. Fetch LIVE balance directly from Monime (ONLY IF SOURCE IS SLE)
+    // Monime only natively supports SLE, so USD checks must rely on local ledger
+    let liveSourceBalance = Number(sourceWallet.balance || 0);
+    if (apiKey && spaceId && sourceCurr === 'SLE') {
+      try {
+        const accRes = await fetch(`https://api.monime.io/v1/financial-accounts/${sourceAccountId}`, {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Monime-Space-Id': spaceId,
+            'Accept': 'application/json'
+          }
+        });
+        if (accRes.ok) {
+          const accData = await accRes.json();
+          const availableValue = accData.result?.balance?.available?.value;
+          if (typeof availableValue === 'number') {
+            liveSourceBalance = availableValue / 100;
+          }
+        }
+      } catch (e) {
+        console.warn("Monime balance fetch warning:", e);
+      }
+    }
+
+    if (liveSourceBalance < numAmount) {
+      return res.status(400).json({ error: `Insufficient ${sourceCurr} balance. Available: ${sourceCurr} ${liveSourceBalance.toFixed(2)}` });
+    }
+
+    // 4. Ping Monime Financial Transaction (Catch their native Cross-Currency Rejection cleanly)
     const transferPayload = {
       amount: { 
         value: Math.round(numAmount * 100), 
         currency: sourceCurr 
       },
-      sourceFinancialAccount: { 
-        id: sourceAccountId 
-      },
-      destinationFinancialAccount: { 
-        id: targetAccountId 
-      },
+      sourceFinancialAccount: { id: sourceAccountId },
+      destinationFinancialAccount: { id: targetAccountId },
       description: `MatMove Exchange Transfer: ${numAmount} ${sourceCurr} to ${targetCurr}`
     };
 
@@ -99,34 +123,34 @@ export default async function handler(req, res) {
 
     const monimeData = await monimeRes.json();
     
-    // Handle Errors or Rejections
+    // Safely process the response without crashing on nested object errors
     if (!monimeRes.ok) {
-       let errorMsg = monimeData.message || monimeData.error || 'Monime internal transfer failed.';
+       const errorObj = monimeData.error || {};
+       const errorMsg = String(errorObj.message || monimeData.message || 'Monime internal transfer failed.');
        
-       if (monimeData.failureDetail && monimeData.failureDetail.code === 'fund_insufficient') {
+       if (errorObj.reason === 'fund_insufficient' || (monimeData.failureDetail && monimeData.failureDetail.code === 'fund_insufficient')) {
            return res.status(400).json({ error: `Insufficient funds in your ${sourceCurr} account on Monime.` });
        }
        
-       // FAILSAFE: If Monime rejects cross-currency transfers natively, fallback to MatMove's local ledger
-       if (errorMsg.toLowerCase().includes('currency') || monimeRes.status === 400) {
-           console.warn("Monime rejected cross-currency transfer. Falling back to local Supabase ledger update.", errorMsg);
-           if (Number(sourceWallet.balance || 0) < numAmount) {
-                return res.status(400).json({ error: `Insufficient ${sourceCurr} balance in local ledger.` });
-           }
+       // Fallback: If Monime rejects cross-currency natively, safely proceed with MatMove's internal ledger
+       if (errorMsg.toLowerCase().includes('currency') || errorObj.reason === 'invariant_violation') {
+           console.warn("Monime rejected cross-currency transfer. Falling back to local Supabase ledger.");
        } else {
+           // A genuine network or structural error occurred
            return res.status(400).json({ error: errorMsg });
        }
     }
 
-    // 4. Update Supabase Wallets Table with the new converted totals
-    const oldSrcBal = Number(sourceWallet.balance || 0);
+    // 5. Update Supabase Wallets Table (The MatMove App Ledger handles the exchange)
     const oldTgtBal = Number(targetWallet.balance || 0);
-    
-    const newSourceBal = Math.max(0, oldSrcBal - numAmount);
+    const newSourceBal = Math.max(0, liveSourceBalance - numAmount);
     const newTargetBal = oldTgtBal + convertedAmount;
 
-    await supabase.from('wallets').update({ balance: newSourceBal, updated_at: new Date().toISOString() }).eq('id', sourceWallet.id);
-    await supabase.from('wallets').update({ balance: newTargetBal, updated_at: new Date().toISOString() }).eq('id', targetWallet.id);
+    const { error: updErr1 } = await supabase.from('wallets').update({ balance: newSourceBal, updated_at: new Date().toISOString() }).eq('id', sourceWallet.id);
+    if (updErr1) throw new Error("Failed to debit source wallet.");
+
+    const { error: updErr2 } = await supabase.from('wallets').update({ balance: newTargetBal, updated_at: new Date().toISOString() }).eq('id', targetWallet.id);
+    if (updErr2) throw new Error("Failed to credit target wallet.");
 
     return res.status(200).json({
       success: true,
