@@ -25,10 +25,7 @@ export function toMinorUnits(value) {
     BigInt(fraction.padEnd(2, '0'));
 
   if (minor <= 0n || minor > 1000000000000n) {
-    throw new HttpError(
-      400,
-      'Amount is outside the supported range.'
-    );
+    throw new HttpError(400, 'Amount is outside the supported range.');
   }
 
   return Number(minor);
@@ -40,10 +37,7 @@ export function keyFor(userId, action, key) {
       String(key)
     )
   ) {
-    throw new HttpError(
-      400,
-      'A valid request key is required.'
-    );
+    throw new HttpError(400, 'A valid request key is required.');
   }
 
   return createHash('sha256')
@@ -52,13 +46,8 @@ export function keyFor(userId, action, key) {
 }
 
 export function assertAllowed(profile, wallets, action) {
-  if (
-    !['rider', 'driver', 'merchant'].includes(profile.role)
-  ) {
-    throw new HttpError(
-      403,
-      'Customer account required.'
-    );
+  if (!['rider', 'driver', 'merchant'].includes(profile.role)) {
+    throw new HttpError(403, 'Customer account required.');
   }
 
   if (action === 'read') return;
@@ -71,13 +60,6 @@ export function assertAllowed(profile, wallets, action) {
       423,
       'Your wallet is frozen. Contact MatMove support.',
       'WALLET_FROZEN'
-    );
-  }
-
-  if (action === 'payout' && profile.role === 'rider') {
-    throw new HttpError(
-      403,
-      'Riders cannot withdraw funds.'
     );
   }
 
@@ -97,7 +79,6 @@ export function dbClient() {
   const url =
     process.env.SUPABASE_URL ||
     process.env.VITE_SUPABASE_URL;
-
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
@@ -110,8 +91,8 @@ export function dbClient() {
   return createClient(url, key, {
     auth: {
       persistSession: false,
-      autoRefreshToken: false,
-    },
+      autoRefreshToken: false
+    }
   });
 }
 
@@ -132,14 +113,12 @@ export async function monime(path, options = {}) {
       ...options,
       signal: AbortSignal.timeout(20000),
       headers: {
-        Authorization:
-          `Bearer ${process.env.MONIME_API_KEY}`,
-        'Monime-Space-Id':
-          process.env.MONIME_SPACE_ID,
+        Authorization: `Bearer ${process.env.MONIME_API_KEY}`,
+        'Monime-Space-Id': process.env.MONIME_SPACE_ID,
         'Monime-Version': 'caph.2025-08-23',
         'Content-Type': 'application/json',
-        ...options.headers,
-      },
+        ...options.headers
+      }
     }
   );
 
@@ -171,24 +150,19 @@ export async function verifiedAccount(db, wallet) {
   const id = direct || legacy;
 
   if (!/^fac-[A-Za-z0-9_-]+$/.test(String(id))) {
-    throw new HttpError(
-      409,
-      'Wallet setup is pending.'
-    );
+    throw new HttpError(409, 'Wallet setup is pending.');
   }
 
   const linked = await db
     .from('wallets')
     .select('id')
     .or(
-      `monime_account_id.eq.${id},metadata->>monime_account_id.eq.${id}`
+      `monime_account_id.eq.${id},` +
+      `metadata->>monime_account_id.eq.${id}`
     );
 
   if (linked.error) {
-    throw new HttpError(
-      503,
-      'Unable to verify wallet ownership.'
-    );
+    throw new HttpError(503, 'Unable to verify wallet ownership.');
   }
 
   if (
@@ -224,10 +198,7 @@ export async function authorize(
   { db = dbClient() } = {}
 ) {
   if (req.method !== 'POST') {
-    throw new HttpError(
-      405,
-      'Method not allowed.'
-    );
+    throw new HttpError(405, 'Method not allowed.');
   }
 
   const authorization = String(
@@ -253,29 +224,24 @@ export async function authorize(
 
   const user = auth.data.user;
 
-  if (
-    req.body?.userId &&
-    req.body.userId !== user.id
-  ) {
+  if (req.body?.userId && req.body.userId !== user.id) {
     throw new HttpError(
       403,
       'This request does not belong to your account.'
     );
   }
 
-  const [profileResult, walletResult] =
-    await Promise.all([
-      db
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single(),
-
-      db
-        .from('wallets')
-        .select('*')
-        .eq('user_id', user.id),
-    ]);
+  const [profileResult, walletResult] = await Promise.all([
+    db
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single(),
+    db
+      .from('wallets')
+      .select('*')
+      .eq('user_id', user.id)
+  ]);
 
   if (profileResult.error || walletResult.error) {
     throw new HttpError(
@@ -293,19 +259,17 @@ export async function authorize(
   req.body = {
     ...req.body,
     userId: user.id,
-    role: profileResult.data.role,
+    role: profileResult.data.role
   };
 
   const context = {
     db,
     user,
     profile: profileResult.data,
-    wallets: walletResult.data || [],
+    wallets: walletResult.data || []
   };
 
-  if (
-    ['load', 'payout', 'transfer'].includes(action)
-  ) {
+  if (['load', 'payout', 'transfer'].includes(action)) {
     context.minor = toMinorUnits(req.body.amount);
 
     const currency = String(
@@ -313,16 +277,10 @@ export async function authorize(
     ).toUpperCase();
 
     if (!['SLE', 'USD'].includes(currency)) {
-      throw new HttpError(
-        400,
-        'Choose SLE or USD.'
-      );
+      throw new HttpError(400, 'Choose SLE or USD.');
     }
 
-    if (
-      action !== 'transfer' &&
-      currency !== 'SLE'
-    ) {
+    if (action !== 'transfer' && currency !== 'SLE') {
       throw new HttpError(
         400,
         'This payment method currently supports SLE only.'
@@ -335,11 +293,8 @@ export async function authorize(
       item => item.currency === currency
     );
 
-    context.account =
-      await verifiedAccount(db, wallet);
-
+    context.account = await verifiedAccount(db, wallet);
     context.accountId = context.account.id;
-
     context.idempotencyKey = keyFor(
       user.id,
       action,
@@ -364,7 +319,7 @@ export function protectedWallet(action, handler) {
         error: error.status
           ? error.message
           : 'Unable to complete the wallet request.',
-        code: error.code,
+        code: error.code
       });
     }
   };
