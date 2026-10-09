@@ -1,60 +1,102 @@
-import { createClient } from '@supabase/supabase-js';
+import {
+  protectedWallet,
+  monime,
+  HttpError,
+} from '../server/wallet-security.js';
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+export default protectedWallet(
+  'load',
+  async (req, res) => {
+    const {
+      user,
+      profile,
+      accountId,
+      minor,
+      idempotencyKey,
+    } = req.matmove;
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+    let origin;
 
-  try {
-    const { amount, userId, role = 'rider' } = req.body;
-    if (!amount || !userId) return res.status(400).json({ error: 'Missing amount or userId.' });
+    try {
+      const url = new URL(
+        process.env.MATMOVE_PUBLIC_URL
+      );
 
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+      if (
+        url.protocol !== 'https:' ||
+        url.username ||
+        url.password
+      ) {
+        throw new Error();
+      }
 
-    const { data: wallet } = await supabase.from('wallets').select('*').eq('user_id', userId).eq('currency', 'SLE').maybeSingle();
-    let targetAccountId = wallet?.monime_account_id || wallet?.metadata?.monime_account_id;
-    
-    if (!targetAccountId) return res.status(400).json({ error: 'User Monime Account could not be resolved.' });
+      origin = url.origin;
+    } catch {
+      throw new HttpError(
+        503,
+        'The checkout return URL is not configured.'
+      );
+    }
 
-    const loadAmountMinor = Math.round(Number(amount) * 100);
-    const hostUrl = req.headers.origin || 'https://matmoveent.vercel.app';
+    const callback =
+      `${origin}/api/monime-return?role=${
+        encodeURIComponent(profile.role)
+      }`;
 
-    // 🔴 FIX: Append the user's role to the return URLs
-    const payload = {
-      name: `MatMove Wallet Top-up`,
-      successUrl: `${hostUrl}/api/monime-return?status=success&role=${role}`, 
-      cancelUrl: `${hostUrl}/api/monime-return?status=cancelled&role=${role}`,
-      financialAccountId: targetAccountId,
-      lineItems: [{ type: "custom", name: "Wallet Load", price: { currency: "SLE", value: loadAmountMinor }, quantity: 1 }],
-      metadata: { userId: userId, role: role }
-    };
+    const session = await monime(
+      'checkout-sessions',
+      {
+        method: 'POST',
+        headers: {
+          'Idempotency-Key': idempotencyKey,
+        },
+        body: JSON.stringify({
+          name: 'MatMove Wallet Top-up',
+          financialAccountId: accountId,
 
-    const monimeResponse = await fetch('https://api.monime.io/v1/checkout-sessions', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json', 'Accept': '*/*', 
-        'Authorization': `Bearer ${process.env.MONIME_API_KEY || process.env.VITE_MONIME_API_KEY}`, 
-        'Monime-Space-Id': process.env.MONIME_SPACE_ID || process.env.VITE_MONIME_SPACE_ID, 
-        'Idempotency-Key': `load-${userId}-${Date.now()}` 
-      },
-      body: JSON.stringify(payload)
-    });
+          successUrl:
+            `${callback}&status=success`,
 
-    const rawText = await monimeResponse.text();
-    let sessionData = {};
-    try { sessionData = JSON.parse(rawText); } catch (e) { return res.status(500).json({ error: "Gateway Error: Did not receive valid JSON." }); }
+          cancelUrl:
+            `${callback}&status=cancelled`,
 
-    if (!monimeResponse.ok) return res.status(400).json({ error: sessionData.message || 'Payment creation failed' });
-    const checkoutUrl = sessionData.result?.redirectUrl || sessionData.result?.url || sessionData.url || sessionData.redirectUrl;
-    if (!checkoutUrl) return res.status(400).json({ error: 'Monime did not return a valid checkout URL.' });
+          lineItems: [
+            {
+              type: 'custom',
+              name: 'Wallet Load',
+              price: {
+                currency: 'SLE',
+                value: minor,
+              },
+              quantity: 1,
+            },
+          ],
 
-    return res.status(200).json({ link: checkoutUrl });
-  } catch (error) {
-    return res.status(500).json({ error: error.message || 'Internal Server Error' });
+          metadata: {
+            userId: user.id,
+            role: profile.role,
+          },
+        }),
+      }
+    );
+
+    const link =
+      session.redirectUrl ||
+      session.url;
+
+    try {
+      if (
+        new URL(link).protocol !== 'https:'
+      ) {
+        throw new Error();
+      }
+    } catch {
+      throw new HttpError(
+        502,
+        'The payment provider did not return a safe checkout URL.'
+      );
+    }
+
+    return res.status(200).json({ link });
   }
-}
+);

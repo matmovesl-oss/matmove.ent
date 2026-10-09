@@ -4,8 +4,10 @@ import {
   Check,
   AlertCircle,
 } from 'lucide-react';
+
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+
 import type {
   DocumentType,
   UploadedDocument,
@@ -26,11 +28,8 @@ interface StoredKycDocument {
   status: 'uploaded';
 }
 
-const DOCUMENT_STORAGE_KEY =
-  'ob_documents';
-
-const SELFIE_STORAGE_KEY =
-  'ob_selfie';
+const DOCUMENT_STORAGE_KEY = 'ob_documents';
+const SELFIE_STORAGE_KEY = 'ob_selfie';
 
 function saveDocumentMetadata(
   document: UploadedDocument
@@ -48,15 +47,16 @@ function saveDocumentMetadata(
 
     if (existingRaw) {
       try {
-        existing =
-          JSON.parse(existingRaw);
+        existing = JSON.parse(existingRaw);
       } catch {
         existing = {};
       }
     }
 
+    if (!document.id) return;
+
     existing[document.type] = {
-      id: document.id,
+      id: document.id || '',
       type: document.type,
       fileName: document.fileName,
       fileSize: document.fileSize,
@@ -75,18 +75,14 @@ function saveDocumentMetadata(
   }
 }
 
-function removeDocumentMetadata(
-  type: string
-) {
+function removeDocumentMetadata(type: string) {
   try {
     const existingRaw =
       sessionStorage.getItem(
         DOCUMENT_STORAGE_KEY
       );
 
-    if (!existingRaw) {
-      return;
-    }
+    if (!existingRaw) return;
 
     let existing: Record<
       string,
@@ -94,8 +90,7 @@ function removeDocumentMetadata(
     > = {};
 
     try {
-      existing =
-        JSON.parse(existingRaw);
+      existing = JSON.parse(existingRaw);
     } catch {
       existing = {};
     }
@@ -103,8 +98,7 @@ function removeDocumentMetadata(
     delete existing[type];
 
     if (
-      Object.keys(existing).length ===
-      0
+      Object.keys(existing).length === 0
     ) {
       sessionStorage.removeItem(
         DOCUMENT_STORAGE_KEY
@@ -127,8 +121,10 @@ function saveSelfieMetadata(
   document: UploadedDocument
 ) {
   try {
+    if (!document.id) return;
+
     const stored: StoredKycDocument = {
-      id: document.id,
+      id: document.id || '',
       type: 'selfie',
       fileName: document.fileName,
       fileSize: document.fileSize,
@@ -171,15 +167,11 @@ export function DocumentUpload({
   const inputRef =
     useRef<HTMLInputElement>(null);
 
-  const [error, setError] =
-    useState('');
-
+  const [error, setError] = useState('');
   const [isDragging, setIsDragging] =
     useState(false);
 
-  const handleFile = async (
-    file: File
-  ) => {
+  const handleFile = async (file: File) => {
     setError('');
 
     if (!session?.user?.id) {
@@ -189,23 +181,14 @@ export function DocumentUpload({
       return;
     }
 
-    // --------------------------------------------------------
-    // Validate file size
-    // --------------------------------------------------------
-
     if (
-      file.size >
-      10 * 1024 * 1024
+      file.size > 10 * 1024 * 1024
     ) {
       setError(
         'File is too large. Maximum size is 10MB.'
       );
       return;
     }
-
-    // --------------------------------------------------------
-    // Validate file type
-    // --------------------------------------------------------
 
     const validTypes = [
       'image/jpeg',
@@ -215,19 +198,13 @@ export function DocumentUpload({
     ];
 
     if (
-      !validTypes.includes(
-        file.type
-      )
+      !validTypes.includes(file.type)
     ) {
       setError(
         'Invalid file type. Please use JPG, PNG, WebP, or PDF.'
       );
       return;
     }
-
-    // --------------------------------------------------------
-    // Remove previous file when replacing
-    // --------------------------------------------------------
 
     if (
       document?.id &&
@@ -248,19 +225,15 @@ export function DocumentUpload({
             ?.toLowerCase()
         : 'bin';
 
-    const filePath = `${
-      session.user.id
-    }/${type}-${Date.now()}.${fileExt}`;
+    const filePath =
+      `${session.user.id}/${type}-${
+        Date.now()
+      }.${fileExt}`;
 
     const localPreview =
-      file.type ===
-      'application/pdf'
+      file.type === 'application/pdf'
         ? undefined
         : URL.createObjectURL(file);
-
-    // --------------------------------------------------------
-    // Show immediate uploading state
-    // --------------------------------------------------------
 
     onUpload({
       id: 'temp',
@@ -273,24 +246,19 @@ export function DocumentUpload({
     });
 
     try {
-      // ------------------------------------------------------
-      // Upload physical file to Supabase Storage
-      // ------------------------------------------------------
-
       const {
         data,
         error: uploadError,
-      } =
-        await supabase.storage
-          .from('kyc-documents')
-          .upload(
-            filePath,
-            file,
-            {
-              cacheControl: '3600',
-              upsert: false,
-            }
-          );
+      } = await supabase.storage
+        .from('kyc-documents')
+        .upload(
+          filePath,
+          file,
+          {
+            cacheControl: '3600',
+            upsert: false,
+          }
+        );
 
       if (uploadError) {
         throw uploadError;
@@ -302,37 +270,22 @@ export function DocumentUpload({
         );
       }
 
-      // ------------------------------------------------------
-      // Build completed document object
-      // ------------------------------------------------------
-
-      const uploadedDocument: UploadedDocument =
-        {
-          id: data.path,
-          type,
-          fileName: file.name,
-          fileSize: file.size,
-          status: 'uploaded',
-          uploadProgress: 100,
-          previewUrl:
-            localPreview,
-        };
-
-      // ------------------------------------------------------
-      // Persist metadata for final KYC submission
-      // ------------------------------------------------------
+      const uploadedDocument:
+        UploadedDocument = {
+        id: data.path,
+        type,
+        fileName: file.name,
+        fileSize: file.size,
+        status: 'uploaded',
+        uploadProgress: 100,
+        previewUrl: localPreview,
+      };
 
       saveDocumentMetadata(
         uploadedDocument
       );
 
-      // ------------------------------------------------------
-      // Update UI
-      // ------------------------------------------------------
-
-      onUpload(
-        uploadedDocument
-      );
+      onUpload(uploadedDocument);
     } catch (e: unknown) {
       onRemove();
 
@@ -362,9 +315,7 @@ export function DocumentUpload({
 
     removeDocumentMetadata(type);
 
-    if (
-      document?.previewUrl
-    ) {
+    if (document?.previewUrl) {
       URL.revokeObjectURL(
         document.previewUrl
       );
@@ -372,10 +323,6 @@ export function DocumentUpload({
 
     onRemove();
   };
-
-  // ----------------------------------------------------------
-  // Empty upload state
-  // ----------------------------------------------------------
 
   if (!document) {
     return (
@@ -388,20 +335,19 @@ export function DocumentUpload({
         onClick={() =>
           inputRef.current?.click()
         }
-        onDragOver={(event) => {
+        onDragOver={event => {
           event.preventDefault();
           setIsDragging(true);
         }}
         onDragLeave={() =>
           setIsDragging(false)
         }
-        onDrop={(event) => {
+        onDrop={event => {
           event.preventDefault();
           setIsDragging(false);
 
           const file =
-            event.dataTransfer
-              .files[0];
+            event.dataTransfer.files[0];
 
           if (file) {
             handleFile(file);
@@ -413,7 +359,7 @@ export function DocumentUpload({
           type="file"
           accept="image/jpeg,image/png,image/webp,application/pdf"
           className="hidden"
-          onChange={(event) => {
+          onChange={event => {
             const file =
               event.target.files?.[0];
 
@@ -427,9 +373,7 @@ export function DocumentUpload({
 
         {error && (
           <div className="absolute bottom-2 left-0 w-full text-center text-red-600 text-sm font-medium flex items-center justify-center gap-1 px-3">
-            <AlertCircle
-              size={14}
-            />
+            <AlertCircle size={14} />
             {error}
           </div>
         )}
@@ -437,18 +381,12 @@ export function DocumentUpload({
     );
   }
 
-  // ----------------------------------------------------------
-  // Uploaded state
-  // ----------------------------------------------------------
-
   return (
     <div className="w-full relative z-20">
       <div className="w-full h-48 mb-4 rounded-xl overflow-hidden bg-slate-100 border-2 border-slate-200 shadow-sm relative group">
         {document.previewUrl ? (
           <img
-            src={
-              document.previewUrl
-            }
+            src={document.previewUrl}
             alt="Document preview"
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
@@ -494,9 +432,7 @@ export function DocumentUpload({
 
           <button
             type="button"
-            onClick={
-              handleRemove
-            }
+            onClick={handleRemove}
             className="text-sm font-medium text-red-500 hover:underline"
           >
             Remove
@@ -509,7 +445,7 @@ export function DocumentUpload({
         type="file"
         accept="image/jpeg,image/png,image/webp,application/pdf"
         className="hidden"
-        onChange={(event) => {
+        onChange={event => {
           const file =
             event.target.files?.[0];
 
@@ -523,9 +459,7 @@ export function DocumentUpload({
 
       {error && (
         <div className="mt-2 text-red-600 text-xs font-medium flex items-center justify-center gap-1">
-          <AlertCircle
-            size={13}
-          />
+          <AlertCircle size={13} />
           {error}
         </div>
       )}
@@ -548,8 +482,7 @@ export function SelfieUpload({
 
   onRemove: () => void;
 }) {
-  const { session } =
-    useAuth();
+  const { session } = useAuth();
 
   const inputRef =
     useRef<HTMLInputElement>(null);
@@ -570,8 +503,7 @@ export function SelfieUpload({
     }
 
     if (
-      file.size >
-      10 * 1024 * 1024
+      file.size > 10 * 1024 * 1024
     ) {
       setError(
         'File too large (Max 10MB)'
@@ -586,19 +518,13 @@ export function SelfieUpload({
     ];
 
     if (
-      !validTypes.includes(
-        file.type
-      )
+      !validTypes.includes(file.type)
     ) {
       setError(
         'Invalid selfie format. Please use JPG, PNG, or WebP.'
       );
       return;
     }
-
-    // --------------------------------------------------------
-    // Remove previous selfie when retaking
-    // --------------------------------------------------------
 
     if (
       document?.id &&
@@ -619,9 +545,10 @@ export function SelfieUpload({
             ?.toLowerCase()
         : 'jpg';
 
-    const filePath = `${
-      session.user.id
-    }/selfie-${Date.now()}.${fileExt}`;
+    const filePath =
+      `${session.user.id}/selfie-${
+        Date.now()
+      }.${fileExt}`;
 
     const localPreview =
       URL.createObjectURL(file);
@@ -640,17 +567,16 @@ export function SelfieUpload({
       const {
         data,
         error: uploadError,
-      } =
-        await supabase.storage
-          .from('kyc-documents')
-          .upload(
-            filePath,
-            file,
-            {
-              cacheControl: '3600',
-              upsert: false,
-            }
-          );
+      } = await supabase.storage
+        .from('kyc-documents')
+        .upload(
+          filePath,
+          file,
+          {
+            cacheControl: '3600',
+            upsert: false,
+          }
+        );
 
       if (uploadError) {
         throw uploadError;
@@ -677,9 +603,7 @@ export function SelfieUpload({
         uploadedSelfie
       );
 
-      onUpload(
-        uploadedSelfie
-      );
+      onUpload(uploadedSelfie);
     } catch (e: unknown) {
       onRemove();
 
@@ -707,9 +631,7 @@ export function SelfieUpload({
 
     removeSelfieMetadata();
 
-    if (
-      document?.previewUrl
-    ) {
+    if (document?.previewUrl) {
       URL.revokeObjectURL(
         document.previewUrl
       );
@@ -717,10 +639,6 @@ export function SelfieUpload({
 
     onRemove();
   };
-
-  // ----------------------------------------------------------
-  // Empty selfie state
-  // ----------------------------------------------------------
 
   if (!document) {
     return (
@@ -737,9 +655,7 @@ export function SelfieUpload({
 
         {error && (
           <div className="text-red-600 text-sm font-medium mt-3 flex items-center justify-center gap-1">
-            <AlertCircle
-              size={14}
-            />
+            <AlertCircle size={14} />
             {error}
           </div>
         )}
@@ -750,7 +666,7 @@ export function SelfieUpload({
           accept="image/jpeg,image/png,image/webp"
           capture="user"
           className="hidden"
-          onChange={(event) => {
+          onChange={event => {
             const file =
               event.target.files?.[0];
 
@@ -765,18 +681,12 @@ export function SelfieUpload({
     );
   }
 
-  // ----------------------------------------------------------
-  // Uploaded selfie state
-  // ----------------------------------------------------------
-
   return (
     <div className="w-full flex flex-col items-center relative z-20">
       <div className="w-48 h-48 md:w-64 md:h-64 rounded-full overflow-hidden border-4 border-[#184f9a] shadow-xl relative mb-6">
         {document.previewUrl ? (
           <img
-            src={
-              document.previewUrl
-            }
+            src={document.previewUrl}
             alt="Selfie"
             className="w-full h-full object-cover"
           />
@@ -810,9 +720,7 @@ export function SelfieUpload({
 
         <button
           type="button"
-          onClick={
-            handleRemove
-          }
+          onClick={handleRemove}
           className="bg-red-50 text-red-600 px-5 py-2.5 rounded-xl font-semibold hover:bg-red-100 transition-colors"
         >
           Remove
@@ -825,7 +733,7 @@ export function SelfieUpload({
         accept="image/jpeg,image/png,image/webp"
         capture="user"
         className="hidden"
-        onChange={(event) => {
+        onChange={event => {
           const file =
             event.target.files?.[0];
 
@@ -839,9 +747,7 @@ export function SelfieUpload({
 
       {error && (
         <div className="text-red-600 text-xs font-medium mt-3 flex items-center justify-center gap-1">
-          <AlertCircle
-            size={13}
-          />
+          <AlertCircle size={13} />
           {error}
         </div>
       )}

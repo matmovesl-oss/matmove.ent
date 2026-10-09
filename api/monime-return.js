@@ -1,8 +1,21 @@
 export default function handler(req, res) {
-  const { role } = req.query;
-  
-  // Dynamically route the user back to their specific dashboard
-  const redirectPath = role ? `/customer/${role}?payment=done` : `/customer?payment=done`;
-  
-  res.redirect(302, redirectPath);
+  res.setHeader('Cache-Control', 'no-store');
+
+  const role =
+    ['rider', 'driver', 'merchant'].includes(
+      req.query?.role
+    )
+      ? req.query.role
+      : null;
+
+  // Navigation only. A redirect never proves payment
+  // and must never credit a wallet.
+  return res.redirect(
+    303,
+    `${
+      role
+        ? `/customer/${role}`
+        : '/customer'
+    }?payment=returned`
+  );
 }

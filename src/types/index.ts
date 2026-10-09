@@ -1,4 +1,7 @@
-export type UserRole = 'rider' | 'driver' | 'merchant';
+export type UserRole =
+  | 'rider'
+  | 'driver'
+  | 'merchant';
 
 export type KycStatus =
   | 'not_started'
@@ -18,11 +21,15 @@ export type DocumentType =
   | 'selfie';
 
 export interface UploadedDocument {
+  id?: string | null;
   type: DocumentType;
   fileName: string;
   fileSize: number;
   uploadProgress: number;
-  status: 'uploading' | 'uploaded' | 'error';
+  status:
+    | 'uploading'
+    | 'uploaded'
+    | 'error';
   previewUrl?: string;
 }
 
@@ -100,5 +107,8 @@ export interface Transaction {
   date: string;
   amount: number;
   direction: 'in' | 'out';
-  status: 'Completed' | 'Pending' | 'Failed';
+  status:
+    | 'Completed'
+    | 'Pending'
+    | 'Failed';
 }
