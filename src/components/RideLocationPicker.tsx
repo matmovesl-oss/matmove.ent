@@ -13,7 +13,7 @@ export type TripLocations = {
   distanceKm: number | null;
 };
 
-// Central Freetown (Charles Street / Pademba Road area - ON LAND)
+// Land fallback: Charles Street / Pademba Road, Freetown
 const FREETOWN_CENTER = { lat: 8.4808, lng: -13.2290 };
 
 export function RideLocationPicker({
@@ -60,7 +60,7 @@ export function RideLocationPicker({
     }
 
     if (!apiKey) {
-      setMessage('Google Maps API Key is missing in VITE_GOOGLE_MAPS_API_KEY.');
+      setMessage('Google Maps API Key missing in VITE_GOOGLE_MAPS_API_KEY.');
       return;
     }
 
@@ -73,17 +73,17 @@ export function RideLocationPicker({
     document.head.appendChild(script);
   }, [apiKey]);
 
-  // Initialize Map
+  // Initialize Map with Restricted Controls
   useEffect(() => {
     if (!isLoaded || !mapRef.current || googleMap.current) return;
 
     const map = new google.maps.Map(mapRef.current, {
       center: FREETOWN_CENTER,
-      zoom: 14,
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: false,
+      zoom: 15,
+      disableDefaultUI: true, // Hides external Google branding/controls
       zoomControl: true,
+      clickableIcons: false, // Prevents clicking POIs to leave the app
+      gestureHandling: 'greedy'
     });
 
     googleMap.current = map;
@@ -92,10 +92,10 @@ export function RideLocationPicker({
 
     directionsRenderer.current = new google.maps.DirectionsRenderer({
       map,
-      polylineOptions: { strokeColor: '#2563EB', strokeWeight: 5 }
+      polylineOptions: { strokeColor: '#2563EB', strokeWeight: 5 },
+      suppressMarkers: false
     });
 
-    // Map Click Handler for Pin Placement
     map.addListener('click', (e: google.maps.MapMouseEvent) => {
       if (!e.latLng) return;
       const lat = e.latLng.lat();
@@ -107,11 +107,9 @@ export function RideLocationPicker({
       }
     });
 
-    // Attempt live location on load
     locateUser(false);
-  }, [isLoaded]);
+  }, [isLoaded, pinTarget]);
 
-  // Place or Update Markers
   const updateMarker = (target: Target, coords: [number, number]) => {
     const position = { lat: coords[1], lng: coords[0] };
     const isPickup = target === 'pickup';
@@ -124,8 +122,8 @@ export function RideLocationPicker({
         draggable: true,
         icon: {
           url: isPickup
-            ? 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
-            : 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+            ? 'https://maps.google.com/mapfiles/ms/icons/green-dot.png'
+            : 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
         }
       });
 
@@ -143,7 +141,6 @@ export function RideLocationPicker({
     googleMap.current?.panTo(position);
   };
 
-  // Select a location by coords & reverse geocode
   const selectLocation = (target: Target, coords: [number, number], formattedAddress?: string) => {
     updateMarker(target, coords);
 
@@ -167,48 +164,60 @@ export function RideLocationPicker({
     setSearching(null);
   };
 
-  // Locate User via Browser GPS
   const locateUser = (explicit = true) => {
     if (!navigator.geolocation) {
-      if (explicit) setMessage('Live GPS is not supported by your browser.');
+      if (explicit) setMessage('Live GPS is not supported on this browser.');
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const coords: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        selectLocation('pickup', coords);
-        setMessage('Live pickup location detected.');
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+
+        // Verify coordinate is on land around Freetown peninsula
+        if (lat < 8.35 || lat > 8.52 || lng < -13.32 || lng > -13.10) {
+          if (explicit) setMessage('Coarse network location detected. Please pin your exact street.');
+          selectLocation('pickup', [FREETOWN_CENTER.lng, FREETOWN_CENTER.lat], 'Charles Street, Freetown');
+          return;
+        }
+
+        selectLocation('pickup', [lng, lat]);
+        if (explicit) setMessage('Live location updated.');
       },
       () => {
-        if (explicit) setMessage('Location permission denied or unavailable. Type an address or place a pin.');
+        if (explicit) setMessage('Location permission denied. Type an address or place a pin.');
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
     );
   };
 
-  // Handle Input Typing & Google Places Predictions
   const handleInputChange = (target: Target, text: string) => {
     setTexts(prev => ({ ...prev, [target]: text }));
     setSearching(target);
 
-    if (text.trim().length < 2) {
+    if (!text.trim()) {
+      value.current[target] = null;
+      if (target === 'pickup' && pickupMarker.current) pickupMarker.current.setMap(null);
+      if (target === 'destination' && destMarker.current) destMarker.current.setMap(null);
+      emit();
       setPredictions([]);
       return;
     }
 
-    if (!autocompleteService.current) return;
+    if (text.trim().length < 2 || !autocompleteService.current) {
+      setPredictions([]);
+      return;
+    }
 
     autocompleteService.current.getPlacePredictions(
       {
         input: text,
-        componentRestrictions: { country: 'sl' }, // Restricted to Sierra Leone
-        locationRestriction: {
-          north: 8.520,
-          south: 8.400,
-          east: -13.150,
-          west: -13.300
-        } // Freetown bounding area
+        componentRestrictions: { country: 'sl' },
+        locationBias: new google.maps.LatLngBounds(
+          { lat: 8.400, lng: -13.300 },
+          { lat: 8.520, lng: -13.150 }
+        )
       },
       (results, status) => {
         if (status === google.maps.places.PlacesServiceStatus.OK && results) {
@@ -222,7 +231,6 @@ export function RideLocationPicker({
     );
   };
 
-  // Select Prediction Item
   const handleSelectPrediction = (prediction: google.maps.places.AutocompletePrediction) => {
     if (!geocoder.current) return;
 
@@ -234,7 +242,6 @@ export function RideLocationPicker({
     });
   };
 
-  // Route Preview Calculation
   const previewRoute = () => {
     const { pickup, destination } = value.current;
     if (!pickup || !destination) {
