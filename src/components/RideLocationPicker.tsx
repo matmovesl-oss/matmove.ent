@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import { useEffect, useRef, useState, useCallback } from 'react';
 
 type Point = {
-  coords: [number, number];
+  coords: [number, number]; // [lng, lat]
   address: string;
 };
 
@@ -15,19 +13,32 @@ export type TripLocations = {
   distanceKm: number | null;
 };
 
-const fallback: [number, number] = [-13.234, 8.484];
+// Central Freetown (Charles Street / Pademba Road area - ON LAND)
+const FREETOWN_CENTER = { lat: 8.4808, lng: -13.2290 };
 
 export function RideLocationPicker({
   onChange
 }: {
   onChange: (value: TripLocations) => void;
 }) {
-  const container = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const googleMap = useRef<google.maps.Map | null>(null);
 
-  const markers = useRef<Partial<Record<Target, mapboxgl.Marker>>>({});
-  const callback = useRef(onChange);
-  callback.current = onChange;
+  const pickupMarker = useRef<google.maps.Marker | null>(null);
+  const destMarker = useRef<google.maps.Marker | null>(null);
+  const directionsRenderer = useRef<google.maps.DirectionsRenderer | null>(null);
+
+  const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
+  const geocoder = useRef<google.maps.Geocoder | null>(null);
+
+  const [texts, setTexts] = useState({ pickup: '', destination: '' });
+  const [searching, setSearching] = useState<Target | null>(null);
+  const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
+  const [pinTarget, setPinTarget] = useState<Target | null>(null);
+  const [message, setMessage] = useState('');
+  const [routing, setRouting] = useState(false);
+  const [distance, setDistance] = useState<number | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   const value = useRef<TripLocations>({
     pickup: null,
@@ -35,315 +46,225 @@ export function RideLocationPicker({
     distanceKm: null
   });
 
-  const manualPickup = useRef(false);
-  const active = useRef(true);
-  const pinTarget = useRef<Target | null>(null);
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
-  const reverseRequests = useRef<Partial<Record<Target, AbortController>>>({});
-  const routeRequest = useRef<AbortController | null>(null);
-  const searchRequest = useRef<AbortController | null>(null);
+  const emit = useCallback(() => {
+    onChange({ ...value.current });
+  }, [onChange]);
 
-  const [texts, setTexts] = useState({ pickup: '', destination: '' });
-  const [searching, setSearching] = useState<Target | null>(null);
-  const [results, setResults] = useState<any[]>([]);
-  const [pin, setPin] = useState<Target | null>(null);
-  const [message, setMessage] = useState('');
-  const [routing, setRouting] = useState(false);
-  const [distance, setDistance] = useState<number | null>(null);
-
-  const token = import.meta.env.VITE_MAPBOX_TOKEN;
-
-  const emit = () => {
-    callback.current({ ...value.current });
-  };
-
-  const invalidateRoute = () => {
-    routeRequest.current?.abort();
-    setRouting(false);
-    setDistance(null);
-    value.current.distanceKm = null;
-
-    const instance = map.current;
-    if (instance?.getLayer('trip-route')) instance.removeLayer('trip-route');
-    if (instance?.getSource('trip-route')) instance.removeSource('trip-route');
-  };
-
-  const select = (
-    target: Target,
-    coords: [number, number],
-    address: string,
-    pan = true
-  ) => {
-    if (!active.current) return;
-
-    reverseRequests.current[target]?.abort();
-    invalidateRoute();
-
-    value.current[target] = { coords, address };
-    setTexts(prev => ({ ...prev, [target]: address }));
-    setResults([]);
-    setSearching(null);
-
-    const instance = map.current;
-    if (instance) {
-      let marker = markers.current[target];
-      if (!marker) {
-        marker = new mapboxgl.Marker({
-          color: target === 'pickup' ? '#10B981' : '#2563EB',
-          draggable: true
-        });
-
-        marker.on('dragend', () => {
-          const pos = marker!.getLngLat();
-          if (target === 'pickup') manualPickup.current = true;
-          void selectPin(target, [pos.lng, pos.lat]);
-        });
-
-        markers.current[target] = marker;
-      }
-
-      marker.setLngLat(coords).addTo(instance);
-      if (pan) instance.flyTo({ center: coords, zoom: 15 });
-    }
-
-    emit();
-  };
-
-  const selectPin = async (target: Target, coords: [number, number]) => {
-    select(target, coords, `${coords[1].toFixed(6)}, ${coords[0].toFixed(6)}`, false);
-
-    if (!token) return;
-
-    const controller = new AbortController();
-    reverseRequests.current[target] = controller;
-
-    try {
-      const res = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${coords[0]},${coords[1]}.json?access_token=${encodeURIComponent(token)}`,
-        { signal: controller.signal }
-      );
-
-      if (!res.ok) return;
-
-      const data = await res.json();
-      const address = data.features?.[0]?.place_name;
-
-      if (active.current && !controller.signal.aborted && address) {
-        value.current[target] = { coords, address };
-        setTexts(prev => ({ ...prev, [target]: address }));
-        emit();
-      }
-    } catch {
-      // Keep exact coordinates
-    }
-  };
-
-  const locate = (explicit = true) => {
-    if (!navigator.geolocation) {
-      setMessage('Live location is unavailable. Type an address or place a pin.');
+  // Load Google Maps Script
+  useEffect(() => {
+    if (window.google?.maps) {
+      setIsLoaded(true);
       return;
     }
 
-    if (explicit) manualPickup.current = false;
+    if (!apiKey) {
+      setMessage('Google Maps API Key is missing in VITE_GOOGLE_MAPS_API_KEY.');
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => setIsLoaded(true);
+    script.onerror = () => setMessage('Failed to load Google Maps SDK.');
+    document.head.appendChild(script);
+  }, [apiKey]);
+
+  // Initialize Map
+  useEffect(() => {
+    if (!isLoaded || !mapRef.current || googleMap.current) return;
+
+    const map = new google.maps.Map(mapRef.current, {
+      center: FREETOWN_CENTER,
+      zoom: 14,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      zoomControl: true,
+    });
+
+    googleMap.current = map;
+    autocompleteService.current = new google.maps.places.AutocompleteService();
+    geocoder.current = new google.maps.Geocoder();
+
+    directionsRenderer.current = new google.maps.DirectionsRenderer({
+      map,
+      polylineOptions: { strokeColor: '#2563EB', strokeWeight: 5 }
+    });
+
+    // Map Click Handler for Pin Placement
+    map.addListener('click', (e: google.maps.MapMouseEvent) => {
+      if (!e.latLng) return;
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+
+      if (pinTarget) {
+        selectLocation(pinTarget, [lng, lat]);
+        setPinTarget(null);
+      }
+    });
+
+    // Attempt live location on load
+    locateUser(false);
+  }, [isLoaded]);
+
+  // Place or Update Markers
+  const updateMarker = (target: Target, coords: [number, number]) => {
+    const position = { lat: coords[1], lng: coords[0] };
+    const isPickup = target === 'pickup';
+    let marker = isPickup ? pickupMarker.current : destMarker.current;
+
+    if (!marker) {
+      marker = new google.maps.Marker({
+        position,
+        map: googleMap.current,
+        draggable: true,
+        icon: {
+          url: isPickup
+            ? 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
+            : 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+        }
+      });
+
+      marker.addListener('dragend', (e: google.maps.MapMouseEvent) => {
+        if (!e.latLng) return;
+        selectLocation(target, [e.latLng.lng(), e.latLng.lat()]);
+      });
+
+      if (isPickup) pickupMarker.current = marker;
+      else destMarker.current = marker;
+    } else {
+      marker.setPosition(position);
+    }
+
+    googleMap.current?.panTo(position);
+  };
+
+  // Select a location by coords & reverse geocode
+  const selectLocation = (target: Target, coords: [number, number], formattedAddress?: string) => {
+    updateMarker(target, coords);
+
+    if (formattedAddress) {
+      value.current[target] = { coords, address: formattedAddress };
+      setTexts(prev => ({ ...prev, [target]: formattedAddress }));
+      emit();
+    } else if (geocoder.current) {
+      geocoder.current.geocode({ location: { lat: coords[1], lng: coords[0] } }, (results, status) => {
+        const address = (status === 'OK' && results?.[0])
+          ? results[0].formatted_address
+          : `${coords[1].toFixed(6)}, ${coords[0].toFixed(6)}`;
+
+        value.current[target] = { coords, address };
+        setTexts(prev => ({ ...prev, [target]: address }));
+        emit();
+      });
+    }
+
+    setPredictions([]);
+    setSearching(null);
+  };
+
+  // Locate User via Browser GPS
+  const locateUser = (explicit = true) => {
+    if (!navigator.geolocation) {
+      if (explicit) setMessage('Live GPS is not supported by your browser.');
+      return;
+    }
 
     navigator.geolocation.getCurrentPosition(
-      pos => {
-        if (!active.current || manualPickup.current) return;
+      (pos) => {
         const coords: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        void selectPin('pickup', coords);
-        map.current?.flyTo({ center: coords, zoom: 15 });
-        setMessage('Live pickup selected. You can change it by typing or dragging the pin.');
+        selectLocation('pickup', coords);
+        setMessage('Live pickup location detected.');
       },
       () => {
-        if (active.current) {
-          setMessage('Location permission is unavailable. Type an address or choose a pin.');
-        }
+        if (explicit) setMessage('Location permission denied or unavailable. Type an address or place a pin.');
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
     );
   };
 
-  useEffect(() => {
-    active.current = true;
-    let observer: ResizeObserver | undefined;
-    let instance: mapboxgl.Map | undefined;
+  // Handle Input Typing & Google Places Predictions
+  const handleInputChange = (target: Target, text: string) => {
+    setTexts(prev => ({ ...prev, [target]: text }));
+    setSearching(target);
 
-    const resize = () => {
-      if (active.current) instance?.resize();
-    };
-
-    try {
-      if (!token || !mapboxgl.supported() || !container.current) throw new Error();
-
-      mapboxgl.accessToken = token;
-      instance = new mapboxgl.Map({
-        container: container.current,
-        style: 'mapbox://styles/mapbox/streets-v12',
-        center: fallback,
-        zoom: 12
-      });
-
-      map.current = instance;
-      instance.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
-
-      instance.on('click', event => {
-        const target = pinTarget.current;
-        if (!target) return;
-        if (target === 'pickup') manualPickup.current = true;
-        void selectPin(target, [event.lngLat.lng, event.lngLat.lat]);
-        pinTarget.current = null;
-        setPin(null);
-      });
-
-      instance.on('error', () => {
-        if (active.current) {
-          setMessage('Map tiles could not load. Check connection or type an address.');
-        }
-      });
-
-      instance.once('load', resize);
-
-      if (typeof ResizeObserver !== 'undefined') {
-        observer = new ResizeObserver(resize);
-        observer.observe(container.current);
-      }
-
-      window.addEventListener('resize', resize);
-    } catch {
-      setMessage('Map is unavailable. Address search remains available with a valid Mapbox token.');
+    if (text.trim().length < 2) {
+      setPredictions([]);
+      return;
     }
 
-    locate(false);
+    if (!autocompleteService.current) return;
 
-    return () => {
-      active.current = false;
-      observer?.disconnect();
-      window.removeEventListener('resize', resize);
-
-      searchRequest.current?.abort();
-      routeRequest.current?.abort();
-
-      Object.values(reverseRequests.current).forEach(c => c?.abort());
-      Object.values(markers.current).forEach(m => m?.remove());
-
-      markers.current = {};
-      instance?.remove();
-      map.current = null;
-    };
-  }, [token]);
-
-  useEffect(() => {
-    searchRequest.current?.abort();
-    setResults([]);
-
-    if (!searching || texts[searching].trim().length < 3 || !token) return;
-
-    const target = searching;
-    const query = texts[target].trim();
-    const controller = new AbortController();
-    searchRequest.current = controller;
-
-    const timer = window.setTimeout(async () => {
-      try {
-        const center = value.current.pickup?.coords || fallback;
-        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?country=sl&autocomplete=true&limit=5&proximity=${center[0]},${center[1]}&access_token=${encodeURIComponent(token)}`;
-
-        const res = await fetch(url, { signal: controller.signal });
-
-        if (!res.ok) throw new Error('Address search failed.');
-
-        const data = await res.json();
-        if (!controller.signal.aborted && active.current) {
-          const features = (data.features || []).filter((f: any) =>
-            Array.isArray(f.geometry?.coordinates)
-          );
-          setResults(features);
-          setMessage(features.length ? '' : 'No address matches found.');
-        }
-      } catch (err: any) {
-        if (!controller.signal.aborted && active.current) {
-          setMessage(err.message);
+    autocompleteService.current.getPlacePredictions(
+      {
+        input: text,
+        componentRestrictions: { country: 'sl' }, // Restricted to Sierra Leone
+        locationRestriction: {
+          north: 8.520,
+          south: 8.400,
+          east: -13.150,
+          west: -13.300
+        } // Freetown bounding area
+      },
+      (results, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+          setPredictions(results);
+          setMessage('');
+        } else {
+          setPredictions([]);
+          setMessage('No address matches found.');
         }
       }
-    }, 300);
+    );
+  };
 
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [searching, texts, token]);
+  // Select Prediction Item
+  const handleSelectPrediction = (prediction: google.maps.places.AutocompletePrediction) => {
+    if (!geocoder.current) return;
 
-  const preview = async () => {
+    geocoder.current.geocode({ placeId: prediction.place_id }, (results, status) => {
+      if (status === 'OK' && results?.[0]?.geometry?.location) {
+        const loc = results[0].geometry.location;
+        selectLocation(searching || 'pickup', [loc.lng(), loc.lat()], prediction.description);
+      }
+    });
+  };
+
+  // Route Preview Calculation
+  const previewRoute = () => {
     const { pickup, destination } = value.current;
-    if (!pickup || !destination || !token) {
+    if (!pickup || !destination) {
       setMessage('Select both pickup and destination first.');
       return;
     }
 
-    routeRequest.current?.abort();
-    const controller = new AbortController();
-    routeRequest.current = controller;
-
     setRouting(true);
     setMessage('');
 
-    try {
-      const res = await fetch(
-        `https://api.mapbox.com/directions/v5/mapbox/driving/` +
-        `${pickup.coords.join(',')};${destination.coords.join(',')}` +
-        `?geometries=geojson&access_token=${encodeURIComponent(token)}`,
-        { signal: controller.signal }
-      );
-
-      if (!res.ok) throw new Error('Route preview is unavailable.');
-
-      const data = await res.json();
-      const route = data.routes?.[0];
-
-      if (!route || !Number.isFinite(route.distance)) {
-        throw new Error('No driving route found between these points.');
-      }
-
-      if (!active.current || controller.signal.aborted) return;
-
-      value.current.distanceKm = route.distance / 1000;
-      setDistance(value.current.distanceKm);
-      emit();
-
-      const instance = map.current;
-      if (instance?.isStyleLoaded()) {
-        const geojson: any = {
-          type: 'Feature',
-          properties: {},
-          geometry: route.geometry
-        };
-
-        if (instance.getSource('trip-route')) {
-          (instance.getSource('trip-route') as mapboxgl.GeoJSONSource).setData(geojson);
-        } else {
-          instance.addSource('trip-route', { type: 'geojson', data: geojson });
-          instance.addLayer({
-            id: 'trip-route',
-            type: 'line',
-            source: 'trip-route',
-            paint: { 'line-color': '#2563EB', 'line-width': 5 }
-          });
-        }
-
-        instance.fitBounds(
-          new mapboxgl.LngLatBounds(pickup.coords, pickup.coords).extend(destination.coords),
-          { padding: 55 }
-        );
-      }
-    } catch (err: any) {
-      if (!controller.signal.aborted && active.current) {
-        setMessage(err.message || 'Route preview failed.');
-      }
-    } finally {
-      if (!controller.signal.aborted && active.current) {
+    const ds = new google.maps.DirectionsService();
+    ds.route(
+      {
+        origin: { lat: pickup.coords[1], lng: pickup.coords[0] },
+        destination: { lat: destination.coords[1], lng: destination.coords[0] },
+        travelMode: google.maps.TravelMode.DRIVING
+      },
+      (result, status) => {
         setRouting(false);
+        if (status === 'OK' && result?.routes?.[0]?.legs?.[0]) {
+          directionsRenderer.current?.setDirections(result);
+          const distKm = (result.routes[0].legs[0].distance?.value || 0) / 1000;
+          setDistance(distKm);
+          value.current.distanceKm = distKm;
+          emit();
+        } else {
+          setMessage('Unable to calculate driving route between selected points.');
+        }
       }
-    }
+    );
   };
 
   return (
@@ -355,40 +276,23 @@ export function RideLocationPicker({
               {target}
               <input
                 value={texts[target]}
-                placeholder={`Type ${target} address (3+ letters)`}
+                placeholder={`Type ${target} (e.g. Syke Street, Stadium)`}
                 onFocus={() => setSearching(target)}
-                onChange={e => {
-                  if (target === 'pickup') manualPickup.current = true;
-                  reverseRequests.current[target]?.abort();
-                  invalidateRoute();
-
-                  value.current[target] = null;
-                  markers.current[target]?.remove();
-                  emit();
-
-                  setTexts(prev => ({ ...prev, [target]: e.target.value }));
-                  setSearching(target);
-                }}
-                className="mt-1 w-full rounded-xl border p-3 font-normal"
+                onChange={e => handleInputChange(target, e.target.value)}
+                className="mt-1 w-full rounded-xl border p-3 font-normal outline-none focus:border-blue-500"
               />
             </label>
 
-            {searching === target && results.length > 0 && (
-              <div className="absolute left-0 right-0 top-full z-30 rounded-xl border bg-white shadow-lg max-h-60 overflow-y-auto">
-                {results.map((feature, index) => (
+            {searching === target && predictions.length > 0 && (
+              <div className="absolute left-0 right-0 top-full z-30 max-h-60 overflow-y-auto rounded-xl border bg-white shadow-xl">
+                {predictions.map(item => (
                   <button
-                    key={feature.id || index}
+                    key={item.place_id}
                     className="block w-full border-b p-3 text-left text-sm hover:bg-slate-50"
-                    onClick={() => {
-                      if (target === 'pickup') manualPickup.current = true;
-                      select(
-                        target,
-                        feature.geometry.coordinates.slice(0, 2) as [number, number],
-                        feature.place_name || feature.text
-                      );
-                    }}
+                    onClick={() => handleSelectPrediction(item)}
                   >
-                    {feature.place_name || feature.text}
+                    <p className="font-bold text-slate-800">{item.structured_formatting.main_text}</p>
+                    <p className="text-xs text-slate-500">{item.structured_formatting.secondary_text}</p>
                   </button>
                 ))}
               </div>
@@ -398,25 +302,23 @@ export function RideLocationPicker({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <button onClick={() => locate()} className="rounded-xl border p-2 text-sm font-bold hover:bg-slate-50">
+        <button onClick={() => locateUser(true)} className="rounded-xl border p-2 text-sm font-bold hover:bg-slate-50">
           Use my live location
         </button>
         {(['pickup', 'destination'] as Target[]).map(target => (
           <button
             key={target}
             onClick={() => {
-              pinTarget.current = target;
-              setPin(target);
-              setSearching(null);
-              setResults([]);
+              setPinTarget(target);
+              setMessage(`Tap the map to place the ${target} pin.`);
             }}
-            className={`rounded-xl border p-2 text-sm font-bold transition ${pin === target ? 'bg-blue-600 text-white' : 'hover:bg-slate-50'}`}
+            className={`rounded-xl border p-2 text-sm font-bold transition ${pinTarget === target ? 'bg-blue-600 text-white' : 'hover:bg-slate-50'}`}
           >
             Pin {target}
           </button>
         ))}
         <button
-          onClick={() => void preview()}
+          onClick={previewRoute}
           disabled={routing}
           className="rounded-xl bg-slate-900 p-2 text-sm font-bold text-white disabled:opacity-50"
         >
@@ -424,16 +326,10 @@ export function RideLocationPicker({
         </button>
       </div>
 
-      {pin && (
-        <p role="status" className="text-sm font-bold text-blue-700">
-          Tap the map to place the {pin} pin. You can drag either pin afterwards.
-        </p>
-      )}
+      {message && <p role="status" className="rounded-xl bg-slate-100 p-3 text-sm font-medium">{message}</p>}
+      {distance !== null && <p className="text-sm font-bold text-emerald-600">Route Distance: {distance.toFixed(1)} km</p>}
 
-      {message && <p role="status" className="rounded-xl bg-slate-100 p-3 text-sm">{message}</p>}
-      {distance !== null && <p className="text-sm font-bold text-emerald-600">Route: {distance.toFixed(1)} km</p>}
-
-      <div ref={container} className="h-[350px] w-full rounded-2xl sm:h-[450px] lg:h-[600px]" />
+      <div ref={mapRef} className="h-[350px] w-full rounded-2xl sm:h-[450px] lg:h-[600px]" />
     </section>
   );
 }
