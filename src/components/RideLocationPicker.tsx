@@ -17,12 +17,6 @@ export type TripLocations = {
 
 const fallback: [number, number] = [-13.234, 8.484];
 
-const label = (feature: any) =>
-  feature.properties?.full_address ||
-  [feature.properties?.name, feature.properties?.place_formatted]
-    .filter(Boolean)
-    .join(', ');
-
 export function RideLocationPicker({
   onChange
 }: {
@@ -124,22 +118,15 @@ export function RideLocationPicker({
     reverseRequests.current[target] = controller;
 
     try {
-      const params = new URLSearchParams({
-        longitude: String(coords[0]),
-        latitude: String(coords[1]),
-        access_token: token,
-        permanent: 'true'
-      });
-
       const res = await fetch(
-        `https://api.mapbox.com/search/geocode/v6/reverse?${params}`,
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${coords[0]},${coords[1]}.json?access_token=${encodeURIComponent(token)}`,
         { signal: controller.signal }
       );
 
       if (!res.ok) return;
 
       const data = await res.json();
-      const address = label(data.features?.[0] || {});
+      const address = data.features?.[0]?.place_name;
 
       if (active.current && !controller.signal.aborted && address) {
         value.current[target] = { coords, address };
@@ -147,7 +134,7 @@ export function RideLocationPicker({
         emit();
       }
     } catch {
-      // Keep exact pin coordinates
+      // Keep exact coordinates
     }
   };
 
@@ -259,20 +246,9 @@ export function RideLocationPicker({
     const timer = window.setTimeout(async () => {
       try {
         const center = value.current.pickup?.coords || fallback;
-        const params = new URLSearchParams({
-          q: query,
-          country: 'sl',
-          autocomplete: 'true',
-          limit: '5',
-          proximity: center.join(','),
-          access_token: token,
-          permanent: 'true'
-        });
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?country=sl&autocomplete=true&limit=5&proximity=${center[0]},${center[1]}&access_token=${encodeURIComponent(token)}`;
 
-        const res = await fetch(
-          `https://api.mapbox.com/search/geocode/v6/forward?${params}`,
-          { signal: controller.signal }
-        );
+        const res = await fetch(url, { signal: controller.signal });
 
         if (!res.ok) throw new Error('Address search failed.');
 
@@ -398,21 +374,21 @@ export function RideLocationPicker({
             </label>
 
             {searching === target && results.length > 0 && (
-              <div className="absolute left-0 right-0 top-full z-30 rounded-xl border bg-white shadow-lg">
+              <div className="absolute left-0 right-0 top-full z-30 rounded-xl border bg-white shadow-lg max-h-60 overflow-y-auto">
                 {results.map((feature, index) => (
                   <button
-                    key={feature.properties?.mapbox_id || index}
+                    key={feature.id || index}
                     className="block w-full border-b p-3 text-left text-sm hover:bg-slate-50"
                     onClick={() => {
                       if (target === 'pickup') manualPickup.current = true;
                       select(
                         target,
                         feature.geometry.coordinates.slice(0, 2) as [number, number],
-                        label(feature)
+                        feature.place_name || feature.text
                       );
                     }}
                   >
-                    {label(feature)}
+                    {feature.place_name || feature.text}
                   </button>
                 ))}
               </div>
@@ -422,7 +398,7 @@ export function RideLocationPicker({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <button onClick={() => locate()} className="rounded-xl border p-2 text-sm font-bold">
+        <button onClick={() => locate()} className="rounded-xl border p-2 text-sm font-bold hover:bg-slate-50">
           Use my live location
         </button>
         {(['pickup', 'destination'] as Target[]).map(target => (
@@ -434,7 +410,7 @@ export function RideLocationPicker({
               setSearching(null);
               setResults([]);
             }}
-            className={`rounded-xl border p-2 text-sm font-bold ${pin === target ? 'bg-blue-600 text-white' : ''}`}
+            className={`rounded-xl border p-2 text-sm font-bold transition ${pin === target ? 'bg-blue-600 text-white' : 'hover:bg-slate-50'}`}
           >
             Pin {target}
           </button>
@@ -455,7 +431,7 @@ export function RideLocationPicker({
       )}
 
       {message && <p role="status" className="rounded-xl bg-slate-100 p-3 text-sm">{message}</p>}
-      {distance !== null && <p className="text-sm font-bold">Route: {distance.toFixed(1)} km</p>}
+      {distance !== null && <p className="text-sm font-bold text-emerald-600">Route: {distance.toFixed(1)} km</p>}
 
       <div ref={container} className="h-[350px] w-full rounded-2xl sm:h-[450px] lg:h-[600px]" />
     </section>

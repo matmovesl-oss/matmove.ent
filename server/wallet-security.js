@@ -42,7 +42,8 @@ export function keyFor(userId, action, key) {
 
   return createHash('sha256')
     .update(`${userId}:${action}:${key}`)
-    .digest('hex');
+    .digest('hex')
+    .slice(0, 64);
 }
 
 export function assertAllowed(profile, wallets, action) {
@@ -125,11 +126,18 @@ export async function monime(path, options = {}) {
   const body = await response.json().catch(() => null);
 
   if (!response.ok || !body?.result) {
+    const errorMsg =
+      body?.error?.message ||
+      body?.message ||
+      (Array.isArray(body?.messages) && body.messages[0]) ||
+      (typeof body?.error === 'string' ? body.error : null) ||
+      'The wallet provider could not complete this request.';
+
+    console.error(`Monime API Error (${response.status} on /v1/${path}):`, body);
+
     throw new HttpError(
-      502,
-      typeof body?.message === 'string'
-        ? body.message
-        : 'The wallet provider could not complete this request.'
+      response.status >= 400 && response.status < 500 ? response.status : 502,
+      errorMsg
     );
   }
 

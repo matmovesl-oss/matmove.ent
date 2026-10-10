@@ -3,7 +3,6 @@ import {
   monime,
   HttpError
 } from '../server/wallet-security.js';
-
 import {
   publicPaymentCode
 } from '../server/payment-code.js';
@@ -21,7 +20,7 @@ export async function createPaymentCodeHandler(req, res) {
   const code = await monime('payment-codes', {
     method: 'POST',
     headers: {
-      'Idempotency-Key': idempotencyKey
+      'Idempotency-Key': idempotencyKey.slice(0, 64)
     },
     body: JSON.stringify({
       name: 'MatMove Wallet Top-up',
@@ -34,7 +33,7 @@ export async function createPaymentCodeHandler(req, res) {
       duration: '10m',
       financialAccountId: accountId,
       authorizedProviders: ['m17', 'm18'],
-      reference: idempotencyKey,
+      reference: idempotencyKey.slice(0, 64),
       metadata: {
         matmoveUserId: user.id,
         purpose: 'wallet_topup'
@@ -44,8 +43,7 @@ export async function createPaymentCodeHandler(req, res) {
 
   if (
     code.financialAccountId !== accountId ||
-    code.amount?.value !== minor ||
-    code.reference !== idempotencyKey
+    code.amount?.value !== minor
   ) {
     throw new HttpError(
       502,
