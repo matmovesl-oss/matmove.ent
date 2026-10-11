@@ -1,6 +1,6 @@
 import { protectedWallet, monime, HttpError } from '../server/wallet-security.js';
 
-export async function completeRidePayoutHandler(req, res) {
+export async function completeRidePayoutHandler(req: any, res: any) {
   const { db, user } = req.matmove;
   const { bookingId, driverId, amount } = req.body;
 
@@ -20,6 +20,11 @@ export async function completeRidePayoutHandler(req, res) {
     throw new HttpError(404, 'Booking not found or already completed.');
   }
 
+  // Prevent double-payments
+  if (booking.status === 'completed') {
+    return res.status(200).json({ success: true, message: 'Already completed' });
+  }
+
   // 2. Fetch the Driver's SLE Wallet Account ID
   const { data: driverWallet, error: driverWalletError } = await db
     .from('wallets')
@@ -35,13 +40,13 @@ export async function completeRidePayoutHandler(req, res) {
   const destinationAccountId = driverWallet.monime_account_id || driverWallet.metadata?.monime_account_id;
   
   if (!destinationAccountId) {
-    throw new HttpError(400, 'Driver has no valid Monime financial account to receive funds.');
+    throw new HttpError(400, 'Driver has no valid Monime account to receive funds.');
   }
 
-  // 3. Get the Platform Escrow Account ID
+  // 3. Get the Platform Escrow Account ID from environment variables
   const sourceAccountId = process.env.MONIME_ESCROW_ACCOUNT_ID;
   if (!sourceAccountId) {
-    throw new HttpError(503, 'Platform escrow account is not configured.');
+    throw new HttpError(503, 'Platform escrow account is not configured on Vercel.');
   }
 
   // 4. Calculate Driver Earnings (85% of Fare)
@@ -50,10 +55,10 @@ export async function completeRidePayoutHandler(req, res) {
   const driverEarningsMinor = Math.round(fareMinorUnits * 0.85);
 
   // 5. Execute Internal Transfer via Monime
-  const transfer = await monime('internal-transfers', {
+  const transfer = await monime('/v1/internal-transfers', {
     method: 'POST',
     headers: {
-      // Unique key prevents double-charging if the user taps the button twice
+      // Idempotency prevents double-charging if the button is clicked twice
       'Idempotency-Key': `payout-${bookingId}-${Date.now()}`
     },
     body: JSON.stringify({
@@ -67,7 +72,7 @@ export async function completeRidePayoutHandler(req, res) {
       destinationFinancialAccount: {
         id: destinationAccountId
       },
-      description: `Trip Earnings Payout for Booking ${bookingId}`,
+      description: `Trip Earnings Payout for Booking ${bookingId.slice(0, 8)}`,
       metadata: {
         bookingId: bookingId,
         driverId: driverId,
@@ -89,6 +94,6 @@ export async function completeRidePayoutHandler(req, res) {
   return res.status(200).json({ success: true, transfer });
 }
 
-// We use 'read' so it authenticates the user but doesn't require the user's wallet 
-// to have funds (since the funds are pulled from the Platform Escrow).
+// Use 'read' permission so the rider doesn't need to hold the funds directly at completion 
+// (the funds are pulled from the Platform Escrow where they were held).
 export default protectedWallet('read', completeRidePayoutHandler);
