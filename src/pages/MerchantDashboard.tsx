@@ -341,17 +341,11 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     setIsRequesting(true);
 
     try {
-      const response = await fetch('/api/complete-ride-payout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bookingId: activeBooking.id,
-          driverId: activeBooking.driver_id,
-          amount: activeBooking.fare_amount,
-        }),
+      const { response, data } = await walletFetch('/api/complete-ride-payout', {
+        bookingId: activeBooking.id,
+        driverId: activeBooking.driver_id,
+        amount: activeBooking.fare_amount,
       });
-
-      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || 'Unable to complete this trip.');
@@ -494,7 +488,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
         <button
           onClick={() => void fetchLiveBalance()}
           disabled={isRefreshing}
-          className="absolute right-4 top-4 flex items-center justify-center rounded-xl bg-white/10 p-2 text-xs font-bold hover:bg-white/20 transition"
+          className="absolute right-4 top-4 flex items-center gap-2 rounded-xl bg-white/10 p-2 text-xs font-bold hover:bg-white/20 transition"
           aria-label="Refresh balance"
         >
           <RefreshCw
@@ -910,9 +904,9 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                 {(['recent', 'all'] as const).map(filter => (
                   <button
                     key={filter}
-                    onClick={() => setTxFilter(filter)}
-                    className={`rounded-md px-3 py-2 text-xs font-bold capitalize ${
-                      txFilter === filter ? 'bg-white shadow-sm' : ''
+                    onClick={() => setOrderFilter(filter)}
+                    className={`rounded-md px-3 py-2 text-sm font-bold capitalize ${
+                      orderFilter === filter ? 'bg-white shadow-sm' : ''
                     }`}
                   >
                     {filter}
@@ -921,782 +915,83 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
               </div>
             </div>
 
-            {!displayedTransactions.length && (
-              <p className="py-6 text-center text-slate-500">
-                No transactions found.
+            {!displayedOrders.length && (
+              <p className="rounded-2xl border bg-white py-10 text-center text-slate-500">
+                No orders found.
               </p>
             )}
 
-            <div className="space-y-3">
-              {displayedTransactions.map(tx => {
-                if (!tx) return null;
-
-                const credit =
-                  String(tx.balanceImpact).toUpperCase() === 'CREDIT';
-                const date =
-                  tx.createdAt || tx.created_at || tx.timestamp || tx.date;
-                const dateLabel =
-                  date && !isNaN(new Date(date).getTime())
-                    ? new Date(date).toLocaleString()
-                    : 'Date pending';
-
-                return (
-                  <div
-                    key={tx.id}
-                    onClick={() => setSelectedTx(tx)}
-                    className="cursor-pointer flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-4 hover:bg-slate-100 transition group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`rounded-full p-2 ${
-                          credit
-                            ? 'bg-emerald-100 text-emerald-600'
-                            : 'bg-red-100 text-red-600'
-                        }`}
-                      >
-                        {credit ? (
-                          <ArrowDownLeft size={18} />
-                        ) : (
-                          <ArrowUpRight size={18} />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold">
-                          {tx.description || tx.type || 'Transaction'}
-                        </p>
-                        <p className="text-xs text-slate-500">{dateLabel}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <p
-                          className={`font-bold ${
-                            credit ? 'text-emerald-600' : 'text-slate-900'
-                          }`}
-                        >
-                          {credit ? '+' : '-'} {tx.amount?.currency || 'SLE'}{' '}
-                          {(Number(tx.amount?.value || 0) / 100).toFixed(2)}
-                        </p>
-                        <p className="text-xs uppercase text-slate-500">
-                          {tx.status}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selectedTx && (
-        <TransactionModal tx={selectedTx} onClose={() => setSelectedTx(null)} />
-      )}
-
-      {isLoadModalOpen && (
-        <WalletTopUp
-          userId={profile.id}
-          allowed={canTransact}
-          onClose={() => setIsLoadModalOpen(false)}
-          onPaid={fetchLiveBalance}
-        />
-      )}
-
-      {isPayoutModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-            <button
-              onClick={closeModals}
-              disabled={isProcessingPayout}
-              className="absolute right-4 top-4 p-2 text-slate-400"
-              aria-label="Close withdrawal"
-            >
-              <X size={20} />
-            </button>
-
-            <h2 className="text-2xl font-bold">Withdraw to Mobile Money</h2>
-            <p className="mb-6 mt-2 text-sm text-slate-500">
-              Available: SLE{' '}
-              {Number(sleWallet?.balance || 0).toFixed(2)}
-            </p>
-
-            <div className="mb-6 space-y-4">
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                placeholder="Amount (SLE)"
-                value={payoutAmount}
-                disabled={isProcessingPayout}
-                onChange={e => setPayoutAmount(e.target.value)}
-                className="w-full rounded-xl border p-4 text-xl font-bold"
-              />
-
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => setNetworkProvider('orange')}
-                  disabled={isProcessingPayout}
-                  className={`rounded-xl border p-3 ${
-                    networkProvider === 'orange'
-                      ? 'border-orange-500 bg-orange-50 font-bold text-orange-700'
-                      : 'text-slate-500'
-                  }`}
-                >
-                  Orange Money
-                </button>
-                <button
-                  onClick={() => setNetworkProvider('afrimoney')}
-                  disabled={isProcessingPayout}
-                  className={`rounded-xl border p-3 ${
-                    networkProvider === 'afrimoney'
-                      ? 'border-purple-500 bg-purple-50 font-bold text-purple-700'
-                      : 'text-slate-500'
-                  }`}
-                >
-                  Afrimoney
-                </button>
-              </div>
-
-              <input
-                type="tel"
-                inputMode="tel"
-                placeholder="e.g. 077123456 or 030123456"
-                value={payoutPhone}
-                disabled={isProcessingPayout}
-                onChange={e => setPayoutPhone(e.target.value)}
-                className="w-full rounded-xl border p-4"
-              />
-            </div>
-
-            <button
-              onClick={() => void executePayout()}
-              disabled={
-                !canTransact ||
-                isProcessingPayout ||
-                !payoutAmount ||
-                !payoutPhone
-              }
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 p-4 font-bold text-white disabled:opacity-50"
-            >
-              {isProcessingPayout ? (
-                <Loader2 size={20} className="animate-spin" />
-              ) : (
-                <ArrowUpRight size={20} />
-              )}
-              {isProcessingPayout ? 'Processing…' : 'Confirm Withdrawal'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {isTransferModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-            <button
-              onClick={closeModals}
-              disabled={isProcessingTransfer}
-              className="absolute right-4 top-4 p-2 text-slate-400"
-              aria-label="Close transfer"
-            >
-              <X size={20} />
-            </button>
-
-            <h2 className="text-2xl font-bold">Account Transfer</h2>
-
-            <label className="my-4 block text-sm font-bold">
-              Send from
-              <select
-                value={transferCurrency}
-                disabled={isProcessingTransfer}
-                onChange={e => {
-                  setTransferCurrency(e.target.value as 'SLE' | 'USD');
-                  setTransferError('');
-                  setTransferNotice('');
-                }}
-                className="mt-2 block w-full rounded-xl border p-3"
-              >
-                <option value="SLE">SLE wallet → SLE account</option>
-                <option value="USD">USD wallet → USD account</option>
-              </select>
-            </label>
-
-            {transferError && (
-              <p role="alert" className="mb-3 text-sm text-red-700">
-                {transferError}
-              </p>
-            )}
-            {transferNotice && (
-              <p role="status" className="mb-3 text-sm text-blue-700">
-                {transferNotice}
-              </p>
-            )}
-
-            <p className="mb-4 text-sm text-slate-500">
-              Paste the recipient’s account ID for the selected currency.
-            </p>
-
-            <div className="mb-6 space-y-4">
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                disabled={isProcessingTransfer}
-                placeholder={`Amount (${transferCurrency})`}
-                value={transferAmount}
-                onChange={e => setTransferAmount(e.target.value)}
-                className="w-full rounded-xl border p-4 text-xl font-bold"
-              />
-              <input
-                type="text"
-                disabled={isProcessingTransfer}
-                placeholder="Recipient account ID (fac-...)"
-                value={transferRecipient}
-                onChange={e => setTransferRecipient(e.target.value)}
-                className="w-full rounded-xl border p-4"
-              />
-            </div>
-
-            <button
-              onClick={() => void executeTransfer()}
-              disabled={
-                !canTransact ||
-                isProcessingTransfer ||
-                !transferAmount ||
-                !transferRecipient
-              }
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 p-4 font-bold text-white disabled:opacity-50"
-            >
-              {isProcessingTransfer ? (
-                <Loader2 size={20} className="animate-spin" />
-              ) : (
-                <Users size={20} />
-              )}
-              Send Transfer
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showPolicy && <PolicyModal onAccept={handleAcceptPolicy} />}
-    </div>
-  );
-}
-
-function MerchantInventory({ profile }: any) {
-  const [activeTab, setActiveTab] =
-    useState<'products' | 'orders'>('products');
-  const [products, setProducts] = useState<any[]>([]);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [orderFilter, setOrderFilter] =
-    useState<'all' | 'pending' | 'completed'>('all');
-  const [error, setError] = useState('');
-
-  const [name, setName] = useState('');
-  const [price, setPrice] = useState('');
-  const [description, setDescription] = useState('');
-  const [whatsappDigits, setWhatsappDigits] = useState('232');
-  const [imageUrl, setImageUrl] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
-
-  const fetchProducts = async () => {
-    const { data, error: queryError } = await supabase
-      .from('products')
-      .select('*')
-      .eq('merchant_id', profile.id)
-      .order('created_at', { ascending: false });
-
-    if (queryError) {
-      setError(queryError.message);
-      return;
-    }
-
-    setProducts(data || []);
-  };
-
-  const fetchOrders = async () => {
-    const { data, error: queryError } = await supabase
-      .from('app_orders')
-      .select('*, rider:rider_id(full_name, phone)')
-      .eq('merchant_id', profile.id)
-      .order('created_at', { ascending: false });
-
-    if (queryError) {
-      setError(queryError.message);
-      return;
-    }
-
-    setOrders(data || []);
-  };
-
-  useEffect(() => {
-    void fetchProducts();
-    void fetchOrders();
-
-    const timer = window.setInterval(() => void fetchOrders(), 15000);
-
-    const channel = supabase
-      .channel(`merchant-orders-${profile.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'app_orders',
-          filter: `merchant_id=eq.${profile.id}`,
-        },
-        () => void fetchOrders(),
-      )
-      .subscribe();
-
-    return () => {
-      window.clearInterval(timer);
-      void supabase.removeChannel(channel);
-    };
-  }, [profile.id]);
-
-  const handleImageUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setError('Choose a JPG, PNG or WebP image.');
-      event.target.value = '';
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Your image must be 5 MB or smaller.');
-      event.target.value = '';
-      return;
-    }
-
-    setIsUploading(true);
-    setError('');
-
-    try {
-      const extension =
-        file.type === 'image/jpeg'
-          ? 'jpg'
-          : file.type === 'image/png'
-            ? 'png'
-            : 'webp';
-
-      const filename =
-        `${profile.id}-${crypto.randomUUID()}.${extension}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('product_images')
-        .upload(filename, file, {
-          contentType: file.type,
-          upsert: false,
-        });
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage
-        .from('product_images')
-        .getPublicUrl(filename);
-
-      setImageUrl(data.publicUrl);
-    } catch (err: any) {
-      setError(err.message || 'Image upload failed. Please try again.');
-    } finally {
-      setIsUploading(false);
-      event.target.value = '';
-    }
-  };
-
-  const handleAddProduct = async () => {
-    if (isAdding || isUploading) return;
-
-    const numericPrice = Number(price);
-
-    if (!name.trim()) {
-      setError('Enter a product name.');
-      return;
-    }
-
-    if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
-      setError('Enter a valid product price.');
-      return;
-    }
-
-    if (!/^[1-9]\d{6,14}$/.test(whatsappDigits)) {
-      setError('Enter a WhatsApp number including its country code.');
-      return;
-    }
-
-    setIsAdding(true);
-    setError('');
-
-    try {
-      const { error: insertError } = await supabase
-        .from('products')
-        .insert({
-          merchant_id: profile.id,
-          name: name.trim(),
-          price: numericPrice,
-          description: description.trim(),
-          image_url: imageUrl || null,
-          whatsapp_number: `+${whatsappDigits}`,
-        });
-
-      if (insertError) throw insertError;
-
-      setName('');
-      setPrice('');
-      setDescription('');
-      setImageUrl('');
-      await fetchProducts();
-    } catch (err: any) {
-      setError(err.message || 'Unable to save the product.');
-    } finally {
-      setIsAdding(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this product?')) return;
-
-    setError('');
-
-    const { error: deleteError } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', id)
-      .eq('merchant_id', profile.id);
-
-    if (deleteError) {
-      setError(deleteError.message);
-      return;
-    }
-
-    await fetchProducts();
-  };
-
-  const handleUpdateOrderStatus = async (
-    orderId: string,
-    status: string,
-  ) => {
-    if (updatingOrder) return;
-
-    setUpdatingOrder(orderId);
-    setError('');
-
-    try {
-      const { error: updateError } = await supabase
-        .from('app_orders')
-        .update({ status })
-        .eq('id', orderId)
-        .eq('merchant_id', profile.id);
-
-      if (updateError) throw updateError;
-      await fetchOrders();
-    } catch (err: any) {
-      setError(err.message || 'Unable to update this order.');
-    } finally {
-      setUpdatingOrder(null);
-    }
-  };
-
-  const handleWhatsAppCustomer = (order: any) => {
-    let digits = String(
-      order.customer_phone || order.rider?.phone || '',
-    ).replace(/\D/g, '');
-
-    if (digits.startsWith('0') && digits.length === 9) {
-      digits = `232${digits.slice(1)}`;
-    }
-
-    if (!/^[1-9]\d{6,14}$/.test(digits)) {
-      setError('This order does not have a valid customer phone number.');
-      return;
-    }
-
-    const message = encodeURIComponent(
-      `Hello ${order.rider?.full_name || 'there'}, regarding your MatMove order for ${order.product_name}.`,
-    );
-
-    window.open(
-      `https://wa.me/${digits}?text=${message}`,
-      '_blank',
-      'noopener,noreferrer',
-    );
-  };
-
-  const displayedOrders = orders.filter(
-    order => orderFilter === 'all' || order.status === orderFilter,
-  );
-
-  return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
-        <h1 className="text-3xl font-bold">Inventory & Orders</h1>
-
-        <div className="flex rounded-xl bg-slate-100 p-1">
-          <button
-            onClick={() => setActiveTab('products')}
-            className={`rounded-lg px-4 py-2 text-sm font-bold ${
-              activeTab === 'products' ? 'bg-white shadow-sm' : ''
-            }`}
-          >
-            My Catalog
-          </button>
-          <button
-            onClick={() => setActiveTab('orders')}
-            className={`rounded-lg px-4 py-2 text-sm font-bold ${
-              activeTab === 'orders' ? 'bg-white shadow-sm' : ''
-            }`}
-          >
-            In-App Orders
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">
-          {error}
-        </p>
-      )}
-
-      {activeTab === 'products' ? (
-        <>
-          <div className="space-y-4 rounded-2xl border bg-white p-5">
-            <h3 className="text-lg font-bold">Add New Product</h3>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <input
-                placeholder="Product name"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                className="rounded-xl border p-3"
-              />
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                placeholder="Price (SLE)"
-                value={price}
-                onChange={e => setPrice(e.target.value)}
-                className="rounded-xl border p-3"
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm font-bold">
-                WhatsApp number with country code
-                <div className="mt-2 flex overflow-hidden rounded-xl border">
-                  <span className="border-r bg-slate-100 px-4 py-3">+</span>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    value={whatsappDigits}
-                    onChange={e =>
-                      setWhatsappDigits(e.target.value.replace(/\D/g, ''))
-                    }
-                    placeholder="23277123456"
-                    className="min-w-0 flex-1 p-3 font-normal outline-none"
-                  />
-                </div>
-              </label>
-
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border p-3 text-sm font-bold">
-                {isUploading ? (
-                  <Loader2 size={18} className="animate-spin" />
-                ) : (
-                  <ImageIcon size={18} />
-                )}
-                {isUploading
-                  ? 'Uploading…'
-                  : imageUrl
-                    ? 'Replace product image'
-                    : 'Upload product image'}
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  disabled={isUploading || isAdding}
-                  onChange={handleImageUpload}
-                  className="hidden"
-                />
-              </label>
-            </div>
-
-            {imageUrl && (
-              <img
-                src={imageUrl}
-                alt="Product preview"
-                className="h-32 w-32 rounded-xl border object-cover"
-              />
-            )}
-
-            <textarea
-              placeholder="Description (optional)"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              rows={3}
-              className="w-full rounded-xl border p-3"
-            />
-
-            <button
-              onClick={() => void handleAddProduct()}
-              disabled={isAdding || isUploading}
-              className="rounded-xl bg-orange-600 px-6 py-3 font-bold text-white disabled:opacity-50"
-            >
-              {isAdding ? 'Saving…' : 'Add to Catalog'}
-            </button>
-          </div>
-
-          {!products.length && (
-            <p className="py-6 text-center text-slate-500">
-              No products listed yet.
-            </p>
-          )}
-
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {products.map(product => (
+            {displayedOrders.map(order => (
               <article
-                key={product.id}
-                className="relative overflow-hidden rounded-2xl border bg-white"
+                key={order.id}
+                className="flex flex-col justify-between gap-4 rounded-2xl border bg-white p-5 sm:flex-row"
               >
-                <button
-                  onClick={() => void handleDelete(product.id)}
-                  className="absolute right-3 top-3 z-10 rounded-full bg-white p-2 text-red-600 shadow"
-                  aria-label={`Delete ${product.name}`}
-                >
-                  <Trash2 size={16} />
-                </button>
+                <div>
+                  <h3 className="text-lg font-bold">{order.product_name}</h3>
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    Quantity: {order.quantity || 1} · {order.status}
+                  </p>
 
-                {product.image_url ? (
-                  <img
-                    src={product.image_url}
-                    alt={product.name}
-                    className="h-40 w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-40 items-center justify-center bg-slate-100">
-                    <Package size={40} className="text-slate-300" />
+                  <div className="mt-3 space-y-2 text-sm text-slate-600">
+                    <p className="flex items-center gap-2">
+                      <User size={14} />
+                      {order.rider?.full_name || 'Customer'}
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <Phone size={14} />
+                      {order.customer_phone ||
+                        order.rider?.phone ||
+                        'No phone provided'}
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <MapPin size={14} />
+                      {order.delivery_location || 'No location provided'}
+                    </p>
+                    {order.delivery_time && (
+                      <p className="flex items-center gap-2">
+                        <CalendarClock size={14} />
+                        {new Date(order.delivery_time).toLocaleString()}
+                      </p>
+                    )}
                   </div>
-                )}
 
-                <div className="p-5">
-                  <h4 className="text-lg font-bold">{product.name}</h4>
-                  <p className="mt-1 text-xl font-bold text-orange-600">
-                    SLE {Number(product.price || 0).toFixed(2)}
+                  <p className="mt-3 text-xs text-slate-400">
+                    {new Date(order.created_at).toLocaleString()}
                   </p>
-                  <p className="mt-2 text-sm text-slate-500">
-                    {product.description || 'No description'}
+                </div>
+
+                <div className="sm:text-right">
+                  <p className="text-xl font-bold text-orange-600">
+                    SLE {Number(order.price || 0).toFixed(2)}
                   </p>
+                  <div className="mt-3 flex flex-wrap gap-2 sm:justify-end">
+                    <button
+                      onClick={() => handleWhatsAppCustomer(order)}
+                      className="flex items-center gap-1 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700"
+                    >
+                      <MessageCircle size={14} /> WhatsApp Customer
+                    </button>
+                    <button
+                      disabled={updatingOrder !== null}
+                      onClick={() =>
+                        void handleUpdateOrderStatus(
+                          order.id,
+                          order.status === 'pending' ? 'completed' : 'pending',
+                        )
+                      }
+                      className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                    >
+                      {updatingOrder === order.id
+                        ? 'Saving…'
+                        : order.status === 'pending'
+                          ? 'Mark Completed'
+                          : 'Mark Pending'}
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}
           </div>
-        </>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex rounded-lg bg-slate-100 p-1">
-              {(['all', 'pending', 'completed'] as const).map(filter => (
-                <button
-                  key={filter}
-                  onClick={() => setOrderFilter(filter)}
-                  className={`rounded-md px-3 py-2 text-sm font-bold capitalize ${
-                    orderFilter === filter ? 'bg-white shadow-sm' : ''
-                  }`}
-                >
-                  {filter}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => void fetchOrders()}
-              className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm"
-            >
-              <RefreshCw size={16} /> Refresh
-            </button>
-          </div>
-
-          {!displayedOrders.length && (
-            <p className="rounded-2xl border bg-white py-10 text-center text-slate-500">
-              No orders found.
-            </p>
-          )}
-
-          {displayedOrders.map(order => (
-            <article
-              key={order.id}
-              className="flex flex-col justify-between gap-4 rounded-2xl border bg-white p-5 sm:flex-row"
-            >
-              <div>
-                <h3 className="text-lg font-bold">{order.product_name}</h3>
-                <p className="mt-1 text-xs font-bold text-slate-500">
-                  Quantity: {order.quantity || 1} · {order.status}
-                </p>
-
-                <div className="mt-3 space-y-2 text-sm text-slate-600">
-                  <p className="flex items-center gap-2">
-                    <User size={14} />
-                    {order.rider?.full_name || 'Customer'}
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <Phone size={14} />
-                    {order.customer_phone ||
-                      order.rider?.phone ||
-                      'No phone provided'}
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <MapPin size={14} />
-                    {order.delivery_location || 'No location provided'}
-                  </p>
-                  {order.delivery_time && (
-                    <p className="flex items-center gap-2">
-                      <CalendarClock size={14} />
-                      {new Date(order.delivery_time).toLocaleString()}
-                    </p>
-                  )}
-                </div>
-
-                <p className="mt-3 text-xs text-slate-400">
-                  {new Date(order.created_at).toLocaleString()}
-                </p>
-              </div>
-
-              <div className="sm:text-right">
-                <p className="text-xl font-bold text-orange-600">
-                  SLE {Number(order.price || 0).toFixed(2)}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2 sm:justify-end">
-                  <button
-                    onClick={() => handleWhatsAppCustomer(order)}
-                    className="flex items-center gap-1 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700"
-                  >
-                    <MessageCircle size={14} /> WhatsApp Customer
-                  </button>
-                  <button
-                    disabled={updatingOrder !== null}
-                    onClick={() =>
-                      void handleUpdateOrderStatus(
-                        order.id,
-                        order.status === 'pending' ? 'completed' : 'pending',
-                      )
-                    }
-                    className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
-                  >
-                    {updatingOrder === order.id
-                      ? 'Saving…'
-                      : order.status === 'pending'
-                        ? 'Mark Completed'
-                        : 'Mark Pending'}
-                  </button>
-                </div>
-              </div>
-            </article>
-          ))}
         </div>
       )}
     </div>

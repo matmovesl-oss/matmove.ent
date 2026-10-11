@@ -4,11 +4,11 @@ import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
-import { 
-  Car, MapPin, Navigation, Power, User, Phone, 
-  Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft, 
-  Users, RefreshCw, Plus, Wallet, Activity, Copy, 
-  Check, Share2 
+import {
+  Car, MapPin, Navigation, Power, User, Phone,
+  Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft,
+  Users, RefreshCw, Plus, Wallet, Activity, Copy,
+  Check, Share2, ArrowRight
 } from 'lucide-react';
 
 export function DriverDashboard(props: any) {
@@ -36,6 +36,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   const googleMap = useRef<google.maps.Map | null>(null);
 
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
+
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
   const [payoutPhone, setPayoutPhone] = useState('');
@@ -217,18 +218,14 @@ function DriverMain({ profile, wallet, activeSection }: any) {
     if (!canTransact) return alert('You must be approved and unfrozen to accept trips.');
     setAcceptingId(booking.id);
     try {
-      const res = await fetch('/api/accept-ride-escrow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bookingId: booking.id,
-          riderId: booking.rider_id,
-          driverId: profile.id,
-          amount: booking.fare_amount
-        })
+      const { response, data } = await walletFetch('/api/accept-ride-escrow', {
+        bookingId: booking.id,
+        riderId: booking.rider_id,
+        driverId: profile.id,
+        amount: booking.fare_amount
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to move funds to Escrow');
+      
+      if (!response.ok) throw new Error(data.error || 'Failed to move funds to Escrow');
 
       setActiveRequests(prev => prev.map(r => r.id === booking.id ? { ...r, status: 'accepted', driver_id: profile.id } : r));
       await fetchLiveBalance();
@@ -242,13 +239,11 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   const handleStartRide = async (booking: any) => {
     setAcceptingId(booking.id);
     try {
-      const res = await fetch('/api/start-ride', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId: booking.id })
+      const { response, data } = await walletFetch('/api/start-ride', {
+        bookingId: booking.id
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to start ride');
+      
+      if (!response.ok) throw new Error(data.error || 'Failed to start ride');
 
       setActiveRequests(prev => prev.map(r => r.id === booking.id ? { ...r, status: 'in_progress' } : r));
     } catch (err: any) {

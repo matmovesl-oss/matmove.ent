@@ -420,9 +420,9 @@ function RiderMain({ profile, wallet, activeSection }: any) {
         <button
           onClick={fetchLiveBalance}
           disabled={isRefreshing}
-          className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center justify-center z-10"
+          className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10"
         >
-          <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
+          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
         </button>
 
         <div>
@@ -453,7 +453,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                 USD Reserve Wallet
               </span>
               <div className="text-3xl font-bold mt-1 text-emerald-400">
-                USD {Number(usdWallet?.balance || 0).toFixed(2)}
+                USD {Number(usdWallet.balance || 0).toFixed(2)}
               </div>
               <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-flex items-center gap-2 px-2 py-1 rounded">
                 ID: {usdWallet.monime_account_id}
@@ -677,17 +677,13 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                           onClick={async () => {
                             setIsRequesting(true);
                             try {
-                              const res = await fetch('/api/complete-ride-payout', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  bookingId: activeBooking.id,
-                                  driverId: activeBooking.driver_id,
-                                  amount: activeBooking.fare_amount
-                                })
+                              const { response, data } = await walletFetch('/api/complete-ride-payout', {
+                                bookingId: activeBooking.id,
+                                driverId: activeBooking.driver_id,
+                                amount: activeBooking.fare_amount
                               });
-                              const data = await res.json();
-                              if (!res.ok) throw new Error(data.error);
+                              
+                              if (!response.ok) throw new Error(data?.error || 'Payment failed');
 
                               alert('Payment released!');
                               window.location.reload();
@@ -883,6 +879,13 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                               {tx.status}
                             </span>
                           </div>
+                          <button
+                            onClick={() => handleShareReceipt(tx)}
+                            className="text-slate-400 hover:text-blue-600 transition p-2 rounded-full hover:bg-white"
+                            title="Copy Receipt"
+                          >
+                            <Share2 size={16} />
+                          </button>
                         </div>
                       </div>
                     );
@@ -894,7 +897,9 @@ function RiderMain({ profile, wallet, activeSection }: any) {
         )}
       </div>
 
-      {selectedTx && <TransactionModal tx={selectedTx} onClose={() => setSelectedTx(null)} />}
+      {selectedTx && (
+        <TransactionModal tx={selectedTx} onClose={() => setSelectedTx(null)} />
+      )}
 
       {isLoadModalOpen && (
         <WalletTopUp
