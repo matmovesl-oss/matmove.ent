@@ -1,120 +1,94 @@
-import { createClient } from '@supabase/supabase-js';
+import { protectedWallet, monime, HttpError } from '../server/wallet-security.js';
 
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY!
-);
+export async function completeRidePayoutHandler(req, res) {
+  const { db, user } = req.matmove;
+  const { bookingId, driverId, amount } = req.body;
 
-const MONIME_API_KEY = process.env.VITE_MONIME_API_KEY || process.env.MONIME_API_KEY!;
-const MONIME_SPACE_ID = process.env.VITE_MONIME_SPACE_ID || process.env.MONIME_SPACE_ID!;
-const ADMIN_MASTER_ESCROW_ID = 'fac-k6V1AXPbAjLxDw9rnsDxWqYpjXp';
+  if (!bookingId || !driverId || !amount) {
+    throw new HttpError(400, 'Missing required booking details.');
+  }
 
-async function resolveMonimeAccountId(userId: string) {
-  const { data: w1 } = await supabase.from('wallets').select('*').eq('user_id', userId).limit(1);
-  const { data: w2 } = await supabase.from('wallets').select('*').eq('id', userId).limit(1);
-  const wallet = w1?.[0] || w2?.[0];
+  // 1. Verify the booking is active and belongs to the rider
+  const { data: booking, error: bookingError } = await db
+    .from('bookings')
+    .select('*')
+    .eq('id', bookingId)
+    .eq('rider_id', user.id)
+    .single();
+
+  if (bookingError || !booking) {
+    throw new HttpError(404, 'Booking not found or already completed.');
+  }
+
+  // 2. Fetch the Driver's SLE Wallet Account ID
+  const { data: driverWallet, error: driverWalletError } = await db
+    .from('wallets')
+    .select('*')
+    .eq('user_id', driverId)
+    .eq('currency', 'SLE')
+    .single();
+
+  if (driverWalletError || !driverWallet) {
+    throw new HttpError(404, 'Driver wallet could not be located.');
+  }
+
+  const destinationAccountId = driverWallet.monime_account_id || driverWallet.metadata?.monime_account_id;
   
-  let accountId = wallet?.metadata?.monime_account_id || wallet?.monime_account_id;
-  if (accountId && String(accountId).startsWith('fac-')) return accountId;
-
-  try {
-    const monimeRes = await fetch('https://api.monime.io/v1/financial-accounts', {
-      headers: {
-        'Authorization': `Bearer ${MONIME_API_KEY}`,
-        'Monime-Space-Id': MONIME_SPACE_ID,
-        'Accept': '*/*'
-      }
-    });
-
-    if (monimeRes.ok) {
-      const monimeData = await monimeRes.json();
-      const accounts = monimeData.result || monimeData.data || (Array.isArray(monimeData) ? monimeData : []);
-      const match = accounts.find((acc: any) => acc.reference === userId);
-      
-      if (match?.id) {
-        if (wallet?.id) {
-          await supabase.from('wallets').update({
-            metadata: { ...(wallet.metadata || {}), monime_account_id: match.id }
-          }).eq('id', wallet.id);
-        }
-        return match.id;
-      }
-    }
-  } catch (e) {
-    console.error('Monime resolution failed:', e);
+  if (!destinationAccountId) {
+    throw new HttpError(400, 'Driver has no valid Monime financial account to receive funds.');
   }
-  return null;
-}
 
-export default async function handler(req: any, res: any) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+  // 3. Get the Platform Escrow Account ID
+  const sourceAccountId = process.env.MONIME_ESCROW_ACCOUNT_ID;
+  if (!sourceAccountId) {
+    throw new HttpError(503, 'Platform escrow account is not configured.');
+  }
 
-  try {
-    const { bookingId, amount } = req.body;
-    let { driverId } = req.body;
+  // 4. Calculate Driver Earnings (85% of Fare)
+  // Convert fare to minor units (cents), then calculate 85%
+  const fareMinorUnits = Math.round(Number(amount) * 100);
+  const driverEarningsMinor = Math.round(fareMinorUnits * 0.85);
 
-    if (!driverId) {
-      const { data: booking } = await supabase.from('bookings').select('driver_id').eq('id', bookingId).single();
-      driverId = booking?.driver_id;
-    }
-
-    if (!driverId) return res.status(400).json({ error: 'Driver ID is missing.' });
-
-    const driverAccountId = await resolveMonimeAccountId(driverId);
-
-    if (!driverAccountId) {
-      return res.status(400).json({ error: `Missing Driver Wallet Account. Driver ID: ${driverId}` });
-    }
-
-    const driverEarnings = Math.round((Number(amount) * 0.85) * 100);
-
-    const headers = {
-      'Content-Type': 'application/json',
-      'Accept': '*/*',
-      'Authorization': `Bearer ${MONIME_API_KEY}`,
-      'Monime-Space-Id': MONIME_SPACE_ID,
+  // 5. Execute Internal Transfer via Monime
+  const transfer = await monime('internal-transfers', {
+    method: 'POST',
+    headers: {
+      // Unique key prevents double-charging if the user taps the button twice
       'Idempotency-Key': `payout-${bookingId}-${Date.now()}`
-    };
+    },
+    body: JSON.stringify({
+      amount: {
+        currency: 'SLE',
+        value: driverEarningsMinor
+      },
+      sourceFinancialAccount: {
+        id: sourceAccountId
+      },
+      destinationFinancialAccount: {
+        id: destinationAccountId
+      },
+      description: `Trip Earnings Payout for Booking ${bookingId}`,
+      metadata: {
+        bookingId: bookingId,
+        driverId: driverId,
+        riderId: user.id
+      }
+    })
+  });
 
-    const payload = {
-      amount: { currency: "SLE", value: driverEarnings },
-      sourceFinancialAccount: { id: ADMIN_MASTER_ESCROW_ID },
-      destinationFinancialAccount: { id: driverAccountId },
-      description: `Trip Earnings Payout for Booking ${bookingId}`
-    };
+  // 6. Mark the Trip as Completed in the database
+  const { error: updateError } = await db
+    .from('bookings')
+    .update({ status: 'completed' })
+    .eq('id', bookingId);
 
-    let monimeResponse = await fetch('https://api.monime.io/v1/internal-transfers', {
-      method: 'POST', headers, body: JSON.stringify(payload)
-    });
-
-    if (monimeResponse.status === 404) {
-      monimeResponse = await fetch('https://api.monime.io/v1/internal_transfers', {
-        method: 'POST', headers, body: JSON.stringify(payload)
-      });
-    }
-
-    if (!monimeResponse.ok) {
-      const errText = await monimeResponse.text();
-      return res.status(400).json({ error: `Transfer API Error: ${monimeResponse.status} - ${errText}` });
-    }
-
-    // 🔴 CRITICAL FIX: Monime returns HTTP 200 even if the transfer fails. We MUST check the JSON status.
-    const transferResult = await monimeResponse.json();
-    const transferData = transferResult.result || transferResult;
-    
-    if (transferData.status === 'failed') {
-      const failureReason = transferData.failureDetail?.message || transferData.failureDetail?.code || 'Unknown error';
-      return res.status(400).json({ error: `Monime Transfer Failed: ${failureReason}` });
-    }
-
-    await supabase.from('bookings').update({ status: 'completed' }).eq('id', bookingId);
-    return res.status(200).json({ success: true, driverAccountId, transferData });
-
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+  if (updateError) {
+    console.error(`Transfer succeeded, but failed to update booking ${bookingId} status:`, updateError);
   }
+
+  return res.status(200).json({ success: true, transfer });
 }
+
+// We use 'read' so it authenticates the user but doesn't require the user's wallet 
+// to have funds (since the funds are pulled from the Platform Escrow).
+export default protectedWallet('read', completeRidePayoutHandler);
