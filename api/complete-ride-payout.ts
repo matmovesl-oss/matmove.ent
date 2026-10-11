@@ -50,15 +50,14 @@ export async function completeRidePayoutHandler(req: any, res: any) {
   }
 
   // 4. Calculate Driver Earnings (85% of Fare)
-  // Convert fare to minor units (cents), then calculate 85%
   const fareMinorUnits = Math.round(Number(amount) * 100);
   const driverEarningsMinor = Math.round(fareMinorUnits * 0.85);
 
   // 5. Execute Internal Transfer via Monime
-  const transfer = await monime('/v1/internal-transfers', {
+  // Fixed: Removed leading /v1/ to prevent double path generation
+  const transfer = await monime('internal-transfers', {
     method: 'POST',
     headers: {
-      // Idempotency prevents double-charging if the button is clicked twice
       'Idempotency-Key': `payout-${bookingId}-${Date.now()}`
     },
     body: JSON.stringify({
@@ -94,6 +93,4 @@ export async function completeRidePayoutHandler(req: any, res: any) {
   return res.status(200).json({ success: true, transfer });
 }
 
-// Use 'read' permission so the rider doesn't need to hold the funds directly at completion 
-// (the funds are pulled from the Platform Escrow where they were held).
 export default protectedWallet('read', completeRidePayoutHandler);
