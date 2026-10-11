@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { RideLocationPicker, TripLocations } from '@/components/RideLocationPicker';
 import { WalletTopUp } from '@/components/WalletTopUp';
+import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -36,6 +37,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   const [isCreatingUsd, setIsCreatingUsd] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedTx, setSelectedTx] = useState<any>(null);
 
   const [pricingRates, setPricingRates] = useState<any>({
     bike: { min: 15, perKm: 3 },
@@ -386,10 +388,6 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       return alert('Enter a valid amount.');
     }
 
-    if (sleWallet?.balanceAvailable === false) {
-      return alert('Refresh your wallet balance before withdrawing.');
-    }
-
     if (amount > Number(sleWallet?.balance || 0)) {
       return alert('Amount exceeds your available SLE balance.');
     }
@@ -496,23 +494,20 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
         <button
           onClick={() => void fetchLiveBalance()}
           disabled={isRefreshing}
-          className="absolute right-4 top-4 flex items-center gap-2 rounded-xl bg-white/10 p-2 text-xs font-bold hover:bg-white/20"
+          className="absolute right-4 top-4 flex items-center justify-center rounded-xl bg-white/10 p-2 text-xs font-bold hover:bg-white/20 transition"
+          aria-label="Refresh balance"
         >
           <RefreshCw
-            size={14}
+            size={18}
             className={isRefreshing ? 'animate-spin' : ''}
           />
-          {isRefreshing ? 'Syncing…' : 'Refresh'}
         </button>
 
         <p className="mt-6 text-xs font-bold uppercase text-orange-200">
           SLE Operating Wallet
         </p>
         <p className="mt-1 text-3xl font-bold">
-          SLE{' '}
-          {sleWallet?.balanceAvailable === false
-            ? 'Unavailable'
-            : Number(sleWallet?.balance || 0).toFixed(2)}
+          SLE {Number(sleWallet?.balance || 0).toFixed(2)}
         </p>
 
         <div className="mt-3 flex items-center gap-2 break-all text-xs">
@@ -537,10 +532,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
               USD Reserve Wallet
             </p>
             <p className="mt-1 text-3xl font-bold text-emerald-400">
-              USD{' '}
-              {usdWallet.balanceAvailable === false
-                ? 'Unavailable'
-                : Number(usdWallet.balance || 0).toFixed(2)}
+              USD {Number(usdWallet.balance || 0).toFixed(2)}
             </p>
 
             <div className="mt-3 flex items-center gap-2 break-all text-xs text-slate-300">
@@ -919,11 +911,11 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                   <button
                     key={filter}
                     onClick={() => setTxFilter(filter)}
-                    className={`rounded-md px-3 py-2 text-xs font-bold ${
+                    className={`rounded-md px-3 py-2 text-xs font-bold capitalize ${
                       txFilter === filter ? 'bg-white shadow-sm' : ''
                     }`}
                   >
-                    {filter === 'recent' ? 'Recent' : 'All'}
+                    {filter}
                   </button>
                 ))}
               </div>
@@ -951,7 +943,8 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                 return (
                   <div
                     key={tx.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-4"
+                    onClick={() => setSelectedTx(tx)}
+                    className="cursor-pointer flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-4 hover:bg-slate-100 transition group"
                   >
                     <div className="flex items-center gap-3">
                       <div
@@ -989,13 +982,6 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                           {tx.status}
                         </p>
                       </div>
-                      <button
-                        onClick={() => void handleShareReceipt(tx)}
-                        aria-label="Share receipt"
-                        className="p-2 text-slate-500"
-                      >
-                        <Share2 size={16} />
-                      </button>
                     </div>
                   </div>
                 );
@@ -1003,6 +989,10 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedTx && (
+        <TransactionModal tx={selectedTx} onClose={() => setSelectedTx(null)} />
       )}
 
       {isLoadModalOpen && (
@@ -1029,9 +1019,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
             <h2 className="text-2xl font-bold">Withdraw to Mobile Money</h2>
             <p className="mb-6 mt-2 text-sm text-slate-500">
               Available: SLE{' '}
-              {sleWallet?.balanceAvailable === false
-                ? 'Unavailable'
-                : Number(sleWallet?.balance || 0).toFixed(2)}
+              {Number(sleWallet?.balance || 0).toFixed(2)}
             </p>
 
             <div className="mb-6 space-y-4">

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 type Point = {
-  coords: [number, number]; // [lng, lat]
+  coords: [number, number];
   address: string;
 };
 
@@ -13,7 +13,6 @@ export type TripLocations = {
   distanceKm: number | null;
 };
 
-// Land fallback: Charles Street / Pademba Road, Freetown
 const FREETOWN_CENTER = { lat: 8.4808, lng: -13.2290 };
 
 export function RideLocationPicker({
@@ -34,7 +33,10 @@ export function RideLocationPicker({
   const [texts, setTexts] = useState({ pickup: '', destination: '' });
   const [searching, setSearching] = useState<Target | null>(null);
   const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
+  
   const [pinTarget, setPinTarget] = useState<Target | null>(null);
+  const activePinRef = useRef<Target | null>(null);
+
   const [message, setMessage] = useState('');
   const [routing, setRouting] = useState(false);
   const [distance, setDistance] = useState<number | null>(null);
@@ -52,7 +54,6 @@ export function RideLocationPicker({
     onChange({ ...value.current });
   }, [onChange]);
 
-  // Load Google Maps Script
   useEffect(() => {
     if (window.google?.maps) {
       setIsLoaded(true);
@@ -60,7 +61,7 @@ export function RideLocationPicker({
     }
 
     if (!apiKey) {
-      setMessage('Google Maps API Key missing in VITE_GOOGLE_MAPS_API_KEY.');
+      setMessage('Google Maps API Key is missing.');
       return;
     }
 
@@ -73,16 +74,15 @@ export function RideLocationPicker({
     document.head.appendChild(script);
   }, [apiKey]);
 
-  // Initialize Map with Restricted Controls
   useEffect(() => {
     if (!isLoaded || !mapRef.current || googleMap.current) return;
 
     const map = new google.maps.Map(mapRef.current, {
       center: FREETOWN_CENTER,
       zoom: 15,
-      disableDefaultUI: true, // Hides external Google branding/controls
+      disableDefaultUI: true,
       zoomControl: true,
-      clickableIcons: false, // Prevents clicking POIs to leave the app
+      clickableIcons: false,
       gestureHandling: 'greedy'
     });
 
@@ -92,23 +92,23 @@ export function RideLocationPicker({
 
     directionsRenderer.current = new google.maps.DirectionsRenderer({
       map,
-      polylineOptions: { strokeColor: '#2563EB', strokeWeight: 5 },
-      suppressMarkers: false
+      polylineOptions: { strokeColor: '#2563EB', strokeWeight: 5 }
     });
 
     map.addListener('click', (e: google.maps.MapMouseEvent) => {
       if (!e.latLng) return;
-      const lat = e.latLng.lat();
-      const lng = e.latLng.lng();
-
-      if (pinTarget) {
-        selectLocation(pinTarget, [lng, lat]);
+      
+      const currentTarget = activePinRef.current;
+      
+      if (currentTarget) {
+        selectLocation(currentTarget, [e.latLng.lng(), e.latLng.lat()]);
+        activePinRef.current = null;
         setPinTarget(null);
       }
     });
 
     locateUser(false);
-  }, [isLoaded, pinTarget]);
+  }, [isLoaded]);
 
   const updateMarker = (target: Target, coords: [number, number]) => {
     const position = { lat: coords[1], lng: coords[0] };
@@ -175,7 +175,6 @@ export function RideLocationPicker({
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
 
-        // Verify coordinate is on land around Freetown peninsula
         if (lat < 8.35 || lat > 8.52 || lng < -13.32 || lng > -13.10) {
           if (explicit) setMessage('Coarse network location detected. Please pin your exact street.');
           selectLocation('pickup', [FREETOWN_CENTER.lng, FREETOWN_CENTER.lat], 'Charles Street, Freetown');
@@ -283,8 +282,11 @@ export function RideLocationPicker({
               {target}
               <input
                 value={texts[target]}
-                placeholder={`Type ${target} (e.g. Syke Street, Stadium)`}
-                onFocus={() => setSearching(target)}
+                placeholder={`Type ${target} (e.g. Syke Street, Siaka Stevens)`}
+                onFocus={() => {
+                  setSearching(target);
+                  if (texts[target].trim()) handleInputChange(target, texts[target]);
+                }}
                 onChange={e => handleInputChange(target, e.target.value)}
                 className="mt-1 w-full rounded-xl border p-3 font-normal outline-none focus:border-blue-500"
               />
@@ -317,7 +319,8 @@ export function RideLocationPicker({
             key={target}
             onClick={() => {
               setPinTarget(target);
-              setMessage(`Tap the map to place the ${target} pin.`);
+              activePinRef.current = target;
+              setMessage(`Tap the map to place the ${target} pin. You can drag it afterwards.`);
             }}
             className={`rounded-xl border p-2 text-sm font-bold transition ${pinTarget === target ? 'bg-blue-600 text-white' : 'hover:bg-slate-50'}`}
           >

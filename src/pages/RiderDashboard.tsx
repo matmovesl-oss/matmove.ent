@@ -1,5 +1,6 @@
 import { RideLocationPicker, TripLocations } from '@/components/RideLocationPicker';
 import { WalletTopUp } from '@/components/WalletTopUp';
+import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
 import { useState, useEffect } from 'react';
@@ -17,12 +18,7 @@ const WHATSAPP_NUMBER = '23290330362';
 
 export function RiderDashboard(props: any) {
   if (props.activeSection === 'shop') {
-    return (
-      <RiderShop
-        profile={props.profile}
-        wallet={props.wallet}
-      />
-    );
+    return <RiderShop profile={props.profile} wallet={props.wallet} />;
   }
 
   if (props.activeSection === 'trips') {
@@ -40,6 +36,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [isCreatingUsd, setIsCreatingUsd] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedTx, setSelectedTx] = useState<any>(null);
 
   const [pricingRates, setPricingRates] = useState<any>({
     bike: { min: 15, perKm: 3 },
@@ -423,10 +420,9 @@ function RiderMain({ profile, wallet, activeSection }: any) {
         <button
           onClick={fetchLiveBalance}
           disabled={isRefreshing}
-          className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10"
+          className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center justify-center z-10"
         >
-          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-          {isRefreshing ? 'Syncing...' : 'Refresh'}
+          <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
         </button>
 
         <div>
@@ -434,9 +430,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
             SLE Operating Wallet
           </span>
           <div className="text-3xl font-bold mt-1 text-blue-400">
-            SLE {sleWallet?.balanceAvailable === false
-              ? 'Unavailable'
-              : Number(sleWallet?.balance || 0).toFixed(2)}
+            SLE {Number(sleWallet?.balance || 0).toFixed(2)}
           </div>
           <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-flex items-center gap-2 px-2 py-1 rounded">
             ID: {monimeAccountId}
@@ -459,9 +453,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                 USD Reserve Wallet
               </span>
               <div className="text-3xl font-bold mt-1 text-emerald-400">
-                USD {usdWallet.balanceAvailable === false
-                  ? 'Unavailable'
-                  : Number(usdWallet.balance || 0).toFixed(2)}
+                USD {Number(usdWallet?.balance || 0).toFixed(2)}
               </div>
               <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-flex items-center gap-2 px-2 py-1 rounded">
                 ID: {usdWallet.monime_account_id}
@@ -863,7 +855,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                     return (
                       <div
                         key={tx.id}
-                        className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition group"
+                        onClick={() => setSelectedTx(tx)}
+                        className="cursor-pointer flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition group"
                       >
                         <div className="flex items-center gap-3">
                           <div className={`p-2 rounded-full ${isCredit ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
@@ -890,13 +883,6 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                               {tx.status}
                             </span>
                           </div>
-                          <button
-                            onClick={() => handleShareReceipt(tx)}
-                            className="text-slate-400 hover:text-blue-600 transition p-2 rounded-full hover:bg-white"
-                            title="Copy Receipt"
-                          >
-                            <Share2 size={16} />
-                          </button>
                         </div>
                       </div>
                     );
@@ -907,6 +893,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
           </div>
         )}
       </div>
+
+      {selectedTx && <TransactionModal tx={selectedTx} onClose={() => setSelectedTx(null)} />}
 
       {isLoadModalOpen && (
         <WalletTopUp

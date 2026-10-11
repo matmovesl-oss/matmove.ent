@@ -1,15 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
 import { WalletTopUp } from '@/components/WalletTopUp';
+import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
-import {
-  Car, MapPin, Navigation, Power, User, Phone,
-  Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft,
-  Users, RefreshCw, Plus, Wallet, Activity, Copy,
-  Check, Share2, ArrowRight
+import { 
+  Car, MapPin, Navigation, Power, User, Phone, 
+  Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft, 
+  Users, RefreshCw, Plus, Wallet, Activity, Copy, 
+  Check, Share2 
 } from 'lucide-react';
 
 export function DriverDashboard(props: any) {
@@ -27,16 +26,16 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   const [txFilter, setTxFilter] = useState<'recent' | 'all'>('recent');
   const [isCreatingUsd, setIsCreatingUsd] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedTx, setSelectedTx] = useState<any>(null);
 
   const [isOnline, setIsOnline] = useState(false);
   const [activeRequests, setActiveRequests] = useState<any[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
+  const googleMap = useRef<google.maps.Map | null>(null);
 
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
-
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
   const [payoutPhone, setPayoutPhone] = useState('');
@@ -152,41 +151,34 @@ function DriverMain({ profile, wallet, activeSection }: any) {
     }
   };
 
-  // Mapbox initialization
+  // Google Maps Initialization
   useEffect(() => {
-    if (map.current || !mapContainer.current) return;
-    const token = import.meta.env.VITE_MAPBOX_TOKEN;
-    if (!token) return;
+    if (!mapContainer.current || googleMap.current) return;
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) return;
 
-    try {
-      mapboxgl.accessToken = token;
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/streets-v12',
-        center: [-13.234, 8.484],
-        zoom: 13
+    const initMap = () => {
+      googleMap.current = new google.maps.Map(mapContainer.current!, {
+        center: { lat: 8.4808, lng: -13.2290 },
+        zoom: 14,
+        disableDefaultUI: true,
+        zoomControl: true,
+        clickableIcons: false
       });
+    };
 
-      const observer = new ResizeObserver(() => { map.current?.resize(); });
-      observer.observe(mapContainer.current);
-
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const { longitude, latitude } = pos.coords;
-            map.current?.flyTo({ center: [longitude, latitude], zoom: 15 });
-            new mapboxgl.Marker({ color: '#10B981' }).setLngLat([longitude, latitude]).addTo(map.current!);
-          },
-          () => {},
-          { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
-        );
-      }
-    } catch (e) {
-      console.error(e);
+    if (window.google?.maps) {
+      initMap();
+    } else {
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+      script.async = true;
+      script.onload = initMap;
+      document.head.appendChild(script);
     }
   }, []);
 
-  // Radar logic
+  // Radar Logic
   useEffect(() => {
     if (!isOnline) {
       setActiveRequests([]);
@@ -284,10 +276,6 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 
     const amt = Number(payoutAmount);
     if (!Number.isFinite(amt) || amt <= 0) return alert('Enter a valid amount.');
-
-    if (sleWallet?.balanceAvailable === false) {
-      return alert('Refresh your wallet balance before withdrawing.');
-    }
 
     if (amt > Number(sleWallet?.balance || 0)) {
       return alert('The withdrawal amount exceeds your available SLE balance.');
@@ -389,10 +377,10 @@ function DriverMain({ profile, wallet, activeSection }: any) {
         <button
           onClick={() => void fetchLiveBalance()}
           disabled={isRefreshing}
-          className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10"
+          className="absolute top-4 right-4 flex items-center justify-center rounded-xl bg-white/10 p-2 text-xs font-bold hover:bg-white/20 transition"
+          aria-label="Refresh balance"
         >
-          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-          {isRefreshing ? 'Syncing…' : 'Refresh'}
+          <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
         </button>
 
         <div>
@@ -400,9 +388,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
             SLE Ledger
           </span>
           <div className="text-3xl font-bold mt-1 text-emerald-400">
-            SLE {sleWallet?.balanceAvailable === false
-              ? 'Unavailable'
-              : Number(sleWallet?.balance || 0).toFixed(2)}
+            SLE {Number(sleWallet?.balance || 0).toFixed(2)}
           </div>
           <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-flex items-center gap-2 px-2 py-1 rounded">
             ID: {monimeAccountId}
@@ -423,9 +409,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                 USD Reserve
               </span>
               <div className="text-3xl font-bold mt-1 text-blue-400">
-                USD {usdWallet.balanceAvailable === false
-                  ? 'Unavailable'
-                  : Number(usdWallet.balance || 0).toFixed(2)}
+                USD {Number(usdWallet.balance || 0).toFixed(2)}
               </div>
               <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-flex items-center gap-2 px-2 py-1 rounded">
                 ID: {usdWallet.monime_account_id}
@@ -686,7 +670,8 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                   return (
                     <div
                       key={tx.id}
-                      className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition group"
+                      onClick={() => setSelectedTx(tx)}
+                      className="cursor-pointer flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition group"
                     >
                       <div className="flex items-center gap-3">
                         <div className={`p-2 rounded-full ${isCredit ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
@@ -730,6 +715,10 @@ function DriverMain({ profile, wallet, activeSection }: any) {
         </div>
       )}
 
+      {selectedTx && (
+        <TransactionModal tx={selectedTx} onClose={() => setSelectedTx(null)} />
+      )}
+
       {isLoadModalOpen && (
         <WalletTopUp
           userId={profile.id}
@@ -742,16 +731,21 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       {isPayoutModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} disabled={isProcessingPayout} className="absolute top-4 right-4 text-slate-400">
+            <button
+              onClick={closeModals}
+              disabled={isProcessingPayout}
+              className="absolute right-4 top-4 p-2 text-slate-400"
+              aria-label="Close withdrawal"
+            >
               <X size={20} />
             </button>
 
             <h2 className="text-2xl font-bold mb-1">Mobile Payout</h2>
             <p className="text-sm text-slate-500 mb-6">
-              Available: SLE {sleWallet?.balanceAvailable === false ? 'Unavailable' : Number(sleWallet?.balance || 0).toFixed(2)}
+              Available: SLE {Number(sleWallet?.balance || 0).toFixed(2)}
             </p>
 
-            <div className="space-y-4 mb-6">
+            <div className="mb-6 space-y-4">
               <input
                 type="number"
                 min="0.01"
@@ -793,11 +787,20 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 
             <button
               onClick={() => void executePayout()}
-              disabled={!canTransact || isProcessingPayout || !payoutAmount || !payoutPhone}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50"
+              disabled={
+                !canTransact ||
+                isProcessingPayout ||
+                !payoutAmount ||
+                !payoutPhone
+              }
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 p-4 font-bold text-white disabled:opacity-50"
             >
-              {isProcessingPayout ? <Loader2 size={20} className="animate-spin" /> : <ArrowUpRight size={20} />}
-              {isProcessingPayout ? 'Processing…' : 'Confirm Payout'}
+              {isProcessingPayout ? (
+                <Loader2 size={20} className="animate-spin" />
+              ) : (
+                <ArrowUpRight size={20} />
+              )}
+              {isProcessingPayout ? 'Processing…' : 'Confirm Withdrawal'}
             </button>
           </div>
         </div>
@@ -806,13 +809,18 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       {isTransferModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} disabled={isProcessingTransfer} className="absolute top-4 right-4 text-slate-400">
+            <button
+              onClick={closeModals}
+              disabled={isProcessingTransfer}
+              className="absolute right-4 top-4 p-2 text-slate-400"
+              aria-label="Close transfer"
+            >
               <X size={20} />
             </button>
 
             <h2 className="text-2xl font-bold mb-1">Account Transfer</h2>
 
-            <label className="block my-4 text-sm font-bold">
+            <label className="my-4 block text-sm font-bold">
               Send from
               <select
                 value={transferCurrency}
@@ -822,7 +830,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                   setTransferError('');
                   setTransferNotice('');
                 }}
-                className="block w-full rounded-xl border p-3 mt-2"
+                className="mt-2 block w-full rounded-xl border p-3"
               >
                 <option value="SLE">SLE wallet → SLE account</option>
                 <option value="USD">USD wallet → USD account</option>
@@ -830,17 +838,21 @@ function DriverMain({ profile, wallet, activeSection }: any) {
             </label>
 
             {transferError && (
-              <p role="alert" className="mb-3 text-sm text-red-700">{transferError}</p>
+              <p role="alert" className="mb-3 text-sm text-red-700">
+                {transferError}
+              </p>
             )}
             {transferNotice && (
-              <p role="status" className="mb-3 text-sm text-blue-700">{transferNotice}</p>
+              <p role="status" className="mb-3 text-sm text-blue-700">
+                {transferNotice}
+              </p>
             )}
 
-            <p className="text-sm text-slate-500 mb-6">
-              Paste the recipient's account ID for the selected currency.
+            <p className="mb-4 text-sm text-slate-500">
+              Paste the recipient’s account ID for the selected currency.
             </p>
 
-            <div className="space-y-4 mb-6">
+            <div className="mb-6 space-y-4">
               <input
                 type="number"
                 min="0.01"
@@ -849,7 +861,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                 placeholder={`Amount (${transferCurrency})`}
                 value={transferAmount}
                 onChange={e => setTransferAmount(e.target.value)}
-                className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-purple-500"
+                className="w-full rounded-xl border p-4 text-xl font-bold"
               />
               <input
                 type="text"
@@ -857,16 +869,25 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                 placeholder="Recipient account ID (fac-...)"
                 value={transferRecipient}
                 onChange={e => setTransferRecipient(e.target.value)}
-                className="w-full border p-4 rounded-xl font-bold text-sm outline-none bg-white focus:border-purple-500"
+                className="w-full rounded-xl border p-4"
               />
             </div>
 
             <button
               onClick={() => void executeTransfer()}
-              disabled={!canTransact || isProcessingTransfer || !transferAmount || !transferRecipient}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50"
+              disabled={
+                !canTransact ||
+                isProcessingTransfer ||
+                !transferAmount ||
+                !transferRecipient
+              }
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 p-4 font-bold text-white disabled:opacity-50"
             >
-              {isProcessingTransfer ? <Loader2 size={20} className="animate-spin" /> : <Users size={20} />}
+              {isProcessingTransfer ? (
+                <Loader2 size={20} className="animate-spin" />
+              ) : (
+                <Users size={20} />
+              )}
               Send Transfer
             </button>
           </div>
