@@ -1,110 +1,62 @@
-import { createClient } from '@supabase/supabase-js';
+import { protectedWallet, monime, HttpError } from '../server/wallet-security.js';
 
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY!
-);
+export async function acceptRideEscrowHandler(req: any, res: any) {
+  const { db } = req.matmove;
+  const { bookingId, riderId, driverId, amount } = req.body;
 
-const MONIME_API_KEY = process.env.VITE_MONIME_API_KEY || process.env.MONIME_API_KEY!;
-const MONIME_SPACE_ID = process.env.VITE_MONIME_SPACE_ID || process.env.MONIME_SPACE_ID!;
-const ADMIN_MASTER_ESCROW_ID = 'fac-k6V1AXPbAjLxDw9rnsDxWqYpjXp';
-
-async function resolveMonimeAccountId(userId: string) {
-  const { data: w1 } = await supabase.from('wallets').select('*').eq('user_id', userId).limit(1);
-  const { data: w2 } = await supabase.from('wallets').select('*').eq('id', userId).limit(1);
-  const wallet = w1?.[0] || w2?.[0];
-  
-  let accountId = wallet?.metadata?.monime_account_id || wallet?.monime_account_id;
-  if (accountId && String(accountId).startsWith('fac-')) return accountId;
-
-  try {
-    const monimeRes = await fetch('https://api.monime.io/v1/financial-accounts', {
-      headers: {
-        'Authorization': `Bearer ${MONIME_API_KEY}`,
-        'Monime-Space-Id': MONIME_SPACE_ID,
-        'Accept': '*/*'
-      }
-    });
-
-    if (monimeRes.ok) {
-      const monimeData = await monimeRes.json();
-      const accounts = monimeData.result || monimeData.data || (Array.isArray(monimeData) ? monimeData : []);
-      const match = accounts.find((acc: any) => acc.reference === userId);
-      
-      if (match?.id) {
-        if (wallet?.id) {
-          await supabase.from('wallets').update({
-            metadata: { ...(wallet.metadata || {}), monime_account_id: match.id }
-          }).eq('id', wallet.id);
-        }
-        return match.id;
-      }
-    }
-  } catch (e) {
-    console.error('Monime resolution failed:', e);
+  if (!bookingId || !riderId || !driverId || !amount) {
+    throw new HttpError(400, 'Missing required booking details.');
   }
-  return null;
+
+  // 1. Get the Rider's Wallet ID
+  const { data: riderWallet, error: riderError } = await db
+    .from('wallets')
+    .select('monime_account_id')
+    .eq('user_id', riderId)
+    .eq('currency', 'SLE')
+    .single();
+
+  if (riderError || !riderWallet?.monime_account_id) {
+    throw new HttpError(404, 'Rider financial account could not be found.');
+  }
+
+  // 2. Get the Platform Escrow ID
+  const escrowAccountId = process.env.MONIME_ESCROW_ACCOUNT_ID;
+  if (!escrowAccountId) {
+    throw new HttpError(503, 'Platform escrow account is not configured.');
+  }
+
+  // 3. Move Funds: Rider -> Escrow
+  const fareMinorUnits = Math.round(Number(amount) * 100);
+
+  const transfer = await monime('internal-transfers', {
+    method: 'POST',
+    headers: {
+      'Idempotency-Key': `escrow-hold-${bookingId}`
+    },
+    body: JSON.stringify({
+      amount: {
+        currency: 'SLE',
+        value: fareMinorUnits
+      },
+      sourceFinancialAccount: {
+        id: riderWallet.monime_account_id
+      },
+      destinationFinancialAccount: {
+        id: escrowAccountId
+      },
+      description: `Escrow Hold for Ride ${bookingId.slice(0, 8)}`,
+      metadata: { bookingId, riderId, driverId }
+    })
+  });
+
+  // 4. Update Booking Status to Accepted
+  await db.from('bookings').update({ 
+    status: 'accepted', 
+    driver_id: driverId 
+  }).eq('id', bookingId);
+
+  return res.status(200).json({ success: true, transfer });
 }
 
-export default async function handler(req: any, res: any) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
-
-  try {
-    const { bookingId, riderId, driverId, amount } = req.body;
-
-    const riderAccountId = await resolveMonimeAccountId(riderId);
-
-    if (!riderAccountId) {
-      return res.status(400).json({ error: `Missing Rider Wallet Account. Rider ID: ${riderId}` });
-    }
-
-    const headers = {
-      'Content-Type': 'application/json',
-      'Accept': '*/*',
-      'Authorization': `Bearer ${MONIME_API_KEY}`,
-      'Monime-Space-Id': MONIME_SPACE_ID,
-      'Idempotency-Key': `hold-${bookingId}-${Date.now()}`
-    };
-
-    const payload = {
-      amount: { currency: "SLE", value: Math.round(Number(amount) * 100) },
-      sourceFinancialAccount: { id: riderAccountId },
-      destinationFinancialAccount: { id: ADMIN_MASTER_ESCROW_ID },
-      description: `Escrow Hold for Booking ${bookingId}`
-    };
-
-    let monimeResponse = await fetch('https://api.monime.io/v1/internal-transfers', {
-      method: 'POST', headers, body: JSON.stringify(payload)
-    });
-
-    if (monimeResponse.status === 404) {
-      monimeResponse = await fetch('https://api.monime.io/v1/internal_transfers', {
-        method: 'POST', headers, body: JSON.stringify(payload)
-      });
-    }
-
-    if (!monimeResponse.ok) {
-      const errText = await monimeResponse.text();
-      return res.status(400).json({ error: `Transfer API Error: ${monimeResponse.status} - ${errText}` });
-    }
-
-    // 🔴 CRITICAL FIX: Explicitly check for transfer failures
-    const transferResult = await monimeResponse.json();
-    const transferData = transferResult.result || transferResult;
-    
-    if (transferData.status === 'failed') {
-      const failureReason = transferData.failureDetail?.message || transferData.failureDetail?.code || 'Unknown error';
-      return res.status(400).json({ error: `Escrow Hold Failed: ${failureReason}` });
-    }
-
-    await supabase.from('bookings').update({ status: 'accepted', driver_id: driverId }).eq('id', bookingId);
-    return res.status(200).json({ success: true, riderAccountId, transferData });
-
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
-  }
-}
+export default protectedWallet('read', acceptRideEscrowHandler);
