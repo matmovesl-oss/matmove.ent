@@ -185,7 +185,9 @@ function DriverMain({ profile, wallet, activeSection }: any) {
     try {
       const { response, data } = await walletFetch('/api/accept-ride-escrow', {
         bookingId: booking.id,
-        driverId: profile.id
+        riderId: booking.rider_id,
+        driverId: profile.id,
+        amount: booking.fare_amount
       });
       
       if (!response.ok) throw new Error(data.error || 'Failed to accept ride.');
