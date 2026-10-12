@@ -32,7 +32,7 @@ export async function acceptRideEscrowHandler(req: any, res: any) {
   const transfer = await monime('internal-transfers', {
     method: 'POST',
     headers: {
-      'Idempotency-Key': `escrow-hold-${bookingId}`
+      'Idempotency-Key': `escrow-hold-${bookingId}-${Date.now()}`
     },
     body: JSON.stringify({
       amount: {
