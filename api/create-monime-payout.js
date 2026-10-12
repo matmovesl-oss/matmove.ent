@@ -1,100 +1,67 @@
-import {
-  protectedWallet,
-  monime,
-  HttpError
-} from '../server/wallet-security.js';
+import { protectedWallet, monime, HttpError } from '../server/wallet-security.js';
 
-export default protectedWallet('payout', async (req, res) => {
-  const {
-    minor,
-    accountId,
-    idempotencyKey,
-    account
-  } = req.matmove;
+export async function completeRidePayoutHandler(req: any, res: any) {
+  const { db, user } = req.matmove;
+  const { bookingId, driverId, amount } = req.body;
 
-  const available = account?.balance?.available;
-
-  if (
-    available?.currency !== 'SLE' ||
-    !Number.isSafeInteger(available.value) ||
-    available.value < 0
-  ) {
-    throw new HttpError(
-      503,
-      'Your available balance could not be verified. Try again shortly.'
-    );
+  if (!bookingId || !driverId || !amount) {
+    throw new HttpError(400, 'Missing required booking details.');
   }
 
-  if (minor > available.value) {
-    throw new HttpError(
-      400,
-      'The withdrawal amount exceeds your available SLE balance.'
-    );
+  // 1. Verify the booking
+  const { data: booking } = await db.from('bookings').select('*').eq('id', bookingId).single();
+  if (!booking) throw new HttpError(404, 'Booking not found.');
+  if (booking.status === 'completed') {
+    return res.status(200).json({ success: true, message: 'Already completed' });
   }
 
-  if (
-    !['orange', 'afrimoney'].includes(
-      req.body.networkProvider
-    )
-  ) {
-    throw new HttpError(
-      400,
-      'Choose a supported mobile money provider.'
-    );
-  }
+  // 2. Fetch Rider/Merchant Wallet
+  const { data: riderWallet } = await db.from('wallets').select('*').eq('user_id', user.id).eq('currency', 'SLE').single();
+  if (!riderWallet?.monime_account_id) throw new HttpError(404, 'Your financial account could not be found.');
 
-  let phone = String(
-    req.body.destinationPhone || ''
-  ).replace(/[\s()-]/g, '');
+  // 3. Fetch Driver Wallet
+  const { data: driverWallet } = await db.from('wallets').select('*').eq('user_id', driverId).eq('currency', 'SLE').single();
+  const driverAccountId = driverWallet?.monime_account_id || driverWallet?.metadata?.monime_account_id;
+  if (!driverAccountId) throw new HttpError(400, 'Driver has no valid Monime account to receive funds.');
 
-  if (/^0\d{8}$/.test(phone)) {
-    phone = `+232${phone.slice(1)}`;
-  }
+  // 4. Fetch Platform Escrow ID
+  const escrowAccountId = process.env.MONIME_ESCROW_ACCOUNT_ID;
+  if (!escrowAccountId) throw new HttpError(503, 'Platform escrow account is not configured.');
 
-  if (/^232\d{8}$/.test(phone)) {
-    phone = `+${phone}`;
-  }
+  // 5. Calculate Split
+  const totalMinorUnits = Math.round(Number(amount) * 100);
+  const driverMinorUnits = Math.round(totalMinorUnits * 0.85);
 
-  if (!/^\+232\d{8}$/.test(phone)) {
-    throw new HttpError(
-      400,
-      'Enter a valid Sierra Leone mobile money number.'
-    );
-  }
-
-  const result = await monime('payouts', {
+  // 6. Transfer 1: Rider -> Platform Escrow (100%)
+  await monime('internal-transfers', {
     method: 'POST',
-    headers: {
-      'Idempotency-Key': idempotencyKey
-    },
+    headers: { 'Idempotency-Key': `ride-in-${bookingId}-${Date.now()}` },
     body: JSON.stringify({
-      amount: {
-        currency: 'SLE',
-        value: minor
-      },
-      source: {
-        financialAccountId: accountId
-      },
-      destination: {
-        type: 'momo',
-        providerId:
-          req.body.networkProvider === 'orange'
-            ? 'm17'
-            : 'm18',
-        phoneNumber: phone
-      }
+      amount: { currency: 'SLE', value: totalMinorUnits },
+      sourceFinancialAccount: { id: riderWallet.monime_account_id },
+      destinationFinancialAccount: { id: escrowAccountId },
+      description: `Ride Payment from Customer for Booking ${bookingId.slice(0, 8)}`,
+      metadata: { bookingId, riderId: user.id }
     })
   });
 
-  if (result.status === 'failed') {
-    throw new HttpError(
-      400,
-      'The payout failed. Check your transaction history before starting another payout.'
-    );
-  }
-
-  return res.status(200).json({
-    success: true,
-    data: result
+  // 7. Transfer 2: Platform Escrow -> Driver (85%)
+  await monime('internal-transfers', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': `ride-out-${bookingId}-${Date.now()}` },
+    body: JSON.stringify({
+      amount: { currency: 'SLE', value: driverMinorUnits },
+      sourceFinancialAccount: { id: escrowAccountId },
+      destinationFinancialAccount: { id: driverAccountId },
+      description: `Driver Earnings Payout for Booking ${bookingId.slice(0, 8)}`,
+      metadata: { bookingId, driverId }
+    })
   });
-});
+
+  // 8. Complete the Ride
+  await db.from('bookings').update({ status: 'completed' }).eq('id', bookingId);
+
+  return res.status(200).json({ success: true, message: 'Transfers completed successfully.' });
+}
+
+export default protectedWallet('read', completeRidePayoutHandler);

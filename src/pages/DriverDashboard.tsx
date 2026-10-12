@@ -4,11 +4,11 @@ import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
-import {
-  Car, MapPin, Navigation, Power, User, Phone,
-  Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft,
-  Users, RefreshCw, Plus, Wallet, Activity, Copy,
-  Check, Share2, ArrowRight
+import { 
+  Car, MapPin, Navigation, Power, User, Phone, 
+  Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft, 
+  Users, RefreshCw, Plus, Wallet, Activity, Copy, 
+  Check, Share2 
 } from 'lucide-react';
 
 export function DriverDashboard(props: any) {
@@ -36,7 +36,6 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   const googleMap = useRef<google.maps.Map | null>(null);
 
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
-
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
   const [payoutPhone, setPayoutPhone] = useState('');
@@ -57,10 +56,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   const { frozen: isFrozen, approved: isApproved } = useWalletAccess(profile.id);
   const canTransact = !isFrozen && isApproved;
 
-  const monimeAccountId =
-    sleWallet?.monime_account_id ||
-    sleWallet?.metadata?.monime_account_id ||
-    'Pending Setup';
+  const monimeAccountId = sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || 'Pending Setup';
 
   useEffect(() => {
     if (profile?.id) {
@@ -101,38 +97,19 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       await navigator.clipboard.writeText(id);
       setCopiedId(id);
       window.setTimeout(() => setCopiedId(null), 2000);
-    } catch {
-      alert(`Account ID: ${id}`);
-    }
+    } catch { alert(`Account ID: ${id}`); }
   };
 
   const handleShareReceipt = async (tx: any) => {
     const isCredit = String(tx.balanceImpact).toUpperCase() === 'CREDIT';
     const date = tx.createdAt || tx.created_at || tx.timestamp || tx.date;
-    const formattedDate =
-      date && !isNaN(new Date(date).getTime())
-        ? new Date(date).toLocaleString()
-        : 'Recent';
+    const formattedDate = date && !isNaN(new Date(date).getTime()) ? new Date(date).toLocaleString() : 'Recent';
 
-    const text = [
-      'MatMove Receipt',
-      `Type: ${tx.description || tx.type || 'Transaction'}`,
-      `Status: ${tx.status || 'Unknown'}`,
-      `Date: ${formattedDate}`,
-      `Amount: ${isCredit ? '+' : '-'}${tx.amount?.currency || 'SLE'} ${(Number(tx.amount?.value || 0) / 100).toFixed(2)}`,
-      `Transaction ID: ${tx.id}`,
-    ].join('\n');
-
+    const text = `MatMove Receipt\nType: ${tx.description || tx.type || 'Transaction'}\nStatus: ${tx.status || 'Unknown'}\nDate: ${formattedDate}\nAmount: ${isCredit ? '+' : '-'}${tx.amount?.currency || 'SLE'} ${(Number(tx.amount?.value || 0) / 100).toFixed(2)}\nTransaction ID: ${tx.id}`;
     try {
-      if (navigator.share) {
-        await navigator.share({ title: 'MatMove Receipt', text });
-      } else {
-        await navigator.clipboard.writeText(text);
-        alert('Receipt copied.');
-      }
-    } catch {
-      // User cancelled share
-    }
+      if (navigator.share) await navigator.share({ title: 'MatMove Receipt', text });
+      else { await navigator.clipboard.writeText(text); alert('Receipt copied.'); }
+    } catch {}
   };
 
   const handleCreateUsdWallet = async () => {
@@ -145,11 +122,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       finish();
       await fetchLiveBalance();
       alert('USD wallet created successfully.');
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setIsCreatingUsd(false);
-    }
+    } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
   };
 
   // Google Maps Initialization
@@ -168,9 +141,8 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       });
     };
 
-    if (window.google?.maps) {
-      initMap();
-    } else {
+    if (window.google?.maps) initMap();
+    else {
       const script = document.createElement('script');
       script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
       script.async = true;
@@ -181,10 +153,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 
   // Radar Logic
   useEffect(() => {
-    if (!isOnline) {
-      setActiveRequests([]);
-      return;
-    }
+    if (!isOnline) { setActiveRequests([]); return; }
 
     const fetchInitialRequests = async () => {
       const { data } = await supabase
@@ -204,14 +173,10 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
         void fetchInitialRequests();
         void fetchLiveBalance();
-      })
-      .subscribe();
+      }).subscribe();
 
     const timer = setInterval(() => void fetchInitialRequests(), 3000);
-    return () => {
-      void supabase.removeChannel(channel);
-      clearInterval(timer);
-    };
+    return () => { void supabase.removeChannel(channel); clearInterval(timer); };
   }, [isOnline, profile?.id]);
 
   const handleAcceptBooking = async (booking: any) => {
@@ -220,50 +185,29 @@ function DriverMain({ profile, wallet, activeSection }: any) {
     try {
       const { response, data } = await walletFetch('/api/accept-ride-escrow', {
         bookingId: booking.id,
-        riderId: booking.rider_id,
-        driverId: profile.id,
-        amount: booking.fare_amount
+        driverId: profile.id
       });
       
-      if (!response.ok) throw new Error(data.error || 'Failed to move funds to Escrow');
+      if (!response.ok) throw new Error(data.error || 'Failed to accept ride.');
 
       setActiveRequests(prev => prev.map(r => r.id === booking.id ? { ...r, status: 'accepted', driver_id: profile.id } : r));
       await fetchLiveBalance();
-    } catch (err: any) {
-      alert('Acceptance Failed: ' + err.message);
-    } finally {
-      setAcceptingId(null);
-    }
+    } catch (err: any) { alert('Acceptance Failed: ' + err.message); } finally { setAcceptingId(null); }
   };
 
   const handleStartRide = async (booking: any) => {
     setAcceptingId(booking.id);
     try {
-      const { response, data } = await walletFetch('/api/start-ride', {
-        bookingId: booking.id
-      });
-      
+      const { response, data } = await walletFetch('/api/start-ride', { bookingId: booking.id });
       if (!response.ok) throw new Error(data.error || 'Failed to start ride');
-
       setActiveRequests(prev => prev.map(r => r.id === booking.id ? { ...r, status: 'in_progress' } : r));
-    } catch (err: any) {
-      alert('Failed: ' + err.message);
-    } finally {
-      setAcceptingId(null);
-    }
+    } catch (err: any) { alert('Failed: ' + err.message); } finally { setAcceptingId(null); }
   };
 
   const closeModals = () => {
     if (isProcessingPayout || isProcessingTransfer) return;
-    setIsLoadModalOpen(false);
-    setIsPayoutModalOpen(false);
-    setIsTransferModalOpen(false);
-    setPayoutAmount('');
-    setPayoutPhone('');
-    setTransferAmount('');
-    setTransferRecipient('');
-    setTransferError('');
-    setTransferNotice('');
+    setIsLoadModalOpen(false); setIsPayoutModalOpen(false); setIsTransferModalOpen(false);
+    setPayoutAmount(''); setPayoutPhone(''); setTransferAmount(''); setTransferRecipient(''); setTransferError(''); setTransferNotice('');
   };
 
   const executePayout = async () => {
@@ -271,120 +215,47 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 
     const amt = Number(payoutAmount);
     if (!Number.isFinite(amt) || amt <= 0) return alert('Enter a valid amount.');
-
-    if (amt > Number(sleWallet?.balance || 0)) {
-      return alert('The withdrawal amount exceeds your available SLE balance.');
-    }
-
-    if (!payoutPhone.trim()) {
-      return alert('Enter your mobile money phone number.');
-    }
+    if (amt > Number(sleWallet?.balance || 0)) return alert('The withdrawal amount exceeds your available SLE balance.');
+    if (!payoutPhone.trim()) return alert('Enter your mobile money phone number.');
 
     setIsProcessingPayout(true);
-
     try {
-      const { response, data, finish } = await walletFetch(
-        '/api/create-monime-payout',
-        {
-          amount: payoutAmount,
-          currency: 'SLE',
-          destinationPhone: payoutPhone,
-          networkProvider
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Payout could not be submitted.');
-      }
-
+      const { response, data, finish } = await walletFetch('/api/create-monime-payout', { amount: payoutAmount, currency: 'SLE', destinationPhone: payoutPhone, networkProvider });
+      if (!response.ok) throw new Error(data.error || 'Payout could not be submitted.');
       if (data.data?.status === 'completed') finish();
 
-      alert(
-        data.data?.status === 'completed'
-          ? 'Payout completed successfully.'
-          : 'Payout submitted. Check your transaction history before initiating another payout.'
-      );
-
-      closeModals();
-      await fetchLiveBalance();
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setIsProcessingPayout(false);
-    }
+      alert(data.data?.status === 'completed' ? 'Payout completed successfully.' : 'Payout submitted. Check your transaction history before initiating another payout.');
+      closeModals(); await fetchLiveBalance();
+    } catch (err: any) { alert(err.message); } finally { setIsProcessingPayout(false); }
   };
 
   const executeTransfer = async () => {
     if (isProcessingTransfer) return;
+    if (!canTransact) { setTransferError('Wallet access is unavailable.'); return; }
+    if (!/^fac-[A-Za-z0-9_-]+$/.test(transferRecipient.trim())) { setTransferError('Enter the recipient MatMove account ID.'); return; }
 
-    if (!canTransact) {
-      setTransferError('Wallet access is unavailable.');
-      return;
-    }
-
-    if (!/^fac-[A-Za-z0-9_-]+$/.test(transferRecipient.trim())) {
-      setTransferError('Enter the recipient MatMove account ID.');
-      return;
-    }
-
-    setIsProcessingTransfer(true);
-    setTransferError('');
-    setTransferNotice('');
-
+    setIsProcessingTransfer(true); setTransferError(''); setTransferNotice('');
     try {
-      const { response, data, finish } = await walletFetch(
-        '/api/create-monime-transfer',
-        {
-          amount: transferAmount,
-          currency: transferCurrency,
-          recipientAccountId: transferRecipient.trim()
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Transfer could not be submitted.');
-      }
-
+      const { response, data, finish } = await walletFetch('/api/create-monime-transfer', { amount: transferAmount, currency: transferCurrency, recipientAccountId: transferRecipient.trim() });
+      if (!response.ok) throw new Error(data.error || 'Transfer could not be submitted.');
       const status = data.data?.status;
 
-      setTransferNotice(
-        status === 'completed'
-          ? 'Transfer completed.'
-          : `Transfer ${status || 'submitted'}. Do not create another payment while this transfer is pending.`
-      );
-
-      if (status === 'completed' || status === 'failed') {
-        finish();
-        setTransferAmount('');
-      }
-
+      setTransferNotice(status === 'completed' ? 'Transfer completed.' : `Transfer ${status || 'submitted'}. Do not create another payment while this transfer is pending.`);
+      if (status === 'completed' || status === 'failed') { finish(); setTransferAmount(''); }
       await fetchLiveBalance();
-    } catch (err: any) {
-      setTransferError(err.message || 'Transfer could not be submitted.');
-    } finally {
-      setIsProcessingTransfer(false);
-    }
+    } catch (err: any) { setTransferError(err.message || 'Transfer could not be submitted.'); } finally { setIsProcessingTransfer(false); }
   };
 
   const walletCards = (
     <div className={`grid grid-cols-1 ${activeSection === 'wallet' ? 'md:grid-cols-2' : ''} gap-4`}>
       <div className="bg-slate-900 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
-        <button
-          onClick={() => void fetchLiveBalance()}
-          disabled={isRefreshing}
-          className="absolute top-4 right-4 flex items-center justify-center rounded-xl bg-white/10 p-2 text-xs font-bold hover:bg-white/20 transition"
-          aria-label="Refresh balance"
-        >
+        <button onClick={() => void fetchLiveBalance()} disabled={isRefreshing} className="absolute top-4 right-4 flex items-center justify-center rounded-xl bg-white/10 p-2 text-xs font-bold hover:bg-white/20 transition" aria-label="Refresh balance">
           <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
         </button>
 
         <div>
-          <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">
-            SLE Ledger
-          </span>
-          <div className="text-3xl font-bold mt-1 text-emerald-400">
-            SLE {Number(sleWallet?.balance || 0).toFixed(2)}
-          </div>
+          <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">SLE Ledger</span>
+          <div className="text-3xl font-bold mt-1 text-emerald-400">SLE {Number(sleWallet?.balance || 0).toFixed(2)}</div>
           <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-flex items-center gap-2 px-2 py-1 rounded">
             ID: {monimeAccountId}
             <button onClick={() => void handleCopy(monimeAccountId)} className="hover:text-white transition" aria-label="Copy SLE account ID">
@@ -392,7 +263,6 @@ function DriverMain({ profile, wallet, activeSection }: any) {
             </button>
           </div>
         </div>
-
         <Wallet size={32} className="text-slate-700 mr-2 md:mr-6 pointer-events-none" />
       </div>
 
@@ -400,12 +270,8 @@ function DriverMain({ profile, wallet, activeSection }: any) {
         {usdWallet?.monime_account_id ? (
           <>
             <div>
-              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">
-                USD Reserve
-              </span>
-              <div className="text-3xl font-bold mt-1 text-blue-400">
-                USD {Number(usdWallet.balance || 0).toFixed(2)}
-              </div>
+              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">USD Reserve</span>
+              <div className="text-3xl font-bold mt-1 text-blue-400">USD {Number(usdWallet.balance || 0).toFixed(2)}</div>
               <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-flex items-center gap-2 px-2 py-1 rounded">
                 ID: {usdWallet.monime_account_id}
                 <button onClick={() => void handleCopy(usdWallet.monime_account_id)} className="hover:text-white transition" aria-label="Copy USD account ID">
@@ -417,12 +283,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
           </>
         ) : (
           <div className="w-full flex flex-col items-center justify-center text-center py-1">
-            <button
-              onClick={() => void handleCreateUsdWallet()}
-              disabled={isCreatingUsd}
-              className="bg-slate-700 hover:bg-slate-600 transition p-3 rounded-full mb-2 shadow-inner"
-              aria-label="Create USD wallet"
-            >
+            <button onClick={() => void handleCreateUsdWallet()} disabled={isCreatingUsd} className="bg-slate-700 hover:bg-slate-600 transition p-3 rounded-full mb-2 shadow-inner" aria-label="Create USD wallet">
               {isCreatingUsd ? <Loader2 size={24} className="animate-spin text-emerald-400" /> : <Plus size={24} className="text-emerald-400" />}
             </button>
             <span className="text-sm font-bold text-slate-300">Create USD Wallet</span>
@@ -439,17 +300,10 @@ function DriverMain({ profile, wallet, activeSection }: any) {
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => setIsOnline(!isOnline)}
-            className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}
-          >
+          <button onClick={() => setIsOnline(!isOnline)} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}>
             <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${isOnline ? 'translate-x-7' : 'translate-x-1'}`} />
           </button>
-          <div>
-            <h2 className="font-bold text-slate-900 text-lg">
-              {isOnline ? 'You are Online' : 'You are Offline'}
-            </h2>
-          </div>
+          <div><h2 className="font-bold text-slate-900 text-lg">{isOnline ? 'You are Online' : 'You are Offline'}</h2></div>
         </div>
 
         <div className="flex gap-2">
@@ -459,15 +313,9 @@ function DriverMain({ profile, wallet, activeSection }: any) {
             </span>
           ) : (
             <>
-              <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">
-                Load
-              </button>
-              <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition">
-                Withdraw
-              </button>
-              <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800 transition">
-                Transfer
-              </button>
+              <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
+              <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition">Withdraw</button>
+              <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800 transition">Transfer</button>
             </>
           )}
         </div>
@@ -498,53 +346,29 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                         {r.service_type}
                       </span>
                       <div>
-                        <span className="text-2xl font-bold text-slate-900 block text-right">
-                          SLE {r.fare_amount}
-                        </span>
-                        <span className="text-[10px] font-bold text-emerald-600 block text-right bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mt-1">
-                          Take-Home: SLE {(r.fare_amount * 0.85).toFixed(2)}
-                        </span>
+                        <span className="text-2xl font-bold text-slate-900 block text-right">SLE {r.fare_amount}</span>
+                        <span className="text-[10px] font-bold text-emerald-600 block text-right bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mt-1">Take-Home: SLE {(r.fare_amount * 0.85).toFixed(2)}</span>
                       </div>
                     </div>
 
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs space-y-2">
-                      <div className="flex items-center gap-2 font-semibold text-slate-800">
-                        <MapPin size={14} className="text-emerald-500 shrink-0" />
-                        Pickup: {r.pickup_location}
-                      </div>
-                      <div className="flex items-center gap-2 font-semibold text-slate-800">
-                        <Navigation size={14} className="text-blue-500 shrink-0" />
-                        Dropoff: {r.destination_location}
-                      </div>
+                      <div className="flex items-center gap-2 font-semibold text-slate-800"><MapPin size={14} className="text-emerald-500 shrink-0" /> Pickup: {r.pickup_location}</div>
+                      <div className="flex items-center gap-2 font-semibold text-slate-800"><Navigation size={14} className="text-blue-500 shrink-0" /> Dropoff: {r.destination_location}</div>
                     </div>
 
                     <div className="flex items-center justify-between text-xs font-bold text-slate-600 pt-1 border-t border-slate-100">
-                      <span className="flex items-center gap-1.5">
-                        <User size={14} className="text-slate-400" />
-                        {r.rider?.full_name || 'Rider Customer'}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Phone size={14} className="text-slate-400" />
-                        {r.rider?.phone || r.rider?.phone_number || 'No Phone'}
-                      </span>
+                      <span className="flex items-center gap-1.5"><User size={14} className="text-slate-400" /> {r.rider?.full_name || 'Rider Customer'}</span>
+                      <span className="flex items-center gap-1.5"><Phone size={14} className="text-slate-400" /> {r.rider?.phone || r.rider?.phone_number || 'No Phone'}</span>
                     </div>
 
                     {r.status === 'pending' && (
-                      <button
-                        onClick={() => void handleAcceptBooking(r)}
-                        disabled={acceptingId === r.id || !canTransact}
-                        className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 disabled:opacity-50"
-                      >
+                      <button onClick={() => void handleAcceptBooking(r)} disabled={acceptingId === r.id || !canTransact} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 disabled:opacity-50">
                         {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Accept Request'}
                       </button>
                     )}
 
                     {r.status === 'accepted' && r.driver_id === profile.id && (
-                      <button
-                        onClick={() => void handleStartRide(r)}
-                        disabled={acceptingId === r.id}
-                        className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50"
-                      >
+                      <button onClick={() => void handleStartRide(r)} disabled={acceptingId === r.id} className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50">
                         {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Arrived / Start Ride'}
                       </button>
                     )}
@@ -568,138 +392,61 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 
       {activeSection === 'wallet' && (
         <div className="p-6 max-w-4xl mx-auto w-full space-y-6">
-          <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">
-            My Wallets
-          </h2>
-
+          <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">My Wallets</h2>
           {walletCards}
 
           <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm flex flex-col items-center text-center mt-6">
-            <h3 className="text-xl font-bold text-slate-900 mb-2">
-              Wallet Actions
-            </h3>
-            <p className="text-sm text-slate-500 mb-8">
-              Transfers support SLE to SLE and USD to USD
-            </p>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Wallet Actions</h3>
+            <p className="text-sm text-slate-500 mb-8">Transfers support SLE to SLE and USD to USD</p>
 
             {!canTransact && (
               <p className="mb-4 text-sm text-red-700 bg-red-50 p-3 rounded-xl w-full">
-                {isFrozen
-                  ? 'Your wallet is frozen. Contact support.'
-                  : 'Your account must be approved before transactions.'}
+                {isFrozen ? 'Your wallet is frozen. Contact support.' : 'Your account must be approved before transactions.'}
               </p>
             )}
 
             <div className="grid grid-cols-3 gap-4 w-full">
-              <button
-                onClick={() => setIsLoadModalOpen(true)}
-                disabled={!canTransact}
-                className="p-4 sm:p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
-              >
-                <div className="p-3 bg-white rounded-full shadow-sm">
-                  <ArrowDownLeft size={24} />
-                </div>
-                Load
-              </button>
-
-              <button
-                onClick={() => setIsPayoutModalOpen(true)}
-                disabled={!canTransact}
-                className="p-4 sm:p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
-              >
-                <ArrowUpRight size={24} /> Withdraw
-              </button>
-
-              <button
-                onClick={() => setIsTransferModalOpen(true)}
-                disabled={!canTransact}
-                className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
-              >
-                <div className="p-3 bg-white rounded-full shadow-sm">
-                  <Users size={24} />
-                </div>
-                Transfer
-              </button>
+              <button onClick={() => setIsLoadModalOpen(true)} disabled={!canTransact} className="p-4 sm:p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"><div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24} /></div>Load</button>
+              <button onClick={() => setIsPayoutModalOpen(true)} disabled={!canTransact} className="p-4 sm:p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"><ArrowUpRight size={24} /> Withdraw</button>
+              <button onClick={() => setIsTransferModalOpen(true)} disabled={!canTransact} className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"><div className="p-3 bg-white rounded-full shadow-sm"><Users size={24} /></div>Transfer</button>
             </div>
           </div>
 
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm w-full">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
-                <Activity size={20} className="text-blue-600" /> Transactions
-              </h3>
+              <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2"><Activity size={20} className="text-blue-600" /> Transactions</h3>
               <div className="flex bg-slate-100 p-1 rounded-lg">
-                <button
-                  onClick={() => setTxFilter('recent')}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter === 'recent' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
-                >
-                  Recent
-                </button>
-                <button
-                  onClick={() => setTxFilter('all')}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter === 'all' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
-                >
-                  All Time
-                </button>
+                <button onClick={() => setTxFilter('recent')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter === 'recent' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Recent</button>
+                <button onClick={() => setTxFilter('all')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter === 'all' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>All Time</button>
               </div>
             </div>
 
             {displayedTx.length === 0 ? (
-              <div className="text-center text-slate-500 py-6">
-                No transactions found.
-              </div>
+              <div className="text-center text-slate-500 py-6">No transactions found.</div>
             ) : (
               <div className="space-y-3">
                 {displayedTx.map(tx => {
                   if (!tx) return null;
-
                   const isCredit = String(tx.balanceImpact).toUpperCase() === 'CREDIT';
-                  const dateStr =
-                    tx.createdAt || tx.created_at ||
-                    tx.timestamp || tx.date || tx.createdOn;
+                  const dateStr = tx.createdAt || tx.created_at || tx.timestamp || tx.date || tx.createdOn;
                   const isValidDate = dateStr && !isNaN(new Date(dateStr).getTime());
-                  const formattedDate = isValidDate
-                    ? new Date(dateStr).toLocaleString()
-                    : 'Date pending';
+                  const formattedDate = isValidDate ? new Date(dateStr).toLocaleString() : 'Date pending';
 
                   return (
-                    <div
-                      key={tx.id}
-                      onClick={() => setSelectedTx(tx)}
-                      className="cursor-pointer flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition group"
-                    >
+                    <div key={tx.id} onClick={() => setSelectedTx(tx)} className="cursor-pointer flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition group">
                       <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-full ${isCredit ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                          {isCredit ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
-                        </div>
+                        <div className={`p-2 rounded-full ${isCredit ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>{isCredit ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}</div>
                         <div>
-                          <p className="font-bold text-slate-900 text-sm">
-                            {tx.description || tx.type || 'Transfer'}
-                          </p>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {formattedDate}
-                          </p>
+                          <p className="font-bold text-slate-900 text-sm">{tx.description || tx.type || 'Transfer'}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">{formattedDate}</p>
                         </div>
                       </div>
-
                       <div className="text-right flex items-center gap-4">
                         <div>
-                          <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>
-                            {isCredit ? '+' : '-'}{' '}
-                            {tx.amount?.currency || 'SLE'}{' '}
-                            {((tx.amount?.value || 0) / 100).toFixed(2)}
-                          </p>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            {tx.status}
-                          </span>
+                          <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>{isCredit ? '+' : '-'}{' '}{tx.amount?.currency || 'SLE'}{' '}{((tx.amount?.value || 0) / 100).toFixed(2)}</p>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tx.status}</span>
                         </div>
-                        <button
-                          onClick={() => void handleShareReceipt(tx)}
-                          className="text-slate-400 hover:text-blue-600 transition p-2 rounded-full hover:bg-white"
-                          title="Copy Receipt"
-                        >
-                          <Share2 size={16} />
-                        </button>
+                        <button onClick={() => void handleShareReceipt(tx)} className="text-slate-400 hover:text-blue-600 transition p-2 rounded-full hover:bg-white" title="Copy Receipt"><Share2 size={16} /></button>
                       </div>
                     </div>
                   );
@@ -715,87 +462,26 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       )}
 
       {isLoadModalOpen && (
-        <WalletTopUp
-          userId={profile.id}
-          allowed={canTransact}
-          onClose={() => setIsLoadModalOpen(false)}
-          onPaid={fetchLiveBalance}
-        />
+        <WalletTopUp userId={profile.id} allowed={canTransact} onClose={() => setIsLoadModalOpen(false)} onPaid={fetchLiveBalance} />
       )}
 
       {isPayoutModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button
-              onClick={closeModals}
-              disabled={isProcessingPayout}
-              className="absolute right-4 top-4 p-2 text-slate-400"
-              aria-label="Close withdrawal"
-            >
-              <X size={20} />
-            </button>
-
+            <button onClick={closeModals} disabled={isProcessingPayout} className="absolute right-4 top-4 p-2 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Mobile Payout</h2>
-            <p className="text-sm text-slate-500 mb-6">
-              Available: SLE {Number(sleWallet?.balance || 0).toFixed(2)}
-            </p>
+            <p className="text-sm text-slate-500 mb-6">Available: SLE {Number(sleWallet?.balance || 0).toFixed(2)}</p>
 
             <div className="mb-6 space-y-4">
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                placeholder="Amount (SLE)"
-                value={payoutAmount}
-                disabled={isProcessingPayout}
-                onChange={e => setPayoutAmount(e.target.value)}
-                className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-emerald-500"
-              />
-
+              <input type="number" min="0.01" step="0.01" placeholder="Amount (SLE)" value={payoutAmount} disabled={isProcessingPayout} onChange={e => setPayoutAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-emerald-500" />
               <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => setNetworkProvider('orange')}
-                  disabled={isProcessingPayout}
-                  className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}
-                >
-                  Orange Money
-                </button>
-                <button
-                  onClick={() => setNetworkProvider('afrimoney')}
-                  disabled={isProcessingPayout}
-                  className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}
-                >
-                  Afrimoney
-                </button>
+                <button onClick={() => setNetworkProvider('orange')} disabled={isProcessingPayout} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
+                <button onClick={() => setNetworkProvider('afrimoney')} disabled={isProcessingPayout} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
               </div>
-
-              <input
-                type="tel"
-                inputMode="tel"
-                placeholder="e.g. 077123456 or 030123456"
-                value={payoutPhone}
-                disabled={isProcessingPayout}
-                onChange={e => setPayoutPhone(e.target.value)}
-                className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500"
-              />
+              <input type="tel" inputMode="tel" placeholder="e.g. 077123456 or 030123456" value={payoutPhone} disabled={isProcessingPayout} onChange={e => setPayoutPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500" />
             </div>
-
-            <button
-              onClick={() => void executePayout()}
-              disabled={
-                !canTransact ||
-                isProcessingPayout ||
-                !payoutAmount ||
-                !payoutPhone
-              }
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 p-4 font-bold text-white disabled:opacity-50"
-            >
-              {isProcessingPayout ? (
-                <Loader2 size={20} className="animate-spin" />
-              ) : (
-                <ArrowUpRight size={20} />
-              )}
-              {isProcessingPayout ? 'Processing…' : 'Confirm Withdrawal'}
+            <button onClick={() => void executePayout()} disabled={!canTransact || isProcessingPayout || !payoutAmount || !payoutPhone} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 p-4 font-bold text-white disabled:opacity-50">
+              {isProcessingPayout ? <Loader2 size={20} className="animate-spin" /> : <ArrowUpRight size={20} />} {isProcessingPayout ? 'Processing…' : 'Confirm Withdrawal'}
             </button>
           </div>
         </div>
@@ -804,86 +490,18 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       {isTransferModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button
-              onClick={closeModals}
-              disabled={isProcessingTransfer}
-              className="absolute right-4 top-4 p-2 text-slate-400"
-              aria-label="Close transfer"
-            >
-              <X size={20} />
-            </button>
-
+            <button onClick={closeModals} disabled={isProcessingTransfer} className="absolute right-4 top-4 p-2 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Account Transfer</h2>
-
-            <label className="my-4 block text-sm font-bold">
-              Send from
-              <select
-                value={transferCurrency}
-                disabled={isProcessingTransfer}
-                onChange={e => {
-                  setTransferCurrency(e.target.value as 'SLE' | 'USD');
-                  setTransferError('');
-                  setTransferNotice('');
-                }}
-                className="mt-2 block w-full rounded-xl border p-3"
-              >
-                <option value="SLE">SLE wallet → SLE account</option>
-                <option value="USD">USD wallet → USD account</option>
-              </select>
-            </label>
-
-            {transferError && (
-              <p role="alert" className="mb-3 text-sm text-red-700">
-                {transferError}
-              </p>
-            )}
-            {transferNotice && (
-              <p role="status" className="mb-3 text-sm text-blue-700">
-                {transferNotice}
-              </p>
-            )}
-
-            <p className="mb-4 text-sm text-slate-500">
-              Paste the recipient’s account ID for the selected currency.
-            </p>
-
+            <label className="my-4 block text-sm font-bold">Send from<select value={transferCurrency} disabled={isProcessingTransfer} onChange={e => { setTransferCurrency(e.target.value as 'SLE' | 'USD'); setTransferError(''); setTransferNotice(''); }} className="mt-2 block w-full rounded-xl border p-3"><option value="SLE">SLE wallet → SLE account</option><option value="USD">USD wallet → USD account</option></select></label>
+            {transferError && <p role="alert" className="mb-3 text-sm text-red-700">{transferError}</p>}
+            {transferNotice && <p role="status" className="mb-3 text-sm text-blue-700">{transferNotice}</p>}
+            <p className="mb-4 text-sm text-slate-500">Paste the recipient’s account ID for the selected currency.</p>
             <div className="mb-6 space-y-4">
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                disabled={isProcessingTransfer}
-                placeholder={`Amount (${transferCurrency})`}
-                value={transferAmount}
-                onChange={e => setTransferAmount(e.target.value)}
-                className="w-full rounded-xl border p-4 text-xl font-bold"
-              />
-              <input
-                type="text"
-                disabled={isProcessingTransfer}
-                placeholder="Recipient account ID (fac-...)"
-                value={transferRecipient}
-                onChange={e => setTransferRecipient(e.target.value)}
-                className="w-full rounded-xl border p-4"
-              />
+              <input type="number" min="0.01" step="0.01" disabled={isProcessingTransfer} placeholder={`Amount (${transferCurrency})`} value={transferAmount} onChange={e => setTransferAmount(e.target.value)} className="w-full rounded-xl border p-4 text-xl font-bold" />
+              <input type="text" disabled={isProcessingTransfer} placeholder="Recipient account ID (fac-...)" value={transferRecipient} onChange={e => setTransferRecipient(e.target.value)} className="w-full rounded-xl border p-4" />
             </div>
-
-            <button
-              onClick={() => void executeTransfer()}
-              disabled={
-                !canTransact ||
-                isProcessingTransfer ||
-                !transferAmount ||
-                !transferRecipient
-              }
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 p-4 font-bold text-white disabled:opacity-50"
-            >
-              {isProcessingTransfer ? (
-                <Loader2 size={20} className="animate-spin" />
-              ) : (
-                <Users size={20} />
-              )}
-              Send Transfer
+            <button onClick={() => void executeTransfer()} disabled={!canTransact || isProcessingTransfer || !transferAmount || !transferRecipient} className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 p-4 font-bold text-white disabled:opacity-50">
+              {isProcessingTransfer ? <Loader2 size={20} className="animate-spin" /> : <Users size={20} />} Send Transfer
             </button>
           </div>
         </div>
@@ -901,64 +519,24 @@ function DriverTrips({ profile }: any) {
 
   const refresh = async () => {
     if (!profile?.id) return;
-    const { data, error: queryError } = await supabase
-      .from('bookings')
-      .select('*, rider:rider_id(full_name)')
-      .eq('driver_id', profile.id)
-      .order('created_at', { ascending: false });
-
-    if (queryError) {
-      setError(queryError.message);
-    } else {
-      setTrips(data || []);
-      setError('');
-    }
+    const { data, error: queryError } = await supabase.from('bookings').select('*, rider:rider_id(full_name)').eq('driver_id', profile.id).order('created_at', { ascending: false });
+    if (queryError) { setError(queryError.message); } else { setTrips(data || []); setError(''); }
     setLoading(false);
   };
 
-  useEffect(() => {
-    setLoading(true);
-    void refresh();
-
-    const timer = setInterval(() => void refresh(), 15000);
-    return () => clearInterval(timer);
-  }, [profile?.id]);
+  useEffect(() => { setLoading(true); void refresh(); const timer = setInterval(() => void refresh(), 15000); return () => clearInterval(timer); }, [profile?.id]);
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-4">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-slate-900">Earnings History</h1>
-        <button onClick={() => void refresh()} className="border bg-white px-4 py-2 rounded-xl text-sm font-bold">
-          Refresh
-        </button>
+        <button onClick={() => void refresh()} className="border bg-white px-4 py-2 rounded-xl text-sm font-bold">Refresh</button>
       </div>
-
-      {error && (
-        <p role="alert" className="bg-red-50 text-red-700 p-3 rounded-xl">{error}</p>
-      )}
-
-      {loading ? (
-        <p>Loading earnings history…</p>
-      ) : trips.length === 0 && !error ? (
-        <div className="text-center text-slate-500 py-10">No trips completed yet.</div>
-      ) : trips.map(t => (
+      {error && <p role="alert" className="bg-red-50 text-red-700 p-3 rounded-xl">{error}</p>}
+      {loading ? <p>Loading earnings history…</p> : trips.length === 0 && !error ? <div className="text-center text-slate-500 py-10">No trips completed yet.</div> : trips.map(t => (
         <div key={t.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
-          <div>
-            <div className="font-bold text-slate-900 capitalize">
-              {t.service_type} - {t.rider?.full_name || 'Rider Customer'}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">
-              {new Date(t.created_at).toLocaleString()}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="font-bold text-lg text-emerald-600">
-              + SLE {(Number(t.fare_amount || 0) * 0.85).toFixed(2)}
-            </div>
-            <div className={`text-[10px] font-bold uppercase mt-1 ${t.status === 'completed' ? 'text-emerald-500' : 'text-slate-400'}`}>
-              {t.status}
-            </div>
-          </div>
+          <div><div className="font-bold text-slate-900 capitalize">{t.service_type} - {t.rider?.full_name || 'Rider Customer'}</div><div className="text-xs text-slate-500 mt-1">{new Date(t.created_at).toLocaleString()}</div></div>
+          <div className="text-right"><div className="font-bold text-lg text-emerald-600">+ SLE {(Number(t.fare_amount || 0) * 0.85).toFixed(2)}</div><div className={`text-[10px] font-bold uppercase mt-1 ${t.status === 'completed' ? 'text-emerald-500' : 'text-slate-400'}`}>{t.status}</div></div>
         </div>
       ))}
     </div>
@@ -969,39 +547,15 @@ function PolicyModal({ onAccept }: { onAccept: () => void }) {
   return (
     <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-        <div className="bg-slate-900 p-6 text-white shrink-0">
-          <h2 className="text-xl font-bold">MatMove Safety & Compliance Policy</h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Sierra Leone Road Safety Authority (SLRSA) Guidelines
-          </p>
-        </div>
-
+        <div className="bg-slate-900 p-6 text-white shrink-0"><h2 className="text-xl font-bold">MatMove Safety & Compliance Policy</h2><p className="text-xs text-slate-400 mt-1">Sierra Leone Road Safety Authority (SLRSA) Guidelines</p></div>
         <div className="p-6 overflow-y-auto flex-1 text-sm text-slate-600 space-y-4">
-          <p>
-            <strong>1. Compliance with SLRSA:</strong> All users (Drivers, Riders, and Merchants) must strictly adhere to the traffic rules and regulations set forth by the Sierra Leone Road Safety Authority (SLRSA).
-          </p>
-          <p>
-            <strong>2. Liability & Accidents:</strong> MatMove Enterprise acts solely as a technology platform connecting users. MatMove is not liable for any road traffic accidents, injuries, loss of property, or damages that occur during transit.
-          </p>
-          <p>
-            <strong>3. Vehicle Safety:</strong> Drivers must ensure their vehicles (Keke, Bike, Car, Van) are roadworthy, insured, and licensed.
-          </p>
-          <p>
-            <strong>4. Account Suspension:</strong> Any violation of these safety policies or reports of reckless behavior will result in immediate wallet freezing and account suspension.
-          </p>
-          <p className="font-bold text-slate-900 pt-2 border-t">
-            By clicking "I Accept", you acknowledge that you have read, understood, and agree to be bound by this policy. All rights reserved by MatMove Enterprise.
-          </p>
+          <p><strong>1. Compliance with SLRSA:</strong> All users must strictly adhere to the traffic rules and regulations set forth by the Sierra Leone Road Safety Authority.</p>
+          <p><strong>2. Liability & Accidents:</strong> MatMove Enterprise acts solely as a technology platform connecting users.</p>
+          <p><strong>3. Vehicle Safety:</strong> Drivers must ensure their vehicles are roadworthy, insured, and licensed.</p>
+          <p><strong>4. Account Suspension:</strong> Any violation of these safety policies will result in immediate wallet freezing.</p>
+          <p className="font-bold text-slate-900 pt-2 border-t">By clicking "I Accept", you acknowledge that you have read and agree to be bound by this policy.</p>
         </div>
-
-        <div className="p-4 border-t bg-slate-50 shrink-0">
-          <button
-            onClick={onAccept}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl transition shadow-md"
-          >
-            I Accept & Agree
-          </button>
-        </div>
+        <div className="p-4 border-t bg-slate-50 shrink-0"><button onClick={onAccept} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl transition shadow-md">I Accept & Agree</button></div>
       </div>
     </div>
   );
