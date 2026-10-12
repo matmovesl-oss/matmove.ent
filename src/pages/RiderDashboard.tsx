@@ -3,7 +3,8 @@ import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
-import { useState, useEffect } from 'react';
+import { updateRide, readRidePayment } from '@/services/rideService';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {
@@ -30,6 +31,9 @@ export function RiderDashboard(props: any) {
 
 function RiderMain({ profile, wallet, activeSection }: any) {
   const [sleWallet, setSleWallet] = useState<any>(wallet);
+  const [rideNotice, setRideNotice] = useState('');
+  const [walletNotice, setWalletNotice] = useState('');
+  const balanceBusy = useRef(false);
   const [usdWallet, setUsdWallet] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [txFilter, setTxFilter] = useState<'recent' | 'all'>('recent');
@@ -218,7 +222,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   }, [profile?.id]);
 
   const fetchLiveBalance = async () => {
-    if (!profile?.id) return;
+    if (!profile?.id || balanceBusy.current) return;
+    balanceBusy.current = true;
     setIsRefreshing(true);
     try {
       const { response, data } = await walletFetch('/api/get-live-wallet', {});
@@ -227,15 +232,26 @@ function RiderMain({ profile, wallet, activeSection }: any) {
       if (data.sleWallet) setSleWallet(data.sleWallet);
       if (data.usdWallet) setUsdWallet(data.usdWallet);
       if (data.transactions) setTransactions(data.transactions);
-    } catch (err) {
-      // Keep previous state
+      setWalletNotice(data.sleWallet?.balanceAvailable === false ? data.sleWallet.balanceError || 'Balance unavailable.' : (data.warnings || []).join(' '));
+    } catch (err: any) {
+      setWalletNotice(err.message || 'Wallet refresh failed.');
+      setSleWallet((previous: any) => previous ? { ...previous, balanceAvailable: false } : null);
     } finally {
+      balanceBusy.current = false;
       setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
     fetchLiveBalance();
+  }, [profile?.id]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    const refresh = () => { if (document.visibilityState === 'visible') void fetchLiveBalance(); };
+    const timer = window.setInterval(refresh, 10000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
   }, [profile?.id]);
 
   const handleCreateUsdWallet = async () => {
@@ -315,11 +331,29 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   };
 
   const cancelTrip = async () => {
-    if (!activeBooking) return;
+    if (!activeBooking || isRequesting) return;
+    setIsRequesting(true); setRideNotice('');
     try {
-      await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', activeBooking.id);
-      setActiveBooking(null);
-    } catch (err) {}
+      const result = await updateRide('cancel', activeBooking.id);
+      setRideNotice(result.pending ? 'Refund is processing. The cancellation is not settled yet.' : 'Trip cancelled. Any held fare has been returned to your wallet.');
+      setActiveBooking(result.pending ? { ...activeBooking, ...result.booking } : null);
+      await fetchLiveBalance();
+    } catch (err: any) { setRideNotice(err.message); }
+    finally { setIsRequesting(false); }
+  };
+
+  const executeRidePayment = async () => {
+    if (!activeBooking || isRequesting) return;
+    setIsRequesting(true); setRideNotice('');
+    try {
+      const result = await updateRide('complete', activeBooking.id);
+      if (!result.pending && result.payment?.settled !== true) throw new Error('Driver credit is not confirmed. Do not make a new payment.');
+      const driverLeg = result.payment?.transfers?.find((leg: any) => leg.kind === 'driver');
+      setRideNotice(result.pending ? 'Driver credit is processing; the trip is not completed yet. Check again.' : `Driver credited SLE ${Number(result.payment.driverEarnings).toFixed(2)}. Receipt: ${driverLeg?.transferId}.`);
+      setActiveBooking(result.pending ? { ...activeBooking, ...result.booking } : null);
+      await fetchLiveBalance();
+    } catch (err: any) { setRideNotice(err.message); }
+    finally { setIsRequesting(false); }
   };
 
   const closeModals = () => {
@@ -430,7 +464,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
             SLE Operating Wallet
           </span>
           <div className="text-3xl font-bold mt-1 text-blue-400">
-            SLE {Number(sleWallet?.balance || 0).toFixed(2)}
+            SLE {sleWallet?.balanceAvailable === true ? Number(sleWallet.balance).toFixed(2) : 'Unavailable'}
           </div>
           <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-flex items-center gap-2 px-2 py-1 rounded">
             ID: {monimeAccountId}
@@ -453,7 +487,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                 USD Reserve Wallet
               </span>
               <div className="text-3xl font-bold mt-1 text-emerald-400">
-                USD {Number(usdWallet.balance || 0).toFixed(2)}
+                USD {usdWallet?.balanceAvailable === true ? Number(usdWallet.balance).toFixed(2) : 'Unavailable'}
               </div>
               <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-flex items-center gap-2 px-2 py-1 rounded">
                 ID: {usdWallet.monime_account_id}
@@ -518,6 +552,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
           )}
         </div>
       </header>
+      {(rideNotice || walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice && <p>{rideNotice}</p>}{walletNotice && <p>{walletNotice}</p>}</div>}
 
       <div className="p-6 max-w-4xl mx-auto space-y-6">
         {activeSection === 'home' && (
@@ -672,32 +707,16 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                         </div>
                       )}
 
+                      {activeBooking.status === 'accepted' && <button onClick={cancelTrip} disabled={isRequesting} className="mb-4 text-red-600 font-bold">Cancel & Refund Held Fare</button>}
                       {activeBooking.status === 'in_progress' && (
                         <button
-                          onClick={async () => {
-                            setIsRequesting(true);
-                            try {
-                              const { response, data } = await walletFetch('/api/complete-ride-payout', {
-                                bookingId: activeBooking.id,
-                                driverId: activeBooking.driver_id,
-                                amount: activeBooking.fare_amount
-                              });
-                              
-                              if (!response.ok) throw new Error(data?.error || 'Payment failed');
-
-                              alert('Payment released!');
-                              window.location.reload();
-                            } catch (err: any) {
-                              alert(err.message);
-                              setIsRequesting(false);
-                            }
-                          }}
+                          onClick={executeRidePayment}
                           disabled={isRequesting}
                           className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2"
                         >
                           {isRequesting
                             ? <Loader2 size={20} className="animate-spin" />
-                            : `Pay SLE ${activeBooking.fare_amount} & Complete Trip`}
+                            : 'Confirm Arrival & Release Driver Payment'}
                         </button>
                       )}
                     </>

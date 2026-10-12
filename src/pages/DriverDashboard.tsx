@@ -4,11 +4,12 @@ import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
-import { 
-  Car, MapPin, Navigation, Power, User, Phone, 
-  Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft, 
-  Users, RefreshCw, Plus, Wallet, Activity, Copy, 
-  Check, Share2 
+import { updateRide, readRidePayment } from '@/services/rideService';
+import {
+  Car, MapPin, Navigation, Power, User, Phone,
+  Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft,
+  Users, RefreshCw, Plus, Wallet, Activity, Copy,
+  Check, Share2
 } from 'lucide-react';
 
 export function DriverDashboard(props: any) {
@@ -21,6 +22,9 @@ export function DriverDashboard(props: any) {
 
 function DriverMain({ profile, wallet, activeSection }: any) {
   const [sleWallet, setSleWallet] = useState<any>(wallet);
+  const [rideNotice, setRideNotice] = useState('');
+  const [walletNotice, setWalletNotice] = useState('');
+  const balanceBusy = useRef(false);
   const [usdWallet, setUsdWallet] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [txFilter, setTxFilter] = useState<'recent' | 'all'>('recent');
@@ -71,7 +75,8 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   };
 
   const fetchLiveBalance = async () => {
-    if (!profile?.id) return;
+    if (!profile?.id || balanceBusy.current) return;
+    balanceBusy.current = true;
     setIsRefreshing(true);
     try {
       const { response, data } = await walletFetch('/api/get-live-wallet', {});
@@ -80,15 +85,26 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       if (data.sleWallet) setSleWallet(data.sleWallet);
       if (data.usdWallet) setUsdWallet(data.usdWallet);
       if (data.transactions) setTransactions(data.transactions);
-    } catch (err) {
-      // Keep existing display
+      setWalletNotice(data.sleWallet?.balanceAvailable === false ? data.sleWallet.balanceError || 'Balance unavailable.' : (data.warnings || []).join(' '));
+    } catch (err: any) {
+      setWalletNotice(err.message || 'Wallet refresh failed.');
+      setSleWallet((previous: any) => previous ? { ...previous, balanceAvailable: false } : null);
     } finally {
+      balanceBusy.current = false;
       setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
     void fetchLiveBalance();
+  }, [profile?.id]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    const refresh = () => { if (document.visibilityState === 'visible') void fetchLiveBalance(); };
+    const timer = window.setInterval(refresh, 10000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
   }, [profile?.id]);
 
   const handleCopy = async (id: string) => {
@@ -161,6 +177,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
         .select('*, rider:profiles!rider_id(full_name, phone, phone_number)')
         .or(`status.eq.pending,driver_id.eq.${profile.id}`)
         .neq('status', 'cancelled')
+        .neq('status', 'completed')
         .order('created_at', { ascending: false });
 
       if (data) setActiveRequests(data);
@@ -180,30 +197,26 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   }, [isOnline, profile?.id]);
 
   const handleAcceptBooking = async (booking: any) => {
-    if (!canTransact) return alert('You must be approved and unfrozen to accept trips.');
-    setAcceptingId(booking.id);
+    if (!canTransact || acceptingId) return;
+    setAcceptingId(booking.id); setRideNotice('');
     try {
-      const { response, data } = await walletFetch('/api/accept-ride-escrow', {
-        bookingId: booking.id,
-        riderId: booking.rider_id,
-        driverId: profile.id,
-        amount: booking.fare_amount
-      });
-      
-      if (!response.ok) throw new Error(data.error || 'Failed to accept ride.');
-
-      setActiveRequests(prev => prev.map(r => r.id === booking.id ? { ...r, status: 'accepted', driver_id: profile.id } : r));
+      const result = await updateRide('accept', booking.id);
+      setActiveRequests(previous => previous.map(item => item.id === booking.id ? { ...item, ...result.booking } : item));
+      setRideNotice(result.pending ? 'Escrow funding is processing. This trip has not been accepted yet; check again.' : 'Customer debit and escrow funding are confirmed. You can start the trip.');
       await fetchLiveBalance();
-    } catch (err: any) { alert('Acceptance Failed: ' + err.message); } finally { setAcceptingId(null); }
+    } catch (err: any) { setRideNotice(err.message); }
+    finally { setAcceptingId(null); }
   };
 
   const handleStartRide = async (booking: any) => {
-    setAcceptingId(booking.id);
+    if (acceptingId) return;
+    setAcceptingId(booking.id); setRideNotice('');
     try {
-      const { response, data } = await walletFetch('/api/start-ride', { bookingId: booking.id });
-      if (!response.ok) throw new Error(data.error || 'Failed to start ride');
-      setActiveRequests(prev => prev.map(r => r.id === booking.id ? { ...r, status: 'in_progress' } : r));
-    } catch (err: any) { alert('Failed: ' + err.message); } finally { setAcceptingId(null); }
+      const result = await updateRide('start', booking.id);
+      setActiveRequests(previous => previous.map(item => item.id === booking.id ? { ...item, ...result.booking } : item));
+      setRideNotice(result.pending ? 'Start is processing.' : 'Trip started. The held funds will be released when the customer confirms arrival.');
+    } catch (err: any) { setRideNotice(err.message); }
+    finally { setAcceptingId(null); }
   };
 
   const closeModals = () => {
@@ -257,7 +270,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 
         <div>
           <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">SLE Ledger</span>
-          <div className="text-3xl font-bold mt-1 text-emerald-400">SLE {Number(sleWallet?.balance || 0).toFixed(2)}</div>
+          <div className="text-3xl font-bold mt-1 text-emerald-400">SLE {sleWallet?.balanceAvailable === true ? Number(sleWallet.balance).toFixed(2) : 'Unavailable'}</div>
           <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-flex items-center gap-2 px-2 py-1 rounded">
             ID: {monimeAccountId}
             <button onClick={() => void handleCopy(monimeAccountId)} className="hover:text-white transition" aria-label="Copy SLE account ID">
@@ -273,7 +286,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
           <>
             <div>
               <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">USD Reserve</span>
-              <div className="text-3xl font-bold mt-1 text-blue-400">USD {Number(usdWallet.balance || 0).toFixed(2)}</div>
+              <div className="text-3xl font-bold mt-1 text-blue-400">USD {usdWallet?.balanceAvailable === true ? Number(usdWallet.balance).toFixed(2) : 'Unavailable'}</div>
               <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-flex items-center gap-2 px-2 py-1 rounded">
                 ID: {usdWallet.monime_account_id}
                 <button onClick={() => void handleCopy(usdWallet.monime_account_id)} className="hover:text-white transition" aria-label="Copy USD account ID">
@@ -300,6 +313,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
+      {(rideNotice || walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice && <p>{rideNotice}</p>}{walletNotice && <p>{walletNotice}</p>}</div>}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-4">
           <button onClick={() => setIsOnline(!isOnline)} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}>
@@ -363,7 +377,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                       <span className="flex items-center gap-1.5"><Phone size={14} className="text-slate-400" /> {r.rider?.phone || r.rider?.phone_number || 'No Phone'}</span>
                     </div>
 
-                    {r.status === 'pending' && (
+                    {['pending', 'pending_admin'].includes(r.status) && (
                       <button onClick={() => void handleAcceptBooking(r)} disabled={acceptingId === r.id || !canTransact} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 disabled:opacity-50">
                         {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Accept Request'}
                       </button>
@@ -472,7 +486,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
             <button onClick={closeModals} disabled={isProcessingPayout} className="absolute right-4 top-4 p-2 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold mb-1">Mobile Payout</h2>
-            <p className="text-sm text-slate-500 mb-6">Available: SLE {Number(sleWallet?.balance || 0).toFixed(2)}</p>
+            <p className="text-sm text-slate-500 mb-6">Available: SLE {sleWallet?.balanceAvailable === true ? Number(sleWallet.balance).toFixed(2) : 'Unavailable'}</p>
 
             <div className="mb-6 space-y-4">
               <input type="number" min="0.01" step="0.01" placeholder="Amount (SLE)" value={payoutAmount} disabled={isProcessingPayout} onChange={e => setPayoutAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-emerald-500" />
@@ -538,7 +552,7 @@ function DriverTrips({ profile }: any) {
       {loading ? <p>Loading earnings history…</p> : trips.length === 0 && !error ? <div className="text-center text-slate-500 py-10">No trips completed yet.</div> : trips.map(t => (
         <div key={t.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
           <div><div className="font-bold text-slate-900 capitalize">{t.service_type} - {t.rider?.full_name || 'Rider Customer'}</div><div className="text-xs text-slate-500 mt-1">{new Date(t.created_at).toLocaleString()}</div></div>
-          <div className="text-right"><div className="font-bold text-lg text-emerald-600">+ SLE {(Number(t.fare_amount || 0) * 0.85).toFixed(2)}</div><div className={`text-[10px] font-bold uppercase mt-1 ${t.status === 'completed' ? 'text-emerald-500' : 'text-slate-400'}`}>{t.status}</div></div>
+          <div className="text-right"><div className="font-bold text-lg text-emerald-600">Fare share: SLE {(Number(t.fare_amount || 0) * 0.85).toFixed(2)}</div><div className={`text-[10px] font-bold uppercase mt-1 ${t.status === 'completed' ? 'text-emerald-500' : 'text-slate-400'}`}>{t.status}</div></div>
         </div>
       ))}
     </div>

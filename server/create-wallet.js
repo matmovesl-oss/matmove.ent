@@ -1,11 +1,22 @@
 import {
   monime,
+  assertMonimeEnvironment,
   verifiedAccount,
-  HttpError,
+  HttpError
 } from './wallet-security.js';
 
-export async function createWallet(req, res, currency) {
-  const { db, user, wallets } = req.matmove;
+export async function createWallet(
+  req,
+  res,
+  currency
+) {
+  assertMonimeEnvironment();
+
+  const {
+    db,
+    user,
+    wallets
+  } = req.matmove;
 
   const existing = wallets.find(
     wallet => wallet.currency === currency
@@ -15,14 +26,16 @@ export async function createWallet(req, res, currency) {
     existing?.monime_account_id ||
     existing?.metadata?.monime_account_id
   ) {
-    const account =
-      await verifiedAccount(db, existing);
+    const account = await verifiedAccount(
+      db,
+      existing
+    );
 
     return res.status(200).json({
       wallet: {
         ...existing,
-        monime_account_id: account.id,
-      },
+        monime_account_id: account.id
+      }
     });
   }
 
@@ -55,13 +68,20 @@ export async function createWallet(req, res, currency) {
         headers: {
           Authorization:
             `Bearer ${process.env.MONIME_API_KEY}`,
+
           'Monime-Space-Id':
             process.env.MONIME_SPACE_ID,
-          'Monime-Version': 'caph.2025-08-23',
+
+          'Monime-Version':
+            'caph.2025-08-23'
         },
+
         signal: AbortSignal.timeout(
-          Math.max(1, deadline - Date.now())
-        ),
+          Math.max(
+            1,
+            deadline - Date.now()
+          )
+        )
       }
     );
 
@@ -122,18 +142,23 @@ export async function createWallet(req, res, currency) {
 
   const account =
     found ||
-    await monime('financial-accounts', {
-      method: 'POST',
-      headers: {
-        'Idempotency-Key':
-          `wallet-${user.id}-${currency}`,
-      },
-      body: JSON.stringify({
-        name: `MatMove ${currency} Wallet`,
-        currency,
-        reference,
-      }),
-    });
+    await monime(
+      'financial-accounts',
+      {
+        method: 'POST',
+
+        headers: {
+          'Idempotency-Key':
+            `wallet-${user.id}-${currency}`
+        },
+
+        body: JSON.stringify({
+          name: `MatMove ${currency} Wallet`,
+          currency,
+          reference
+        })
+      }
+    );
 
   if (
     !account.id ||
@@ -149,7 +174,8 @@ export async function createWallet(req, res, currency) {
     .from('wallets')
     .select('id,user_id,currency')
     .or(
-      `monime_account_id.eq.${account.id},metadata->>monime_account_id.eq.${account.id}`
+      `monime_account_id.eq.${account.id},` +
+      `metadata->>monime_account_id.eq.${account.id}`
     );
 
   if (
@@ -173,10 +199,11 @@ export async function createWallet(req, res, currency) {
       .from('wallets')
       .update({
         monime_account_id: account.id,
+
         metadata: {
           ...existing.metadata,
-          monime_account_id: account.id,
-        },
+          monime_account_id: account.id
+        }
       })
       .eq('id', existing.id)
       .select()
@@ -190,20 +217,25 @@ export async function createWallet(req, res, currency) {
           currency,
           balance: 0,
           monime_account_id: account.id,
+
           metadata: {
-            monime_account_id: account.id,
+            monime_account_id: account.id
           },
-          is_frozen: false,
+
+          is_frozen: false
         },
         {
           onConflict: 'user_id,currency',
-          ignoreDuplicates: true,
+          ignoreDuplicates: true
         }
       )
       .select()
       .maybeSingle();
 
-    if (!result.error && !result.data) {
+    if (
+      !result.error &&
+      !result.data
+    ) {
       result = await db
         .from('wallets')
         .select('*')
@@ -221,6 +253,6 @@ export async function createWallet(req, res, currency) {
   }
 
   return res.status(200).json({
-    wallet: result.data,
+    wallet: result.data
   });
 }

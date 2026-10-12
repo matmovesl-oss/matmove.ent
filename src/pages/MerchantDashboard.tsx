@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { RideLocationPicker, TripLocations } from '@/components/RideLocationPicker';
 import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
+import { updateRide, readRidePayment } from '@/services/rideService';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {
   Store, Plus, Package, RefreshCw, X, Loader2, MapPin,
@@ -25,6 +26,9 @@ export function MerchantDashboard(props: any) {
 
 function MerchantMain({ profile, wallet, activeSection }: any) {
   const [sleWallet, setSleWallet] = useState<any>(wallet);
+  const [rideNotice, setRideNotice] = useState('');
+  const [walletNotice, setWalletNotice] = useState('');
+  const balanceBusy = useRef(false);
   const [usdWallet, setUsdWallet] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [txFilter, setTxFilter] = useState<'recent' | 'all'>('recent');
@@ -65,7 +69,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   // Confirmation Modal
   const [paymentModalData, setPaymentModalData] = useState<any>(null);
   const [showPolicy, setShowPolicy] = useState(false);
-  
+
   const { frozen: isFrozen, approved: isApproved } = useWalletAccess(profile.id);
   const canTransact = !isFrozen && isApproved;
   const monimeAccountId = sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || 'Pending Setup';
@@ -102,14 +106,17 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   const handleAcceptPolicy = () => { localStorage.setItem(`matmove_policy_${profile.id}`, 'true'); setShowPolicy(false); };
 
   const fetchLiveBalance = async () => {
-    if (!profile?.id) return;
+    if (!profile?.id || balanceBusy.current) return;
+    balanceBusy.current = true;
     setIsRefreshing(true);
     try {
       const { response, data } = await walletFetch('/api/get-live-wallet', {});
+      if (!response.ok) throw new Error(data.error || 'Unable to read wallet balances.');
       if (data.sleWallet) setSleWallet(data.sleWallet);
       if (data.usdWallet) setUsdWallet(data.usdWallet);
       if (data.transactions) setTransactions(data.transactions);
-    } catch (err) {} finally { setIsRefreshing(false); }
+      setWalletNotice(data.sleWallet?.balanceAvailable === false ? data.sleWallet.balanceError || 'Balance unavailable.' : (data.warnings || []).join(' '));
+    } catch (err: any) { setWalletNotice(err.message || 'Wallet refresh failed.'); setSleWallet((previous: any) => previous ? { ...previous, balanceAvailable: false } : null); } finally { balanceBusy.current = false; setIsRefreshing(false); }
   };
 
   useEffect(() => { void fetchLiveBalance(); }, [profile?.id]);
@@ -126,6 +133,14 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     const text = `MatMove Receipt\nType: ${tx.description || tx.type || 'Transaction'}\nStatus: ${tx.status || 'Unknown'}\nDate: ${formattedDate}\nAmount: ${isCredit ? '+' : '-'}${tx.amount?.currency || 'SLE'} ${(Number(tx.amount?.value || 0) / 100).toFixed(2)}\nTransaction ID: ${tx.id}`;
     try { if (navigator.share) await navigator.share({ title: 'MatMove Receipt', text }); else { await navigator.clipboard.writeText(text); alert('Receipt copied.'); } } catch {}
   };
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    const refresh = () => { if (document.visibilityState === 'visible') void fetchLiveBalance(); };
+    const timer = window.setInterval(refresh, 10000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [profile?.id]);
 
   const handleCreateUsdWallet = async () => {
     if (!window.confirm('Create a USD wallet?')) return;
@@ -164,38 +179,44 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   };
 
   const cancelTrip = async () => {
-    if (!activeBooking) return;
+    if (!activeBooking || isRequesting) return;
+    setIsRequesting(true); setRideNotice('');
     try {
-      await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', activeBooking.id);
-      setActiveBooking(null);
-    } catch (err: any) { alert(err.message); }
+      const result = await updateRide('cancel', activeBooking.id);
+      setRideNotice(result.pending ? 'Refund is processing. The cancellation is not settled yet.' : 'Trip cancelled. Any held fare has been returned to your wallet.');
+      setActiveBooking(result.pending ? { ...activeBooking, ...result.booking } : null);
+      if (!result.pending) setPaymentModalData(null);
+      await fetchLiveBalance();
+    } catch (err: any) { setRideNotice(err.message); }
+    finally { setIsRequesting(false); }
   };
 
-  // OPEN PAYMENT MODAL
-  const handleOpenPaymentModal = async () => {
-    if (!activeBooking) return;
-    setIsRequesting(true);
-    try {
-      const { data: driverWallet } = await supabase.from('wallets').select('monime_account_id').eq('user_id', activeBooking.driver_id).eq('currency', 'SLE').single();
-      setPaymentModalData({
-        driverAccountId: driverWallet?.monime_account_id || 'Pending Setup',
-        driverName: activeBooking.driver?.full_name || 'Driver',
-        amount: activeBooking.fare_amount
-      });
-    } catch (err) { alert("Could not load driver details."); } finally { setIsRequesting(false); }
-  };
-
-  // EXECUTE FINAL PAYMENT
   const executeRidePayment = async () => {
-    setIsRequesting(true);
+    if (!activeBooking || isRequesting) return;
+    setIsRequesting(true); setRideNotice('');
     try {
-      const { response, data } = await walletFetch('/api/complete-ride-payout', {
-        bookingId: activeBooking.id, driverId: activeBooking.driver_id, amount: activeBooking.fare_amount
-      });
-      if (!response.ok) throw new Error(data?.error || 'Payment failed');
-      alert('Payment confirmed and transferred successfully!');
-      window.location.reload();
-    } catch (err: any) { alert(err.message); setIsRequesting(false); }
+      const result = await updateRide('complete', activeBooking.id);
+      if (!result.pending && result.payment?.settled !== true) throw new Error('Driver credit is not confirmed. Do not make a new payment.');
+      const driverLeg = result.payment?.transfers?.find((leg: any) => leg.kind === 'driver');
+      setRideNotice(result.pending ? 'Driver credit is processing; the trip is not completed yet. Check again.' : `Driver credited SLE ${Number(result.payment.driverEarnings).toFixed(2)}. Receipt: ${driverLeg?.transferId}.`);
+      setActiveBooking(result.pending ? { ...activeBooking, ...result.booking } : null);
+      if (!result.pending) setPaymentModalData(null);
+      await fetchLiveBalance();
+    } catch (err: any) { setRideNotice(err.message); }
+    finally { setIsRequesting(false); }
+  };
+
+  const handleOpenPaymentModal = async () => {
+    if (!activeBooking || isRequesting) return;
+    setIsRequesting(true); setRideNotice('');
+    try {
+      const result = await readRidePayment(activeBooking.id);
+      if (!result.payment?.holdConfirmed) throw new Error('This trip has no verified escrow receipt. Support must reconcile it before payment.');
+      setPaymentModalData({ driverAccountId: result.payment.driverAccountId,
+        driverName: activeBooking.driver?.full_name || 'Driver', amount: result.payment.fare,
+        driverEarnings: result.payment.driverEarnings, platformFee: result.payment.platformFee });
+    } catch (err: any) { setRideNotice(err.message); }
+    finally { setIsRequesting(false); }
   };
 
   const closeModals = () => {
@@ -242,14 +263,14 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       <div className="relative rounded-3xl bg-orange-600 p-6 text-white shadow-xl">
         <button onClick={() => void fetchLiveBalance()} disabled={isRefreshing} className="absolute right-4 top-4 flex items-center gap-2 rounded-xl bg-white/10 p-2 text-xs font-bold hover:bg-white/20 transition"><RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} /></button>
         <p className="mt-6 text-xs font-bold uppercase text-orange-200">SLE Operating Wallet</p>
-        <p className="mt-1 text-3xl font-bold">SLE {Number(sleWallet?.balance || 0).toFixed(2)}</p>
+        <p className="mt-1 text-3xl font-bold">SLE {sleWallet?.balanceAvailable === true ? Number(sleWallet.balance).toFixed(2) : 'Unavailable'}</p>
         <div className="mt-3 flex items-center gap-2 break-all text-xs"><span>ID: {monimeAccountId}</span><button onClick={() => void handleCopy(monimeAccountId)}>{copiedId === monimeAccountId ? <Check size={14} /> : <Copy size={14} />}</button></div>
       </div>
       <div className="rounded-3xl border border-slate-700 bg-slate-800 p-6 text-white shadow-xl">
         {usdWallet?.monime_account_id ? (
           <>
             <p className="text-xs font-bold uppercase text-slate-400">USD Reserve Wallet</p>
-            <p className="mt-1 text-3xl font-bold text-emerald-400">USD {Number(usdWallet.balance || 0).toFixed(2)}</p>
+            <p className="mt-1 text-3xl font-bold text-emerald-400">USD {usdWallet?.balanceAvailable === true ? Number(usdWallet.balance).toFixed(2) : 'Unavailable'}</p>
             <div className="mt-3 flex items-center gap-2 break-all text-xs text-slate-300"><span>ID: {usdWallet.monime_account_id}</span><button onClick={() => void handleCopy(usdWallet.monime_account_id)}>{copiedId === usdWallet.monime_account_id ? <Check size={14} /> : <Copy size={14} />}</button></div>
           </>
         ) : (
@@ -275,6 +296,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
           )}
         </div>
       </header>
+      {(rideNotice || walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice && <p>{rideNotice}</p>}{walletNotice && <p>{walletNotice}</p>}</div>}
 
       {activeSection === 'home' && (
         <div className="flex flex-col lg:flex-row">
@@ -321,6 +343,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                         <p className="mt-1 flex items-center gap-2 text-sm"><Smartphone size={14} />{activeBooking.driver.phone}</p>
                       </div>
                     )}
+                    {activeBooking.status === 'accepted' && <button onClick={cancelTrip} disabled={isRequesting} className="mb-4 text-red-600 font-bold">Cancel & Refund Held Fare</button>}
                     {activeBooking.status === 'in_progress' && (
                       <div className="mt-4 mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm text-left">
                         <h5 className="font-bold text-slate-900 border-b pb-2 mb-2 flex items-center gap-2"><ShieldCheck size={16} className="text-orange-600" />Payment Breakdown</h5>
@@ -332,7 +355,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                     )}
                     {activeBooking.status === 'in_progress' && (
                       <button onClick={handleOpenPaymentModal} disabled={isRequesting} className="w-full rounded-xl bg-emerald-600 py-4 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2">
-                        {isRequesting ? <Loader2 size={20} className="animate-spin" /> : <><Banknote size={20}/> Pay & Complete Trip</>}
+                        {isRequesting ? <Loader2 size={20} className="animate-spin" /> : <><Banknote size={20}/> Confirm Arrival & Release Payment</>}
                       </button>
                     )}
                   </>
@@ -340,7 +363,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                   <>
                     <Loader2 size={40} className="mx-auto mb-4 animate-spin text-orange-600" />
                     <h4 className="text-lg font-bold">{activeBooking.status === 'pending_admin' ? 'Request sent to Dispatch' : 'Finding a driver'}</h4>
-                    <button onClick={async () => { await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', activeBooking.id); setActiveBooking(null); }} className="mt-4 text-sm font-bold text-red-600">Cancel Request</button>
+                    <button onClick={cancelTrip} disabled={isRequesting} className="mt-4 text-sm font-bold text-red-600">Cancel Request</button>
                   </>
                 )}
               </div>
@@ -397,10 +420,10 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       )}
 
       {paymentModalData && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+        <div className="m-4 flex justify-center rounded-2xl border bg-slate-100 p-4">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl relative">
             <button onClick={() => setPaymentModalData(null)} className="absolute right-4 top-4 p-2 text-slate-400 hover:text-slate-600 rounded-full bg-slate-50"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Confirm Payment</h2>
+            <h2 className="text-2xl font-bold mb-1">Confirm Completion</h2>
             <p className="text-sm text-slate-500 mb-6">Review transfer details below.</p>
 
             <div className="space-y-4 text-sm mb-8 bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-inner">
@@ -410,8 +433,8 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                 <b className="text-[11px] bg-slate-200 px-2 py-1.5 rounded font-mono text-slate-700 break-all">{paymentModalData.driverAccountId}</b>
               </div>
               <div className="border-t border-slate-200 pt-3 mt-1 space-y-2">
-                <p className="flex justify-between items-center"><span className="text-slate-500">Driver Cut (85%)</span> <b className="text-emerald-600">SLE {(paymentModalData.amount * 0.85).toFixed(2)}</b></p>
-                <p className="flex justify-between items-center"><span className="text-slate-500">Platform Fee (15%)</span> <b className="text-rose-500">SLE {(paymentModalData.amount * 0.15).toFixed(2)}</b></p>
+                <p className="flex justify-between items-center"><span className="text-slate-500">Driver Cut (85%)</span> <b className="text-emerald-600">SLE {Number(paymentModalData.driverEarnings).toFixed(2)}</b></p>
+                <p className="flex justify-between items-center"><span className="text-slate-500">Platform Fee (15%)</span> <b className="text-rose-500">SLE {Number(paymentModalData.platformFee).toFixed(2)}</b></p>
               </div>
               <p className="flex justify-between items-center text-lg border-t border-slate-200 pt-3 mt-1"><span className="text-slate-800 font-bold">Total Payment</span> <b className="text-slate-900 font-black">SLE {paymentModalData.amount}</b></p>
             </div>
@@ -425,13 +448,13 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
 
       {selectedTx && <TransactionModal tx={selectedTx} onClose={() => setSelectedTx(null)} />}
       {isLoadModalOpen && <WalletTopUp userId={profile.id} allowed={canTransact} onClose={() => setIsLoadModalOpen(false)} onPaid={fetchLiveBalance} />}
-      
+
       {isPayoutModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm">
           <div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
             <button onClick={closeModals} disabled={isProcessingPayout} className="absolute right-4 top-4 p-2 text-slate-400"><X size={20} /></button>
             <h2 className="text-2xl font-bold">Withdraw to Mobile Money</h2>
-            <p className="mb-6 mt-2 text-sm text-slate-500">Available: SLE {Number(sleWallet?.balance || 0).toFixed(2)}</p>
+            <p className="mb-6 mt-2 text-sm text-slate-500">Available: SLE {sleWallet?.balanceAvailable === true ? Number(sleWallet.balance).toFixed(2) : 'Unavailable'}</p>
             <div className="mb-6 space-y-4">
               <input type="number" min="0.01" step="0.01" placeholder="Amount (SLE)" value={payoutAmount} disabled={isProcessingPayout} onChange={e => setPayoutAmount(e.target.value)} className="w-full rounded-xl border p-4 text-xl font-bold" />
               <div className="grid grid-cols-2 gap-3">

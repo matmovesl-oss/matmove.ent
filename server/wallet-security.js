@@ -25,7 +25,10 @@ export function toMinorUnits(value) {
     BigInt(fraction.padEnd(2, '0'));
 
   if (minor <= 0n || minor > 1000000000000n) {
-    throw new HttpError(400, 'Amount is outside the supported range.');
+    throw new HttpError(
+      400,
+      'Amount is outside the supported range.'
+    );
   }
 
   return Number(minor);
@@ -37,7 +40,10 @@ export function keyFor(userId, action, key) {
       String(key)
     )
   ) {
-    throw new HttpError(400, 'A valid request key is required.');
+    throw new HttpError(
+      400,
+      'A valid request key is required.'
+    );
   }
 
   return createHash('sha256')
@@ -47,8 +53,13 @@ export function keyFor(userId, action, key) {
 }
 
 export function assertAllowed(profile, wallets, action) {
-  if (!['rider', 'driver', 'merchant'].includes(profile.role)) {
-    throw new HttpError(403, 'Customer account required.');
+  if (
+    !['rider', 'driver', 'merchant'].includes(profile.role)
+  ) {
+    throw new HttpError(
+      403,
+      'Customer account required.'
+    );
   }
 
   if (action === 'read') return;
@@ -80,6 +91,7 @@ export function dbClient() {
   const url =
     process.env.SUPABASE_URL ||
     process.env.VITE_SUPABASE_URL;
+
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
@@ -97,7 +109,52 @@ export function dbClient() {
   });
 }
 
+export function monimeEnvironment() {
+  const token = process.env.MONIME_API_KEY || '';
+
+  return token.startsWith('mon_test_')
+    ? 'test'
+    : token.startsWith('mon_')
+      ? 'live'
+      : 'unknown';
+}
+
+export function assertMonimeEnvironment() {
+  const expected =
+    process.env.MONIME_ENVIRONMENT ||
+    (
+      process.env.VERCEL_ENV === 'production'
+        ? 'live'
+        : null
+    );
+
+  if (
+    expected &&
+    !['live', 'test'].includes(expected)
+  ) {
+    throw new HttpError(
+      503,
+      'Set MONIME_ENVIRONMENT to live or test.'
+    );
+  }
+
+  const actual = monimeEnvironment();
+
+  if (
+    expected &&
+    actual !== 'unknown' &&
+    expected !== actual
+  ) {
+    throw new HttpError(
+      503,
+      'Monime token mode does not match MONIME_ENVIRONMENT. Check the server token and the dashboard Live/Test mode.'
+    );
+  }
+}
+
 export async function monime(path, options = {}) {
+  assertMonimeEnvironment();
+
   if (
     !process.env.MONIME_API_KEY ||
     !process.env.MONIME_SPACE_ID
@@ -113,11 +170,17 @@ export async function monime(path, options = {}) {
     {
       ...options,
       signal: AbortSignal.timeout(20000),
+
       headers: {
-        Authorization: `Bearer ${process.env.MONIME_API_KEY}`,
-        'Monime-Space-Id': process.env.MONIME_SPACE_ID,
+        Authorization:
+          `Bearer ${process.env.MONIME_API_KEY}`,
+
+        'Monime-Space-Id':
+          process.env.MONIME_SPACE_ID,
+
         'Monime-Version': 'caph.2025-08-23',
         'Content-Type': 'application/json',
+
         ...options.headers
       }
     }
@@ -129,14 +192,28 @@ export async function monime(path, options = {}) {
     const errorMsg =
       body?.error?.message ||
       body?.message ||
-      (Array.isArray(body?.messages) && body.messages[0]) ||
-      (typeof body?.error === 'string' ? body.error : null) ||
+      (
+        Array.isArray(body?.messages) &&
+        body.messages[0]
+      ) ||
+      (
+        typeof body?.error === 'string'
+          ? body.error
+          : null
+      ) ||
       'The wallet provider could not complete this request.';
 
-    console.error(`Monime API Error (${response.status} on /v1/${path}):`, body);
+    console.error(
+      `Monime API Error (${response.status} on /v1/${path}):`,
+      body
+    );
 
     throw new HttpError(
-      response.status >= 400 && response.status < 500 ? response.status : 502,
+      response.status >= 400 &&
+      response.status < 500
+        ? response.status
+        : 502,
+
       errorMsg
     );
   }
@@ -158,7 +235,10 @@ export async function verifiedAccount(db, wallet) {
   const id = direct || legacy;
 
   if (!/^fac-[A-Za-z0-9_-]+$/.test(String(id))) {
-    throw new HttpError(409, 'Wallet setup is pending.');
+    throw new HttpError(
+      409,
+      'Wallet setup is pending.'
+    );
   }
 
   const linked = await db
@@ -170,7 +250,10 @@ export async function verifiedAccount(db, wallet) {
     );
 
   if (linked.error) {
-    throw new HttpError(503, 'Unable to verify wallet ownership.');
+    throw new HttpError(
+      503,
+      'Unable to verify wallet ownership.'
+    );
   }
 
   if (
@@ -206,7 +289,10 @@ export async function authorize(
   { db = dbClient() } = {}
 ) {
   if (req.method !== 'POST') {
-    throw new HttpError(405, 'Method not allowed.');
+    throw new HttpError(
+      405,
+      'Method not allowed.'
+    );
   }
 
   const authorization = String(
@@ -232,26 +318,34 @@ export async function authorize(
 
   const user = auth.data.user;
 
-  if (req.body?.userId && req.body.userId !== user.id) {
+  if (
+    req.body?.userId &&
+    req.body.userId !== user.id
+  ) {
     throw new HttpError(
       403,
       'This request does not belong to your account.'
     );
   }
 
-  const [profileResult, walletResult] = await Promise.all([
-    db
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single(),
-    db
-      .from('wallets')
-      .select('*')
-      .eq('user_id', user.id)
-  ]);
+  const [profileResult, walletResult] =
+    await Promise.all([
+      db
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single(),
 
-  if (profileResult.error || walletResult.error) {
+      db
+        .from('wallets')
+        .select('*')
+        .eq('user_id', user.id)
+    ]);
+
+  if (
+    profileResult.error ||
+    walletResult.error
+  ) {
     throw new HttpError(
       503,
       'Unable to verify your wallet permissions.'
@@ -277,7 +371,9 @@ export async function authorize(
     wallets: walletResult.data || []
   };
 
-  if (['load', 'payout', 'transfer'].includes(action)) {
+  if (
+    ['load', 'payout', 'transfer'].includes(action)
+  ) {
     context.minor = toMinorUnits(req.body.amount);
 
     const currency = String(
@@ -285,10 +381,16 @@ export async function authorize(
     ).toUpperCase();
 
     if (!['SLE', 'USD'].includes(currency)) {
-      throw new HttpError(400, 'Choose SLE or USD.');
+      throw new HttpError(
+        400,
+        'Choose SLE or USD.'
+      );
     }
 
-    if (action !== 'transfer' && currency !== 'SLE') {
+    if (
+      action !== 'transfer' &&
+      currency !== 'SLE'
+    ) {
       throw new HttpError(
         400,
         'This payment method currently supports SLE only.'
@@ -301,8 +403,11 @@ export async function authorize(
       item => item.currency === currency
     );
 
-    context.account = await verifiedAccount(db, wallet);
+    context.account =
+      await verifiedAccount(db, wallet);
+
     context.accountId = context.account.id;
+
     context.idempotencyKey = keyFor(
       user.id,
       action,
@@ -327,6 +432,7 @@ export function protectedWallet(action, handler) {
         error: error.status
           ? error.message
           : 'Unable to complete the wallet request.',
+
         code: error.code
       });
     }

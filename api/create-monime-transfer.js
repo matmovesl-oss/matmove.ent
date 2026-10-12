@@ -20,9 +20,7 @@ export async function transferHandler(req, res) {
     req.body.recipientAccountId || ''
   ).trim();
 
-  if (
-    !/^fac-[A-Za-z0-9_-]+$/.test(recipientId)
-  ) {
+  if (!/^fac-[A-Za-z0-9_-]+$/.test(recipientId)) {
     throw new HttpError(
       400,
       'Enter a valid recipient account ID.'
@@ -81,10 +79,7 @@ export async function transferHandler(req, res) {
         .eq('user_id', recipient.user_id),
     ]);
 
-  if (
-    profileResult.error ||
-    walletsResult.error
-  ) {
+  if (profileResult.error || walletsResult.error) {
     throw new HttpError(
       503,
       'Unable to verify recipient permissions.'
