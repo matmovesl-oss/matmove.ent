@@ -1,3 +1,5 @@
+
+import PayoutPanel from '@/components/PayoutPanel';
 import { RideLocationPicker, TripLocations } from '@/components/RideLocationPicker';
 import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
@@ -368,38 +370,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     setPayoutPhone('');
   };
 
-  const executePayout = async () => {
-    const amt = Number(payoutAmount);
-    if (!amt || amt <= 0) return alert('Enter valid amount');
-    if (!payoutPhone.trim()) return alert('Enter recipient mobile money number');
 
-    setIsProcessingPayout(true);
-
-    try {
-      const { response, data, finish } = await walletFetch('/api/create-monime-payout', {
-        amount: payoutAmount,
-        currency: 'SLE',
-        destinationPhone: payoutPhone,
-        networkProvider
-      });
-
-      if (!response.ok) throw new Error(data.error || 'Payout could not be submitted.');
-
-      if (data.data?.status === 'completed') finish();
-
-      alert(
-        data.data?.status === 'completed'
-          ? 'Payout completed.'
-          : 'Payout submitted. Check your transaction history.'
-      );
-
-      closeModals();
-      await fetchLiveBalance();
-    } catch (err: any) {
-      alert(err.message);
-      setIsProcessingPayout(false);
-    }
-  };
 
   const executeTransfer = async () => {
     if (isProcessingTransfer) return;
@@ -930,62 +901,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
       )}
 
       {isPayoutModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} disabled={isProcessingPayout} className="absolute top-4 right-4 text-slate-400">
-              <X size={20} />
-            </button>
-
-            <h2 className="text-2xl font-bold mb-1">Mobile Payout</h2>
-            <p className="text-sm text-slate-500 mb-6">Cashout to Mobile Money.</p>
-
-            <div className="space-y-4 mb-6">
-              <input
-                type="number"
-                placeholder="Amount (SLE)"
-                value={payoutAmount}
-                disabled={isProcessingPayout}
-                onChange={e => setPayoutAmount(e.target.value)}
-                className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-emerald-500"
-              />
-
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => setNetworkProvider('orange')}
-                  disabled={isProcessingPayout}
-                  className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}
-                >
-                  Orange
-                </button>
-                <button
-                  onClick={() => setNetworkProvider('afrimoney')}
-                  disabled={isProcessingPayout}
-                  className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}
-                >
-                  Afrimoney
-                </button>
-              </div>
-
-              <input
-                type="tel"
-                placeholder="e.g. 077123456 or 030123456"
-                value={payoutPhone}
-                disabled={isProcessingPayout}
-                onChange={e => setPayoutPhone(e.target.value)}
-                className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <button
-              onClick={executePayout}
-              disabled={isFrozen || !isApproved || isProcessingPayout || !payoutAmount || !payoutPhone}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50"
-            >
-              {isProcessingPayout ? <Loader2 size={20} className="animate-spin" /> : <ArrowUpRight size={20} />}
-              Confirm Payout
-            </button>
-          </div>
-        </div>
+        <PayoutPanel userId={profile.id} allowed={!isFrozen && isApproved}
+          onClose={() => setIsPayoutModalOpen(false)} onBalanceChange={fetchLiveBalance} />
       )}
 
       {isTransferModalOpen && (

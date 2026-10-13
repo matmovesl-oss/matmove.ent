@@ -12,7 +12,9 @@ const button =
   'rounded-xl bg-orange-600 px-4 py-3 font-semibold text-white disabled:opacity-50';
 
 export function MerchantCatalog({ profile }: Props) {
-  const [tab, setTab] = useState<'products' | 'orders'>('products');
+  const [tab, setTab] =
+    useState<'products' | 'orders'>('products');
+
   const [products, setProducts] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
 
@@ -26,28 +28,38 @@ export function MerchantCatalog({ profile }: Props) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const [deleteId, setDeleteId] =
+    useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const [catalog, incoming] = await Promise.all([
       supabase
         .from('products')
-        .select('id,name,price,description,image_url,whatsapp_number')
+        .select(
+          'id,name,price,description,image_url,whatsapp_number'
+        )
         .eq('merchant_id', profile.id)
-        .order('created_at', { ascending: false }),
+        .order('created_at', {
+          ascending: false,
+        }),
 
       supabase
         .from('app_orders')
-        .select('id,product_name,price,status,created_at')
+        .select(
+          'id,product_name,price,status,created_at'
+        )
         .eq('merchant_id', profile.id)
-        .order('created_at', { ascending: false })
+        .order('created_at', {
+          ascending: false,
+        }),
     ]);
 
     if (catalog.error || incoming.error) {
       setError(
         catalog.error?.message ||
-        incoming.error?.message ||
-        'Unable to load your catalog.'
+          incoming.error?.message ||
+          'Unable to load your catalog.'
       );
       return;
     }
@@ -75,11 +87,16 @@ export function MerchantCatalog({ profile }: Props) {
     const extensions: Record<string, string> = {
       'image/jpeg': 'jpg',
       'image/png': 'png',
-      'image/webp': 'webp'
+      'image/webp': 'webp',
     };
 
-    if (!extensions[file.type] || file.size > 5 * 1024 * 1024) {
-      setError('Choose a JPG, PNG or WebP image no larger than 5 MB.');
+    if (
+      !extensions[file.type] ||
+      file.size > 5 * 1024 * 1024
+    ) {
+      setError(
+        'Choose a JPG, PNG or WebP image no larger than 5 MB.'
+      );
       return;
     }
 
@@ -93,7 +110,7 @@ export function MerchantCatalog({ profile }: Props) {
         .from('product_images')
         .upload(path, file, {
           contentType: file.type,
-          upsert: false
+          upsert: false,
         });
 
       if (result.error) throw result.error;
@@ -103,9 +120,13 @@ export function MerchantCatalog({ profile }: Props) {
         .getPublicUrl(path);
 
       setImage(data.publicUrl);
-      setMessage('Image uploaded. Save the product to publish it.');
+      setMessage(
+        'Image uploaded. Save the product to publish it.'
+      );
     } catch (err: any) {
-      setError(err.message || 'Image upload failed.');
+      setError(
+        err.message || 'Image upload failed.'
+      );
     } finally {
       setUploading(false);
     }
@@ -147,14 +168,16 @@ export function MerchantCatalog({ profile }: Props) {
     setBusy(true);
 
     try {
-      const result = await supabase.from('products').insert({
-        merchant_id: profile.id,
-        name: name.trim(),
-        price: amount,
-        description: description.trim(),
-        image_url: image,
-        whatsapp_number: `+${phone}`
-      });
+      const result = await supabase
+        .from('products')
+        .insert({
+          merchant_id: profile.id,
+          name: name.trim(),
+          price: amount,
+          description: description.trim(),
+          image_url: image,
+          whatsapp_number: `+${phone}`,
+        });
 
       if (result.error) throw result.error;
 
@@ -166,7 +189,10 @@ export function MerchantCatalog({ profile }: Props) {
       setMessage('Product published successfully.');
       await refresh();
     } catch (err: any) {
-      setError(err.message || 'Product could not be saved.');
+      setError(
+        err.message ||
+          'Product could not be saved.'
+      );
     } finally {
       setBusy(false);
     }
@@ -188,7 +214,9 @@ export function MerchantCatalog({ profile }: Props) {
       if (result.error) throw result.error;
 
       if (!result.data?.length) {
-        throw new Error('Product could not be deleted.');
+        throw new Error(
+          'Product could not be deleted.'
+        );
       }
 
       setDeleteId(null);
@@ -204,15 +232,21 @@ export function MerchantCatalog({ profile }: Props) {
   return (
     <section className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
       <h1 className="text-3xl font-bold text-slate-900">
-        Inventory & Orders
+        Inventory &amp; Orders
       </h1>
 
       <div className="flex flex-wrap gap-2">
-        <button onClick={() => setTab('products')} className={button}>
+        <button
+          onClick={() => setTab('products')}
+          className={button}
+        >
           My Products
         </button>
 
-        <button onClick={() => setTab('orders')} className={button}>
+        <button
+          onClick={() => setTab('orders')}
+          className={button}
+        >
           Orders ({orders.length})
         </button>
 
@@ -228,7 +262,10 @@ export function MerchantCatalog({ profile }: Props) {
       </div>
 
       {error && (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">
+        <p
+          role="alert"
+          className="rounded-xl bg-red-50 p-3 text-red-700"
+        >
           {error}
         </p>
       )}
@@ -248,7 +285,9 @@ export function MerchantCatalog({ profile }: Props) {
             onSubmit={save}
             className="space-y-4 rounded-2xl border bg-white p-5"
           >
-            <h2 className="text-xl font-bold">Add Product</h2>
+            <h2 className="text-xl font-bold">
+              Add Product
+            </h2>
 
             <label className="block">
               Product name
@@ -256,7 +295,9 @@ export function MerchantCatalog({ profile }: Props) {
                 required
                 maxLength={200}
                 value={name}
-                onChange={e => setName(e.target.value)}
+                onChange={e =>
+                  setName(e.target.value)
+                }
                 className={field}
               />
             </label>
@@ -269,7 +310,9 @@ export function MerchantCatalog({ profile }: Props) {
                 min="0.01"
                 step="0.01"
                 value={price}
-                onChange={e => setPrice(e.target.value)}
+                onChange={e =>
+                  setPrice(e.target.value)
+                }
                 className={field}
               />
             </label>
@@ -279,7 +322,9 @@ export function MerchantCatalog({ profile }: Props) {
               <textarea
                 maxLength={2000}
                 value={description}
-                onChange={e => setDescription(e.target.value)}
+                onChange={e =>
+                  setDescription(e.target.value)
+                }
                 className={field}
               />
             </label>
@@ -287,14 +332,21 @@ export function MerchantCatalog({ profile }: Props) {
             <label className="block">
               Merchant WhatsApp number
               <div className="flex overflow-hidden rounded-xl border border-slate-300">
-                <span className="bg-slate-100 px-4 py-3 font-bold">+</span>
+                <span className="bg-slate-100 px-4 py-3 font-bold">
+                  +
+                </span>
+
                 <input
                   required
                   type="tel"
                   inputMode="numeric"
                   value={phone}
                   onChange={e =>
-                    setPhone(e.target.value.replace(/\D/g, '').slice(0, 15))
+                    setPhone(
+                      e.target.value
+                        .replace(/\D/g, '')
+                        .slice(0, 15)
+                    )
                   }
                   className="min-w-0 flex-1 p-3"
                 />
@@ -308,7 +360,9 @@ export function MerchantCatalog({ profile }: Props) {
                 accept="image/jpeg,image/png,image/webp"
                 disabled={uploading || busy}
                 onChange={e => {
-                  const file = e.target.files?.[0];
+                  const file =
+                    e.target.files?.[0];
+
                   e.target.value = '';
                   void upload(file);
                 }}
@@ -316,7 +370,11 @@ export function MerchantCatalog({ profile }: Props) {
               />
             </label>
 
-            {uploading && <p role="status">Uploading image...</p>}
+            {uploading && (
+              <p role="status">
+                Uploading image...
+              </p>
+            )}
 
             {image && (
               <img
@@ -331,11 +389,15 @@ export function MerchantCatalog({ profile }: Props) {
               disabled={busy || uploading}
               className={button}
             >
-              {busy ? 'Saving...' : 'Save Product'}
+              {busy
+                ? 'Saving...'
+                : 'Save Product'}
             </button>
           </form>
 
-          {!products.length && <p>No products listed yet.</p>}
+          {!products.length && (
+            <p>No products listed yet.</p>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {products.map(product => (
@@ -352,10 +414,13 @@ export function MerchantCatalog({ profile }: Props) {
                 )}
 
                 <div className="space-y-2 p-4">
-                  <h2 className="text-lg font-bold">{product.name}</h2>
+                  <h2 className="text-lg font-bold">
+                    {product.name}
+                  </h2>
 
                   <p className="font-semibold">
-                    SLE {Number(product.price).toFixed(2)}
+                    SLE{' '}
+                    {Number(product.price).toFixed(2)}
                   </p>
 
                   <p className="break-words text-sm text-slate-600">
@@ -363,14 +428,18 @@ export function MerchantCatalog({ profile }: Props) {
                   </p>
 
                   <p className="text-sm">
-                    WhatsApp: {product.whatsapp_number || 'Not supplied'}
+                    WhatsApp:{' '}
+                    {product.whatsapp_number ||
+                      'Not supplied'}
                   </p>
 
                   {deleteId === product.id ? (
                     <div className="flex gap-3">
                       <button
                         disabled={busy}
-                        onClick={() => void remove(product.id)}
+                        onClick={() =>
+                          void remove(product.id)
+                        }
                         className="text-red-700"
                       >
                         Confirm delete
@@ -378,7 +447,9 @@ export function MerchantCatalog({ profile }: Props) {
 
                       <button
                         disabled={busy}
-                        onClick={() => setDeleteId(null)}
+                        onClick={() =>
+                          setDeleteId(null)
+                        }
                       >
                         Cancel
                       </button>
@@ -386,7 +457,9 @@ export function MerchantCatalog({ profile }: Props) {
                   ) : (
                     <button
                       disabled={busy}
-                      onClick={() => setDeleteId(product.id)}
+                      onClick={() =>
+                        setDeleteId(product.id)
+                      }
                       className="text-red-700"
                     >
                       Delete product
@@ -399,21 +472,33 @@ export function MerchantCatalog({ profile }: Props) {
         </>
       ) : (
         <div className="space-y-3">
-          {!orders.length && <p>No in-app orders received yet.</p>}
+          {!orders.length && (
+            <p>No in-app orders received yet.</p>
+          )}
 
           {orders.map(order => (
             <article
               key={order.id}
               className="rounded-2xl border bg-white p-5"
             >
-              <h2 className="text-lg font-bold">{order.product_name}</h2>
+              <h2 className="text-lg font-bold">
+                {order.product_name}
+              </h2>
 
-              <p>SLE {Number(order.price || 0).toFixed(2)}</p>
+              <p>
+                SLE{' '}
+                {Number(order.price || 0).toFixed(2)}
+              </p>
 
-              <p>Order status: {order.status || 'pending'}</p>
+              <p>
+                Order status:{' '}
+                {order.status || 'pending'}
+              </p>
 
               <p className="text-sm text-slate-500">
-                {new Date(order.created_at).toLocaleString()}
+                {new Date(
+                  order.created_at
+                ).toLocaleString()}
               </p>
 
               <p className="break-all text-xs text-slate-500">

@@ -1,3 +1,5 @@
+
+import PayoutPanel from '@/components/PayoutPanel';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { WalletTopUp } from '@/components/WalletTopUp';
@@ -225,24 +227,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
     setPayoutAmount(''); setPayoutPhone(''); setTransferAmount(''); setTransferRecipient(''); setTransferError(''); setTransferNotice('');
   };
 
-  const executePayout = async () => {
-    if (isProcessingPayout || !canTransact) return;
 
-    const amt = Number(payoutAmount);
-    if (!Number.isFinite(amt) || amt <= 0) return alert('Enter a valid amount.');
-    if (amt > Number(sleWallet?.balance || 0)) return alert('The withdrawal amount exceeds your available SLE balance.');
-    if (!payoutPhone.trim()) return alert('Enter your mobile money phone number.');
-
-    setIsProcessingPayout(true);
-    try {
-      const { response, data, finish } = await walletFetch('/api/create-monime-payout', { amount: payoutAmount, currency: 'SLE', destinationPhone: payoutPhone, networkProvider });
-      if (!response.ok) throw new Error(data.error || 'Payout could not be submitted.');
-      if (data.data?.status === 'completed') finish();
-
-      alert(data.data?.status === 'completed' ? 'Payout completed successfully.' : 'Payout submitted. Check your transaction history before initiating another payout.');
-      closeModals(); await fetchLiveBalance();
-    } catch (err: any) { alert(err.message); } finally { setIsProcessingPayout(false); }
-  };
 
   const executeTransfer = async () => {
     if (isProcessingTransfer) return;
@@ -482,25 +467,8 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       )}
 
       {isPayoutModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button onClick={closeModals} disabled={isProcessingPayout} className="absolute right-4 top-4 p-2 text-slate-400"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Mobile Payout</h2>
-            <p className="text-sm text-slate-500 mb-6">Available: SLE {sleWallet?.balanceAvailable === true ? Number(sleWallet.balance).toFixed(2) : 'Unavailable'}</p>
-
-            <div className="mb-6 space-y-4">
-              <input type="number" min="0.01" step="0.01" placeholder="Amount (SLE)" value={payoutAmount} disabled={isProcessingPayout} onChange={e => setPayoutAmount(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-emerald-500" />
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => setNetworkProvider('orange')} disabled={isProcessingPayout} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'orange' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Orange</button>
-                <button onClick={() => setNetworkProvider('afrimoney')} disabled={isProcessingPayout} className={`p-3 border rounded-xl flex items-center justify-center gap-2 ${networkProvider === 'afrimoney' ? 'border-purple-500 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-500'}`}>Afrimoney</button>
-              </div>
-              <input type="tel" inputMode="tel" placeholder="e.g. 077123456 or 030123456" value={payoutPhone} disabled={isProcessingPayout} onChange={e => setPayoutPhone(e.target.value)} className="w-full border p-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500" />
-            </div>
-            <button onClick={() => void executePayout()} disabled={!canTransact || isProcessingPayout || !payoutAmount || !payoutPhone} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 p-4 font-bold text-white disabled:opacity-50">
-              {isProcessingPayout ? <Loader2 size={20} className="animate-spin" /> : <ArrowUpRight size={20} />} {isProcessingPayout ? 'Processing…' : 'Confirm Withdrawal'}
-            </button>
-          </div>
-        </div>
+        <PayoutPanel userId={profile.id} allowed={canTransact}
+          onClose={() => setIsPayoutModalOpen(false)} onBalanceChange={fetchLiveBalance} />
       )}
 
       {isTransferModalOpen && (
