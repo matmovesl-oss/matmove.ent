@@ -1,4 +1,6 @@
 
+import TripHistory from '@/components/TripHistory';
+
 import PayoutPanel from '@/components/PayoutPanel';
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -604,6 +606,8 @@ function MerchantInventory({ profile }: any) {
             <article key={order.id} className="flex flex-col justify-between gap-4 rounded-2xl border bg-white p-5 sm:flex-row">
               <div>
                 <h3 className="text-lg font-bold">{order.product_name}</h3>
+                <p className={`mt-2 text-sm font-bold ${order.wallet_payment_status === 'paid' ? 'text-emerald-700' : 'text-amber-700'}`}>{order.wallet_payment_status === 'paid' ? 'Paid in-app — merchant wallet credited' : 'Payment not confirmed'}</p>
+                {order.wallet_payment_id && <p className="mt-1 break-all text-xs text-slate-500">Payment receipt: {order.wallet_payment_id}</p>}
                 <p className="mt-1 text-xs font-bold text-slate-500">Quantity: {order.quantity || 1} · {order.status}</p>
                 <div className="mt-3 space-y-2 text-sm text-slate-600">
                   <p className="flex items-center gap-2"><User size={14} />{order.rider?.full_name || 'Customer'}</p>
@@ -629,42 +633,7 @@ function MerchantInventory({ profile }: any) {
 }
 
 function MerchantTrips({ profile }: any) {
-  const [trips, setTrips] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const refresh = async () => {
-    const { data, error: queryError } = await supabase.from('bookings').select('*, driver:driver_id(full_name)').eq('rider_id', profile.id).order('created_at', { ascending: false });
-    if (queryError) { setError(queryError.message); } else { setTrips(data || []); setError(''); }
-    setLoading(false);
-  };
-
-  useEffect(() => { setLoading(true); void refresh(); const timer = window.setInterval(() => void refresh(), 15000); return () => window.clearInterval(timer); }, [profile.id]);
-
-  return (
-    <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-3xl font-bold">Trips & Deliveries</h1>
-        <button onClick={() => void refresh()} className="rounded-xl border bg-white px-4 py-2">Refresh</button>
-      </div>
-      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
-      {loading ? <p>Loading trips…</p> : !trips.length && !error ? <p className="py-6 text-center text-slate-500">No requests found.</p> : null}
-      {trips.map(trip => (
-        <article key={trip.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border bg-white p-5">
-          <div>
-            <h3 className="font-bold capitalize">{trip.service_type}{trip.vehicle_type ? ` (${trip.vehicle_type})` : ''}</h3>
-            <p className="mt-1 text-xs text-slate-500">{new Date(trip.created_at).toLocaleString()}</p>
-            <p className="mt-3 text-sm text-slate-600">{trip.pickup_location}<ArrowRight size={14} className="mx-2 inline" />{trip.destination_location}</p>
-            {trip.scheduled_time && <p className="mt-2 text-xs text-slate-500">Scheduled: {new Date(trip.scheduled_time).toLocaleString()}</p>}
-          </div>
-          <div className="text-right">
-            <p className="text-lg font-bold">SLE {Number(trip.fare_amount || 0).toFixed(2)}</p>
-            <p className={`mt-1 rounded px-2 py-1 text-xs font-bold uppercase ${trip.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : trip.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{trip.status}</p>
-          </div>
-        </article>
-      ))}
-    </div>
-  );
+  return <TripHistory userId={profile.id} role="merchant" />;
 }
 
 function PolicyModal({ onAccept }: { onAccept: () => void }) {

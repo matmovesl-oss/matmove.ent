@@ -1,4 +1,6 @@
 
+import TripHistory from '@/components/TripHistory';
+
 import PayoutPanel from '@/components/PayoutPanel';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -497,34 +499,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 }
 
 function DriverTrips({ profile }: any) {
-  const [trips, setTrips] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const refresh = async () => {
-    if (!profile?.id) return;
-    const { data, error: queryError } = await supabase.from('bookings').select('*, rider:rider_id(full_name)').eq('driver_id', profile.id).order('created_at', { ascending: false });
-    if (queryError) { setError(queryError.message); } else { setTrips(data || []); setError(''); }
-    setLoading(false);
-  };
-
-  useEffect(() => { setLoading(true); void refresh(); const timer = setInterval(() => void refresh(), 15000); return () => clearInterval(timer); }, [profile?.id]);
-
-  return (
-    <div className="p-6 max-w-4xl mx-auto space-y-4">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-slate-900">Earnings History</h1>
-        <button onClick={() => void refresh()} className="border bg-white px-4 py-2 rounded-xl text-sm font-bold">Refresh</button>
-      </div>
-      {error && <p role="alert" className="bg-red-50 text-red-700 p-3 rounded-xl">{error}</p>}
-      {loading ? <p>Loading earnings history…</p> : trips.length === 0 && !error ? <div className="text-center text-slate-500 py-10">No trips completed yet.</div> : trips.map(t => (
-        <div key={t.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
-          <div><div className="font-bold text-slate-900 capitalize">{t.service_type} - {t.rider?.full_name || 'Rider Customer'}</div><div className="text-xs text-slate-500 mt-1">{new Date(t.created_at).toLocaleString()}</div></div>
-          <div className="text-right"><div className="font-bold text-lg text-emerald-600">Fare share: SLE {(Number(t.fare_amount || 0) * 0.85).toFixed(2)}</div><div className={`text-[10px] font-bold uppercase mt-1 ${t.status === 'completed' ? 'text-emerald-500' : 'text-slate-400'}`}>{t.status}</div></div>
-        </div>
-      ))}
-    </div>
-  );
+  return <TripHistory userId={profile.id} role="driver" />;
 }
 
 function PolicyModal({ onAccept }: { onAccept: () => void }) {

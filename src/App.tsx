@@ -1,3 +1,5 @@
+
+import MerchantCheckout from '@/components/MerchantCheckout';
 import { AccountPolicy } from '@/components/AccountPolicy';
 import {
   Routes,
@@ -662,11 +664,6 @@ function AccountSection({
     useState<any[]>([]);
 
   const [
-    isCheckingOut,
-    setIsCheckingOut,
-  ] = useState(false);
-
-  const [
     viewingCartOrders,
     setViewingCartOrders,
   ] = useState(false);
@@ -678,16 +675,6 @@ function AccountSection({
     useState<
       'all' | 'pending' | 'completed'
     >('all');
-
-  const [cartLocation, setCartLocation] =
-    useState('');
-
-  const [cartPhone, setCartPhone] =
-    useState(
-      profile?.phone ||
-      profile?.phone_number ||
-      ''
-    );
 
   const fetchCartAndOrders = async () => {
     if (
@@ -977,85 +964,11 @@ function AccountSection({
     fetchCartAndOrders();
   };
 
-  const handleCheckoutCart = async () => {
-    if (
-      cartItems.length === 0
-    ) {
-      return alert(
-        'Your cart is empty.'
-      );
-    }
+  const [checkoutMerchant, setCheckoutMerchant] = useState('');
+  const merchantChoices = [...new Set(cartItems.map((item: any) => String(item.product?.merchant_id || '')).filter(Boolean))];
+  const selectedMerchant = merchantChoices.includes(checkoutMerchant) ? checkoutMerchant : merchantChoices[0];
+  const checkoutItems = cartItems.filter((item: any) => item.product?.merchant_id === selectedMerchant);
 
-    if (
-      !cartLocation.trim()
-    ) {
-      return alert(
-        'Please enter your street address.'
-      );
-    }
-
-    if (
-      !cartPhone.trim()
-    ) {
-      return alert(
-        'Please enter your phone number.'
-      );
-    }
-
-    setIsCheckingOut(true);
-
-    try {
-      for (const item of cartItems) {
-        await supabase
-          .from('app_orders')
-          .insert({
-            rider_id: profile.id,
-            merchant_id:
-              item.product.merchant_id,
-            product_name:
-              item.product.name,
-            price:
-              Number(
-                item.product.price
-              ) * (item.quantity || 1),
-            quantity:
-              item.quantity || 1,
-            delivery_location:
-              `Freetown - ${cartLocation}`,
-            customer_phone: cartPhone,
-            status: 'pending',
-          });
-      }
-
-      await supabase
-        .from('cart_items')
-        .delete()
-        .eq('rider_id', profile.id);
-
-      alert(
-        'Orders successfully submitted to the merchants!'
-      );
-
-      setCartLocation('');
-
-      await fetchCartAndOrders();
-
-      setCartOrderTab('orders');
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setIsCheckingOut(false);
-    }
-  };
-
-  const cartTotal = cartItems.reduce(
-    (sum, item) =>
-      sum +
-      Number(
-        item.product?.price
-      ) * (item.quantity || 1),
-    0
-  );
 
   const filteredRiderOrders =
     riderOrders.filter(
@@ -1291,89 +1204,33 @@ function AccountSection({
                   </div>
                 ))}
 
-                <div className="pt-6 border-t border-slate-100 mt-6 space-y-4">
-                  <h3 className="font-bold text-slate-900">
-                    Delivery Details
-                  </h3>
-
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="flex-1 relative">
-                      <MapPin
-                        size={18}
-                        className="absolute left-3 top-3.5 text-slate-400"
-                      />
-
-                      <div className="absolute left-[36px] top-3.5 text-slate-500 text-sm font-bold border-r pr-2 border-slate-300">
-                        Freetown
-                      </div>
-
-                      <input
-                        type="text"
-                        placeholder="Street Address"
-                        value={cartLocation}
-                        onChange={e =>
-                          setCartLocation(
-                            e.target.value
-                          )
-                        }
-                        className="w-full border p-3 pl-[110px] rounded-xl outline-none focus:border-blue-500 text-sm"
-                      />
-                    </div>
-
-                    <div className="sm:w-1/3 relative">
-                      <Phone
-                        size={18}
-                        className="absolute left-3 top-3.5 text-slate-400"
-                      />
-
-                      <input
-                        type="tel"
-                        placeholder="Phone Number"
-                        value={cartPhone}
-                        onChange={e =>
-                          setCartPhone(
-                            e.target.value
-                          )
-                        }
-                        className="w-full border p-3 pl-10 rounded-xl outline-none focus:border-blue-500 text-sm"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-6 flex justify-between items-center">
-                  <div>
-                    <p className="text-sm text-slate-500 uppercase tracking-wider font-bold">
-                      Total Price
-                    </p>
-
-                    <p className="text-2xl font-bold text-slate-900">
-                      SLE {cartTotal.toFixed(2)}
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={handleCheckoutCart}
-                    disabled={isCheckingOut}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 py-3.5 rounded-xl flex items-center gap-2 transition disabled:opacity-50 shadow-md"
-                  >
-                    {isCheckingOut ? (
-                      <Loader2
-                        className="animate-spin"
-                        size={18}
-                      />
-                    ) : (
-                      <>
-                        Submit Order
-                        <ArrowRight size={18} />
-                      </>
-                    )}
-                  </button>
-                </div>
+                <p className="border-t pt-4 text-sm text-slate-600">Pay one merchant at a time. You can choose product only or optional Freetown delivery at checkout.</p>
               </div>
             )}
           </div>
         )}
+
+        {cartOrderTab === 'cart' && <div className="rounded-2xl border bg-white p-4">
+          {merchantChoices.length > 1 && <label className="block font-bold">Choose merchant to pay
+            <select value={selectedMerchant || ''} onChange={e => setCheckoutMerchant(e.target.value)} className="mt-2 w-full rounded-xl border p-3">
+              {merchantChoices.map(id => <option key={id} value={id}>{cartItems.find((x: any) => x.product?.merchant_id === id)?.product?.merchant?.business_name || cartItems.find((x: any) => x.product?.merchant_id === id)?.product?.merchant?.full_name || `Merchant ${id.slice(0,8)}`}</option>)}
+            </select>
+          </label>}
+          <MerchantCheckout userId={profile.id} initialPhone={profile.phone || profile.phone_number || ''}
+            items={checkoutItems.map((item: any) => ({productId:item.product.id,quantity:item.quantity || 1}))}
+            onPaid={async payment => {
+              const paidRows = cartItems.filter((row: any) => payment.items.some(item => {
+                if (item.productId !== (row.product_id || row.product?.id)) return false;
+                const rows = cartItems.filter((x: any) => (x.product_id || x.product?.id) === item.productId);
+                return rows.reduce((sum: number, x: any) => sum + (x.quantity || 1), 0) === item.quantity;
+              }));
+              if (paidRows.length) {
+                const result = await supabase.from('cart_items').delete().eq('rider_id', profile.id).in('id', paidRows.map((x: any) => x.id));
+                if (result.error) throw result.error;
+              }
+              await fetchCartAndOrders();
+            }} />
+        </div>}
 
         {cartOrderTab === 'orders' && (
           <div className="space-y-4">
@@ -1438,6 +1295,8 @@ function AccountSection({
                         </span>
                       </div>
 
+                      <p className="mt-2 text-sm font-bold">{o.wallet_payment_status === 'paid' ? 'Paid in-app — merchant credited' : 'Payment not confirmed'}</p>
+                      {o.wallet_payment_id && <p className="mt-1 break-all text-xs">Payment receipt: {o.wallet_payment_id}</p>}
                       <div className="text-sm text-slate-500 mt-2 flex items-center gap-1.5">
                         <Store size={14} />
                         {o.merchant?.business_name ||
@@ -1719,6 +1578,11 @@ function PortalNavigation({
           id: 'wallet',
           label: 'Wallet',
           icon: Wallet,
+        },
+        {
+          id: 'trips',
+          label: 'Trips',
+          icon: Navigation,
         },
         {
           id: 'account',

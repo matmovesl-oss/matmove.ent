@@ -1,3 +1,5 @@
+
+import { merchantPaymentAction, reconcileMerchantPayments } from '../server/merchant-payments.js';
 import {
   protectedWallet,
   verifiedAccount,
@@ -135,7 +137,11 @@ export async function transferHandler(req, res) {
   });
 }
 
-export default protectedWallet(
-  'transfer',
-  transferHandler
-);
+const transfers = protectedWallet('transfer', transferHandler);
+const merchantPayments = protectedWallet('read', merchantPaymentAction);
+export default function handler(req, res) {
+  if (req.query?.action === 'merchant_reconcile') return reconcileMerchantPayments(req, res);
+  return String(req.body?.action || '').startsWith('merchant_')
+    ? merchantPayments(req, res)
+    : transfers(req, res);
+}

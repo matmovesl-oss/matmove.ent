@@ -1,4 +1,7 @@
 
+import MerchantCheckout from '@/components/MerchantCheckout';
+import TripHistory from '@/components/TripHistory';
+
 import PayoutPanel from '@/components/PayoutPanel';
 import { RideLocationPicker, TripLocations } from '@/components/RideLocationPicker';
 import { WalletTopUp } from '@/components/WalletTopUp';
@@ -983,10 +986,6 @@ function RiderShop({ profile, wallet }: any) {
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [orderQty, setOrderQty] = useState(1);
-  const [orderPhone, setOrderPhone] = useState(profile?.phone || profile?.phone_number || '');
-  const [streetAddress, setStreetAddress] = useState('');
-  const [deliveryTime, setDeliveryTime] = useState('');
-  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
   const fetchShopProducts = async () => {
     const { data, error } = await supabase
@@ -1051,47 +1050,9 @@ function RiderShop({ profile, wallet }: any) {
   const openOrderModal = (product: any) => {
     setSelectedProduct(product);
     setOrderQty(1);
-    setOrderPhone(profile?.phone || profile?.phone_number || '');
-    setStreetAddress('');
-    setDeliveryTime('');
     setOrderModalOpen(true);
   };
 
-  const submitInAppOrder = async () => {
-    if (!streetAddress.trim()) return alert('Street address is required.');
-    if (!orderPhone.trim()) return alert('Contact phone number is required.');
-    if (!deliveryTime) return alert('Delivery date and time are required.');
-
-    const itemPrice = Number(selectedProduct.price || 0);
-    const totalPrice = itemPrice * orderQty;
-
-    setIsSubmittingOrder(true);
-
-    try {
-      const { error: orderErr } = await supabase
-        .from('app_orders')
-        .insert({
-          rider_id: profile.id,
-          merchant_id: selectedProduct.merchant_id,
-          product_name: selectedProduct.name,
-          price: totalPrice,
-          quantity: orderQty,
-          delivery_location: `Freetown - ${streetAddress}`,
-          customer_phone: orderPhone,
-          delivery_time: deliveryTime,
-          status: 'pending'
-        });
-
-      if (orderErr) throw orderErr;
-
-      alert(`Order submitted to merchant! They will review your request for SLE ${totalPrice.toFixed(2)}.`);
-      setOrderModalOpen(false);
-    } catch (e: any) {
-      alert(`Order failed: ${e.message}`);
-    } finally {
-      setIsSubmittingOrder(false);
-    }
-  };
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -1173,152 +1134,25 @@ function RiderShop({ profile, wallet }: any) {
         </div>
       )}
 
+      {!orderModalOpen && <MerchantCheckout userId={profile.id} items={[]}
+        initialPhone={profile.phone || profile.phone_number || ''} />}
       {orderModalOpen && selectedProduct && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
-            <button
-              onClick={() => setOrderModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
-            >
-              <X size={20} />
-            </button>
-            <h2 className="text-2xl font-bold mb-1">Place Order</h2>
-            <p className="text-sm text-slate-500 mb-6">{selectedProduct.name}</p>
-
-            <div className="space-y-4 mb-6">
-              <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <span className="text-sm font-bold text-slate-700">Quantity</span>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setOrderQty(prev => Math.max(1, prev - 1))}
-                    className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"
-                  >
-                    <Minus size={16} />
-                  </button>
-                  <span className="font-bold text-lg w-4 text-center">{orderQty}</span>
-                  <button
-                    onClick={() => setOrderQty(prev => prev + 1)}
-                    className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"
-                  >
-                    <Plus size={16} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="relative">
-                <Phone size={18} className="absolute left-3 top-3.5 text-slate-400" />
-                <input
-                  type="tel"
-                  placeholder="Your Phone Number"
-                  value={orderPhone}
-                  onChange={e => setOrderPhone(e.target.value)}
-                  className="w-full border p-3 pl-10 rounded-xl outline-none focus:border-blue-500 text-sm"
-                />
-              </div>
-
-              <div className="flex gap-3">
-                <div className="w-1/3 relative">
-                  <MapPin size={18} className="absolute left-3 top-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    value="Freetown"
-                    disabled
-                    className="w-full border p-3 pl-10 rounded-xl bg-slate-100 text-slate-500 font-bold text-sm cursor-not-allowed"
-                  />
-                </div>
-                <div className="w-2/3 relative">
-                  <input
-                    type="text"
-                    placeholder="Street Address (e.g. 15 Signal Hill Rd)"
-                    value={streetAddress}
-                    onChange={e => setStreetAddress(e.target.value)}
-                    className="w-full border p-3 rounded-xl outline-none focus:border-blue-500 text-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="relative">
-                <CalendarClock size={18} className="absolute left-3 top-3.5 text-slate-400" />
-                <input
-                  type="datetime-local"
-                  value={deliveryTime}
-                  onChange={e => setDeliveryTime(e.target.value)}
-                  className="w-full border p-3 pl-10 rounded-xl outline-none focus:border-blue-500 text-sm"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center mb-6 pt-4 border-t border-slate-100">
-              <span className="text-sm font-bold text-slate-500">Total Price</span>
-              <span className="text-2xl font-bold text-blue-600">
-                SLE {(Number(selectedProduct.price) * orderQty).toFixed(2)}
-              </span>
-            </div>
-
-            <button
-              onClick={submitInAppOrder}
-              disabled={isSubmittingOrder}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50"
-            >
-              {isSubmittingOrder
-                ? <Loader2 size={20} className="animate-spin" />
-                : `Submit Order (SLE ${(Number(selectedProduct.price) * orderQty).toFixed(2)})`}
-            </button>
-          </div>
-        </div>
+        <section className="rounded-2xl border bg-white p-5">
+          <div className="flex justify-between gap-3"><h2 className="text-xl font-bold">{selectedProduct.name}</h2>
+            <button className="rounded-lg border px-3 py-2" onClick={() => setOrderModalOpen(false)}>Close</button></div>
+          <label className="mt-3 block font-medium">Quantity<input type="number" min="1" max="100" step="1" value={orderQty}
+            onChange={e => setOrderQty(Math.max(1, Math.min(100, Math.floor(Number(e.target.value) || 1))))}
+            className="mt-1 w-full rounded-xl border p-3" /></label>
+          <MerchantCheckout userId={profile.id} items={[{productId: selectedProduct.id, quantity: orderQty}]}
+            initialPhone={profile.phone || profile.phone_number || ''} />
+        </section>
       )}
     </div>
   );
 }
 
 function RiderTrips({ profile }: any) {
-  const [trips, setTrips] = useState<any[]>([]);
-
-  useEffect(() => {
-    supabase
-      .from('bookings')
-      .select('*, driver:driver_id(full_name)')
-      .eq('rider_id', profile.id)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        if (data) setTrips(data);
-      });
-  }, [profile.id]);
-
-  return (
-    <div className="p-6 max-w-4xl mx-auto space-y-4">
-      <h1 className="text-3xl font-bold text-slate-900 mb-6">Trip History</h1>
-
-      {trips.length === 0 ? (
-        <div className="text-center text-slate-500 py-10">No trips found.</div>
-      ) : trips.map(t => (
-        <div
-          key={t.id}
-          className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center"
-        >
-          <div>
-            <div className="font-bold text-slate-900 capitalize">
-              {t.service_type} {t.vehicle_type ? `(${t.vehicle_type})` : ''}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">
-              {new Date(t.created_at).toLocaleString()}
-            </div>
-            <div className="text-xs font-mono text-slate-400 mt-2">
-              {t.pickup_location?.slice(0, 25)}...{' '}
-              <ArrowRight className="inline" size={10} />{' '}
-              {t.destination_location?.slice(0, 25)}...
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="font-bold text-lg text-slate-900">SLE {t.fare_amount}</div>
-            <div className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded mt-1 inline-block ${t.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : t.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
-              {t.status}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+  return <TripHistory userId={profile.id} role="rider" />;
 }
 
 function PolicyModal({ onAccept }: { onAccept: () => void }) {

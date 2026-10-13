@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
@@ -484,6 +485,8 @@ export function MerchantCatalog({ profile }: Props) {
               <h2 className="text-lg font-bold">
                 {order.product_name}
               </h2>
+              <p className="mt-2 text-sm font-bold">{order.wallet_payment_status === 'paid' ? 'Paid in-app — wallet credited' : 'Payment not confirmed'}</p>
+              {order.wallet_payment_id && <p className="mt-1 break-all text-xs">Payment receipt: {order.wallet_payment_id}</p>}
 
               <p>
                 SLE{' '}

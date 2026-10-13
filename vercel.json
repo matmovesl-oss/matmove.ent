@@ -1,5 +1,14 @@
+
 {
   "routes": [
+    {
+      "src": "/api/cancel-ride/?",
+      "dest": "/api/accept-ride-escrow?action=cancel"
+    },
+    {
+      "src": "/api/reconcile-ride-payments/?",
+      "dest": "/api/accept-ride-escrow?action=reconcile"
+    },
     {
       "handle": "filesystem"
     },
