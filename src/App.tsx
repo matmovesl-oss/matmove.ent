@@ -1,4 +1,7 @@
 
+import ActivityAnalytics from '@/components/ActivityAnalytics';
+import MerchantAnalytics from '@/components/MerchantAnalytics';
+
 import MerchantCheckout from '@/components/MerchantCheckout';
 import { AccountPolicy } from '@/components/AccountPolicy';
 import {
@@ -920,7 +923,7 @@ function AccountSection({
       fetchCartAndOrders();
     }
 
-    if (viewingAnalytics) {
+    if (viewingAnalytics && !['rider', 'driver', 'merchant'].includes(profile.role)) {
       fetchAnalytics();
     }
   }, [
@@ -977,6 +980,14 @@ function AccountSection({
           ? true
           : o.status === orderFilter
     );
+
+  if (viewingAnalytics && (profile.role === 'rider' || profile.role === 'driver')) {
+    return <ActivityAnalytics role={profile.role} onBack={() => setViewingAnalytics(false)} />;
+  }
+
+  if (viewingAnalytics && profile.role === 'merchant') {
+    return <MerchantAnalytics userId={profile.id} onBack={() => setViewingAnalytics(false)} />;
+  }
 
   if (viewingAnalytics) {
     const title =

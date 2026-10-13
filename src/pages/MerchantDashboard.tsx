@@ -1,4 +1,7 @@
 
+import WalletCardsView from '@/components/WalletCards';
+import TransactionHistory from '@/components/TransactionHistory';
+
 import TripHistory from '@/components/TripHistory';
 
 import PayoutPanel from '@/components/PayoutPanel';
@@ -47,7 +50,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
 
-  const [serviceType, setServiceType] = useState<ServiceType>('delivery');
+  const [serviceType,setServiceType] = useState<ServiceType>('delivery');
   const [vehicleType, setVehicleType] = useState<VehicleType>('car');
   const [offerAmount, setOfferAmount] = useState('');
   const [tripDistanceKm, setTripDistanceKm] = useState<number | null>(null);
@@ -98,7 +101,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   useEffect(() => {
     if (!profile?.id) return;
     const checkActiveTrip = async () => {
-      const { data } = await supabase.from('bookings').select('*, driver:driver_id(full_name, phone)').eq('rider_id', profile.id).in('status', ['pending', 'pending_admin', 'accepted', 'in_progress']).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      const { data } = await supabase.from('bookings').select('*, driver:driver_id(full_name, phone)').eq('rider_id', profile.id).in('status', ['pending', 'pending_admin','accepted', 'in_progress']).order('created_at', { ascending: false }).limit(1).maybeSingle();
       setActiveBooking(data || null);
     };
     void checkActiveTrip();
@@ -130,13 +133,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     try { await navigator.clipboard.writeText(id); setCopiedId(id); window.setTimeout(() => setCopiedId(null), 2000); } catch { alert(`Account ID: ${id}`); }
   };
 
-  const handleShareReceipt = async (tx: any) => {
-    const isCredit = String(tx.balanceImpact).toUpperCase() === 'CREDIT';
-    const date = tx.createdAt || tx.created_at || tx.timestamp || tx.date;
-    const formattedDate = date && !isNaN(new Date(date).getTime()) ? new Date(date).toLocaleString() : 'Recent';
-    const text = `MatMove Receipt\nType: ${tx.description || tx.type || 'Transaction'}\nStatus: ${tx.status || 'Unknown'}\nDate: ${formattedDate}\nAmount: ${isCredit ? '+' : '-'}${tx.amount?.currency || 'SLE'} ${(Number(tx.amount?.value || 0) / 100).toFixed(2)}\nTransaction ID: ${tx.id}`;
-    try { if (navigator.share) await navigator.share({ title: 'MatMove Receipt', text }); else { await navigator.clipboard.writeText(text); alert('Receipt copied.'); } } catch {}
-  };
+
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -202,7 +199,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       const result = await updateRide('complete', activeBooking.id);
       if (!result.pending && result.payment?.settled !== true) throw new Error('Driver credit is not confirmed. Do not make a new payment.');
       const driverLeg = result.payment?.transfers?.find((leg: any) => leg.kind === 'driver');
-      setRideNotice(result.pending ? 'Driver credit is processing; the trip is not completed yet. Check again.' : `Driver credited SLE ${Number(result.payment.driverEarnings).toFixed(2)}. Receipt: ${driverLeg?.transferId}.`);
+      setRideNotice(result.pending ? 'Driver credit is processing; the trip is not completed yet. Check again.' :`Driver credited SLE ${Number(result.payment.driverEarnings).toFixed(2)}. Receipt: ${driverLeg?.transferId}.`);
       setActiveBooking(result.pending ? { ...activeBooking, ...result.booking } : null);
       if (!result.pending) setPaymentModalData(null);
       await fetchLiveBalance();
@@ -247,30 +244,8 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     } catch (err: any) { setTransferError(err.message || 'Transfer could not be submitted.'); } finally { setIsProcessingTransfer(false); }
   };
 
-  const walletCards = (
-    <div className={`grid grid-cols-1 ${activeSection === 'wallet' ? 'md:grid-cols-2' : ''} gap-4`}>
-      <div className="relative rounded-3xl bg-orange-600 p-6 text-white shadow-xl">
-        <button onClick={() => void fetchLiveBalance()} disabled={isRefreshing} className="absolute right-4 top-4 flex items-center gap-2 rounded-xl bg-white/10 p-2 text-xs font-bold hover:bg-white/20 transition"><RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} /></button>
-        <p className="mt-6 text-xs font-bold uppercase text-orange-200">SLE Operating Wallet</p>
-        <p className="mt-1 text-3xl font-bold">SLE {sleWallet?.balanceAvailable === true ? Number(sleWallet.balance).toFixed(2) : 'Unavailable'}</p>
-        <div className="mt-3 flex items-center gap-2 break-all text-xs"><span>ID: {monimeAccountId}</span><button onClick={() => void handleCopy(monimeAccountId)}>{copiedId === monimeAccountId ? <Check size={14} /> : <Copy size={14} />}</button></div>
-      </div>
-      <div className="rounded-3xl border border-slate-700 bg-slate-800 p-6 text-white shadow-xl">
-        {usdWallet?.monime_account_id ? (
-          <>
-            <p className="text-xs font-bold uppercase text-slate-400">USD Reserve Wallet</p>
-            <p className="mt-1 text-3xl font-bold text-emerald-400">USD {usdWallet?.balanceAvailable === true ? Number(usdWallet.balance).toFixed(2) : 'Unavailable'}</p>
-            <div className="mt-3 flex items-center gap-2 break-all text-xs text-slate-300"><span>ID: {usdWallet.monime_account_id}</span><button onClick={() => void handleCopy(usdWallet.monime_account_id)}>{copiedId === usdWallet.monime_account_id ? <Check size={14} /> : <Copy size={14} />}</button></div>
-          </>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-2">
-            <button onClick={() => void handleCreateUsdWallet()} disabled={isCreatingUsd} className="mb-2 rounded-full bg-slate-700 p-3 hover:bg-slate-600">{isCreatingUsd ? <Loader2 size={24} className="animate-spin text-emerald-400" /> : <Plus size={24} className="text-emerald-400" />}</button>
-            <span className="text-sm font-bold">Create USD Wallet</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const walletCards = <WalletCardsView sleWallet={sleWallet} usdWallet={usdWallet}
+    refresh={fetchLiveBalance} refreshing={isRefreshing} createUsd={handleCreateUsdWallet} creatingUsd={isCreatingUsd} />;
 
   const validTransactions = Array.isArray(transactions) ? transactions : [];
   const displayedTransactions = txFilter === 'recent' ? validTransactions.slice(0, 5) : validTransactions;
@@ -295,7 +270,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
             {!activeBooking ? (
               <>
                 <div className="flex gap-2 rounded-xl bg-slate-100 p-1">
-                  <button onClick={() => setServiceType('delivery')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Package size={16} /> Delivery</button>
+                  <button onClick={() => setServiceType('delivery')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' :'text-slate-500'}`}><Package size={16} /> Delivery</button>
                   <button onClick={() => setServiceType('ride')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16} /> Ride</button>
                   <button onClick={() => setServiceType('scheduled')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size={16} /> Schedule</button>
                 </div>
@@ -376,35 +351,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
               <button onClick={() => setIsTransferModalOpen(true)} disabled={!canTransact} className="flex flex-col items-center gap-3 rounded-2xl bg-purple-50 p-4 font-bold text-purple-700 disabled:opacity-50"><Users size={24} /> Transfer</button>
             </div>
           </div>
-          <div className="rounded-3xl border bg-white p-5">
-            <div className="mb-5 flex items-center justify-between gap-2">
-              <h3 className="flex items-center gap-2 font-bold"><Activity size={20} /> Transactions</h3>
-              <div className="flex rounded-lg bg-slate-100 p-1">{(['recent', 'all'] as const).map(filter => <button key={filter} onClick={() => setTxFilter(filter)} className={`rounded-md px-3 py-2 text-sm font-bold capitalize ${txFilter === filter ? 'bg-white shadow-sm' : ''}`}>{filter}</button>)}</div>
-            </div>
-            {!displayedTransactions.length && <p className="py-6 text-center text-slate-500">No transactions found.</p>}
-            <div className="space-y-3">
-              {displayedTransactions.map(tx => {
-                if (!tx) return null;
-                const credit = String(tx.balanceImpact).toUpperCase() === 'CREDIT';
-                const date = tx.createdAt || tx.created_at || tx.timestamp || tx.date;
-                const dateLabel = date && !isNaN(new Date(date).getTime()) ? new Date(date).toLocaleString() : 'Date pending';
-                return (
-                  <div key={tx.id} onClick={() => setSelectedTx(tx)} className="cursor-pointer flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-4 hover:bg-slate-100 transition group">
-                    <div className="flex items-center gap-3">
-                      <div className={`rounded-full p-2 ${credit ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>{credit ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}</div>
-                      <div><p className="text-sm font-bold">{tx.description || tx.type || 'Transaction'}</p><p className="text-xs text-slate-500">{dateLabel}</p></div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <p className={`font-bold ${credit ? 'text-emerald-600' : 'text-slate-900'}`}>{credit ? '+' : '-'} {tx.amount?.currency || 'SLE'} {(Number(tx.amount?.value || 0) / 100).toFixed(2)}</p>
-                        <p className="text-xs uppercase text-slate-500">{tx.status}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <TransactionHistory transactions={transactions} onSelect={setSelectedTx} />
         </div>
       )}
 
@@ -457,7 +404,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
               <input type="text" disabled={isProcessingTransfer} placeholder="Recipient account ID (fac-...)" value={transferRecipient} onChange={e => setTransferRecipient(e.target.value)} className="w-full rounded-xl border p-4" />
             </div>
             <button onClick={() => void executeTransfer()} disabled={!canTransact || isProcessingTransfer || !transferAmount || !transferRecipient} className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 p-4 font-bold text-white disabled:opacity-50">
-              {isProcessingTransfer ? <Loader2 size={20} className="animate-spin" /> : <Users size={20} />} Send Transfer
+              {isProcessingTransfer ? <Loader2 size={20} className="animate-spin" /> :<Users size={20} />} Send Transfer
             </button>
           </div>
         </div>
@@ -510,7 +457,7 @@ function MerchantInventory({ profile }: any) {
     if (file.size > 5 * 1024 * 1024) { setError('Your image must be 5 MB or smaller.'); event.target.value = ''; return; }
     setIsUploading(true); setError('');
     try {
-      const extension = file.type === 'image/jpeg' ? 'jpg' : file.type === 'image/png' ? 'png' : 'webp';
+      const extension = file.type === 'image/jpeg' ? 'jpg' :file.type === 'image/png' ? 'png' : 'webp';
       const filename = `${profile.id}-${crypto.randomUUID()}.${extension}`;
       const { error: uploadError } = await supabase.storage.from('product_images').upload(filename, file, { contentType: file.type, upsert: false });
       if (uploadError) throw uploadError;
@@ -577,7 +524,7 @@ function MerchantInventory({ profile }: any) {
             <h3 className="text-lg font-bold">Add New Product</h3>
             <div className="grid gap-4 sm:grid-cols-2"><input placeholder="Product name" value={name} onChange={e => setName(e.target.value)} className="rounded-xl border p-3" /><input type="number" min="0.01" step="0.01" placeholder="Price (SLE)" value={price} onChange={e => setPrice(e.target.value)} className="rounded-xl border p-3" /></div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm font-bold">WhatsApp number with country code<div className="mt-2 flex overflow-hidden rounded-xl border"><span className="border-r bg-slate-100 px-4 py-3">+</span><input type="tel" inputMode="numeric" value={whatsappDigits} onChange={e => setWhatsappDigits(e.target.value.replace(/\D/g, ''))} placeholder="23277123456" className="min-w-0 flex-1 p-3 font-normal outline-none" /></div></label>
+              <label className="block text-sm font-bold">WhatsApp number with country code<div className="mt-2 flex overflow-hidden rounded-xl border"><span className="border-r bg-slate-100 px-4 py-3">+</span><input type="tel" inputMode="numeric" value={whatsappDigits} onChange={e => setWhatsappDigits(e.target.value.replace(/\D/g,''))} placeholder="23277123456" className="min-w-0 flex-1 p-3 font-normal outline-none" /></div></label>
               <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border p-3 text-sm font-bold">{isUploading ? <Loader2 size={18} className="animate-spin" /> : <ImageIcon size={18} />}{isUploading ? 'Uploading…' : imageUrl ? 'Replace product image' : 'Upload product image'}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={isUploading || isAdding} onChange={handleImageUpload} className="hidden" /></label>
             </div>
             {imageUrl && <img src={imageUrl} alt="Product preview" className="h-32 w-32 rounded-xl border object-cover" />}
@@ -595,7 +542,7 @@ function MerchantInventory({ profile }: any) {
             ))}
           </div>
         </>
-      ) : (
+      ) :(
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex rounded-lg bg-slate-100 p-1">{(['all', 'pending', 'completed'] as const).map(filter => <button key={filter} onClick={() => setOrderFilter(filter)} className={`rounded-md px-3 py-2 text-sm font-bold capitalize ${orderFilter === filter ? 'bg-white shadow-sm' : ''}`}>{filter}</button>)}</div>

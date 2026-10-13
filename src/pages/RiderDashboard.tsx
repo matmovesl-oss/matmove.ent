@@ -1,4 +1,7 @@
 
+import WalletCardsView from '@/components/WalletCards';
+import TransactionHistory from '@/components/TransactionHistory';
+
 import MerchantCheckout from '@/components/MerchantCheckout';
 import TripHistory from '@/components/TripHistory';
 
@@ -59,7 +62,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
 
-  const [serviceType, setServiceType] = useState<'ride' | 'delivery' | 'scheduled'>('ride');
+  const [serviceType,setServiceType] = useState<'ride' | 'delivery' | 'scheduled'>('ride');
   const [vehicleType, setVehicleType] = useState<'keke' | 'bike' | 'car' | 'van'>('car');
   const [offerAmount, setOfferAmount] = useState('');
   const [tripDistanceKm, setTripDistanceKm] = useState<number | null>(null);
@@ -128,7 +131,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     const formattedDate =
       dateStr && !isNaN(new Date(dateStr).getTime())
         ? new Date(dateStr).toLocaleString()
-        : 'Recent';
+        :'Recent';
 
     const receiptText =
       `MatMove Receipt\n----------------\n` +
@@ -231,7 +234,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     balanceBusy.current = true;
     setIsRefreshing(true);
     try {
-      const { response, data } = await walletFetch('/api/get-live-wallet', {});
+      const { response, data } = await walletFetch('/api/get-live-wallet',{});
       if (!response.ok) throw new Error(data.error || 'Unable to read wallet balances.');
 
       if (data.sleWallet) setSleWallet(data.sleWallet);
@@ -311,7 +314,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     setIsRequesting(true);
 
     try {
-      const { data, error } = await supabase
+      const { data,error } = await supabase
         .from('bookings')
         .insert({
           rider_id: profile.id,
@@ -422,77 +425,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     }
   };
 
-  const WalletCards = (
-    <div className={`grid grid-cols-1 ${activeSection === 'wallet' ? 'md:grid-cols-2' : ''} gap-4`}>
-      <div className="bg-slate-900 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
-        <button
-          onClick={fetchLiveBalance}
-          disabled={isRefreshing}
-          className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-xs font-bold z-10"
-        >
-          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-        </button>
-
-        <div>
-          <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">
-            SLE Operating Wallet
-          </span>
-          <div className="text-3xl font-bold mt-1 text-blue-400">
-            SLE {sleWallet?.balanceAvailable === true ? Number(sleWallet.balance).toFixed(2) : 'Unavailable'}
-          </div>
-          <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-flex items-center gap-2 px-2 py-1 rounded">
-            ID: {monimeAccountId}
-            <button onClick={() => handleCopy(monimeAccountId)} className="hover:text-white transition">
-              {copiedId === monimeAccountId
-                ? <Check size={12} className="text-emerald-400" />
-                : <Copy size={12} />}
-            </button>
-          </div>
-        </div>
-
-        <Wallet size={32} className="text-slate-700 mr-2 md:mr-6 pointer-events-none" />
-      </div>
-
-      <div className="bg-slate-800 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl border border-slate-700 relative">
-        {usdWallet?.monime_account_id ? (
-          <>
-            <div>
-              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">
-                USD Reserve Wallet
-              </span>
-              <div className="text-3xl font-bold mt-1 text-emerald-400">
-                USD {usdWallet?.balanceAvailable === true ? Number(usdWallet.balance).toFixed(2) : 'Unavailable'}
-              </div>
-              <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-flex items-center gap-2 px-2 py-1 rounded">
-                ID: {usdWallet.monime_account_id}
-                <button onClick={() => handleCopy(usdWallet.monime_account_id)} className="hover:text-white transition">
-                  {copiedId === usdWallet.monime_account_id
-                    ? <Check size={12} className="text-emerald-400" />
-                    : <Copy size={12} />}
-                </button>
-              </div>
-            </div>
-            <Wallet size={32} className="text-slate-600 mr-2 md:mr-6 pointer-events-none" />
-          </>
-        ) : (
-          <div className="w-full flex flex-col items-center justify-center text-center py-1">
-            <button
-              onClick={handleCreateUsdWallet}
-              disabled={isCreatingUsd}
-              className="bg-slate-700 hover:bg-slate-600 transition p-3 rounded-full mb-2 shadow-inner"
-            >
-              {isCreatingUsd
-                ? <Loader2 size={24} className="animate-spin text-emerald-400" />
-                : <Plus size={24} className="text-emerald-400" />}
-            </button>
-            <span className="text-sm font-bold text-slate-300">
-              Create USD Wallet
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const WalletCards = <WalletCardsView sleWallet={sleWallet} usdWallet={usdWallet}
+    refresh={fetchLiveBalance} refreshing={isRefreshing} createUsd={handleCreateUsdWallet} creatingUsd={isCreatingUsd} />;
 
   const validTransactions = Array.isArray(transactions) ? transactions : [];
   const displayedTx = txFilter === 'recent' ? validTransactions.slice(0, 5) : validTransactions;
@@ -802,90 +736,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm w-full">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
-                  <Activity size={20} className="text-blue-600" /> Transactions
-                </h3>
-                <div className="flex bg-slate-100 p-1 rounded-lg">
-                  <button
-                    onClick={() => setTxFilter('recent')}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter === 'recent' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
-                  >
-                    Recent
-                  </button>
-                  <button
-                    onClick={() => setTxFilter('all')}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter === 'all' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
-                  >
-                    All Time
-                  </button>
-                </div>
-              </div>
-
-              {displayedTx.length === 0 ? (
-                <div className="text-center text-slate-500 py-6">
-                  No transactions found.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {displayedTx.map(tx => {
-                    if (!tx) return null;
-
-                    const isCredit = String(tx.balanceImpact).toUpperCase() === 'CREDIT';
-                    const dateStr =
-                      tx.createdAt || tx.created_at ||
-                      tx.timestamp || tx.date || tx.createdOn;
-                    const isValidDate = dateStr && !isNaN(new Date(dateStr).getTime());
-                    const formattedDate = isValidDate
-                      ? new Date(dateStr).toLocaleString()
-                      : 'Date pending';
-
-                    return (
-                      <div
-                        key={tx.id}
-                        onClick={() => setSelectedTx(tx)}
-                        className="cursor-pointer flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition group"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-full ${isCredit ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                            {isCredit ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
-                          </div>
-                          <div>
-                            <p className="font-bold text-slate-900 text-sm">
-                              {tx.description || tx.type || 'Transfer'}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                              {formattedDate}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="text-right flex items-center gap-4">
-                          <div>
-                            <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>
-                              {isCredit ? '+' : '-'}{' '}
-                              {tx.amount?.currency || 'SLE'}{' '}
-                              {((tx.amount?.value || 0) / 100).toFixed(2)}
-                            </p>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                              {tx.status}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => handleShareReceipt(tx)}
-                            className="text-slate-400 hover:text-blue-600 transition p-2 rounded-full hover:bg-white"
-                            title="Copy Receipt"
-                          >
-                            <Share2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <TransactionHistory transactions={transactions} onSelect={setSelectedTx} />
           </div>
         )}
       </div>
@@ -985,7 +836,7 @@ function RiderShop({ profile, wallet }: any) {
   const [products, setProducts] = useState<any[]>([]);
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
-  const [orderQty, setOrderQty] = useState(1);
+  const [orderQty,setOrderQty] = useState(1);
 
   const fetchShopProducts = async () => {
     const { data, error } = await supabase
@@ -1191,6 +1042,38 @@ function PolicyModal({ onAccept }: { onAccept: () => void }) {
           <p className="font-bold text-slate-900 pt-2 border-t">
             By clicking "I Accept", you acknowledge that you have read,
             understood, and agree to be bound by this policy.
+            All rights reserved by MatMove Enterprise.
+          </p>
+        </div>
+
+        <div className="p-4 border-t bg-slate-50 shrink-0">
+          <button
+            onClick={onAccept}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl transition shadow-md"
+          >
+            I Accept & Agree
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}understood, and agree to be bound by this policy.
+            All rights reserved by MatMove Enterprise.
+          </p>
+        </div>
+
+        <div className="p-4 border-t bg-slate-50 shrink-0">
+          <button
+            onClick={onAccept}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl transition shadow-md"
+          >
+            I Accept & Agree
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}understood, and agree to be bound by this policy.
             All rights reserved by MatMove Enterprise.
           </p>
         </div>

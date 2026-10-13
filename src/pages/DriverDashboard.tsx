@@ -1,4 +1,7 @@
 
+import WalletCardsView from '@/components/WalletCards';
+import TransactionHistory from '@/components/TransactionHistory';
+
 import TripHistory from '@/components/TripHistory';
 
 import PayoutPanel from '@/components/PayoutPanel';
@@ -54,7 +57,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   const [transferAmount, setTransferAmount] = useState('');
   const [transferCurrency, setTransferCurrency] = useState<'SLE' | 'USD'>('SLE');
   const [transferError, setTransferError] = useState('');
-  const [transferNotice, setTransferNotice] = useState('');
+  const [transferNotice,setTransferNotice] = useState('');
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
 
@@ -120,17 +123,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
     } catch { alert(`Account ID: ${id}`); }
   };
 
-  const handleShareReceipt = async (tx: any) => {
-    const isCredit = String(tx.balanceImpact).toUpperCase() === 'CREDIT';
-    const date = tx.createdAt || tx.created_at || tx.timestamp || tx.date;
-    const formattedDate = date && !isNaN(new Date(date).getTime()) ? new Date(date).toLocaleString() : 'Recent';
 
-    const text = `MatMove Receipt\nType: ${tx.description || tx.type || 'Transaction'}\nStatus: ${tx.status || 'Unknown'}\nDate: ${formattedDate}\nAmount: ${isCredit ? '+' : '-'}${tx.amount?.currency || 'SLE'} ${(Number(tx.amount?.value || 0) / 100).toFixed(2)}\nTransaction ID: ${tx.id}`;
-    try {
-      if (navigator.share) await navigator.share({ title: 'MatMove Receipt', text });
-      else { await navigator.clipboard.writeText(text); alert('Receipt copied.'); }
-    } catch {}
-  };
 
   const handleCreateUsdWallet = async () => {
     if (!window.confirm('Create a USD wallet?')) return;
@@ -248,55 +241,11 @@ function DriverMain({ profile, wallet, activeSection }: any) {
     } catch (err: any) { setTransferError(err.message || 'Transfer could not be submitted.'); } finally { setIsProcessingTransfer(false); }
   };
 
-  const walletCards = (
-    <div className={`grid grid-cols-1 ${activeSection === 'wallet' ? 'md:grid-cols-2' : ''} gap-4`}>
-      <div className="bg-slate-900 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl relative">
-        <button onClick={() => void fetchLiveBalance()} disabled={isRefreshing} className="absolute top-4 right-4 flex items-center justify-center rounded-xl bg-white/10 p-2 text-xs font-bold hover:bg-white/20 transition" aria-label="Refresh balance">
-          <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
-        </button>
-
-        <div>
-          <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">SLE Ledger</span>
-          <div className="text-3xl font-bold mt-1 text-emerald-400">SLE {sleWallet?.balanceAvailable === true ? Number(sleWallet.balance).toFixed(2) : 'Unavailable'}</div>
-          <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-800 inline-flex items-center gap-2 px-2 py-1 rounded">
-            ID: {monimeAccountId}
-            <button onClick={() => void handleCopy(monimeAccountId)} className="hover:text-white transition" aria-label="Copy SLE account ID">
-              {copiedId === monimeAccountId ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-            </button>
-          </div>
-        </div>
-        <Wallet size={32} className="text-slate-700 mr-2 md:mr-6 pointer-events-none" />
-      </div>
-
-      <div className="bg-slate-800 rounded-3xl p-6 text-white flex justify-between items-center shadow-xl border border-slate-700 relative">
-        {usdWallet?.monime_account_id ? (
-          <>
-            <div>
-              <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">USD Reserve</span>
-              <div className="text-3xl font-bold mt-1 text-blue-400">USD {usdWallet?.balanceAvailable === true ? Number(usdWallet.balance).toFixed(2) : 'Unavailable'}</div>
-              <div className="text-[10px] font-mono text-slate-400 mt-2 bg-slate-700 inline-flex items-center gap-2 px-2 py-1 rounded">
-                ID: {usdWallet.monime_account_id}
-                <button onClick={() => void handleCopy(usdWallet.monime_account_id)} className="hover:text-white transition" aria-label="Copy USD account ID">
-                  {copiedId === usdWallet.monime_account_id ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                </button>
-              </div>
-            </div>
-            <Wallet size={32} className="text-slate-600 mr-2 md:mr-6 pointer-events-none" />
-          </>
-        ) : (
-          <div className="w-full flex flex-col items-center justify-center text-center py-1">
-            <button onClick={() => void handleCreateUsdWallet()} disabled={isCreatingUsd} className="bg-slate-700 hover:bg-slate-600 transition p-3 rounded-full mb-2 shadow-inner" aria-label="Create USD wallet">
-              {isCreatingUsd ? <Loader2 size={24} className="animate-spin text-emerald-400" /> : <Plus size={24} className="text-emerald-400" />}
-            </button>
-            <span className="text-sm font-bold text-slate-300">Create USD Wallet</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const walletCards = <WalletCardsView sleWallet={sleWallet} usdWallet={usdWallet}
+    refresh={fetchLiveBalance} refreshing={isRefreshing} createUsd={handleCreateUsdWallet} creatingUsd={isCreatingUsd} />;
 
   const validTransactions = Array.isArray(transactions) ? transactions : [];
-  const displayedTx = txFilter === 'recent' ? validTransactions.slice(0, 5) : validTransactions;
+  const displayedTx = txFilter === 'recent' ? validTransactions.slice(0, 5) :validTransactions;
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
@@ -415,48 +364,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm w-full">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2"><Activity size={20} className="text-blue-600" /> Transactions</h3>
-              <div className="flex bg-slate-100 p-1 rounded-lg">
-                <button onClick={() => setTxFilter('recent')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter === 'recent' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Recent</button>
-                <button onClick={() => setTxFilter('all')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${txFilter === 'all' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>All Time</button>
-              </div>
-            </div>
-
-            {displayedTx.length === 0 ? (
-              <div className="text-center text-slate-500 py-6">No transactions found.</div>
-            ) : (
-              <div className="space-y-3">
-                {displayedTx.map(tx => {
-                  if (!tx) return null;
-                  const isCredit = String(tx.balanceImpact).toUpperCase() === 'CREDIT';
-                  const dateStr = tx.createdAt || tx.created_at || tx.timestamp || tx.date || tx.createdOn;
-                  const isValidDate = dateStr && !isNaN(new Date(dateStr).getTime());
-                  const formattedDate = isValidDate ? new Date(dateStr).toLocaleString() : 'Date pending';
-
-                  return (
-                    <div key={tx.id} onClick={() => setSelectedTx(tx)} className="cursor-pointer flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition group">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-full ${isCredit ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>{isCredit ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}</div>
-                        <div>
-                          <p className="font-bold text-slate-900 text-sm">{tx.description || tx.type || 'Transfer'}</p>
-                          <p className="text-xs text-slate-500 mt-0.5">{formattedDate}</p>
-                        </div>
-                      </div>
-                      <div className="text-right flex items-center gap-4">
-                        <div>
-                          <p className={`font-bold ${isCredit ? 'text-emerald-600' : 'text-slate-900'}`}>{isCredit ? '+' : '-'}{' '}{tx.amount?.currency || 'SLE'}{' '}{((tx.amount?.value || 0) / 100).toFixed(2)}</p>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tx.status}</span>
-                        </div>
-                        <button onClick={() => void handleShareReceipt(tx)} className="text-slate-400 hover:text-blue-600 transition p-2 rounded-full hover:bg-white" title="Copy Receipt"><Share2 size={16} /></button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <TransactionHistory transactions={transactions} onSelect={setSelectedTx} />
         </div>
       )}
 
@@ -508,7 +416,7 @@ function PolicyModal({ onAccept }: { onAccept: () => void }) {
       <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         <div className="bg-slate-900 p-6 text-white shrink-0"><h2 className="text-xl font-bold">MatMove Safety & Compliance Policy</h2><p className="text-xs text-slate-400 mt-1">Sierra Leone Road Safety Authority (SLRSA) Guidelines</p></div>
         <div className="p-6 overflow-y-auto flex-1 text-sm text-slate-600 space-y-4">
-          <p><strong>1. Compliance with SLRSA:</strong> All users must strictly adhere to the traffic rules and regulations set forth by the Sierra Leone Road Safety Authority.</p>
+          <p><strong>1.Compliance with SLRSA:</strong> All users must strictly adhere to the traffic rules and regulations set forth by the Sierra Leone Road Safety Authority.</p>
           <p><strong>2. Liability & Accidents:</strong> MatMove Enterprise acts solely as a technology platform connecting users.</p>
           <p><strong>3. Vehicle Safety:</strong> Drivers must ensure their vehicles are roadworthy, insured, and licensed.</p>
           <p><strong>4. Account Suspension:</strong> Any violation of these safety policies will result in immediate wallet freezing.</p>
