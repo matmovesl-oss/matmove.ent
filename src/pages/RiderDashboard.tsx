@@ -1057,36 +1057,4 @@ function PolicyModal({ onAccept }: { onAccept: () => void }) {
       </div>
     </div>
   );
-}understood, and agree to be bound by this policy.
-            All rights reserved by MatMove Enterprise.
-          </p>
-        </div>
-
-        <div className="p-4 border-t bg-slate-50 shrink-0">
-          <button
-            onClick={onAccept}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl transition shadow-md"
-          >
-            I Accept & Agree
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}understood, and agree to be bound by this policy.
-            All rights reserved by MatMove Enterprise.
-          </p>
-        </div>
-
-        <div className="p-4 border-t bg-slate-50 shrink-0">
-          <button
-            onClick={onAccept}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl transition shadow-md"
-          >
-            I Accept & Agree
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
