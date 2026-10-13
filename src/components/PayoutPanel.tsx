@@ -1,64 +1,47 @@
-import {
-  useEffect,
-  useRef,
-  useState
-} from 'react';
-
+import { useEffect, useRef, useState } from 'react';
 import {
   payoutRequest,
   type PayoutQuote,
   type PayoutRequest,
-  type Withdrawal
+  type Withdrawal,
 } from '@/services/payoutService';
 
-const sle = (minor: number) =>
-  `SLE ${(minor / 100).toFixed(2)}`;
+const sle = (minor: number) => `SLE ${(minor / 100).toFixed(2)}`;
 
 const terminal = (state: string) =>
-  [
-    'completed',
-    'fee_failed',
-    'refunded',
-    'review_required'
-  ].includes(state);
+  ['completed', 'fee_failed', 'refunded', 'review_required'].includes(state);
+
+const canStartAgain = (state: string) =>
+  ['completed', 'fee_failed', 'refunded'].includes(state);
 
 type Saved = {
   request: PayoutRequest;
   withdrawal?: Withdrawal;
 };
 
-export default function PayoutPanel({
-  userId,
-  allowed,
-  onClose,
-  onBalanceChange
-}: {
+type Props = {
   userId: string;
   allowed: boolean;
   onClose: () => void;
   onBalanceChange: () => unknown;
-}) {
-  const storageKey =
-    `matmove-payout:${userId}`;
+};
+
+export default function PayoutPanel({
+  userId,
+  allowed,
+  onClose,
+  onBalanceChange,
+}: Props) {
+  const storageKey = `matmove-payout:${userId}`;
 
   const [amount, setAmount] = useState('');
   const [phone, setPhone] = useState('');
-  const [network, setNetwork] =
-    useState('orange');
-
-  const [quote, setQuote] =
-    useState<PayoutQuote | null>(null);
-
-  const [saved, setSaved] =
-    useState<Saved | null>(null);
-
+  const [network, setNetwork] = useState('orange');
+  const [quote, setQuote] = useState<PayoutQuote | null>(null);
+  const [saved, setSaved] = useState<Saved | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-
-  const [
-    storageAvailable,
-    setStorageAvailable
-  ] = useState(true);
+  const [storageAvailable, setStorageAvailable] = useState(true);
 
   const panel = useRef<HTMLDivElement>(null);
   const inFlight = useRef(false);
@@ -69,30 +52,30 @@ export default function PayoutPanel({
 
     panel.current?.scrollIntoView({
       behavior: 'smooth',
-      block: 'center'
+      block: 'center',
     });
 
     try {
-      const raw =
-        localStorage.getItem(storageKey);
+      const raw = localStorage.getItem(storageKey);
 
       if (raw) {
-        const value =
-          JSON.parse(raw) as Saved;
+        const value = JSON.parse(raw) as Saved;
 
         if (
           value.request?.action === 'submit' &&
-          typeof value.request.idempotencyKey ===
-            'string'
+          typeof value.request.idempotencyKey === 'string'
         ) {
-          setSaved(value);
-          setAmount(value.request.amount);
-          setPhone(
-            value.request.destinationPhone
-          );
-          setNetwork(
-            value.request.networkProvider
-          );
+          if (
+            value.withdrawal &&
+            canStartAgain(value.withdrawal.state)
+          ) {
+            localStorage.removeItem(storageKey);
+          } else {
+            setSaved(value);
+            setAmount(value.request.amount);
+            setPhone(value.request.destinationPhone);
+            setNetwork(value.request.networkProvider);
+          }
         }
       }
     } catch {
@@ -108,10 +91,15 @@ export default function PayoutPanel({
   }, [storageKey]);
 
   function persist(value: Saved) {
-    localStorage.setItem(
-      storageKey,
-      JSON.stringify(value)
-    );
+    // Keep the same request key until the backend confirms a final result.
+    if (
+      value.withdrawal &&
+      canStartAgain(value.withdrawal.state)
+    ) {
+      localStorage.removeItem(storageKey);
+    } else {
+      localStorage.setItem(storageKey, JSON.stringify(value));
+    }
 
     setSaved(value);
   }
@@ -122,9 +110,7 @@ export default function PayoutPanel({
   }
 
   async function preview() {
-    if (inFlight.current || !allowed) {
-      return;
-    }
+    if (inFlight.current || !allowed) return;
 
     inFlight.current = true;
     setBusy(true);
@@ -137,22 +123,26 @@ export default function PayoutPanel({
         currency: 'SLE',
         destinationPhone: phone,
         networkProvider: network,
-        idempotencyKey:
-          crypto.randomUUID()
+        idempotencyKey: crypto.randomUUID(),
       });
 
       if (!result.quote) {
-        throw new Error(
-          'No payout fee quote was returned.'
-        );
+        throw new Error('No payout fee quote was returned.');
       }
 
-      setQuote(result.quote);
+      if (mounted.current) {
+        setQuote(result.quote);
+      }
     } catch (e: any) {
-      setError(e.message);
+      if (mounted.current) {
+        setError(e.message);
+      }
     } finally {
       inFlight.current = false;
-      setBusy(false);
+
+      if (mounted.current) {
+        setBusy(false);
+      }
     }
   }
 
@@ -161,8 +151,7 @@ export default function PayoutPanel({
       value.withdrawal
         ? {
             action: 'status',
-            withdrawalId:
-              value.withdrawal.id
+            withdrawalId: value.withdrawal.id,
           }
         : value.request
     );
@@ -173,9 +162,9 @@ export default function PayoutPanel({
       );
     }
 
-    const next = {
+    const next: Saved = {
       ...value,
-      withdrawal: result.withdrawal
+      withdrawal: result.withdrawal,
     };
 
     if (mounted.current) {
@@ -190,11 +179,7 @@ export default function PayoutPanel({
 
     if (
       !saved &&
-      (
-        !quote?.affordable ||
-        !allowed ||
-        !storageAvailable
-      )
+      (!quote?.affordable || !allowed || !storageAvailable)
     ) {
       return;
     }
@@ -211,15 +196,15 @@ export default function PayoutPanel({
           currency: 'SLE',
           destinationPhone: phone,
           networkProvider: network,
-          acceptedTotalMinor:
-            quote!.totalMinor,
-          idempotencyKey:
-            crypto.randomUUID()
-        }
+          acceptedTotalMinor: quote!.totalMinor,
+          idempotencyKey: crypto.randomUUID(),
+        },
       };
 
-      // Save the request key before sending money.
-      if (!saved) persist(value);
+      // Persist before sending the first money operation.
+      if (!saved) {
+        persist(value);
+      }
 
       await check(value);
     } catch (e: any) {
@@ -237,29 +222,34 @@ export default function PayoutPanel({
     }
   }
 
-  function newWithdrawal() {
-    if (busy) return;
-
-    const state =
-      saved?.withdrawal?.state;
-
+  useEffect(() => {
     if (
-      !state ||
-      ![
-        'completed',
-        'fee_failed',
-        'refunded'
-      ].includes(state)
+      !saved ||
+      busy ||
+      (saved.withdrawal && terminal(saved.withdrawal.state))
     ) {
       return;
     }
 
+    // Resume this same withdrawal, using its existing ID or request key.
+    const timer = window.setTimeout(() => {
+      void submitOrCheck();
+    }, 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [saved, busy]);
+
+  function newWithdrawal() {
+    if (busy) return;
+
+    const state = saved?.withdrawal?.state;
+
+    if (!state || !canStartAgain(state)) return;
+
     try {
       localStorage.removeItem(storageKey);
     } catch {
-      setError(
-        'Could not clear this request.'
-      );
+      setError('Could not clear this request.');
       return;
     }
 
@@ -293,9 +283,8 @@ export default function PayoutPanel({
       </div>
 
       <p className="mt-2 text-sm text-slate-500">
-        Enter the amount the recipient will receive.
-        Monime charges 1% and MatMove charges 0.58%,
-        added on top and rounded to cents.
+        Enter the amount the recipient will receive. Monime charges
+        1% and MatMove charges 0.58%, added on top and rounded to cents.
       </p>
 
       {!saved && (
@@ -329,12 +318,8 @@ export default function PayoutPanel({
               }}
               className="mt-1 w-full rounded-xl border p-3"
             >
-              <option value="orange">
-                Orange Money
-              </option>
-              <option value="afrimoney">
-                AfriMoney
-              </option>
+              <option value="orange">Orange Money</option>
+              <option value="afrimoney">AfriMoney</option>
             </select>
           </label>
 
@@ -355,18 +340,11 @@ export default function PayoutPanel({
           </label>
 
           <button
-            disabled={
-              busy ||
-              !allowed ||
-              !amount ||
-              !phone
-            }
+            disabled={busy || !allowed || !amount || !phone}
             onClick={() => void preview()}
             className="rounded-xl border px-4 py-3 font-bold disabled:opacity-50"
           >
-            {busy
-              ? 'Checking...'
-              : 'Review fees'}
+            {busy ? 'Checking...' : 'Review fees'}
           </button>
         </div>
       )}
@@ -382,16 +360,12 @@ export default function PayoutPanel({
 
           <div className="flex justify-between">
             <dt>Monime fee (1%)</dt>
-            <dd>
-              {sle(breakdown.monimeFeeMinor)}
-            </dd>
+            <dd>{sle(breakdown.monimeFeeMinor)}</dd>
           </div>
 
           <div className="flex justify-between">
             <dt>MatMove fee (0.58%)</dt>
-            <dd>
-              {sle(breakdown.platformFeeMinor)}
-            </dd>
+            <dd>{sle(breakdown.platformFeeMinor)}</dd>
           </div>
 
           <div className="flex justify-between border-t pt-2 font-bold">
@@ -400,17 +374,13 @@ export default function PayoutPanel({
                 ? 'Quoted total wallet debit'
                 : 'Total wallet debit'}
             </dt>
-            <dd>
-              {sle(breakdown.totalMinor)}
-            </dd>
+            <dd>{sle(breakdown.totalMinor)}</dd>
           </div>
 
           {!withdrawal && quote && (
             <div className="flex justify-between">
               <dt>Available balance</dt>
-              <dd>
-                {sle(quote.availableMinor)}
-              </dd>
+              <dd>{sle(quote.availableMinor)}</dd>
             </div>
           )}
 
@@ -424,25 +394,17 @@ export default function PayoutPanel({
           {withdrawal?.actualTotalMinor != null && (
             <div className="flex justify-between font-bold">
               <dt>Confirmed total wallet debit</dt>
-              <dd>
-                {sle(withdrawal.actualTotalMinor)}
-              </dd>
+              <dd>{sle(withdrawal.actualTotalMinor)}</dd>
             </div>
           )}
         </dl>
       )}
 
-      {quote &&
-        !quote.affordable &&
-        !saved && (
-          <p
-            role="alert"
-            className="mt-3 text-red-700"
-          >
-            Insufficient balance for the amount
-            and both fees.
-          </p>
-        )}
+      {quote && !quote.affordable && !saved && (
+        <p role="alert" className="mt-3 text-red-700">
+          Insufficient balance for the amount and both fees.
+        </p>
+      )}
 
       {error && (
         <p
@@ -454,12 +416,9 @@ export default function PayoutPanel({
       )}
 
       {!allowed && !saved && (
-        <p
-          role="alert"
-          className="mt-3 text-amber-800"
-        >
-          Your wallet must be unfrozen and approved
-          where required before withdrawing.
+        <p role="alert" className="mt-3 text-amber-800">
+          Your wallet must be unfrozen and approved where required
+          before withdrawing.
         </p>
       )}
 
@@ -474,39 +433,41 @@ export default function PayoutPanel({
         >
           <p className="font-bold">
             {withdrawal.state === 'completed'
-              ? 'Payout completed'
+              ? 'Transaction completed'
               : withdrawal.state === 'refunded'
-                ? 'Payout not completed; MatMove fee refunded'
-                : withdrawal.state === 'fee_failed'
-                  ? 'Fee transfer failed; no payout sent'
-                  : withdrawal.state === 'review_required'
-                    ? 'Support review required'
-                    : 'Withdrawal processing'}
+              ? 'Payout not completed; MatMove fee refunded'
+              : withdrawal.state === 'fee_failed'
+              ? 'Fee transfer failed; no payout sent'
+              : withdrawal.state === 'review_required'
+              ? 'Support review required'
+              : 'Withdrawal processing — checking automatically'}
           </p>
 
           {withdrawal.state === 'completed' && (
             <p>
-              {sle(withdrawal.amountMinor)} sent to
-              your mobile money number. Total wallet
-              debit: {sle(withdrawal.totalMinor)}.
+              {sle(withdrawal.amountMinor)} sent to your mobile
+              money number. Total wallet debit:{' '}
+              {sle(
+                withdrawal.actualTotalMinor ??
+                  withdrawal.totalMinor
+              )}
+              .
             </p>
           )}
 
           {withdrawal.error && (
-            <p className="mt-2">
-              {withdrawal.error}
-            </p>
+            <p className="mt-2">{withdrawal.error}</p>
           )}
 
-          {withdrawal.actualMonimeFeeMinor !== null &&
+          {withdrawal.actualMonimeFeeMinor != null &&
             withdrawal.actualMonimeFeeMinor !==
               withdrawal.monimeFeeMinor && (
               <p className="mt-2">
                 Monime reported{' '}
-                {sle(withdrawal.actualMonimeFeeMinor)}
-                {' '}in fees instead of the quoted{' '}
-                {sle(withdrawal.monimeFeeMinor)}.
-                Support must reconcile this difference.
+                {sle(withdrawal.actualMonimeFeeMinor)} in fees
+                instead of the quoted{' '}
+                {sle(withdrawal.monimeFeeMinor)}. Support must
+                reconcile this difference.
               </p>
             )}
 
@@ -520,65 +481,48 @@ export default function PayoutPanel({
               className="mt-1 break-all text-xs"
             >
               {receipt.kind}: {receipt.status}
-              {receipt.id
-                ? ` — ${receipt.id}`
-                : ''}
+              {receipt.id ? ` — ${receipt.id}` : ''}
             </p>
           ))}
 
           {withdrawal.state === 'review_required' && (
             <p className="mt-2">
-              Do not submit another withdrawal
-              for this payment.
+              Do not submit another withdrawal for this payment.
             </p>
           )}
         </div>
       )}
 
-      {(
-        !withdrawal ||
-        !terminal(withdrawal.state)
-      ) &&
+      {(!withdrawal || !terminal(withdrawal.state)) &&
         (saved || quote) && (
           <button
             disabled={
               busy ||
-              (
-                !saved &&
-                (
-                  !quote?.affordable ||
+              (!saved &&
+                (!quote?.affordable ||
                   !allowed ||
-                  !storageAvailable
-                )
-              )
+                  !storageAvailable))
             }
-            onClick={() =>
-              void submitOrCheck()
-            }
+            onClick={() => void submitOrCheck()}
             className="mt-4 rounded-xl bg-emerald-600 px-4 py-3 font-bold text-white disabled:opacity-50"
           >
             {busy
               ? 'Processing...'
               : saved
-                ? 'Check status'
-                : `Confirm — debit ${sle(quote!.totalMinor)}`}
+              ? 'Check status'
+              : `Confirm — debit ${sle(quote!.totalMinor)}`}
           </button>
         )}
 
-      {withdrawal &&
-        [
-          'completed',
-          'fee_failed',
-          'refunded'
-        ].includes(withdrawal.state) && (
-          <button
-            disabled={busy}
-            onClick={newWithdrawal}
-            className="mt-4 rounded-xl border px-4 py-3 font-bold"
-          >
-            New withdrawal
-          </button>
-        )}
+      {withdrawal && canStartAgain(withdrawal.state) && (
+        <button
+          disabled={busy}
+          onClick={newWithdrawal}
+          className="mt-4 rounded-xl border px-4 py-3 font-bold"
+        >
+          New withdrawal
+        </button>
+      )}
     </div>
   );
 }
