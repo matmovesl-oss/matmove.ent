@@ -1,3 +1,4 @@
+
 import {
   enrichTransactions,
 } from './transaction-context.js';
@@ -69,10 +70,6 @@ export async function liveWallet(
             tx.financialAccount?.id &&
             tx.financialAccount.id !== account.id
           ) {
-            warnings.push(
-              'A transaction for a different account was excluded.'
-            );
-
             return false;
           }
 

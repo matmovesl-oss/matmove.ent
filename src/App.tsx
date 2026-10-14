@@ -1,4 +1,6 @@
 
+import { SpinGame } from '@/components/SpinGame';
+
 import ActivityAnalytics from '@/components/ActivityAnalytics';
 import MerchantAnalytics from '@/components/MerchantAnalytics';
 
@@ -630,6 +632,7 @@ function AccountSection({
   onLogout,
   onBack,
 }: any) {
+  const [viewingGames, setViewingGames] = useState(false);
   const [
     showDeleteConfirm,
     setShowDeleteConfirm,
@@ -980,6 +983,10 @@ function AccountSection({
           ? true
           : o.status === orderFilter
     );
+
+  if (viewingGames) {
+    return <SpinGame userId={profile.id} onBack={() => setViewingGames(false)} />;
+  }
 
   if (viewingAnalytics && (profile.role === 'rider' || profile.role === 'driver')) {
     return <ActivityAnalytics role={profile.role} onBack={() => setViewingAnalytics(false)} />;
@@ -1363,6 +1370,12 @@ function AccountSection({
       </h1>
 
       <AccountPolicy />
+
+      <button onClick={() => setViewingGames(true)} className="mb-6 w-full rounded-3xl border border-amber-300 bg-gradient-to-r from-purple-950 to-slate-950 p-6 text-left text-white">
+        <h2 className="text-xl font-bold text-amber-300">Games — Spin & Win</h2>
+        <p className="mt-2">SLE 5 · 3 spins · Prizes from SLE 1 to SLE 20</p>
+        <p className="mt-2 text-xs text-slate-300">18+ · Play responsibly · View rules and prize chances</p>
+      </button>
 
       <div className="bg-white border border-slate-200 rounded-3xl p-6 mb-6 flex items-center gap-4">
         <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">

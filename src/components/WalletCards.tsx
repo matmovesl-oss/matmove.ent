@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import {
   Wallet,
@@ -72,7 +73,7 @@ export default function WalletCards({
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))' }}>
         {(['SLE', 'USD'] as const).map(currency => {
           const wallet =
             currency === 'SLE'
