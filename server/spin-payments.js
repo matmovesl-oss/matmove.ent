@@ -1,7 +1,7 @@
 
 import { randomInt, timingSafeEqual } from 'node:crypto';
 import { HttpError, assertAllowed, keyFor, verifiedAccount, monime, dbClient } from './wallet-security.js';
-import { validateSpinSectors, spinOdds, SPIN_ENTRY_MINOR, SPIN_COUNT } from '../shared/spin-rules.js';
+import { validateSpinSectors, validateSpinTiers, spinOdds, SPIN_TIER_AMOUNTS, sampleSpinSector, spinProfileEligibility, SPIN_COUNT } from '../shared/spin-rules.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const terminal = new Set(['completed', 'failed', 'review_required']);
@@ -100,7 +100,7 @@ export async function spinSnapshot(db, round) {
   return {
     id: round.id, state: round.state, configId: round.config_id,
     sectors: round.sectors, odds: spinOdds(round.sectors), luckyDigit: round.lucky_digit,
-    entryMinor: SPIN_ENTRY_MINOR, spinCount: SPIN_COUNT,
+    entryMinor: Number(round.entry_minor), spinCount: SPIN_COUNT,
     spinsUsed: legs.filter(leg => leg.kind === 'win').length,
     paidMinor: legs.filter(leg => leg.kind === 'win' && leg.status === 'completed').reduce((sum, leg) => sum + Number(leg.amount_minor), 0),
     error: round.error, createdAt: round.created_at,
@@ -126,18 +126,26 @@ export async function spinAction(req, res, { provider = monime, verifyAccount = 
     return respond(db,res,await reconcileSpinRound(db,canceled.roundId,provider));
   }
   if (action === 'spin_config') {
-    const [config, access, rounds] = await Promise.all([
+    const [config, rounds] = await Promise.all([
       db.from('matmove_spin_configs').select('*').order('id', { ascending: false }).limit(1),
-      db.from('matmove_spin_access').select('*').eq('user_id', user.id).maybeSingle(),
       db.from('matmove_spin_rounds').select('*').eq('user_id', user.id).in('state', ['entry_pending','active','win_pending','review_required']).maybeSingle(),
     ]);
-    if (config.error || access.error || rounds.error || !config.data?.[0]) throw new HttpError(503, 'Game setup unavailable.');
+    if (config.error || rounds.error || !config.data?.[0]) throw new HttpError(503, 'Game setup unavailable.');
     const c = config.data[0];
-    const sectors = validateSpinSectors(c.sectors);
+    if (!c.tiers) throw new HttpError(503, 'Apply SPIN_TIERS_SETUP.sql before using the new price bundles.');
+    const tiers = validateSpinTiers(c.tiers).map(t => ({...t, odds:spinOdds(t.sectors)}));
+    const eligibility = spinProfileEligibility(profile, wallets);
+    let availableMinor = null;
+    let balanceError = null;
+    const candidates = wallets.filter(w => w.currency === 'SLE');
+    if (candidates.length === 1) {
+      try {availableMinor=balance(await verifyAccount(db,candidates[0]));}
+      catch {balanceError='Available SLE balance could not be verified. Refresh before paying.';}
+    } else balanceError='One verified SLE wallet is required.';
     return res.status(200).json({
-      config: { id: c.id, enabled: c.enabled && process.env.MATMOVE_SPIN_ENABLED === 'true', sectors, odds: spinOdds(sectors), entryMinor: SPIN_ENTRY_MINOR, spinCount: SPIN_COUNT },
-      access: { approved: !!(access.data?.approved && access.data?.verified_adult), dailyLimitMinor: Number(access.data?.daily_limit_minor || 0) },
-      round: rounds.data ? await spinSnapshot(db, rounds.data) : null,
+      config:{id:c.id,enabled:c.enabled && process.env.MATMOVE_SPIN_ENABLED==='true',tiers},
+      eligibility,availableMinor,balanceError,
+      round:rounds.data ? await spinSnapshot(db,rounds.data) : null,
     });
   }
   if (['spin_status', 'spin_draw'].includes(action)) {
@@ -148,32 +156,36 @@ export async function spinAction(req, res, { provider = monime, verifyAccount = 
       const index = req.body.spinIndex;
       if (!Number.isInteger(index) || index < 1 || index > SPIN_COUNT) throw new HttpError(400, 'Invalid spin number.');
       const sectors = validateSpinSectors(round.sectors);
-      // CSPRNG samples each equal-sized sector; client choice never sets the outcome.
-      const sector = draw(sectors.length);
+      // CSPRNG uses the published tier probabilities stored in this paid round.
+      const sector = sampleSpinSector(sectors, draw);
       await rpc(db, 'matmove_spin_draw', { p_id: id, p_user: user.id, p_index: index, p_sector: sector });
     }
     round = await reconcileSpinRound(db, id, provider);
     return respond(db, res, round);
   }
   if (action !== 'spin_enter') throw new HttpError(400, 'Invalid game action.');
+  const selectedTier = req.body.tierMinor === undefined ? 500 : req.body.tierMinor;
+  if (!SPIN_TIER_AMOUNTS.includes(selectedTier)) throw new HttpError(400, 'Choose SLE 5, 10 or 20.');
   const key = keyFor(user.id, 'spin-entry', req.body.requestKey);
   const existing = await db.from('matmove_spin_rounds').select('*').eq('request_key', key).maybeSingle();
   if (existing.error) throw new HttpError(503, 'Game storage unavailable.');
   if (existing.data) {
-    if (existing.data.user_id !== user.id || existing.data.config_id !== req.body.configId || existing.data.lucky_digit !== req.body.luckyDigit) {
+    if (existing.data.user_id !== user.id || existing.data.config_id !== req.body.configId || existing.data.lucky_digit !== req.body.luckyDigit || Number(existing.data.entry_minor) !== selectedTier) {
       throw new HttpError(409, 'Game entry request changed.');
     }
     return respond(db, res, await reconcileSpinRound(db, existing.data.id, provider));
   }
   if (process.env.MATMOVE_SPIN_ENABLED !== 'true') throw new HttpError(409, 'New game entries are paused.');
-  if (req.body.acceptRules !== true || req.body.acceptedEntryMinor !== SPIN_ENTRY_MINOR || !Number.isSafeInteger(req.body.configId)) {
+  if (req.body.acceptRules !== true || req.body.acceptedEntryMinor !== selectedTier || !Number.isSafeInteger(req.body.configId)) {
     throw new HttpError(409, 'Review and accept the current entry fee and prize chances.');
   }
+  const eligibility = spinProfileEligibility(profile, wallets);
+  if (!eligibility.eligible) throw new HttpError(403, eligibility.reason);
   assertAllowed(profile, wallets, 'payout');
   const candidates = wallets.filter(wallet => wallet.currency === 'SLE');
   if (candidates.length !== 1) throw new HttpError(409, 'One verified SLE wallet is required.');
   const account = await verifyAccount(db, candidates[0]);
-  if (balance(account) < SPIN_ENTRY_MINOR) throw new HttpError(409, 'You need SLE 5 available to enter.');
+  if (balance(account) < selectedTier) throw new HttpError(409, `You need SLE ${(selectedTier/100).toFixed(2)} available for this bundle.`);
   const spinId = process.env.MONIME_SPIN_ACCOUNT_ID;
   if (!/^fac-[A-Za-z0-9_-]+$/.test(spinId || '') || [account.id, process.env.MONIME_ESCROW_ACCOUNT_ID, process.env.MONIME_PLATFORM_FEE_ACCOUNT_ID].includes(spinId)) {
     throw new HttpError(503, 'Configure a separate SLE Spin Account.');
@@ -183,10 +195,10 @@ export async function spinAction(req, res, { provider = monime, verifyAccount = 
   const observed = new Date().toISOString();
   const treasury = await provider(`financial-accounts/${encodeURIComponent(spinId)}?withBalance=true`);
   if (treasury.id !== spinId) throw new HttpError(503, 'Spin Account could not be verified.');
-  const round = await rpc(db, 'matmove_spin_prepare', {
+  const round = await rpc(db, 'matmove_spin_prepare_tier', {
     p_key: key, p_user: user.id, p_wallet: candidates[0].id, p_config: req.body.configId,
     p_digit: req.body.luckyDigit, p_source: account.id, p_spin: spinId,
-    p_balance: balance(treasury), p_observed: observed,
+    p_balance: balance(treasury), p_observed: observed, p_tier: selectedTier,
   });
   return respond(db, res, await reconcileSpinRound(db, round.id, provider));
 }
