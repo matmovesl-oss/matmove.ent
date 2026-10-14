@@ -1,5 +1,6 @@
 
 
+
 import { SpinGame } from '@/components/SpinGame';
 
 import ActivityAnalytics from '@/components/ActivityAnalytics';
@@ -1374,7 +1375,7 @@ function AccountSection({
 
       <button onClick={() => setViewingGames(true)} className="mb-6 w-full rounded-3xl border border-amber-300 bg-gradient-to-r from-purple-950 to-slate-950 p-6 text-left text-white">
         <h2 className="text-xl font-bold text-amber-300">Games — Spin & Win</h2>
-        <p className="mt-2">SLE 5 / 10 / 20 · 3 spins per bundle · Win up to SLE 50</p>
+        <p className="mt-2">Choose a fee · Six segments · One possible free bonus</p>
         <p className="mt-2 text-xs text-slate-300">18+ · Play responsibly · View rules and prize chances</p>
       </button>
 
