@@ -24,7 +24,7 @@ async function gameRequest(body:Record<string,unknown>) {
   if (!response.ok||!data) throw new Error(data?.error||'Game unavailable. Check status before another payment.');
   return data;
 }
-function Wheel({sectors,rotation}:{sectors:DisplaySector[];rotation:number}) {
+function Wheel({sectors,rotation,canSpin,onSpin,buttonLabel}:{sectors:DisplaySector[];rotation:number;canSpin:boolean;onSpin:()=>void;buttonLabel:string}) {
   const clean=sectors[0]?.kind?sectors.map(s=>({...s,weight:1})):validateSpinSectors(sectors),total=clean.reduce((n,s)=>n+s.weight,0);
   let cursor=0;
   const gradient=clean.map(s=>{const start=cursor;cursor+=s.weight/total*360;return `${color(s.prizeMinor)} ${start}deg ${cursor}deg`;}).join(',');
@@ -32,8 +32,8 @@ function Wheel({sectors,rotation}:{sectors:DisplaySector[];rotation:number}) {
     <div aria-hidden="true" className="absolute -top-4 left-1/2 z-10 -translate-x-1/2 text-4xl text-amber-300">▼</div>
     <div aria-hidden="true" className="relative aspect-square rounded-full border-[10px] border-amber-300 shadow-[0_0_45px_rgba(251,191,36,0.3)]" style={{background:`conic-gradient(${gradient})`,transform:`rotate(${rotation}deg)`,transition:'transform 3.6s cubic-bezier(.12,.7,.16,1)'}}>
       {clean.map((s,i)=>{const degrees=center(clean,i),angle=degrees*Math.PI/180;if(s.weight/total*360<10)return null;return <span key={s.digit} className="absolute font-bold text-white" style={{left:`${50+40*Math.sin(angle)}%`,top:`${50-40*Math.cos(angle)}%`,fontSize:'11px',transform:`translate(-50%,-50%) rotate(${degrees}deg)`}}>{label(s)}</span>;})}
-      <div className="absolute inset-[36%] flex items-center justify-center rounded-full border-4 border-amber-300 bg-slate-950 text-center text-sm font-black text-amber-300">MatMove<br/>SPIN</div>
     </div>
+    <button type="button" disabled={!canSpin} onClick={onSpin} aria-label={buttonLabel} className="absolute inset-[36%] flex flex-col items-center justify-center rounded-full border-4 border-amber-300 bg-slate-950 text-center text-sm font-black text-amber-300 shadow-lg focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-70"><span>MatMove</span><span>{buttonLabel}</span></button>
   </div>;
 }
 export function SpinGame({userId,onBack}:{userId:string;onBack:()=>void}) {
@@ -43,12 +43,14 @@ export function SpinGame({userId,onBack}:{userId:string;onBack:()=>void}) {
   const [available,setAvailable]=useState<number|null>(null);
   const [balanceError,setBalanceError]=useState('');
   const [tier,setTier]=useState(500);
-  const [digit,setDigit]=useState('0');
   const [accepted,setAccepted]=useState(false);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
   const [rotation,setRotation]=useState(0);
   const [animation,setAnimation]=useState(false);
+  const [resultNotice,setResultNotice]=useState<{title:string;message:string}|null>(null);
+  const resultDialog=useRef<HTMLDialogElement|null>(null);
+  const shownResult=useRef('');
   const draft=useRef<Draft|null>(null);
   const mutex=useRef(false);
   const configVersion=useRef<number|null>(null);
@@ -98,33 +100,48 @@ export function SpinGame({userId,onBack}:{userId:string;onBack:()=>void}) {
   },[round,perform]);
   function enter(){
     if(!config||!accepted||draft.current||mutex.current)return;
-    const entry:Draft={requestKey:crypto.randomUUID(),configId:config.id,luckyDigit:digit,acceptedEntryMinor:tier,tierMinor:tier,acceptRules:true};
+    const entry:Draft={requestKey:crypto.randomUUID(),configId:config.id,luckyDigit:selected?.sectors[0]?.digit||'0',acceptedEntryMinor:tier,tierMinor:tier,acceptRules:true};
     try{localStorage.setItem(storageKey,JSON.stringify(entry));draft.current=entry;}
     catch{setError('Allow browser storage before paying so this entry can be recovered.');return;}
     void perform({action:'spin_enter',...entry});
   }
   const selected=config?.tiers.find(t=>t.entryMinor===tier);
   const sectors=round?.sectors||selected?.sectors||[];
-  useEffect(()=>{if(!round&&!draft.current&&selected)setDigit(old=>selected.sectors.some(s=>s.digit===old)?old:selected.sectors[0].digit);},[selected,round]);
   const affordable=available!==null&&available>=tier;
   const six=(round?.mode||config?.mode)===SIX_MODE;
   const topPrize=sectors.length?Math.max(...sectors.map(s=>s.prizeMinor)):5000;
   const spins=round?.receipts.filter(r=>r.index>0)||[];
   const latest=spins[spins.length-1];
   const finished=round&&['completed','failed'].includes(round.state);
+  useEffect(()=>{
+    if(!round||!latest||latest.status!=='completed'||animation)return;
+    const key=`${round.id}:${latest.index}`;
+    if(shownResult.current===key)return;
+    shownResult.current=key;
+    if(latest.kind==='again')setResultNotice({title:'One free final spin!',message:'You earned one extra spin without another payment. Close this message and tap the wheel to use it.'});
+    else if(latest.kind==='lose')setResultNotice({title:'Better luck next time',message:'This game has finished with no cash prize. You can choose a fee and start a new game.'});
+    else setResultNotice({title:`You won ${money(latest.amountMinor)}!`,message:'The full prize has been credited to your wallet. No MatMove winnings fee was deducted.'});
+  },[round,latest,animation]);
+  useEffect(()=>{if(resultNotice&&resultDialog.current&&!resultDialog.current.open)resultDialog.current.showModal();},[resultNotice]);
+  const canSpin=round?.state==='active'&&!busy&&!animation;
+  const spinNow=()=>{if(round&&canSpin)void perform({action:'spin_draw',roundId:round.id,spinIndex:round.spinsUsed+1},true);};
+  const spinLabel=animation?'Spinning…':busy?'Checking…':round?.state==='active'?(six&&round.spinsUsed===1?'FREE SPIN':'SPIN'):round?.state==='completed'?'FINISHED':round?'WAIT':'PAY FIRST';
   const odds=sectors.length&&!six?spinOdds(sectors):[];
   return <section className="mx-auto max-w-3xl space-y-5 p-4 sm:p-6">
+    <dialog ref={resultDialog} onClose={()=>setResultNotice(null)} aria-labelledby="spin-result-title" aria-describedby="spin-result-message" className="w-[calc(100%-2rem)] max-w-md rounded-3xl border-2 border-amber-400 bg-slate-950 p-6 text-center text-white shadow-2xl backdrop:bg-slate-950/70">
+      {resultNotice&&<><p className="text-sm font-bold uppercase tracking-widest text-amber-300">MatMove Games</p><h2 id="spin-result-title" className="mt-4 text-3xl font-black">{resultNotice.title}</h2><p id="spin-result-message" className="mt-4 text-slate-200">{resultNotice.message}</p><button autoFocus type="button" onClick={()=>resultDialog.current?.close()} className="mt-6 w-full rounded-xl bg-amber-300 p-3 font-bold text-slate-950">Continue</button></>}
+    </dialog>
     <button onClick={onBack} className="font-semibold text-slate-600">← Account</button>
     <div className="overflow-hidden rounded-3xl border border-amber-400 bg-gradient-to-b from-slate-950 via-purple-950 to-slate-950 p-6 text-white">
       <p className="text-sm font-bold uppercase tracking-widest text-amber-300">MatMove Games</p><h1 className="mt-2 text-3xl font-black">Spin & Win</h1>
       <p className="mt-3 text-slate-200">{six?'Choose a fee for one spin, with at most one free bonus spin.':'Your purchased legacy game includes three spins.'} Win up to {money(topPrize)}.</p>
-      {sectors.length>0&&<Wheel sectors={sectors} rotation={rotation}/>}
+      {sectors.length>0&&<Wheel sectors={sectors} rotation={rotation} canSpin={!!canSpin} onSpin={spinNow} buttonLabel={spinLabel}/>}
       <p className="text-center text-lg font-bold" aria-live="polite">{animation?'Wheel spinning…':latest?(latest.kind==='again'?'You earned one free final spin.':latest.kind==='lose'?'Better luck next time — game finished.':`${money(latest.amountMinor)} — ${latest.status==='completed'?'credited to your wallet':'payment '+latest.status}`):six?'Six equal segments. One possible bonus.':'Three spins. Published prize chances.'}</p>
       {error&&<p role="alert" className="mt-4 rounded-xl bg-red-950 p-3 text-red-200">{error}</p>}
       {round?.error&&<p role="alert" className="mt-4 rounded-xl bg-amber-950 p-3 text-amber-200">{round.error} Your receipt is retained. Contact support with game ID {round.id}.</p>}
       {round?<div className="mt-5 space-y-3 border-t border-white/20 pt-5">
         <p>{money(round.entryMinor)} bundle · {round.spinsUsed}/{six?'2 maximum':3} spins used · Total credited: {money(round.paidMinor)}</p>
-        {round.state==='active'&&<button disabled={busy||animation} onClick={()=>void perform({action:'spin_draw',roundId:round.id,spinIndex:round.spinsUsed+1},true)} className="w-full rounded-xl bg-amber-300 p-4 font-black text-slate-950 disabled:opacity-50">{six?(round.spinsUsed===0?'Spin now':'Use your one free final spin'):`Spin ${round.spinsUsed+1} of 3`}</button>}
+        {round.state==='active'&&<button disabled={busy||animation} onClick={spinNow} className="w-full rounded-xl bg-amber-300 p-4 font-black text-slate-950 disabled:opacity-50">{six?(round.spinsUsed===0?'Spin now':'Use your one free final spin'):`Spin ${round.spinsUsed+1} of 3`}</button>}
         {['entry_pending','win_pending'].includes(round.state)&&<p role="status">Payment processing. Checking the receipt automatically…</p>}
         <button disabled={busy} onClick={()=>void perform({action:'spin_status',roundId:round.id})} className="rounded-xl border border-white/30 px-4 py-2">Check status</button>
         {finished&&<button disabled={busy||animation} onClick={()=>{setRound(null);setAccepted(false);void load().catch(e=>setError(e.message));}} className="ml-3 rounded-xl bg-white px-4 py-2 font-bold text-slate-950">{round.state==='completed'?'Round completed — new game':'Entry failed — review new game'}</button>}
@@ -133,8 +150,6 @@ export function SpinGame({userId,onBack}:{userId:string;onBack:()=>void}) {
         <p>Available SLE balance: {available===null?'Unavailable':money(available)}</p>
         {balanceError&&<p role="alert" className="text-amber-200">{balanceError}</p>}
         {available!==null&&!affordable&&<p>You need {money(tier)} available for this bundle.</p>}
-        <label className="block">Choose your lucky number<select value={digit} disabled={!!draft.current} onChange={e=>setDigit(e.target.value)} className="mt-2 w-full rounded-xl bg-slate-900 p-3 text-white">{sectors.map(s=><option key={s.digit} value={s.digit}>{s.digit}: {label(s)}</option>)}</select></label>
-        <p className="text-sm text-slate-300">Your chosen number is a personal marker. It does not change the prize chances. The selected bundle determines the published odds, and each spin pays the prize where the wheel lands.</p>
         {!config.enabled&&<p>New entries are paused.</p>}{!eligibility.eligible&&<p>{eligibility.reason}</p>}
         <p className="text-sm text-slate-300">No separate game-admin approval is needed. Your profile must meet the adult identity requirements and your wallet must be unfrozen.</p>
         <label className="flex gap-3 text-sm"><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)}/>I am 18 or older and have reviewed the {money(tier)} fee, displayed game rules and prize chances below.</label>
