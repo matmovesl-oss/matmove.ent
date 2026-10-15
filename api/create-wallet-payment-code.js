@@ -1,4 +1,5 @@
 
+
 import {
   protectedWallet,
   monime,
@@ -8,8 +9,15 @@ import {
 import { topupQuote } from '../server/topup-fees.js';
 
 import {
-  publicPaymentCode
+  publicPaymentCode, topupSettlement, encodeTopupQuote
 } from '../server/payment-code.js';
+
+async function sendPaymentCode(res,code,context,provider) {
+  const result=publicPaymentCode(code,context);
+  let settlement=null;
+  if(result.confirmed){try{settlement=await topupSettlement(code,provider);}catch{/* Status remains completed; wallet refresh uses the live provider balance. */}}
+  return res.status(200).json({paymentCode:{...result,settlement}});
+}
 
 export async function createPaymentCodeHandler(req, res, {provider=monime}={}) {
   const context = req.matmove;
@@ -43,7 +51,7 @@ export async function createPaymentCodeHandler(req, res, {provider=monime}={}) {
       metadata: {
         matmoveUserId: user.id,
         purpose: 'wallet_topup',
-        ...(quote.netMode?{matmoveTopupQuote:JSON.stringify(quote)}:{})
+        ...(quote.netMode?{matmoveTopupQuote:encodeTopupQuote(quote)}:{})
       }
     })
   });
@@ -58,9 +66,7 @@ export async function createPaymentCodeHandler(req, res, {provider=monime}={}) {
     );
   }
 
-  return res.status(200).json({
-    paymentCode: publicPaymentCode(code, context)
-  });
+  return sendPaymentCode(res,code,context,provider);
 }
 
 export async function getPaymentCodeHandler(req, res, {provider=monime}={}) {
@@ -87,9 +93,7 @@ export async function getPaymentCodeHandler(req, res, {provider=monime}={}) {
     );
   }
 
-  return res.status(200).json({
-    paymentCode: publicPaymentCode(code, req.matmove)
-  });
+  return sendPaymentCode(res,code,req.matmove,provider);
 }
 
 export async function quotePaymentCodeHandler(req,res) {return res.status(200).json({quote:topupQuote(req.matmove.minor)});}
