@@ -1,18 +1,20 @@
 
 
 
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { spinOdds, spinSectorCenter, validateSpinSectors, type SpinSector } from '../../shared/spin-rules.js';
 
 import { SIX_MODE, sixLabel, type SixSector } from '../../shared/six-spin-rules.js';
+import { BUNDLE_MODE } from '../../shared/bundle-spin-rules.js';
 type DisplaySector=SpinSector & {kind?:'cash'|'again'|'lose'};
-const center=(sectors:DisplaySector[],index:number)=>sectors[0]?.kind?(index+0.5)*60:spinSectorCenter(sectors,index);
+const center=(sectors:DisplaySector[],index:number)=>sectors[0]?.kind?(index+0.5)*360/sectors.length:spinSectorCenter(sectors,index);
 const label=(s:DisplaySector)=>s.kind?sixLabel(s as SixSector):money(s.prizeMinor);
 
 type Receipt = {kind?:string;index:number;sectorIndex:number|null;digit:string|null;amountMinor:number;providerId:string|null;status:string;error:string|null};
-type Round = {id:string;mode?:string;spinCount:number;state:string;sectors:DisplaySector[];entryMinor:number;luckyDigit:string;spinsUsed:number;paidMinor:number;receipts:Receipt[];error:string|null};
-type Config = {id:number;mode?:string;enabled:boolean;tiers:Array<{entryMinor:number;sectors:DisplaySector[]}>};
+type Round = {id:string;mode?:string;spinCount:number;bonusPending?:boolean;state:string;sectors:DisplaySector[];entryMinor:number;luckyDigit:string;spinsUsed:number;paidMinor:number;receipts:Receipt[];error:string|null};
+type Config = {id:number;mode?:string;enabled:boolean;tiers:Array<{entryMinor:number;paidSpins?:number;sectors:DisplaySector[]}>};
 type Draft = {requestKey:string;configId:number;luckyDigit:string;acceptedEntryMinor:number;tierMinor?:number;acceptRules:true};
 const money = (minor:number) => `SLE ${(minor/100).toFixed(2)}`;
 const color=(prize:number)=>prize===5000?'#f59e0b':`hsl(${(prize/100*39)%360} 65% 35%)`;
@@ -108,7 +110,11 @@ export function SpinGame({userId,onBack}:{userId:string;onBack:()=>void}) {
   const selected=config?.tiers.find(t=>t.entryMinor===tier);
   const sectors=round?.sectors||selected?.sectors||[];
   const affordable=available!==null&&available>=tier;
+  const bundle=(round?.mode||config?.mode)===BUNDLE_MODE;
   const six=(round?.mode||config?.mode)===SIX_MODE;
+  const paidSpins=round?.spinCount||selected?.paidSpins||1;
+  const bonusPending=!!round?.bonusPending;
+  const hasSpecial=sectors.some(s=>s.kind==='again');
   const topPrize=sectors.length?Math.max(...sectors.map(s=>s.prizeMinor)):5000;
   const spins=round?.receipts.filter(r=>r.index>0)||[];
   const latest=spins[spins.length-1];
@@ -119,14 +125,14 @@ export function SpinGame({userId,onBack}:{userId:string;onBack:()=>void}) {
     if(shownResult.current===key)return;
     shownResult.current=key;
     if(latest.kind==='again')setResultNotice({title:'One free final spin!',message:'You earned one extra spin without another payment. Close this message and tap the wheel to use it.'});
-    else if(latest.kind==='lose')setResultNotice({title:'Better luck next time',message:'This game has finished with no cash prize. You can choose a fee and start a new game.'});
+    else if(latest.kind==='lose')setResultNotice({title:'Better luck next time',message:round.state==='completed'?'No prize on this spin. This game is complete. A new game requires a new payment.':'No prize on this spin. Your remaining paid spin is still available.'});
     else setResultNotice({title:`You won ${money(latest.amountMinor)}!`,message:'The full prize has been credited to your wallet. No MatMove winnings fee was deducted.'});
   },[round,latest,animation]);
   useEffect(()=>{if(resultNotice&&resultDialog.current&&!resultDialog.current.open)resultDialog.current.showModal();},[resultNotice]);
   const canSpin=round?.state==='active'&&!busy&&!animation;
   const spinNow=()=>{if(round&&canSpin)void perform({action:'spin_draw',roundId:round.id,spinIndex:round.spinsUsed+1},true);};
-  const spinLabel=animation?'Spinning…':busy?'Checking…':round?.state==='active'?(six&&round.spinsUsed===1?'FREE SPIN':'SPIN'):round?.state==='completed'?'FINISHED':round?'WAIT':'PAY FIRST';
-  const odds=sectors.length&&!six?spinOdds(sectors):[];
+  const spinLabel=animation?'Spinning…':busy?'Checking…':round?.state==='active'?((bonusPending||(six&&round.spinsUsed===1))?'FREE SPIN':'SPIN'):round?.state==='completed'?'FINISHED':round?'WAIT':'PAY FIRST';
+  const odds=sectors.length&&!six&&!bundle?spinOdds(sectors):[];
   return <section className="mx-auto max-w-3xl space-y-5 p-4 sm:p-6">
     <dialog ref={resultDialog} onClose={()=>setResultNotice(null)} aria-labelledby="spin-result-title" aria-describedby="spin-result-message" className="w-[calc(100%-2rem)] max-w-md rounded-3xl border-2 border-amber-400 bg-slate-950 p-6 text-center text-white shadow-2xl backdrop:bg-slate-950/70">
       {resultNotice&&<><p className="text-sm font-bold uppercase tracking-widest text-amber-300">MatMove Games</p><h2 id="spin-result-title" className="mt-4 text-3xl font-black">{resultNotice.title}</h2><p id="spin-result-message" className="mt-4 text-slate-200">{resultNotice.message}</p><button autoFocus type="button" onClick={()=>resultDialog.current?.close()} className="mt-6 w-full rounded-xl bg-amber-300 p-3 font-bold text-slate-950">Continue</button></>}
@@ -134,27 +140,34 @@ export function SpinGame({userId,onBack}:{userId:string;onBack:()=>void}) {
     <button onClick={onBack} className="font-semibold text-slate-600">← Account</button>
     <div className="overflow-hidden rounded-3xl border border-amber-400 bg-gradient-to-b from-slate-950 via-purple-950 to-slate-950 p-6 text-white">
       <p className="text-sm font-bold uppercase tracking-widest text-amber-300">MatMove Games</p><h1 className="mt-2 text-3xl font-black">Spin & Win</h1>
-      <p className="mt-3 text-slate-200">{six?'Choose a fee for one spin, with at most one free bonus spin.':'Your purchased legacy game includes three spins.'} Win up to {money(topPrize)}.</p>
+      <p className="mt-3 text-slate-200">{bundle?`This package includes ${paidSpins} paid spin${paidSpins===1?'':'s'}.${hasSpecial?' One possible free final spin.':''}`:six?'Choose a fee for one spin, with at most one free bonus spin.':'Your purchased legacy game includes three spins.'} Win up to {money(topPrize)}.</p>
       {sectors.length>0&&<Wheel sectors={sectors} rotation={rotation} canSpin={!!canSpin} onSpin={spinNow} buttonLabel={spinLabel}/>}
-      <p className="text-center text-lg font-bold" aria-live="polite">{animation?'Wheel spinning…':latest?(latest.kind==='again'?'You earned one free final spin.':latest.kind==='lose'?'Better luck next time — game finished.':`${money(latest.amountMinor)} — ${latest.status==='completed'?'credited to your wallet':'payment '+latest.status}`):six?'Six equal segments. One possible bonus.':'Three spins. Published prize chances.'}</p>
+      <p className="text-center text-lg font-bold" aria-live="polite">{animation?'Wheel spinning…':latest?(latest.kind==='again'?'You earned one free final spin.':latest.kind==='lose'?(round?.state==='completed'?'Better luck next time — game finished.':'No prize this spin — continue your paid game.'):`${money(latest.amountMinor)} — ${latest.status==='completed'?'credited to your wallet':'payment '+latest.status}`):bundle?`${sectors.length} equal segments. Published prize chances.`:six?'Six equal segments. One possible bonus.':'Three spins. Published prize chances.'}</p>
       {error&&<p role="alert" className="mt-4 rounded-xl bg-red-950 p-3 text-red-200">{error}</p>}
       {round?.error&&<p role="alert" className="mt-4 rounded-xl bg-amber-950 p-3 text-amber-200">{round.error} Your receipt is retained. Contact support with game ID {round.id}.</p>}
       {round?<div className="mt-5 space-y-3 border-t border-white/20 pt-5">
-        <p>{money(round.entryMinor)} bundle · {round.spinsUsed}/{six?'2 maximum':3} spins used · Total credited: {money(round.paidMinor)}</p>
-        {round.state==='active'&&<button disabled={busy||animation} onClick={spinNow} className="w-full rounded-xl bg-amber-300 p-4 font-black text-slate-950 disabled:opacity-50">{six?(round.spinsUsed===0?'Spin now':'Use your one free final spin'):`Spin ${round.spinsUsed+1} of 3`}</button>}
+        <p>{money(round.entryMinor)} bundle · {bundle?`${Math.min(round.spinsUsed,round.spinCount)}/${round.spinCount} paid spins used${round.spinsUsed>round.spinCount?' · free final spin used':''}`:`${round.spinsUsed}/${six?'2 maximum':3} spins used`} · Total credited: {money(round.paidMinor)}</p>
+        {round.state==='active'&&<button disabled={busy||animation} onClick={spinNow} className="w-full rounded-xl bg-amber-300 p-4 font-black text-slate-950 disabled:opacity-50">{bundle?(bonusPending?'Use your one free final spin':`Spin ${round.spinsUsed+1} of ${round.spinCount}`):six?(round.spinsUsed===0?'Spin now':'Use your one free final spin'):`Spin ${round.spinsUsed+1} of 3`}</button>}
         {['entry_pending','win_pending'].includes(round.state)&&<p role="status">Payment processing. Checking the receipt automatically…</p>}
         <button disabled={busy} onClick={()=>void perform({action:'spin_status',roundId:round.id})} className="rounded-xl border border-white/30 px-4 py-2">Check status</button>
         {finished&&<button disabled={busy||animation} onClick={()=>{setRound(null);setAccepted(false);void load().catch(e=>setError(e.message));}} className="ml-3 rounded-xl bg-white px-4 py-2 font-bold text-slate-950">{round.state==='completed'?'Round completed — new game':'Entry failed — review new game'}</button>}
       </div>:config?<div className="mt-5 space-y-3 border-t border-white/20 pt-5">
-        <div className="grid grid-cols-3 gap-3">{config.tiers.map(t=>{const jackpot=six?null:spinOdds(t.sectors).find(o=>o.prizeMinor===5000);return <button key={t.entryMinor} disabled={busy||!!draft.current} onClick={()=>{setTier(t.entryMinor);setAccepted(false);}} aria-pressed={tier===t.entryMinor} className={`rounded-xl border p-3 text-center ${tier===t.entryMinor?'border-amber-300 bg-amber-300 text-slate-950':'border-white/30 bg-slate-900 text-white'}`}><b>{money(t.entryMinor)}</b><p className="mt-1 text-xs">{six?"1 spin + possible bonus":"3 spins"}</p>{!six&&<p className="mt-1 text-xs">SLE 50: {((jackpot?.probability||0)*100).toFixed(4)}% per spin</p>}</button>;})}</div>
+        <div className="grid grid-cols-3 gap-3">{config.tiers.map(t=>{const jackpot=six||bundle?null:spinOdds(t.sectors).find(o=>o.prizeMinor===5000);return <button key={t.entryMinor} disabled={busy||!!draft.current} onClick={()=>{setTier(t.entryMinor);setAccepted(false);}} aria-pressed={tier===t.entryMinor} className={`rounded-xl border p-3 text-center ${tier===t.entryMinor?'border-amber-300 bg-amber-300 text-slate-950':'border-white/30 bg-slate-900 text-white'}`}><b>{money(t.entryMinor)}</b><p className="mt-1 text-xs">{bundle?`${t.paidSpins} paid spin${t.paidSpins===1?'':'s'}`:six?"1 spin + possible bonus":"3 spins"}</p>{!six&&!bundle&&<p className="mt-1 text-xs">SLE 50: {((jackpot?.probability||0)*100).toFixed(4)}% per spin</p>}</button>;})}</div>
         <p>Available SLE balance: {available===null?'Unavailable':money(available)}</p>
         {balanceError&&<p role="alert" className="text-amber-200">{balanceError}</p>}
         {available!==null&&!affordable&&<p>You need {money(tier)} available for this bundle.</p>}
         {!config.enabled&&<p>New entries are paused.</p>}{!eligibility.eligible&&<p>{eligibility.reason}</p>}
         <p className="text-sm text-slate-300">No separate game-admin approval is needed. Your profile must meet the adult identity requirements and your wallet must be unfrozen.</p>
         <label className="flex gap-3 text-sm"><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)}/>I am 18 or older and have reviewed the {money(tier)} fee, displayed game rules and prize chances below.</label>
-        {draft.current?<><button disabled={busy} onClick={()=>void perform({action:'spin_enter',...draft.current})} className="w-full rounded-xl bg-amber-300 p-4 font-bold text-slate-950">Check entry status</button><button disabled={busy} onClick={()=>void perform({action:'spin_cancel_entry',requestKey:draft.current?.requestKey})} className="w-full rounded-xl border border-white/30 p-3">Cancel only if entry has not started</button></>:<button disabled={busy||!accepted||!config.enabled||!eligibility.eligible||!affordable} onClick={enter} className="w-full rounded-xl bg-amber-300 p-4 font-black text-slate-950 disabled:opacity-50">Pay {money(tier)} — {six?"start one spin":"start 3 spins"}</button>}
+        {draft.current?<><button disabled={busy} onClick={()=>void perform({action:'spin_enter',...draft.current})} className="w-full rounded-xl bg-amber-300 p-4 font-bold text-slate-950">Check entry status</button><button disabled={busy} onClick={()=>void perform({action:'spin_cancel_entry',requestKey:draft.current?.requestKey})} className="w-full rounded-xl border border-white/30 p-3">Cancel only if entry has not started</button></>:<button disabled={busy||!accepted||!config.enabled||!eligibility.eligible||!affordable} onClick={enter} className="w-full rounded-xl bg-amber-300 p-4 font-black text-slate-950 disabled:opacity-50">Pay {money(tier)} — {bundle?`start ${paidSpins} spin${paidSpins===1?'':'s'}`:six?"start one spin":"start 3 spins"}</button>}
       </div>:<p>Loading game…</p>}
+      {bundle&&<div className="mt-5 space-y-2 border-t border-white/20 pt-4 text-sm">
+        <p>One payment buys {paidSpins} paid spin{paidSpins===1?'':'s'}. Each spin has {sectors.length} equally likely segments: 1 in {sectors.length} ({(100/sectors.length).toFixed(2)}%) per segment. Each cash prize is transferred in full from the Spin Account to your wallet after its provider receipt completes.</p>
+        {hasSpecial&&<p>Spin again grants one free final spin among the four cash segments, each with a 1 in 4 chance (25%). A free spin cannot earn another free spin.</p>}
+        {sectors.some(s=>s.kind==='lose')&&<p>Better luck next time pays no prize for that spin. Any remaining paid spins stay available.</p>}
+        <div className="grid grid-cols-2 gap-2">{sectors.map((s,i)=><p key={i} className="rounded-lg bg-white/10 p-2">{label(s)}</p>)}</div>
+        <p>Purchased fees, prizes and spin counts stay fixed. No winnings fee. Another package requires a new payment.</p>
+      </div>}
       {six&&<div className="mt-5 space-y-2 border-t border-white/20 pt-4 text-sm"><p>First spin: each of the six segments has a 1 in 6 chance (16.67%). A cash result ends the game after its full prize is credited. Better luck next time pays nothing and ends the game.</p><p>Spin again grants one free final spin. Its four cash segments and Better luck next time each have a 1 in 5 chance (20%). The Spin again segment is excluded on that final spin.</p><div className="grid grid-cols-2 gap-2">{sectors.map((s,i)=><p key={i} className="rounded-lg bg-white/10 p-2">{label(s)}</p>)}</div><p>Starting another game requires a new payment. No winnings fee. Purchased rules stay fixed.</p></div>}
       <p className="mt-5 text-center text-sm text-amber-200">18+ · Play responsibly</p>
     </div>

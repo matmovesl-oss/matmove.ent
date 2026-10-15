@@ -1,10 +1,11 @@
+
 import { useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type SetStateAction } from 'react';
 import { supabase } from '@/lib/supabase';
 import { walletFetch } from '@/lib/apiFetch';
 import { CarFront, Truck, Store, ArrowRight, ArrowLeft, Check, ShieldCheck, UploadCloud, Camera } from 'lucide-react';
 import { OnboardingShell } from '@/components/AuthShell';
-import { DocumentUpload, SelfieUpload } from '@/components/DocumentUpload';
+import { DocumentUpload, SelfieUpload, isUploadedKyc, verifyKycDocument } from '@/components/DocumentUpload';
 import { useAuth } from '@/context/AuthContext';
 import { roleLabels, roleDescriptions } from '@/services/roleService';
 import type { UserRole, PersonalInfo, IdentityInfo, DriverInfo, MerchantInfo, UploadedDocument, DocumentType } from '@/types';
@@ -23,9 +24,12 @@ function useOnboardingState<T>(key: string, initialValue: T) {
     }
   });
 
-  const setPersistentState = (value: T) => {
-    setState(value);
-    sessionStorage.setItem(key, JSON.stringify(value));
+  const setPersistentState = (value: SetStateAction<T>) => {
+    setState(previous => {
+      const next = typeof value === 'function' ? (value as (old:T)=>T)(previous) : value;
+      try {sessionStorage.setItem(key, JSON.stringify(next));} catch {/* Keep draft in memory. */}
+      return next;
+    });
   };
 
   return [state, setPersistentState] as const;
@@ -527,6 +531,7 @@ export function IdentityPage() {
 }
 
 export function DocumentsPage() {
+  const {session}=useAuth();
   const navigate = useNavigate();
   const role = getActiveRole();
 
@@ -596,18 +601,16 @@ export function DocumentsPage() {
     useOnboardingState<Record<string, any>>('ob_docs', {});
 
   const handleUpload = (type: string, document: any) => {
-    setDocs({ ...docs, [type]: document });
+    setDocs(previous => ({ ...previous, [type]: document }));
   };
 
   const handleRemove = (type: string) => {
-    const updatedDocs = { ...docs };
-    delete updatedDocs[type];
-    setDocs(updatedDocs);
+    setDocs(previous => {const next={...previous};delete next[type];return next;});
   };
 
-  const allUploaded = displayDocs
+  const allUploaded = !!session?.user.id && displayDocs
     .filter((d) => d.required)
-    .every((d) => !!docs[d.id]);
+    .every((d) => isUploadedKyc(docs[d.id],session?.user.id)) && !Object.values(docs).some((d:any)=>d?.status==='uploading');
 
   return (
     <OnboardingShell step={5}>
@@ -668,6 +671,7 @@ export function DocumentsPage() {
 }
 
 export function SelfiePage() {
+  const {session}=useAuth();
   const navigate = useNavigate();
   const role = getActiveRole();
 
@@ -688,7 +692,8 @@ export function SelfiePage() {
 
   const handleSelfieUpload = (document: UploadedDocument) => {
     setSelfie(document);
-    sessionStorage.setItem('ob_selfie', JSON.stringify(document));
+    if(isUploadedKyc(document,session?.user.id)) sessionStorage.setItem('ob_selfie', JSON.stringify(document));
+    else sessionStorage.removeItem('ob_selfie');
   };
 
   const handleSelfieRemove = () => {
@@ -730,7 +735,7 @@ export function SelfiePage() {
           <button
             type="button"
             className="primary-button"
-            disabled={!selfie}
+            disabled={!session || !isUploadedKyc(selfie,session.user.id)}
             onClick={() =>
               navigate(
                 role === 'driver'
@@ -901,7 +906,7 @@ export function ReviewPage() {
     useOnboardingState<Record<string, any>>('ob_docs', {});
 
   const selfieRaw = sessionStorage.getItem('ob_selfie');
-  const selfieData = selfieRaw ? JSON.parse(selfieRaw) : null;
+  const selfieData:UploadedDocument|null = (()=>{try{return selfieRaw?JSON.parse(selfieRaw):null;}catch{return null;}})();
 
   const displayPhone = normalizePhone(
     info.phone ?? session?.user?.phone ?? ''
@@ -933,34 +938,25 @@ export function ReviewPage() {
           .replace(/\s+/g, ' ')
           .trim() || 'New User';
 
-      // Drivers/Merchants are tracked as 'pending' for withdrawals,
-      // but still get let into the dashboard instantly.
-      const userStatus = role === 'rider' ? 'approved' : 'pending';
+      // Identity status and role are assigned by the existing secure onboarding RPC.
 
-      const idCardUrl =
-        docs['id_front']?.url ||
-        docs['id_front']?.fileName ||
-        null;
+      const required = role==='driver'?['license_doc']:role==='merchant'&&merchant.infrastructure!=='Digital / Online Only'?['business_doc']:['id_front','id_back'];
+      for(const key of required) await verifyKycDocument(docs[key],userId);
+      const selfieUrl=await verifyKycDocument(selfieData,userId);
+      const path=(key:string)=>isUploadedKyc(docs[key],userId)?docs[key].id:null;
+      const idCardUrl=path('id_front');
+      const idCardBackUrl=path('id_back');
+      const licenseUrl=path('license_doc');
+      const businessUrl=path('business_doc');
 
-      const idCardBackUrl =
-        docs['id_back']?.url ||
-        docs['id_back']?.fileName ||
-        null;
-
-      const licenseUrl =
-        docs['license_doc']?.url ||
-        docs['license_doc']?.fileName ||
-        null;
-
-      const businessUrl =
-        docs['business_doc']?.url ||
-        docs['business_doc']?.fileName ||
-        null;
-
-      const selfieUrl =
-        selfieData?.url ||
-        selfieData?.fileName ||
-        null;
+      const canonicalType:Record<string,string>={id_front:'identity_front',id_back:'identity_back',license_doc:'drivers_license_front',business_doc:'business_document',business_doc_2:'business_document'};
+      const uploaded=[...Object.values(docs),selfieData].filter((d:any)=>isUploadedKyc(d,userId));
+      const documentRows=[...new Map(uploaded.map((d:any)=>[d.id,d])).values()].map((d:any)=>({document_type:canonicalType[d.type]||d.type,storage_path:d.id,file_name:d.fileName,file_size_bytes:d.fileSize}));
+      const submission=await supabase.rpc('submit_customer_kyc',{
+        p_role:role,p_first_name:info.firstName||session.user.firstName||'',p_last_name:info.lastName||session.user.lastName||'',
+        p_phone:displayPhone,p_address:info.residentialAddress||'',p_documents:documentRows,
+      });
+      if(submission.error||submission.data?.success!==true)throw new Error(submission.error?.message||'KYC submission was not confirmed. Please retry.');
 
       const { error: profileError } = await supabase
         .from('profiles')
@@ -992,8 +988,6 @@ export function ReviewPage() {
           license_doc_url: licenseUrl,
           business_doc_url: businessUrl,
           selfie_url: selfieUrl,
-          role: role,
-          kyc_status: userStatus,
           updated_at: new Date().toISOString()
         });
 

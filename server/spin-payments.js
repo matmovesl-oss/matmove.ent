@@ -1,10 +1,13 @@
 
 
+
 import { randomInt, timingSafeEqual } from 'node:crypto';
 import { HttpError, assertAllowed, keyFor, verifiedAccount, monime, dbClient } from './wallet-security.js';
 import { validateSpinSectors, validateSpinTiers, spinOdds, SPIN_TIER_AMOUNTS, sampleSpinSector, spinProfileEligibility, SPIN_COUNT } from '../shared/spin-rules.js';
 
 import { SIX_MODE, validateSixTiers, sampleSix } from '../shared/six-spin-rules.js';
+
+import { BUNDLE_MODE, validateBundleTiers, sampleBundle } from '../shared/bundle-spin-rules.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const terminal = new Set(['completed', 'failed', 'review_required']);
@@ -100,18 +103,20 @@ export async function reconcileSpinRound(db, id, provider = monime) {
 
 export async function spinSnapshot(db, round) {
   const legs = await legsFor(db, round.id);
+  const bundle=round.game_mode===BUNDLE_MODE;
   const six=round.game_mode===SIX_MODE;
   let outcomes=[];
-  if(six){const result=await db.from('matmove_spin_outcomes').select('*').eq('round_id',round.id).order('spin_index');if(result.error)throw new HttpError(503,'Game outcomes unavailable.');outcomes=result.data;}
+  if(six||bundle){const result=await db.from('matmove_spin_outcomes').select('*').eq('round_id',round.id).order('spin_index');if(result.error)throw new HttpError(503,'Game outcomes unavailable.');outcomes=result.data;}
   const receipts=legs.map(leg=>({index:leg.spin_index,sectorIndex:leg.sector_index,digit:leg.digit,amountMinor:Number(leg.amount_minor),providerId:leg.provider_id,status:leg.status,error:leg.error,kind:leg.kind==='entry'?'entry':'cash'}));
-  if(six)for(const o of outcomes)if(o.kind!=='cash')receipts.push({index:o.spin_index,sectorIndex:o.sector_index,digit:String(o.sector_index),amountMinor:0,providerId:null,status:'completed',error:null,kind:o.kind});
+  if(six||bundle)for(const o of outcomes)if(o.kind!=='cash')receipts.push({index:o.spin_index,sectorIndex:o.sector_index,digit:String(o.sector_index),amountMinor:0,providerId:null,status:'completed',error:null,kind:o.kind});
   receipts.sort((a,b)=>a.index-b.index);
   return {
-    mode:six?SIX_MODE:'legacy',
+    mode:bundle?BUNDLE_MODE:six?SIX_MODE:'legacy',
     id: round.id, state: round.state, configId: round.config_id,
-    sectors: round.sectors, odds: six?[]:spinOdds(round.sectors), luckyDigit: round.lucky_digit,
-    entryMinor: Number(round.entry_minor), spinCount: six?2:SPIN_COUNT,
-    spinsUsed: six?outcomes.length:legs.filter(leg => leg.kind === 'win').length,
+    sectors: round.sectors, odds: six||bundle?[]:spinOdds(round.sectors), luckyDigit: round.lucky_digit,
+    entryMinor: Number(round.entry_minor), spinCount: bundle?Number(round.paid_spin_count):six?2:SPIN_COUNT,
+    bonusPending: bundle&&round.bundle_tier_id==='0'&&outcomes.length===1&&outcomes[0].kind==='again',
+    spinsUsed: six||bundle?outcomes.length:legs.filter(leg => leg.kind === 'win').length,
     paidMinor: legs.filter(leg => leg.kind === 'win' && leg.status === 'completed').reduce((sum, leg) => sum + Number(leg.amount_minor), 0),
     error: round.error, createdAt: round.created_at,
     receipts,
@@ -139,8 +144,8 @@ export async function spinAction(req, res, { provider = monime, verifyAccount = 
     if (config.error || rounds.error || !config.data?.[0]) throw new HttpError(503, 'Game setup unavailable.');
     const c = config.data[0];
     if (!c.tiers) throw new HttpError(503, 'Apply SPIN_TIERS_SETUP.sql before using the new price bundles.');
-    const six=!!c.six_tiers;
-    const tiers = six?validateSixTiers(c.six_tiers):validateSpinTiers(c.tiers).map(t => ({...t, odds:spinOdds(t.sectors)}));
+    const bundle=!!c.bundle_tiers,six=!!c.six_tiers;
+    const tiers = bundle?validateBundleTiers(c.bundle_tiers):six?validateSixTiers(c.six_tiers):validateSpinTiers(c.tiers).map(t => ({...t, odds:spinOdds(t.sectors)}));
     const eligibility = spinProfileEligibility(profile, wallets);
     let availableMinor = null;
     let balanceError = null;
@@ -150,7 +155,7 @@ export async function spinAction(req, res, { provider = monime, verifyAccount = 
       catch {balanceError='Available SLE balance could not be verified. Refresh before paying.';}
     } else balanceError='One verified SLE wallet is required.';
     return res.status(200).json({
-      config:{id:c.id,mode:six?SIX_MODE:'legacy',enabled:c.enabled && process.env.MATMOVE_SPIN_ENABLED==='true',tiers},
+      config:{id:c.id,mode:bundle?BUNDLE_MODE:six?SIX_MODE:'legacy',enabled:c.enabled && process.env.MATMOVE_SPIN_ENABLED==='true',tiers},
       eligibility,availableMinor,balanceError,
       round:rounds.data ? await spinSnapshot(db,rounds.data) : null,
     });
@@ -161,12 +166,13 @@ export async function spinAction(req, res, { provider = monime, verifyAccount = 
     let round = await readRound(db, id, user.id);
     if (action === 'spin_draw') {
       const index = req.body.spinIndex;
-      if (!Number.isInteger(index) || index < 1 || index > SPIN_COUNT) throw new HttpError(400, 'Invalid spin number.');
-      const six=round.game_mode===SIX_MODE;
-      const sectors = six?round.sectors:validateSpinSectors(round.sectors);
+      if (!Number.isInteger(index) || index < 1 || index > (round.game_mode===BUNDLE_MODE?4:SPIN_COUNT)) throw new HttpError(400, 'Invalid spin number.');
+      const bundle=round.game_mode===BUNDLE_MODE;
+  const six=round.game_mode===SIX_MODE;
+      const sectors = six||bundle?round.sectors:validateSpinSectors(round.sectors);
       // CSPRNG uses the published tier probabilities stored in this paid round.
-      const sector = six?sampleSix(sectors,draw,index===2):sampleSpinSector(sectors, draw);
-      await rpc(db, six?'matmove_spin_draw_six':'matmove_spin_draw', { p_id: id, p_user: user.id, p_index: index, p_sector: sector });
+      const sector = bundle?sampleBundle(sectors,draw,round.bundle_tier_id==='0'&&index===2):six?sampleSix(sectors,draw,index===2):sampleSpinSector(sectors, draw);
+      await rpc(db, bundle?'matmove_spin_draw_bundle':six?'matmove_spin_draw_six':'matmove_spin_draw', { p_id: id, p_user: user.id, p_index: index, p_sector: sector });
     }
     round = await reconcileSpinRound(db, id, provider);
     return respond(db, res, round);
@@ -185,8 +191,8 @@ export async function spinAction(req, res, { provider = monime, verifyAccount = 
   }
   const configResult=await db.from('matmove_spin_configs').select('*').order('id',{ascending:false}).limit(1);
   if(configResult.error||!configResult.data?.[0])throw new HttpError(503,'Game configuration unavailable.');
-  const current=configResult.data[0],six=!!current.six_tiers;
-  const choices=six?validateSixTiers(current.six_tiers):validateSpinTiers(current.tiers);
+  const current=configResult.data[0],bundle=!!current.bundle_tiers,six=!!current.six_tiers;
+  const choices=bundle?validateBundleTiers(current.bundle_tiers):six?validateSixTiers(current.six_tiers):validateSpinTiers(current.tiers);
   if(!choices.some(t=>t.entryMinor===selectedTier))throw new HttpError(400,'Choose a published fee.');
   if (process.env.MATMOVE_SPIN_ENABLED !== 'true') throw new HttpError(409, 'New game entries are paused.');
   if (req.body.acceptRules !== true || req.body.acceptedEntryMinor !== selectedTier || !Number.isSafeInteger(req.body.configId)) {
@@ -208,7 +214,7 @@ export async function spinAction(req, res, { provider = monime, verifyAccount = 
   const observed = new Date().toISOString();
   const treasury = await provider(`financial-accounts/${encodeURIComponent(spinId)}?withBalance=true`);
   if (treasury.id !== spinId) throw new HttpError(503, 'Spin Account could not be verified.');
-  const round = await rpc(db, six?'matmove_spin_prepare_six':'matmove_spin_prepare_tier', {
+  const round = await rpc(db, bundle?'matmove_spin_prepare_bundle':six?'matmove_spin_prepare_six':'matmove_spin_prepare_tier', {
     p_key: key, p_user: user.id, p_wallet: candidates[0].id, p_config: req.body.configId,
     p_digit: req.body.luckyDigit, p_source: account.id, p_spin: spinId,
     p_balance: balance(treasury), p_observed: observed, p_tier: selectedTier,

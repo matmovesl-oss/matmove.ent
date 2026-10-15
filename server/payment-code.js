@@ -1,3 +1,4 @@
+
 import { HttpError } from './wallet-security.js';
 
 export function publicPaymentCode(code, context) {
@@ -53,7 +54,13 @@ export function publicPaymentCode(code, context) {
     paid.amount?.currency === 'SLE' &&
     paid.amount.value === code.amount.value;
 
+  let quote=null;
+  if(code.metadata?.matmoveTopupQuote){
+    try{quote=JSON.parse(code.metadata.matmoveTopupQuote);}catch{throw new HttpError(502,'Top-up quote receipt is invalid.');}
+    if(quote?.netMode!==true||!Number.isSafeInteger(quote.walletCreditMinor)||quote.walletCreditMinor<=0||!Number.isSafeInteger(quote.feeMinor)||quote.feeMinor<0||quote.totalMinor!==code.amount.value||quote.walletCreditMinor+quote.feeMinor!==quote.totalMinor)throw new HttpError(502,'Top-up fee receipt does not match.');
+  }
   return {
+    quote,
     id: code.id,
     ussdCode: code.ussdCode,
     amount: code.amount,

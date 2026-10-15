@@ -1,11 +1,13 @@
 
-import { useState } from 'react';
+
+import { useEffect, useRef, useState } from 'react';
 import {
   Wallet,
   RefreshCw,
   Copy,
   Share2,
   Plus,
+  Eye, EyeOff, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 
 type Props = {
@@ -25,6 +27,15 @@ export default function WalletCards({
   createUsd,
   creatingUsd,
 }: Props) {
+  const [visible, setVisible] = useState<Record<string, boolean>>({});
+  const [active, setActive] = useState(0);
+  useEffect(() => { setVisible({}); }, [sleWallet?.monime_account_id, sleWallet?.metadata?.monime_account_id, usdWallet?.monime_account_id, usdWallet?.metadata?.monime_account_id]);
+  const rail = useRef<HTMLDivElement>(null);
+  function move(index: number) {
+    const next = Math.max(0, Math.min(1, index));
+    const el = rail.current;
+    if (el) el.scrollTo({left: el.clientWidth * next, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+  }
   const [notice, setNotice] = useState('');
   const [iconFailed, setIconFailed] = useState(false);
 
@@ -73,7 +84,17 @@ export default function WalletCards({
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))' }}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-slate-600">Your wallets · swipe to change currency</p>
+        <div className="flex gap-2">
+          <button type="button" aria-label="Previous wallet" disabled={active === 0} onClick={() => move(active - 1)} className="rounded-full border p-2 disabled:opacity-40"><ChevronLeft size={18}/></button>
+          <button type="button" aria-label="Next wallet" disabled={active === 1} onClick={() => move(active + 1)} className="rounded-full border p-2 disabled:opacity-40"><ChevronRight size={18}/></button>
+        </div>
+      </div>
+      <div ref={rail} role="region" aria-label="SLE and USD wallets" tabIndex={0}
+        onScroll={e => {const el=e.currentTarget; setActive(Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));}}
+        onKeyDown={e => {if(e.target!==e.currentTarget)return; if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();move(active+(e.key==='ArrowRight'?1:-1));}}}
+        className="flex w-full snap-x snap-mandatory overflow-x-auto rounded-3xl" style={{overscrollBehaviorX:'contain'}}>
         {(['SLE', 'USD'] as const).map(currency => {
           const wallet =
             currency === 'SLE'
@@ -97,7 +118,8 @@ export default function WalletCards({
           return (
             <article
               key={currency}
-              className={`relative overflow-hidden rounded-3xl p-6 text-white shadow-xl ${colour}`}
+              aria-label={`${currency} wallet`}
+              className={`relative w-full min-w-0 shrink-0 snap-center overflow-hidden rounded-3xl p-6 text-white shadow-xl ${colour}`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/95">
@@ -137,14 +159,16 @@ export default function WalletCards({
                   : 'US dollar wallet'}
               </p>
 
-              <p className="mt-2 text-3xl font-black">
-                {currency}{' '}
-                {available
-                  ? Number(wallet.balance).toFixed(2)
-                  : id
-                  ? 'Unavailable'
-                  : 'Not created'}
-              </p>
+              <div className="mt-2 flex items-center gap-3">
+                <p className="min-w-0 break-words text-3xl font-black" aria-live="polite">
+                  {currency} {visible[currency] ? (available ? Number(wallet.balance).toFixed(2) : id ? 'Unavailable' : 'Not created') : <span aria-label="Balance hidden">••••••</span>}
+                </p>
+                <button type="button" aria-label={`${visible[currency] ? 'Hide' : 'Show'} ${currency} balance`} aria-pressed={!!visible[currency]}
+                  onClick={() => setVisible(old => ({...old,[currency]:!old[currency]}))}
+                  className="shrink-0 rounded-xl bg-white/15 p-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
+                  {visible[currency] ? <EyeOff size={21}/> : <Eye size={21}/>}
+                </button>
+              </div>
 
               {id ? (
                 <>
@@ -194,6 +218,9 @@ export default function WalletCards({
         })}
       </div>
 
+      <div className="flex justify-center gap-3" aria-label="Choose wallet">
+        {['SLE','USD'].map((currency,index)=><button type="button" key={currency} aria-label={`Show ${currency} wallet`} aria-current={active===index?'true':undefined} onClick={()=>move(index)} className={`rounded-full px-4 py-1 text-xs font-bold ${active===index?'bg-slate-900 text-white':'bg-slate-100 text-slate-600'}`}>{currency}</button>)}
+      </div>
       {notice && (
         <p
           role="status"

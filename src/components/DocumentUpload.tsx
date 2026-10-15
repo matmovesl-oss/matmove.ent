@@ -1,756 +1,92 @@
-import { useRef, useState } from 'react';
-import {
-  RefreshCw,
-  Check,
-  AlertCircle,
-} from 'lucide-react';
 
+import { useEffect, useRef, useState } from 'react';
+import { UploadCloud, RefreshCw, CheckCircle2, Trash2, Camera } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import type { DocumentType, UploadedDocument } from '@/types';
 
-import type {
-  DocumentType,
-  UploadedDocument,
-} from '@/types';
-
-interface DocumentUploadProps {
-  type: DocumentType;
-  document: UploadedDocument | undefined;
-  onUpload: (doc: UploadedDocument) => void;
-  onRemove: () => void;
+type Props = {type:DocumentType;document:UploadedDocument|undefined;onUpload:(doc:UploadedDocument)=>void;onRemove:()=>void};
+const bucket = () => supabase.storage.from('kyc-documents');
+const extensions:Record<string,string> = {'image/jpeg':'jpg','image/png':'png','image/webp':'webp','application/pdf':'pdf'};
+export function isUploadedKyc(doc:UploadedDocument|undefined|null,userId?:string):doc is UploadedDocument & {id:string} {
+  return !!doc && doc.status==='uploaded' && typeof doc.id==='string' && /^[0-9a-f-]{36}\/[A-Za-z0-9_./-]+$/i.test(doc.id) && !doc.id.includes('..') && (!userId||doc.id.startsWith(`${userId}/`));
 }
-
-interface StoredKycDocument {
-  id: string;
-  type: string;
-  fileName: string;
-  fileSize: number;
-  status: 'uploaded';
+export async function verifyKycDocument(doc:UploadedDocument|undefined|null,userId:string) {
+  if(!isUploadedKyc(doc,userId))throw new Error('Upload each required document fully before continuing.');
+  const {data,error}=await bucket().info(doc.id);
+  if(error||!data||!Number.isFinite(Number(data.size))||Number(data.size)<=0)throw new Error('A document could not be verified in storage. Return to Documents and upload it again.');
+  return doc.id;
 }
-
-const DOCUMENT_STORAGE_KEY = 'ob_documents';
-const SELFIE_STORAGE_KEY = 'ob_selfie';
-
-function saveDocumentMetadata(
-  document: UploadedDocument
-) {
+export async function uploadKycFile(file:File,userId:string,type:DocumentType) {
+  if(!extensions[file.type]||(type==='selfie'&&file.type==='application/pdf'))throw new Error('Choose a supported document or photo.');
+  if(file.size<=0||file.size>10*1024*1024)throw new Error('Maximum upload size is 10 MB.');
+  const path=`${userId}/${String(type).replace(/[^A-Za-z0-9_-]/g,'_')}-${crypto.randomUUID()}.${extensions[file.type]}`;
+  const {error}=await bucket().upload(path,file,{upsert:false,cacheControl:'0',contentType:file.type});
+  if(error)throw new Error(error.message);
+  const next:UploadedDocument={id:path,type,fileName:file.name,fileSize:file.size,status:'uploaded',uploadProgress:100};
+  await verifyKycDocument(next,userId);
+  return next;
+}
+function remember(doc:UploadedDocument,userId:string) {
+  if(!isUploadedKyc(doc,userId))return;
+  const clean={id:doc.id,type:doc.type,fileName:doc.fileName,fileSize:doc.fileSize,status:'uploaded',uploadProgress:100};
   try {
-    const existingRaw =
-      sessionStorage.getItem(
-        DOCUMENT_STORAGE_KEY
-      );
-
-    let existing: Record<
-      string,
-      StoredKycDocument
-    > = {};
-
-    if (existingRaw) {
-      try {
-        existing = JSON.parse(existingRaw);
-      } catch {
-        existing = {};
-      }
+    if(doc.type==='selfie')sessionStorage.setItem('ob_selfie',JSON.stringify(clean));
+    else for(const key of ['ob_docs','ob_documents']) {
+      let old:Record<string,unknown>={};try{old=JSON.parse(sessionStorage.getItem(key)||'{}')||{};}catch{/* Replace broken local metadata. */}
+      sessionStorage.setItem(key,JSON.stringify({...old,[doc.type]:clean}));
     }
-
-    if (!document.id) return;
-
-    existing[document.type] = {
-      id: document.id || '',
-      type: document.type,
-      fileName: document.fileName,
-      fileSize: document.fileSize,
-      status: 'uploaded',
-    };
-
-    sessionStorage.setItem(
-      DOCUMENT_STORAGE_KEY,
-      JSON.stringify(existing)
-    );
-  } catch (error) {
-    console.error(
-      'Could not save document metadata:',
-      error
-    );
-  }
+  }catch{/* The verified upload can still be submitted while this page is open. */}
 }
-
-function removeDocumentMetadata(type: string) {
-  try {
-    const existingRaw =
-      sessionStorage.getItem(
-        DOCUMENT_STORAGE_KEY
-      );
-
-    if (!existingRaw) return;
-
-    let existing: Record<
-      string,
-      StoredKycDocument
-    > = {};
-
-    try {
-      existing = JSON.parse(existingRaw);
-    } catch {
-      existing = {};
-    }
-
-    delete existing[type];
-
-    if (
-      Object.keys(existing).length === 0
-    ) {
-      sessionStorage.removeItem(
-        DOCUMENT_STORAGE_KEY
-      );
-    } else {
-      sessionStorage.setItem(
-        DOCUMENT_STORAGE_KEY,
-        JSON.stringify(existing)
-      );
-    }
-  } catch (error) {
-    console.error(
-      'Could not remove document metadata:',
-      error
-    );
-  }
-}
-
-function saveSelfieMetadata(
-  document: UploadedDocument
-) {
-  try {
-    if (!document.id) return;
-
-    const stored: StoredKycDocument = {
-      id: document.id || '',
-      type: 'selfie',
-      fileName: document.fileName,
-      fileSize: document.fileSize,
-      status: 'uploaded',
-    };
-
-    sessionStorage.setItem(
-      SELFIE_STORAGE_KEY,
-      JSON.stringify(stored)
-    );
-  } catch (error) {
-    console.error(
-      'Could not save selfie metadata:',
-      error
-    );
-  }
-}
-
-function removeSelfieMetadata() {
-  try {
-    sessionStorage.removeItem(
-      SELFIE_STORAGE_KEY
-    );
-  } catch (error) {
-    console.error(
-      'Could not remove selfie metadata:',
-      error
-    );
-  }
-}
-
-export function DocumentUpload({
-  type,
-  document,
-  onUpload,
-  onRemove,
-}: DocumentUploadProps) {
-  const { session } = useAuth();
-
-  const inputRef =
-    useRef<HTMLInputElement>(null);
-
-  const [error, setError] = useState('');
-  const [isDragging, setIsDragging] =
-    useState(false);
-
-  const handleFile = async (file: File) => {
+export function DocumentUpload({type,document,onUpload,onRemove}:Props) {
+  const {session}=useAuth();
+  const userId=session?.user.id;
+  const input=useRef<HTMLInputElement>(null);
+  const lock=useRef(false),mounted=useRef(true);
+  const callbacks=useRef({onUpload,onRemove});callbacks.current={onUpload,onRemove};
+  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[preview,setPreview]=useState('');
+  const current=userId&&isUploadedKyc(document,userId)?document:null;
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+  useEffect(()=>{
+    let live=true;setPreview('');
+    if(current&&userId&&current.id.startsWith(`${userId}/`)&&current.fileName&&!current.fileName.toLowerCase().endsWith('.pdf'))void bucket().createSignedUrl(current.id,300).then(({data})=>{if(live&&data?.signedUrl)setPreview(data.signedUrl);});
+    return()=>{live=false;};
+  },[current?.id,userId]);
+  async function upload(file:File) {
+    if(lock.current)return;
+    const previous=current;
     setError('');
-
-    if (!session?.user?.id) {
-      setError(
-        'Your session has expired. Please sign in again.'
-      );
-      return;
-    }
-
-    if (
-      file.size > 10 * 1024 * 1024
-    ) {
-      setError(
-        'File is too large. Maximum size is 10MB.'
-      );
-      return;
-    }
-
-    const validTypes = [
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-      'application/pdf',
-    ];
-
-    if (
-      !validTypes.includes(file.type)
-    ) {
-      setError(
-        'Invalid file type. Please use JPG, PNG, WebP, or PDF.'
-      );
-      return;
-    }
-
-    if (
-      document?.id &&
-      document.id !== 'temp'
-    ) {
-      await supabase.storage
-        .from('kyc-documents')
-        .remove([document.id]);
-
-      removeDocumentMetadata(type);
-    }
-
-    const fileExt =
-      file.name.includes('.')
-        ? file.name
-            .split('.')
-            .pop()
-            ?.toLowerCase()
-        : 'bin';
-
-    const filePath =
-      `${session.user.id}/${type}-${
-        Date.now()
-      }.${fileExt}`;
-
-    const localPreview =
-      file.type === 'application/pdf'
-        ? undefined
-        : URL.createObjectURL(file);
-
-    onUpload({
-      id: 'temp',
-      type,
-      fileName: file.name,
-      fileSize: file.size,
-      status: 'uploading',
-      uploadProgress: 10,
-      previewUrl: localPreview,
-    });
-
+    if(!userId){setError('Sign in again before uploading.');return;}
+    if(!extensions[file.type]||(type==='selfie'&&file.type==='application/pdf')){setError(type==='selfie'?'Choose a JPG, PNG or WebP photo.':'Choose a JPG, PNG, WebP or PDF.');return;}
+    if(file.size<=0||file.size>10*1024*1024){setError('Choose a file between 1 byte and 10 MB.');return;}
+    lock.current=true;setBusy(true);
+    callbacks.current.onUpload({id:null,type,fileName:file.name,fileSize:file.size,status:'uploading',uploadProgress:0});
     try {
-      const {
-        data,
-        error: uploadError,
-      } = await supabase.storage
-        .from('kyc-documents')
-        .upload(
-          filePath,
-          file,
-          {
-            cacheControl: '3600',
-            upsert: false,
-          }
-        );
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      if (!data?.path) {
-        throw new Error(
-          'The document uploaded but no storage path was returned.'
-        );
-      }
-
-      const uploadedDocument:
-        UploadedDocument = {
-        id: data.path,
-        type,
-        fileName: file.name,
-        fileSize: file.size,
-        status: 'uploaded',
-        uploadProgress: 100,
-        previewUrl: localPreview,
-      };
-
-      saveDocumentMetadata(
-        uploadedDocument
-      );
-
-      onUpload(uploadedDocument);
-    } catch (e: unknown) {
-      onRemove();
-
-      if (localPreview) {
-        URL.revokeObjectURL(
-          localPreview
-        );
-      }
-
-      setError(
-        e instanceof Error
-          ? e.message
-          : 'Failed to upload document.'
-      );
-    }
-  };
-
-  const handleRemove = async () => {
-    if (
-      document?.id &&
-      document.id !== 'temp'
-    ) {
-      await supabase.storage
-        .from('kyc-documents')
-        .remove([document.id]);
-    }
-
-    removeDocumentMetadata(type);
-
-    if (document?.previewUrl) {
-      URL.revokeObjectURL(
-        document.previewUrl
-      );
-    }
-
-    onRemove();
-  };
-
-  if (!document) {
-    return (
-      <div
-        className={`absolute inset-0 z-10 cursor-pointer rounded-2xl ${
-          isDragging
-            ? 'bg-[#184f9a]/5'
-            : ''
-        }`}
-        onClick={() =>
-          inputRef.current?.click()
-        }
-        onDragOver={event => {
-          event.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={() =>
-          setIsDragging(false)
-        }
-        onDrop={event => {
-          event.preventDefault();
-          setIsDragging(false);
-
-          const file =
-            event.dataTransfer.files[0];
-
-          if (file) {
-            handleFile(file);
-          }
-        }}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,application/pdf"
-          className="hidden"
-          onChange={event => {
-            const file =
-              event.target.files?.[0];
-
-            if (file) {
-              handleFile(file);
-            }
-
-            event.target.value = '';
-          }}
-        />
-
-        {error && (
-          <div className="absolute bottom-2 left-0 w-full text-center text-red-600 text-sm font-medium flex items-center justify-center gap-1 px-3">
-            <AlertCircle size={14} />
-            {error}
-          </div>
-        )}
-      </div>
-    );
+      // A replacement never deletes the previous successfully uploaded document.
+      const next=await uploadKycFile(file,userId,type);
+      const {data:{session:active}}=await supabase.auth.getSession();
+      if(active?.user.id!==userId)throw new Error('Your session changed. Sign in and upload again.');
+      remember(next,userId);
+      if(mounted.current)callbacks.current.onUpload(next);
+    } catch(e) {
+      if(mounted.current){setError((e instanceof Error?e.message:'Upload failed.')+' Your previous document was kept. Choose the file again to retry.');if(previous){remember(previous,userId);callbacks.current.onUpload(previous);}else callbacks.current.onRemove();}
+    } finally {lock.current=false;if(mounted.current){setBusy(false);if(input.current)input.current.value='';}}
   }
-
-  return (
-    <div className="w-full relative z-20">
-      <div className="w-full h-48 mb-4 rounded-xl overflow-hidden bg-slate-100 border-2 border-slate-200 shadow-sm relative group">
-        {document.previewUrl ? (
-          <img
-            src={document.previewUrl}
-            alt="Document preview"
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-slate-400 bg-slate-100">
-            <span className="font-medium text-sm">
-              PDF Document
-            </span>
-          </div>
-        )}
-
-        {document.status ===
-          'uploading' && (
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center text-white">
-            <RefreshCw
-              size={24}
-              className="animate-spin mb-2"
-            />
-
-            <span className="font-medium text-sm">
-              Uploading securely...
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold text-[#32a84a]">
-          <Check size={16} />
-          Uploaded
-        </div>
-
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() =>
-              inputRef.current?.click()
-            }
-            className="text-sm font-medium text-[#184f9a] hover:underline"
-          >
-            Replace
-          </button>
-
-          <button
-            type="button"
-            onClick={handleRemove}
-            className="text-sm font-medium text-red-500 hover:underline"
-          >
-            Remove
-          </button>
-        </div>
-      </div>
-
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,application/pdf"
-        className="hidden"
-        onChange={event => {
-          const file =
-            event.target.files?.[0];
-
-          if (file) {
-            handleFile(file);
-          }
-
-          event.target.value = '';
-        }}
-      />
-
-      {error && (
-        <div className="mt-2 text-red-600 text-xs font-medium flex items-center justify-center gap-1">
-          <AlertCircle size={13} />
-          {error}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function SelfieUpload({
-  document,
-  onUpload,
-  onRemove,
-}: {
-  document:
-    | UploadedDocument
-    | undefined;
-
-  onUpload: (
-    doc: UploadedDocument
-  ) => void;
-
-  onRemove: () => void;
-}) {
-  const { session } = useAuth();
-
-  const inputRef =
-    useRef<HTMLInputElement>(null);
-
-  const [error, setError] =
-    useState('');
-
-  const handleFile = async (
-    file: File
-  ) => {
-    setError('');
-
-    if (!session?.user?.id) {
-      setError(
-        'Your session has expired. Please sign in again.'
-      );
-      return;
-    }
-
-    if (
-      file.size > 10 * 1024 * 1024
-    ) {
-      setError(
-        'File too large (Max 10MB)'
-      );
-      return;
-    }
-
-    const validTypes = [
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-    ];
-
-    if (
-      !validTypes.includes(file.type)
-    ) {
-      setError(
-        'Invalid selfie format. Please use JPG, PNG, or WebP.'
-      );
-      return;
-    }
-
-    if (
-      document?.id &&
-      document.id !== 'temp'
-    ) {
-      await supabase.storage
-        .from('kyc-documents')
-        .remove([document.id]);
-
-      removeSelfieMetadata();
-    }
-
-    const fileExt =
-      file.name.includes('.')
-        ? file.name
-            .split('.')
-            .pop()
-            ?.toLowerCase()
-        : 'jpg';
-
-    const filePath =
-      `${session.user.id}/selfie-${
-        Date.now()
-      }.${fileExt}`;
-
-    const localPreview =
-      URL.createObjectURL(file);
-
-    onUpload({
-      id: 'temp',
-      type: 'selfie',
-      fileName: file.name,
-      fileSize: file.size,
-      status: 'uploading',
-      uploadProgress: 10,
-      previewUrl: localPreview,
-    });
-
-    try {
-      const {
-        data,
-        error: uploadError,
-      } = await supabase.storage
-        .from('kyc-documents')
-        .upload(
-          filePath,
-          file,
-          {
-            cacheControl: '3600',
-            upsert: false,
-          }
-        );
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      if (!data?.path) {
-        throw new Error(
-          'The selfie uploaded but no storage path was returned.'
-        );
-      }
-
-      const uploadedSelfie:
-        UploadedDocument = {
-        id: data.path,
-        type: 'selfie',
-        fileName: file.name,
-        fileSize: file.size,
-        status: 'uploaded',
-        uploadProgress: 100,
-        previewUrl: localPreview,
-      };
-
-      saveSelfieMetadata(
-        uploadedSelfie
-      );
-
-      onUpload(uploadedSelfie);
-    } catch (e: unknown) {
-      onRemove();
-
-      URL.revokeObjectURL(
-        localPreview
-      );
-
-      setError(
-        e instanceof Error
-          ? e.message
-          : 'Upload failed'
-      );
-    }
-  };
-
-  const handleRemove = async () => {
-    if (
-      document?.id &&
-      document.id !== 'temp'
-    ) {
-      await supabase.storage
-        .from('kyc-documents')
-        .remove([document.id]);
-    }
-
-    removeSelfieMetadata();
-
-    if (document?.previewUrl) {
-      URL.revokeObjectURL(
-        document.previewUrl
-      );
-    }
-
-    onRemove();
-  };
-
-  if (!document) {
-    return (
-      <>
-        <button
-          type="button"
-          onClick={() =>
-            inputRef.current?.click()
-          }
-          className="bg-[#184f9a] text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 mx-auto hover:bg-[#123e7a] transition-all shadow-md"
-        >
-          Take Selfie
-        </button>
-
-        {error && (
-          <div className="text-red-600 text-sm font-medium mt-3 flex items-center justify-center gap-1">
-            <AlertCircle size={14} />
-            {error}
-          </div>
-        )}
-
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          capture="user"
-          className="hidden"
-          onChange={event => {
-            const file =
-              event.target.files?.[0];
-
-            if (file) {
-              handleFile(file);
-            }
-
-            event.target.value = '';
-          }}
-        />
-      </>
-    );
+  function remove() {
+    if(lock.current)return;
+    // Keep storage objects for existing profile references; removal here only changes this onboarding draft.
+    try{if(type==='selfie')sessionStorage.removeItem('ob_selfie');else for(const key of ['ob_docs','ob_documents']){const old=JSON.parse(sessionStorage.getItem(key)||'{}');delete old[type];sessionStorage.setItem(key,JSON.stringify(old));}}catch{/* Parent state still updates. */}
+    callbacks.current.onRemove();setError('');setPreview('');
   }
-
-  return (
-    <div className="w-full flex flex-col items-center relative z-20">
-      <div className="w-48 h-48 md:w-64 md:h-64 rounded-full overflow-hidden border-4 border-[#184f9a] shadow-xl relative mb-6">
-        {document.previewUrl ? (
-          <img
-            src={document.previewUrl}
-            alt="Selfie"
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-400 text-sm">
-            Selfie uploaded
-          </div>
-        )}
-
-        {document.status ===
-          'uploading' && (
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center text-white">
-            <RefreshCw
-              size={24}
-              className="animate-spin"
-            />
-          </div>
-        )}
-      </div>
-
-      <div className="flex gap-4">
-        <button
-          type="button"
-          onClick={() =>
-            inputRef.current?.click()
-          }
-          className="bg-slate-100 text-slate-700 px-5 py-2.5 rounded-xl font-semibold hover:bg-slate-200 transition-colors"
-        >
-          Retake
-        </button>
-
-        <button
-          type="button"
-          onClick={handleRemove}
-          className="bg-red-50 text-red-600 px-5 py-2.5 rounded-xl font-semibold hover:bg-red-100 transition-colors"
-        >
-          Remove
-        </button>
-      </div>
-
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        capture="user"
-        className="hidden"
-        onChange={event => {
-          const file =
-            event.target.files?.[0];
-
-          if (file) {
-            handleFile(file);
-          }
-
-          event.target.value = '';
-        }}
-      />
-
-      {error && (
-        <div className="text-red-600 text-xs font-medium mt-3 flex items-center justify-center gap-1">
-          <AlertCircle size={13} />
-          {error}
-        </div>
-      )}
+  return <div data-doc-type={type} className="space-y-3">
+    <input ref={input} type="file" className="hidden" accept={type==='selfie'?'image/jpeg,image/png,image/webp':'image/jpeg,image/png,image/webp,application/pdf'} capture={type==='selfie'?'user':undefined} disabled={busy} onChange={e=>{const file=e.target.files?.[0];if(file)void upload(file);}}/>
+    {preview&&<img src={preview} alt={type==='selfie'?'Your uploaded selfie':'Your uploaded document'} className="mx-auto max-h-56 rounded-xl object-contain"/>}
+    {busy?<p role="status" className="flex items-center justify-center gap-2 font-semibold text-blue-700"><RefreshCw size={20} className="animate-spin"/>Uploading and verifying… Keep this page open.</p>:current?<p className="flex items-center justify-center gap-2 break-all text-emerald-700"><CheckCircle2 size={20}/>{current.fileName} · Uploaded</p>:<p className="text-sm text-slate-500">{type==='selfie'?'Take or choose a clear photo of your face.':'Choose a clear photo or PDF.'} Maximum 10 MB.</p>}
+    {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+    <div className="flex flex-wrap justify-center gap-3">
+      <button type="button" disabled={busy} onClick={()=>input.current?.click()} className="flex items-center gap-2 rounded-xl border bg-white px-4 py-3 font-bold disabled:opacity-50">{type==='selfie'?<Camera size={18}/>:<UploadCloud size={18}/>} {current?'Replace file':type==='selfie'?'Add selfie':'Choose file'}</button>
+      {current&&<button type="button" disabled={busy} onClick={remove} className="flex items-center gap-2 rounded-xl border px-4 py-3 text-red-700 disabled:opacity-50"><Trash2 size={16}/>Remove from draft</button>}
     </div>
-  );
+  </div>;
 }
+export function SelfieUpload(props:Omit<Props,'type'>) {return <DocumentUpload {...props} type="selfie"/>;}
