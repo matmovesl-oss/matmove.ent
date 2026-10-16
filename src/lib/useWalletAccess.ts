@@ -1,5 +1,7 @@
+
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { resolveCustomerRole, customerCapabilities } from '../../shared/customer-access.js';
 
 export function useWalletAccess(userId: string) {
   const [access, setAccess] = useState({
@@ -22,7 +24,7 @@ export function useWalletAccess(userId: string) {
       busy = true;
 
       try {
-        const [profile, wallets] =
+        const [profile, wallets, roles] =
           await Promise.all([
             supabase
               .from('profiles')
@@ -34,30 +36,24 @@ export function useWalletAccess(userId: string) {
               .from('wallets')
               .select('is_frozen')
               .eq('user_id', userId),
+
+            supabase.from('user_roles').select('role').eq('profile_id', userId),
           ]);
 
         if (!disposed) {
           if (
             profile.error ||
-            wallets.error
+            wallets.error ||
+            roles.error
           ) {
             setAccess({
               frozen: true,
               approved: false,
             });
           } else {
-            setAccess({
-              frozen:
-                !!profile.data.is_wallet_frozen ||
-                (wallets.data || []).some(
-                  wallet => wallet.is_frozen
-                ),
-
-              approved:
-                profile.data.role === 'rider' ||
-                profile.data.kyc_status ===
-                  'approved',
-            });
+            const role = resolveCustomerRole(profile.data, roles.data || []);
+            const capabilities = customerCapabilities({ ...profile.data, role }, wallets.data || []);
+            setAccess({ frozen: !capabilities.customer || capabilities.frozen, approved: capabilities.customer && capabilities.verified });
           }
         }
       } catch {

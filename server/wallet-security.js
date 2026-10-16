@@ -1,3 +1,5 @@
+
+import {customerCapabilities,resolveCustomerRole} from '../shared/customer-access.js';
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'node:crypto';
 
@@ -53,38 +55,12 @@ export function keyFor(userId, action, key) {
 }
 
 export function assertAllowed(profile, wallets, action) {
-  if (
-    !['rider', 'driver', 'merchant'].includes(profile.role)
-  ) {
-    throw new HttpError(
-      403,
-      'Customer account required.'
-    );
-  }
-
-  if (action === 'read') return;
-
-  if (
-    profile.is_wallet_frozen ||
-    wallets.some(wallet => wallet.is_frozen)
-  ) {
-    throw new HttpError(
-      423,
-      'Your wallet is frozen. Contact MatMove support.',
-      'WALLET_FROZEN'
-    );
-  }
-
-  if (
-    ['load', 'payout', 'transfer'].includes(action) &&
-    ['driver', 'merchant'].includes(profile.role) &&
-    profile.kyc_status !== 'approved'
-  ) {
-    throw new HttpError(
-      403,
-      'Your account needs administrator approval before using wallet payments.'
-    );
-  }
+  const access=customerCapabilities(profile,wallets);
+  if(!access.customer)throw new HttpError(403,'Customer account required. Complete your account setup.','CUSTOMER_SETUP_REQUIRED');
+  if(action==='read')return;
+  if(access.frozen)throw new HttpError(423,'Your wallet is frozen. Contact MatMove support.','WALLET_FROZEN');
+  if(['load','create','purchase'].includes(action)&&!access.load)throw new HttpError(403,'Approval pending. Your wallet will become available after administrator approval.','APPROVAL_PENDING');
+  if(['payout','transfer'].includes(action)&&!access.payout)throw new HttpError(403,access.approvalPending?'Approval pending. Complete KYC and wait for administrator approval.':'Verify your identity before transferring or withdrawing money.','KYC_REQUIRED');
 }
 
 export function dbClient() {
@@ -328,7 +304,7 @@ export async function authorize(
     );
   }
 
-  const [profileResult, walletResult] =
+  const [profileResult, walletResult, rolesResult] =
     await Promise.all([
       db
         .from('profiles')
@@ -339,18 +315,24 @@ export async function authorize(
       db
         .from('wallets')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user.id),
+      db.from('user_roles').select('role').eq('profile_id',user.id)
     ]);
 
   if (
     profileResult.error ||
-    walletResult.error
+    walletResult.error ||
+    rolesResult.error
   ) {
     throw new HttpError(
       503,
       'Unable to verify your wallet permissions.'
     );
   }
+
+  const role=resolveCustomerRole(profileResult.data,rolesResult.data||[]);
+  if(!role)throw new HttpError(403,'Customer account required. Complete your account setup.','CUSTOMER_SETUP_REQUIRED');
+  profileResult.data={...profileResult.data,role};
 
   assertAllowed(
     profileResult.data,

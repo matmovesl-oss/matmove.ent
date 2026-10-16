@@ -1,8 +1,8 @@
 
+
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, type SetStateAction } from 'react';
 import { supabase } from '@/lib/supabase';
-import { walletFetch } from '@/lib/apiFetch';
 import { CarFront, Truck, Store, ArrowRight, ArrowLeft, Check, ShieldCheck, UploadCloud, Camera } from 'lucide-react';
 import { OnboardingShell } from '@/components/AuthShell';
 import { DocumentUpload, SelfieUpload, isUploadedKyc, verifyKycDocument } from '@/components/DocumentUpload';
@@ -55,110 +55,53 @@ function normalizePhone(value: string): string {
 
 export function RoleSelectionPage() {
   const navigate = useNavigate();
-
-  const [selected, setSelected] = useState<UserRole | null>(() => {
-    const stored = sessionStorage.getItem('ob_role');
-
-    return stored === 'rider' ||
-      stored === 'driver' ||
-      stored === 'merchant'
-      ? stored
-      : null;
-  });
-
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  const roles: {
-    key: UserRole;
-    icon: React.ReactNode;
-    tone: string;
-  }[] = [
-    { key: 'rider', icon: <CarFront size={26} />, tone: 'blue' },
-    { key: 'driver', icon: <Truck size={26} />, tone: 'green' },
-    { key: 'merchant', icon: <Store size={26} />, tone: 'orange' },
-  ];
-
-  const handleContinue = async () => {
-    if (!selected) return;
-
-    setIsProcessing(true);
-
+  const { session, saveAccount, loading } = useAuth();
+  const [selected, setSelected] = useState<UserRole | null>(session?.roles[0] || null);
+  const [phone, setPhone] = useState(session?.user.phone || '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (session?.roles[0]) setSelected(session.roles[0]);
+    if (session?.user.phone) setPhone(session.user.phone);
+  }, [session]);
+  const proceed = async (skip: boolean) => {
+    if (!selected || busy) return;
+    setBusy(true); setError('');
     try {
-      sessionStorage.setItem('ob_role', selected);
-      navigate('/onboarding/personal');
-    } catch (error) {
-      alert('Failed to save your account type.');
-    } finally {
-      setIsProcessing(false);
-    }
+      const current = await saveAccount(selected, phone);
+      navigate(skip ? `/customer/${current.roles[0]}` : '/onboarding/personal');
+    } catch (error: any) { setError(error.message || 'Unable to save your account.'); }
+    finally { setBusy(false); }
   };
-
-  return (
-    <OnboardingShell step={2}>
-      <div className="ob-page animate-in">
-        <h2 className="ob-title">How will you use MatMove?</h2>
-        <p className="ob-subtitle">Choose your primary account type.</p>
-
-        <div className="role-choice-grid">
-          {roles.map(({ key, icon, tone }) => (
-            <button
-              key={key}
-              type="button"
-              className={`role-choice-card ${selected === key ? 'selected' : ''}`}
-              onClick={() => setSelected(key)}
-              disabled={isProcessing}
-            >
-              <div className={`icon-box tone-${tone} icon-lg`}>
-                {icon}
-              </div>
-
-              <strong>{roleLabels[key]}</strong>
-              <span>{roleDescriptions[key]}</span>
-
-              {selected === key && (
-                <div className="selected-check">
-                  <Check size={13} />
-                </div>
-              )}
-            </button>
-          ))}
-        </div>
-
-        <div className="ob-actions">
-          <button
-            type="button"
-            className="back-button"
-            onClick={() => navigate('/')}
-            disabled={isProcessing}
-          >
-            <ArrowLeft size={16} /> Back
-          </button>
-
-          <button
-            type="button"
-            className="primary-button"
-            disabled={!selected || isProcessing}
-            onClick={handleContinue}
-          >
-            {isProcessing ? 'Saving...' : 'Continue'}
-            <ArrowRight size={17} />
-          </button>
-        </div>
-      </div>
-    </OnboardingShell>
-  );
+  return <OnboardingShell step={2}><div className="ob-page animate-in">
+    <h2 className="ob-title">How will you use MatMove?</h2>
+    <p className="ob-subtitle">Save your phone number and account type. You can verify your identity now or later.</p>
+    <div className="role-choice-grid">{([
+      { key: 'rider', Icon: CarFront }, { key: 'driver', Icon: Truck }, { key: 'merchant', Icon: Store }
+    ] as const).map(({ key, Icon }) => <button key={key} type="button"
+      className={`role-choice-card ${selected === key ? 'selected' : ''}`}
+      disabled={busy || (!!session?.roles.length && session.roles[0] !== key)} onClick={() => setSelected(key)}>
+      <Icon size={26}/><strong>{roleLabels[key]}</strong><span>{roleDescriptions[key]}</span>
+      {selected === key && <Check size={16}/>}</button>)}</div>
+    <label className="field mt-6"><span>Phone number</span><input type="tel" autoComplete="tel" className="input-field" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+232 76 000 000" /></label>
+    <p className="mt-4 text-sm text-slate-600">Riders can load their wallet before verification. Transfers and withdrawals require completed verification. Driver and merchant wallets require approval.</p>
+    {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
+    <div className="ob-actions"><button type="button" className="primary-button" disabled={!selected || !phone.trim() || busy || loading} onClick={() => void proceed(false)}>{busy ? 'Saving…' : 'Verify identity now'}<ArrowRight size={17}/></button>
+    <button type="button" className="back-button" disabled={!selected || !phone.trim() || busy || loading} onClick={() => void proceed(true)}>Skip KYC for now</button></div>
+  </div></OnboardingShell>;
 }
 
 export function PersonalInfoPage() {
   const navigate = useNavigate();
+  const { session } = useAuth();
 
   const [info, setInfo] = useOnboardingState<OnboardingPersonalInfo>(
     'ob_personal',
     {
-      firstName: '',
+      firstName: session?.user.firstName || '',
       middleName: '',
-      lastName: '',
-      phone: '',
+      lastName: session?.user.lastName || '',
+      phone: session?.user.phone || '',
       dateOfBirth: '',
       nationality: 'Sierra Leonean',
       country: 'Sierra Leone',
@@ -166,6 +109,20 @@ export function PersonalInfoPage() {
       city: ''
     }
   );
+
+  useEffect(() => {
+    let active = true;
+    if (!session?.user.id || sessionStorage.getItem('ob_personal')) return;
+    void supabase.from('profiles').select('first_name,last_name,phone,date_of_birth,nationality,country,residential_address,city').eq('id', session.user.id).maybeSingle().then(({ data, error }) => {
+      if (!active || error || !data) return;
+      setInfo(previous => ({ ...previous, firstName: previous.firstName || data.first_name || '',
+        lastName: previous.lastName || data.last_name || '', phone: previous.phone || data.phone || '',
+        dateOfBirth: previous.dateOfBirth || data.date_of_birth || '', nationality: data.nationality || previous.nationality,
+        country: data.country || previous.country, residentialAddress: previous.residentialAddress || data.residential_address || '',
+        city: previous.city || data.city || '' }));
+    });
+    return () => { active = false; };
+  }, [session?.user.id]);
 
   const update = (
     field: keyof OnboardingPersonalInfo,
@@ -870,10 +827,11 @@ export function VehicleSelectionPage() {
 }
 
 export function ReviewPage() {
-  const { session, loading } = useAuth();
+  const { session, loading, refreshSession } = useAuth();
   const navigate = useNavigate();
   const role = getActiveRole();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const [info] =
     useOnboardingState<OnboardingPersonalInfo>('ob_personal', {});
@@ -914,125 +872,40 @@ export function ReviewPage() {
 
   const handleFinalSubmit = async () => {
     if (isSubmitting || loading) return;
-
-    if (!session) {
-      alert('Session expired.');
-      navigate('/login');
-      return;
-    }
-
-    if (!displayPhone) {
-      alert('Phone missing.');
-      navigate('/onboarding/personal');
-      return;
-    }
-
-    setIsSubmitting(true);
-
+    if (!session) { navigate('/login'); return; }
+    if (!displayPhone) { setSubmitError('Please complete your phone number in Personal information.'); return; }
+    setIsSubmitting(true); setSubmitError('');
     try {
       const userId = session.user.id;
-      const userEmail = session.user.email;
-
-      const fullName =
-        `${info.firstName || ''} ${info.middleName || ''} ${info.lastName || ''}`
-          .replace(/\s+/g, ' ')
-          .trim() || 'New User';
-
-      // Identity status and role are assigned by the existing secure onboarding RPC.
-
-      const required = role==='driver'?['license_doc']:role==='merchant'&&merchant.infrastructure!=='Digital / Online Only'?['business_doc']:['id_front','id_back'];
-      for(const key of required) await verifyKycDocument(docs[key],userId);
-      const selfieUrl=await verifyKycDocument(selfieData,userId);
-      const path=(key:string)=>isUploadedKyc(docs[key],userId)?docs[key].id:null;
-      const idCardUrl=path('id_front');
-      const idCardBackUrl=path('id_back');
-      const licenseUrl=path('license_doc');
-      const businessUrl=path('business_doc');
-
-      const canonicalType:Record<string,string>={id_front:'identity_front',id_back:'identity_back',license_doc:'drivers_license_front',business_doc:'business_document',business_doc_2:'business_document'};
-      const uploaded=[...Object.values(docs),selfieData].filter((d:any)=>isUploadedKyc(d,userId));
-      const documentRows=[...new Map(uploaded.map((d:any)=>[d.id,d])).values()].map((d:any)=>({document_type:canonicalType[d.type]||d.type,storage_path:d.id,file_name:d.fileName,file_size_bytes:d.fileSize}));
-      const submission=await supabase.rpc('submit_customer_kyc',{
-        p_role:role,p_first_name:info.firstName||session.user.firstName||'',p_last_name:info.lastName||session.user.lastName||'',
-        p_phone:displayPhone,p_address:info.residentialAddress||'',p_documents:documentRows,
+      const required = role === 'driver' ? ['license_doc'] : role === 'merchant' && merchant.infrastructure !== 'Digital / Online Only' ? ['business_doc'] : ['id_front', 'id_back'];
+      for (const key of required) await verifyKycDocument(docs[key], userId);
+      await verifyKycDocument(selfieData, userId);
+      const canonicalType: Record<string,string> = { id_front:'identity_front', id_back:'identity_back', license_doc:'drivers_license_front', business_doc:'business_document', business_doc_2:'business_document' };
+      const uploaded = [...Object.values(docs), selfieData].filter((document: any) => isUploadedKyc(document, userId));
+      const documents = [...new Map(uploaded.map((document: any) => [document.id, document])).values()].map((document: any) => ({
+        document_type: canonicalType[document.type] || document.type, storage_path: document.id,
+        file_name: document.fileName, file_size_bytes: document.fileSize
+      }));
+      const result = await supabase.rpc('matmove_submit_customer_kyc', {
+        p_role: role,
+        p_details: { ...info, phone: displayPhone, vehicleType: vehicle.type, plateNumber: vehicle.plateNumber,
+          driverLicenseNumber: driver.licenseNumber || identity.idNumber || '', businessName: merchant.businessName || '',
+          businessType: merchant.infrastructure || '', businessRegNumber: merchant.businessRegNumber || '' },
+        p_documents: documents
       });
-      if(submission.error||submission.data?.success!==true)throw new Error(submission.error?.message||'KYC submission was not confirmed. Please retry.');
-
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: userId,
-          email: userEmail,
-          full_name: fullName,
-          first_name: info.firstName || null,
-          last_name: info.lastName || null,
-          date_of_birth: info.dateOfBirth || null,
-          nationality: info.nationality || null,
-          country: info.country || null,
-          residential_address: info.residentialAddress || null,
-          city: info.city || null,
-          address: info.residentialAddress || null,
-          phone: displayPhone || null,
-          phone_number: displayPhone || null,
-          vehicle_type: vehicle.type || null,
-          plate_number: vehicle.plateNumber || null,
-          business_name: merchant.businessName || null,
-          business_type: merchant.infrastructure || null,
-          tax_id: merchant.businessRegNumber || identity.idNumber || null,
-          driver_license_no:
-            role === 'driver'
-              ? driver.licenseNumber
-              : identity.idNumber || null,
-          id_card_url: idCardUrl,
-          id_card_back_url: idCardBackUrl,
-          license_doc_url: licenseUrl,
-          business_doc_url: businessUrl,
-          selfie_url: selfieUrl,
-          updated_at: new Date().toISOString()
-        });
-
-      if (profileError) {
-        if (
-          profileError.message.includes('profiles_phone_key') ||
-          profileError.code === '23505'
-        ) {
-          alert(
-            'This phone number is already registered to another account. ' +
-            'Please use a different number or log in.'
-          );
-        } else {
-          alert(`Database Error: ${profileError.message}`);
-        }
-
-        throw profileError;
-      }
-
-      // Wallet ownership comes from the authenticated session on the backend.
-      const { response, data, finish } = await walletFetch(
-        '/api/create-monime-wallet',
-        {}
-      );
-
-      if (!response.ok || !data.wallet?.monime_account_id) {
-        throw new Error(
-          data.error ||
-          'Wallet setup is not confirmed. Retry submission; do not create another account.'
-        );
-      }
-
-      finish();
+      if (result.error || result.data?.success !== true) throw new Error(result.error?.message || 'Verification submission was not confirmed. Retry without creating another account.');
+      await refreshSession();
+      ['ob_personal','ob_identity','ob_docs','ob_selfie','ob_vehicle','ob_driver','ob_merchant'].forEach(key => sessionStorage.removeItem(key));
       navigate('/onboarding/submitted');
-    } catch (error: any) {
-      console.error(error);
-      alert(error.message || 'Submission failed. Please retry.');
-      setIsSubmitting(false);
-    }
+    } catch (error: any) { setSubmitError(error.message || 'Unable to submit. Please retry.'); }
+    finally { setIsSubmitting(false); }
   };
 
   return (
     <OnboardingShell step={7}>
       <div className="ob-page animate-in">
         <h2 className="ob-title">Review your submission</h2>
+        {submitError && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-4 text-red-700">{submitError}</p>}
 
         <div className="space-y-6 mt-8">
           <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 relative">
@@ -1193,7 +1066,9 @@ export function ReviewPage() {
 }
 
 export function SubmittedPage() {
-  const role = getActiveRole();
+  const { session } = useAuth();
+  const navigate = useNavigate();
+  const role = session?.roles[0] || getActiveRole();
 
   const portalPath =
     role === 'driver'
@@ -1214,16 +1089,16 @@ export function SubmittedPage() {
         </h2>
 
         <p className="text-slate-500 mb-10">
-          Your account has been created. You can now access your dashboard.
+          Your verification details have been saved. You can now access your dashboard.
           {role !== 'rider' &&
-            " Note: Some features like withdrawals require document verification."}
+            " Approval pending: your wallet features unlock after your documents are approved."}
         </p>
 
         <button
           type="button"
           className="primary-button w-full py-4"
           onClick={() => {
-            window.location.href = portalPath;
+            navigate(portalPath, { replace: true });
           }}
         >
           Access dashboard

@@ -1,4 +1,5 @@
 
+
 import WalletCardsView from '@/components/WalletCards';
 import TransactionHistory from '@/components/TransactionHistory';
 
@@ -32,6 +33,9 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   const [rideNotice, setRideNotice] = useState('');
   const [walletNotice, setWalletNotice] = useState('');
   const balanceBusy = useRef(false);
+  const setupBusy = useRef(false);
+  const [isSettingUpWallet, setIsSettingUpWallet] = useState(false);
+  const [walletSetupError, setWalletSetupError] = useState('');
   const [usdWallet, setUsdWallet] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [txFilter, setTxFilter] = useState<'recent' | 'all'>('recent');
@@ -102,6 +106,38 @@ function DriverMain({ profile, wallet, activeSection }: any) {
     }
   };
 
+  const hasSleAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || ''));
+  const setupSleWallet = async () => {
+    if (!canTransact || setupBusy.current) return;
+    setupBusy.current = true;
+    setIsSettingUpWallet(true);
+    setWalletSetupError('');
+    try {
+      // Reuse the authenticated account reference and request key on every retry.
+      const { response, data, finish } = await walletFetch('/api/create-monime-wallet', {});
+      if (!response.ok || !/^fac-[A-Za-z0-9_-]+$/.test(String(data.wallet?.monime_account_id || ''))) {
+        throw new Error(data.error || 'Wallet setup was not confirmed. Retry without creating another account.');
+      }
+      finish();
+      setSleWallet({ ...data.wallet, balance: null, balanceAvailable: false });
+      await fetchLiveBalance();
+    } catch (error: any) {
+      setWalletSetupError(error.message || 'Wallet setup is unavailable. Please retry.');
+    } finally { setupBusy.current = false; setIsSettingUpWallet(false); }
+  };
+
+  useEffect(() => {
+    if (canTransact && !hasSleAccount) void setupSleWallet();
+    // One automatic attempt when access becomes available; failures use explicit Retry.
+  }, [profile?.id, canTransact]);
+
+  const walletSetupPanel = canTransact && !hasSleAccount ? <section role="status" className="m-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
+    <p className="font-bold">{isSettingUpWallet ? 'Setting up your SLE wallet…' : 'Finish wallet setup'}</p>
+    <p className="mt-1 text-sm">Your dashboard is available. Loading becomes available when your wallet account is ready.</p>
+    {walletSetupError && <p role="alert" className="mt-2 text-red-700">{walletSetupError}</p>}
+    <button type="button" disabled={isSettingUpWallet} onClick={() => void setupSleWallet()} className="mt-3 rounded-xl bg-blue-700 px-4 py-2 font-bold text-white disabled:opacity-50">{isSettingUpWallet ? 'Setting up…' : 'Retry wallet setup'}</button>
+  </section> : null;
+
   useEffect(() => {
     void fetchLiveBalance();
   }, [profile?.id]);
@@ -126,7 +162,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 
 
   const handleCreateUsdWallet = async () => {
-    if (!window.confirm('Create a USD wallet?')) return;
+    if (!canTransact || isCreatingUsd) { setWalletNotice('Approval pending or wallet unavailable.'); return; }
     setIsCreatingUsd(true);
     try {
       const { response, data, finish } = await walletFetch('/api/create-usd-wallet', {});
@@ -134,8 +170,8 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 
       finish();
       await fetchLiveBalance();
-      alert('USD wallet created successfully.');
-    } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
+      setWalletNotice('USD wallet created successfully.');
+    } catch (err: any) { setWalletNotice(err.message || 'Unable to create USD wallet.'); } finally { setIsCreatingUsd(false); }
   };
 
   // Google Maps Initialization
@@ -265,13 +301,14 @@ function DriverMain({ profile, wallet, activeSection }: any) {
             </span>
           ) : (
             <>
-              <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
-              <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition">Withdraw</button>
-              <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800 transition">Transfer</button>
+              <button onClick={() => setIsLoadModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
+              <button onClick={() => setIsPayoutModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition">Withdraw</button>
+              <button onClick={() => setIsTransferModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800 transition">Transfer</button>
             </>
           )}
         </div>
       </header>
+      {walletSetupPanel}
 
       {activeSection === 'home' && (
         <div className="flex-1 flex flex-col lg:flex-row">
@@ -353,14 +390,14 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 
             {!canTransact && (
               <p className="mb-4 text-sm text-red-700 bg-red-50 p-3 rounded-xl w-full">
-                {isFrozen ? 'Your wallet is frozen. Contact support.' : 'Your account must be approved before transactions.'}
+                {isFrozen ? 'Your wallet is frozen. Contact support.' : 'Approval pending. Complete verification in Account & Profile; wallet features unlock after administrator approval.'}
               </p>
             )}
 
             <div className="grid grid-cols-3 gap-4 w-full">
-              <button onClick={() => setIsLoadModalOpen(true)} disabled={!canTransact} className="p-4 sm:p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"><div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24} /></div>Load</button>
-              <button onClick={() => setIsPayoutModalOpen(true)} disabled={!canTransact} className="p-4 sm:p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"><ArrowUpRight size={24} /> Withdraw</button>
-              <button onClick={() => setIsTransferModalOpen(true)} disabled={!canTransact} className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"><div className="p-3 bg-white rounded-full shadow-sm"><Users size={24} /></div>Transfer</button>
+              <button onClick={() => setIsLoadModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="p-4 sm:p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"><div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24} /></div>Load</button>
+              <button onClick={() => setIsPayoutModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="p-4 sm:p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"><ArrowUpRight size={24} /> Withdraw</button>
+              <button onClick={() => setIsTransferModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"><div className="p-3 bg-white rounded-full shadow-sm"><Users size={24} /></div>Transfer</button>
             </div>
           </div>
 
@@ -373,11 +410,11 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       )}
 
       {isLoadModalOpen && (
-        <WalletTopUp userId={profile.id} allowed={canTransact} onClose={() => setIsLoadModalOpen(false)} onPaid={fetchLiveBalance} />
+        <WalletTopUp userId={profile.id} allowed={canTransact && hasSleAccount} onClose={() => setIsLoadModalOpen(false)} onPaid={fetchLiveBalance} />
       )}
 
       {isPayoutModalOpen && (
-        <PayoutPanel userId={profile.id} allowed={canTransact}
+        <PayoutPanel userId={profile.id} allowed={canTransact && hasSleAccount}
           onClose={() => setIsPayoutModalOpen(false)} onBalanceChange={fetchLiveBalance} />
       )}
 

@@ -1,4 +1,5 @@
 
+
 import WalletCardsView from '@/components/WalletCards';
 import TransactionHistory from '@/components/TransactionHistory';
 
@@ -42,6 +43,9 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [rideNotice, setRideNotice] = useState('');
   const [walletNotice, setWalletNotice] = useState('');
   const balanceBusy = useRef(false);
+  const setupBusy = useRef(false);
+  const [isSettingUpWallet, setIsSettingUpWallet] = useState(false);
+  const [walletSetupError, setWalletSetupError] = useState('');
   const [usdWallet, setUsdWallet] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [txFilter, setTxFilter] = useState<'recent' | 'all'>('recent');
@@ -88,6 +92,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [showPolicy, setShowPolicy] = useState(false);
 
   const { frozen: isFrozen, approved: isApproved } = useWalletAccess(profile.id);
+  const canLoad = !isFrozen && profile.role === 'rider';
+  const canSend = canLoad && isApproved;
 
   useEffect(() => {
     if (tripDistanceKm === null) return;
@@ -250,6 +256,38 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     }
   };
 
+  const hasSleAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || ''));
+  const setupSleWallet = async () => {
+    if (!canLoad || setupBusy.current) return;
+    setupBusy.current = true;
+    setIsSettingUpWallet(true);
+    setWalletSetupError('');
+    try {
+      // Reuse the authenticated account reference and request key on every retry.
+      const { response, data, finish } = await walletFetch('/api/create-monime-wallet', {});
+      if (!response.ok || !/^fac-[A-Za-z0-9_-]+$/.test(String(data.wallet?.monime_account_id || ''))) {
+        throw new Error(data.error || 'Wallet setup was not confirmed. Retry without creating another account.');
+      }
+      finish();
+      setSleWallet({ ...data.wallet, balance: null, balanceAvailable: false });
+      await fetchLiveBalance();
+    } catch (error: any) {
+      setWalletSetupError(error.message || 'Wallet setup is unavailable. Please retry.');
+    } finally { setupBusy.current = false; setIsSettingUpWallet(false); }
+  };
+
+  useEffect(() => {
+    if (canLoad && !hasSleAccount) void setupSleWallet();
+    // One automatic attempt when access becomes available; failures use explicit Retry.
+  }, [profile?.id, canLoad]);
+
+  const walletSetupPanel = canLoad && !hasSleAccount ? <section role="status" className="m-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
+    <p className="font-bold">{isSettingUpWallet ? 'Setting up your SLE wallet…' : 'Finish wallet setup'}</p>
+    <p className="mt-1 text-sm">Your dashboard is available. Loading becomes available when your wallet account is ready.</p>
+    {walletSetupError && <p role="alert" className="mt-2 text-red-700">{walletSetupError}</p>}
+    <button type="button" disabled={isSettingUpWallet} onClick={() => void setupSleWallet()} className="mt-3 rounded-xl bg-blue-700 px-4 py-2 font-bold text-white disabled:opacity-50">{isSettingUpWallet ? 'Setting up…' : 'Retry wallet setup'}</button>
+  </section> : null;
+
   useEffect(() => {
     fetchLiveBalance();
   }, [profile?.id]);
@@ -263,17 +301,17 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   }, [profile?.id]);
 
   const handleCreateUsdWallet = async () => {
-    if (!window.confirm('Create a secure USD Wallet?')) return;
+    if (!canLoad || isCreatingUsd) { setWalletNotice('Wallet access is unavailable.'); return; }
     setIsCreatingUsd(true);
     try {
       const { response, data, finish } = await walletFetch('/api/create-usd-wallet', {});
       if (!response.ok) throw new Error(data.error || 'Unable to create USD wallet.');
 
       finish();
-      alert('USD Wallet created successfully!');
+      setWalletNotice('USD wallet created successfully.');
       fetchLiveBalance();
     } catch (err: any) {
-      alert(err.message);
+      setWalletNotice(err.message || 'Unable to create USD wallet.');
     } finally {
       setIsCreatingUsd(false);
     }
@@ -381,8 +419,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const executeTransfer = async () => {
     if (isProcessingTransfer) return;
 
-    if (isFrozen || !isApproved) {
-      setTransferError('Wallet access is unavailable.');
+    if (!canSend) {
+      setTransferError(isFrozen ? 'Your wallet is unavailable. Contact support.' : 'Verify your identity before transferring money.');
       return;
     }
 
@@ -441,27 +479,14 @@ function RiderMain({ profile, wallet, activeSection }: any) {
         </div>
 
         <div className="flex gap-2">
-          {isFrozen || !isApproved ? (
-            <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">
-              {isFrozen ? 'Wallet unavailable' : 'Approval pending'}
-            </span>
-          ) : (
-            <>
-              <button onClick={() => setIsLoadModalOpen(true)} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">
-                Load
-              </button>
-              <button onClick={() => setIsPayoutModalOpen(true)} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition">
-                Payout
-              </button>
-              <button onClick={() => setIsTransferModalOpen(true)} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800 transition">
-                Transfer
-              </button>
-            </>
-          )}
+          <button onClick={() => setIsLoadModalOpen(true)} disabled={!canLoad || !hasSleAccount || isSettingUpWallet} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Load</button>
+          <button onClick={() => setIsPayoutModalOpen(true)} disabled={!canSend || !hasSleAccount} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50" title={canSend ? 'Withdraw' : 'Verify your identity to withdraw'}>Payout</button>
+          <button onClick={() => setIsTransferModalOpen(true)} disabled={!canSend || !hasSleAccount} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50" title={canSend ? 'Transfer' : 'Verify your identity to transfer'}>Transfer</button>
         </div>
       </header>
       {(rideNotice || walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice && <p>{rideNotice}</p>}{walletNotice && <p>{walletNotice}</p>}</div>}
 
+      {walletSetupPanel}
       <div className="p-6 max-w-4xl mx-auto space-y-6">
         {activeSection === 'home' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -700,13 +725,14 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                 Wallet Actions
               </h3>
               <p className="text-sm text-slate-500 mb-8">
-                Transfer funds to an account in the same currency
+                Load your wallet anytime. Verify your identity to transfer or withdraw.
               </p>
 
+              {!canSend && <p role="status" className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{isFrozen ? 'Wallet unavailable. Contact support if this continues.' : 'Verify your identity in Account & Profile to unlock transfers and withdrawals. You can still load your wallet.'}</p>}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 w-full">
                 <button
                   onClick={() => setIsLoadModalOpen(true)}
-                  disabled={isFrozen || !isApproved}
+                  disabled={!canLoad || !hasSleAccount || isSettingUpWallet}
                   className="p-4 sm:p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
                 >
                   <div className="p-3 bg-white rounded-full shadow-sm">
@@ -717,7 +743,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
                 <button
                   onClick={() => setIsPayoutModalOpen(true)}
-                  disabled={isFrozen || !isApproved}
+                  disabled={!canSend || !hasSleAccount}
                   className="p-4 sm:p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
                 >
                   <ArrowUpRight size={24} /> Withdraw
@@ -725,7 +751,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
                 <button
                   onClick={() => setIsTransferModalOpen(true)}
-                  disabled={isFrozen || !isApproved}
+                  disabled={!canSend || !hasSleAccount}
                   className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
                 >
                   <div className="p-3 bg-white rounded-full shadow-sm">
@@ -748,14 +774,14 @@ function RiderMain({ profile, wallet, activeSection }: any) {
       {isLoadModalOpen && (
         <WalletTopUp
           userId={profile.id}
-          allowed={!isFrozen && isApproved}
+          allowed={canLoad && hasSleAccount}
           onClose={() => setIsLoadModalOpen(false)}
           onPaid={fetchLiveBalance}
         />
       )}
 
       {isPayoutModalOpen && (
-        <PayoutPanel userId={profile.id} allowed={!isFrozen && isApproved}
+        <PayoutPanel userId={profile.id} allowed={canSend && hasSleAccount}
           onClose={() => setIsPayoutModalOpen(false)} onBalanceChange={fetchLiveBalance} />
       )}
 
@@ -817,7 +843,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
             <button
               onClick={executeTransfer}
-              disabled={isFrozen || !isApproved || isProcessingTransfer || !transferAmount || !transferRecipient}
+              disabled={!canSend || !hasSleAccount || isProcessingTransfer || !transferAmount || !transferRecipient}
               className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50"
             >
               {isProcessingTransfer ? <Loader2 size={20} className="animate-spin" /> : <Users size={20} />}

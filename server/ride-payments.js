@@ -1,3 +1,4 @@
+
 import {
   HttpError,
   assertAllowed,
@@ -100,7 +101,7 @@ async function customerAccount(
     );
   }
 
-  assertAllowed(p.data, w.data || [], 'transfer');
+  assertAllowed(p.data, w.data || [], 'purchase');
 
   const wallets = (w.data || []).filter(
     wallet => wallet.currency === 'SLE'

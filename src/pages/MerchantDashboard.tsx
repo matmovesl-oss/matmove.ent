@@ -1,4 +1,5 @@
 
+
 import WalletCardsView from '@/components/WalletCards';
 import TransactionHistory from '@/components/TransactionHistory';
 
@@ -36,6 +37,9 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   const [rideNotice, setRideNotice] = useState('');
   const [walletNotice, setWalletNotice] = useState('');
   const balanceBusy = useRef(false);
+  const setupBusy = useRef(false);
+  const [isSettingUpWallet, setIsSettingUpWallet] = useState(false);
+  const [walletSetupError, setWalletSetupError] = useState('');
   const [usdWallet, setUsdWallet] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [txFilter, setTxFilter] = useState<'recent' | 'all'>('recent');
@@ -126,6 +130,38 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     } catch (err: any) { setWalletNotice(err.message || 'Wallet refresh failed.'); setSleWallet((previous: any) => previous ? { ...previous, balanceAvailable: false } : null); } finally { balanceBusy.current = false; setIsRefreshing(false); }
   };
 
+  const hasSleAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || ''));
+  const setupSleWallet = async () => {
+    if (!canTransact || setupBusy.current) return;
+    setupBusy.current = true;
+    setIsSettingUpWallet(true);
+    setWalletSetupError('');
+    try {
+      // Reuse the authenticated account reference and request key on every retry.
+      const { response, data, finish } = await walletFetch('/api/create-monime-wallet', {});
+      if (!response.ok || !/^fac-[A-Za-z0-9_-]+$/.test(String(data.wallet?.monime_account_id || ''))) {
+        throw new Error(data.error || 'Wallet setup was not confirmed. Retry without creating another account.');
+      }
+      finish();
+      setSleWallet({ ...data.wallet, balance: null, balanceAvailable: false });
+      await fetchLiveBalance();
+    } catch (error: any) {
+      setWalletSetupError(error.message || 'Wallet setup is unavailable. Please retry.');
+    } finally { setupBusy.current = false; setIsSettingUpWallet(false); }
+  };
+
+  useEffect(() => {
+    if (canTransact && !hasSleAccount) void setupSleWallet();
+    // One automatic attempt when access becomes available; failures use explicit Retry.
+  }, [profile?.id, canTransact]);
+
+  const walletSetupPanel = canTransact && !hasSleAccount ? <section role="status" className="m-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
+    <p className="font-bold">{isSettingUpWallet ? 'Setting up your SLE wallet…' : 'Finish wallet setup'}</p>
+    <p className="mt-1 text-sm">Your dashboard is available. Loading becomes available when your wallet account is ready.</p>
+    {walletSetupError && <p role="alert" className="mt-2 text-red-700">{walletSetupError}</p>}
+    <button type="button" disabled={isSettingUpWallet} onClick={() => void setupSleWallet()} className="mt-3 rounded-xl bg-blue-700 px-4 py-2 font-bold text-white disabled:opacity-50">{isSettingUpWallet ? 'Setting up…' : 'Retry wallet setup'}</button>
+  </section> : null;
+
   useEffect(() => { void fetchLiveBalance(); }, [profile?.id]);
 
   const handleCopy = async (id: string) => {
@@ -144,13 +180,13 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   }, [profile?.id]);
 
   const handleCreateUsdWallet = async () => {
-    if (!window.confirm('Create a USD wallet?')) return;
+    if (!canTransact || isCreatingUsd) { setWalletNotice('Approval pending or wallet unavailable.'); return; }
     setIsCreatingUsd(true);
     try {
       const { response, data, finish } = await walletFetch('/api/create-usd-wallet', {});
       if (!response.ok) throw new Error(data.error || 'Unable to create USD wallet.');
-      finish(); await fetchLiveBalance(); alert('USD wallet created successfully.');
-    } catch (err: any) { alert(err.message); } finally { setIsCreatingUsd(false); }
+      finish(); await fetchLiveBalance(); setWalletNotice('USD wallet created successfully.');
+    } catch (err: any) { setWalletNotice(err.message || 'Unable to create USD wallet.'); } finally { setIsCreatingUsd(false); }
   };
 
   const handleDispatchDelivery = async () => {
@@ -256,10 +292,11 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
         <div className="flex items-center gap-3"><div className="rounded-xl bg-orange-100 p-2 text-orange-600"><Store size={20} /></div><h2 className="font-bold text-slate-900">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
         <div className="flex gap-2">
           {!canTransact ? <span className="rounded-xl border border-red-200 bg-red-100 px-4 py-2 text-xs font-bold text-red-700">{isFrozen ? 'Wallet unavailable' : 'Approval pending'}</span> : (
-            <><button onClick={() => setIsLoadModalOpen(true)} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">Load</button><button onClick={() => setIsPayoutModalOpen(true)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Withdraw</button><button onClick={() => setIsTransferModalOpen(true)} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Transfer</button></>
+            <><button onClick={() => setIsLoadModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">Load</button><button onClick={() => setIsPayoutModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Withdraw</button><button onClick={() => setIsTransferModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Transfer</button></>
           )}
         </div>
       </header>
+      {walletSetupPanel}
       {(rideNotice || walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice && <p>{rideNotice}</p>}{walletNotice && <p>{walletNotice}</p>}</div>}
 
       {activeSection === 'home' && (
@@ -344,11 +381,11 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
           <div className="rounded-3xl border bg-white p-6 text-center">
             <h3 className="text-xl font-bold">Wallet Actions</h3>
             <p className="mb-6 mt-2 text-sm text-slate-500">Transfers support SLE to SLE and USD to USD.</p>
-            {!canTransact && <p className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{isFrozen ? 'Your wallet is frozen. Contact support.' : 'Your account must be approved before transactions.'}</p>}
+            {!canTransact && <p className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{isFrozen ? 'Your wallet is frozen. Contact support.' : 'Approval pending. Complete verification in Account & Profile; wallet features unlock after administrator approval.'}</p>}
             <div className="grid grid-cols-3 gap-3">
-              <button onClick={() => setIsLoadModalOpen(true)} disabled={!canTransact} className="flex flex-col items-center gap-3 rounded-2xl bg-blue-50 p-4 font-bold text-blue-700 disabled:opacity-50"><ArrowDownLeft size={24} /> Load</button>
-              <button onClick={() => setIsPayoutModalOpen(true)} disabled={!canTransact} className="flex flex-col items-center gap-3 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700 disabled:opacity-50"><ArrowUpRight size={24} /> Withdraw</button>
-              <button onClick={() => setIsTransferModalOpen(true)} disabled={!canTransact} className="flex flex-col items-center gap-3 rounded-2xl bg-purple-50 p-4 font-bold text-purple-700 disabled:opacity-50"><Users size={24} /> Transfer</button>
+              <button onClick={() => setIsLoadModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="flex flex-col items-center gap-3 rounded-2xl bg-blue-50 p-4 font-bold text-blue-700 disabled:opacity-50"><ArrowDownLeft size={24} /> Load</button>
+              <button onClick={() => setIsPayoutModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="flex flex-col items-center gap-3 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700 disabled:opacity-50"><ArrowUpRight size={24} /> Withdraw</button>
+              <button onClick={() => setIsTransferModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="flex flex-col items-center gap-3 rounded-2xl bg-purple-50 p-4 font-bold text-purple-700 disabled:opacity-50"><Users size={24} /> Transfer</button>
             </div>
           </div>
           <TransactionHistory transactions={transactions} onSelect={setSelectedTx} />
@@ -383,10 +420,10 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       )}
 
       {selectedTx && <TransactionModal tx={selectedTx} onClose={() => setSelectedTx(null)} />}
-      {isLoadModalOpen && <WalletTopUp userId={profile.id} allowed={canTransact} onClose={() => setIsLoadModalOpen(false)} onPaid={fetchLiveBalance} />}
+      {isLoadModalOpen && <WalletTopUp userId={profile.id} allowed={canTransact && hasSleAccount} onClose={() => setIsLoadModalOpen(false)} onPaid={fetchLiveBalance} />}
 
       {isPayoutModalOpen && (
-        <PayoutPanel userId={profile.id} allowed={canTransact}
+        <PayoutPanel userId={profile.id} allowed={canTransact && hasSleAccount}
           onClose={() => setIsPayoutModalOpen(false)} onBalanceChange={fetchLiveBalance} />
       )}
 

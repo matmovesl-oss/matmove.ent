@@ -1,4 +1,5 @@
 
+
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { HttpError, assertAllowed, verifiedAccount, toMinorUnits, keyFor, monime, dbClient } from './wallet-security.js';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -46,7 +47,7 @@ async function customerAccount(db,userId,role,verify) {
   const [p,w]=await Promise.all([db.from('profiles').select('*').eq('id',userId).single(),db.from('wallets').select('*').eq('user_id',userId)]);
   if(p.error||w.error||!p.data) throw new HttpError(503,'Unable to verify merchant wallet permissions.');
   if(p.data.role!==role) throw new HttpError(403,'Merchant account required.');
-  assertAllowed(p.data,w.data||[],'transfer');
+  assertAllowed(p.data,w.data||[],'purchase');
   const wallets=(w.data||[]).filter(x=>x.currency==='SLE');
   if(wallets.length!==1) throw new HttpError(409,'A unique SLE merchant wallet is required.');
   return verify(db,wallets[0]);
@@ -111,7 +112,7 @@ async function processMerchantPayment(req,res,{provider=monime,verifyAccount=ver
       return respond(db,res,await reconcileMerchantPayment(db,old.id,provider));
     }
   }
-  assertAllowed(profile,wallets,'transfer');
+  assertAllowed(profile,wallets,'purchase');
   const {data:products,error}=await db.from('products').select('*').in('id',input.items.map(x=>x.productId));
   if(error||products?.length!==input.items.length) throw new HttpError(409,'Some products are no longer available.');
   const merchants=[...new Set(products.map(x=>x.merchant_id))];

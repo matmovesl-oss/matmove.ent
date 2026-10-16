@@ -1,6 +1,7 @@
 
 
 
+
 import { SpinGame } from '@/components/SpinGame';
 
 import ActivityAnalytics from '@/components/ActivityAnalytics';
@@ -23,11 +24,13 @@ import {
 
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { resolveCustomerRole } from '../shared/customer-access.js';
 
 import { LandingPage } from '@/pages/LandingPage';
 import {
   LoginPage,
   SignupPage,
+  AuthCallbackPage,
 } from '@/pages/AuthPages';
 import {
   ForgotPasswordPage,
@@ -416,11 +419,6 @@ export function PortalApp() {
 
         const userId = session.user.id;
 
-        const pathRole =
-          getRoleFromPath(
-            location.pathname
-          );
-
         const {
           data: profileData,
           error: profileError,
@@ -441,30 +439,10 @@ export function PortalApp() {
           return;
         }
 
-        const profileRole =
-          profileData?.role
-            ? String(
-                profileData.role
-              ).toLowerCase()
-            : '';
-
-        const resolvedRole:
-          CustomerRole | '' =
-          profileRole === 'rider' ||
-          profileRole === 'driver' ||
-          profileRole === 'merchant'
-            ? (profileRole as CustomerRole)
-            : pathRole || '';
-
-        if (
-          !resolvedRole ||
-          profileRole === 'admin'
-        ) {
-          throw new Error(
-            'Invalid account type.'
-          );
-        }
-
+        const { data: assignedRoles, error: roleError } = await supabase.from('user_roles').select('role').eq('profile_id', userId);
+        if (roleError) throw roleError;
+        const resolvedRole = resolveCustomerRole(profileData, assignedRoles || []);
+        if (!resolvedRole) throw new Error('Your customer account type needs completing. Sign in again and finish account setup.');
         const {
           data: walletData,
         } = await supabase
@@ -594,6 +572,13 @@ export function PortalApp() {
 
   return (
     <div className="relative min-h-screen bg-slate-50 pb-24">
+      {profile.kyc_status !== 'approved' && activeSection === 'home' && <div className="mx-auto max-w-6xl p-4">
+        {profile.role !== 'rider' && ['submitted','pending','under_review'].includes(profile.kyc_status) ?
+          <p role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">Approval pending. Your dashboard is available; wallet features unlock after approval.</p> :
+          <button className="w-full rounded-2xl border border-blue-200 bg-blue-50 p-4 text-left text-blue-900" onClick={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal'); }}>
+            <strong>Verify your identity →</strong><span className="mt-1 block text-sm">Complete verification to unlock transfers and withdrawals.</span>
+          </button>}
+      </div>}
       {role === 'rider' && (
         <RiderDashboard
           profile={profile}
@@ -634,6 +619,8 @@ function AccountSection({
   onLogout,
   onBack,
 }: any) {
+  const navigate = useNavigate();
+  const resumeVerification = () => { sessionStorage.setItem('ob_role', profile.role); navigate('/onboarding/personal'); };
   const [viewingGames, setViewingGames] = useState(false);
   const [
     showDeleteConfirm,
@@ -1379,7 +1366,7 @@ function AccountSection({
         <p className="mt-2 text-xs text-slate-300">18+ · Play responsibly · View rules and prize chances</p>
       </button>
 
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 mb-6 flex items-center gap-4">
+      <button type="button" onClick={resumeVerification} className="w-full text-left bg-white border border-slate-200 rounded-3xl p-6 mb-6 flex items-center gap-4">
         <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
           <UserCircle size={34} />
         </div>
@@ -1396,7 +1383,7 @@ function AccountSection({
             {profile.phone || 'No Phone'}
           </div>
         </div>
-      </div>
+      <span className="ml-auto text-sm font-bold text-blue-700">{profile.kyc_status === 'approved' ? 'View verification' : 'Verify identity →'}</span></button>
 
       <button
         onClick={() =>
@@ -1827,12 +1814,24 @@ function CustomerPortal() {
     );
   }
 
+  if (session.roles.length !== 1 || !session.user.phone) return <Navigate to="/select-role" replace />;
   return <PortalApp />;
+}
+
+function OnboardingGuard({ children, needsRole = true }: { children: React.ReactNode; needsRole?: boolean }) {
+  const { session, loading, authError, refreshSession, signOut } = useAuth();
+  if (loading) return <p role="status" className="p-8">Loading your account…</p>;
+  if (authError) return <div className="p-8"><p role="alert">{authError}</p><button className="primary-button mt-4" onClick={() => void refreshSession().catch(() => {})}>Retry</button><button className="ml-4" onClick={() => void signOut()}>Sign out</button></div>;
+  if (!session) return <Navigate to="/login" replace />;
+  if (needsRole && (session.roles.length !== 1 || !session.user.phone)) return <Navigate to="/select-role" replace />;
+  if (session.roles[0]) sessionStorage.setItem('ob_role', session.roles[0]);
+  return <>{children}</>;
 }
 
 export default function App() {
   return (
     <Routes>
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route
         path="/"
         element={<LandingPage />}
@@ -1860,47 +1859,47 @@ export default function App() {
 
       <Route
         path="/select-role"
-        element={<RoleSelectionPage />}
+        element={<OnboardingGuard needsRole={false}><RoleSelectionPage /></OnboardingGuard>}
       />
 
       <Route
         path="/onboarding/personal"
-        element={<PersonalInfoPage />}
+        element={<OnboardingGuard><PersonalInfoPage /></OnboardingGuard>}
       />
 
       <Route
         path="/onboarding/identity"
-        element={<IdentityPage />}
+        element={<OnboardingGuard><IdentityPage /></OnboardingGuard>}
       />
 
       <Route
         path="/onboarding/documents"
-        element={<DocumentsPage />}
+        element={<OnboardingGuard><DocumentsPage /></OnboardingGuard>}
       />
 
       <Route
         path="/onboarding/selfie"
-        element={<SelfiePage />}
+        element={<OnboardingGuard><SelfiePage /></OnboardingGuard>}
       />
 
       <Route
         path="/onboarding/vehicle"
-        element={<VehicleSelectionPage />}
+        element={<OnboardingGuard><VehicleSelectionPage /></OnboardingGuard>}
       />
 
       <Route
         path="/onboarding/review"
-        element={<ReviewPage />}
+        element={<OnboardingGuard><ReviewPage /></OnboardingGuard>}
       />
 
       <Route
         path="/onboarding/submitted"
-        element={<SubmittedPage />}
+        element={<OnboardingGuard><SubmittedPage /></OnboardingGuard>}
       />
 
       <Route
         path="/verification"
-        element={<VerificationPage />}
+        element={<OnboardingGuard><VerificationPage /></OnboardingGuard>}
       />
 
       <Route
