@@ -1,7 +1,8 @@
 
 
-import { useNavigate } from 'react-router-dom';
-import { useState, useEffect, type SetStateAction } from 'react';
+
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef, useContext, createContext, type ReactNode, type SetStateAction } from 'react';
 import { supabase } from '@/lib/supabase';
 import { CarFront, Truck, Store, ArrowRight, ArrowLeft, Check, ShieldCheck, UploadCloud, Camera } from 'lucide-react';
 import { OnboardingShell } from '@/components/AuthShell';
@@ -9,6 +10,131 @@ import { DocumentUpload, SelfieUpload, isUploadedKyc, verifyKycDocument } from '
 import { useAuth } from '@/context/AuthContext';
 import { roleLabels, roleDescriptions } from '@/services/roleService';
 import type { UserRole, PersonalInfo, IdentityInfo, DriverInfo, MerchantInfo, UploadedDocument, DocumentType } from '@/types';
+
+const KYC_DRAFT_KEYS = ['ob_personal','ob_identity','ob_docs','ob_selfie','ob_vehicle','ob_driver','ob_merchant'] as const;
+const KycDraftContext = createContext({beforeSubmit: async () => {}, cancelSubmit: () => {}, finishSubmit: () => {}});
+function readKycDraft(userId: string, role: string) {
+  if (sessionStorage.getItem('ob_owner_id') !== userId) throw new Error('Your sign-in changed. Reload before editing verification.');
+  const payload: Record<string, unknown> = {ob_role: role};
+  for (const key of KYC_DRAFT_KEYS) {
+    const raw = sessionStorage.getItem(key);
+    if (raw) { try { payload[key] = JSON.parse(raw); } catch { throw new Error('A browser draft could not be read. Load your saved draft to continue.'); } }
+  }
+  return payload;
+}
+
+export function KycWorkspace({children}: {children: ReactNode}) {
+  const {session, refreshSession} = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [ready, setReady] = useState(false);
+  const [locked, setLocked] = useState(session?.kycStatus === 'approved');
+  const [error, setError] = useState('');
+  const [saveStatus, setSaveStatus] = useState('Loading saved progress…');
+  const [reload, setReload] = useState(0);
+  const [formKey, setFormKey] = useState(0);
+  const version = useRef(0), savedDigest = useRef(''), paused = useRef(false), finished = useRef(false);
+  const inFlight = useRef<Promise<void> | null>(null), mounted = useRef(true), saveFailed = useRef(false);
+  const step = useRef('personal');
+  const userId = session?.user.id || '', role = session?.roles[0] || '';
+  step.current = location.pathname.split('/').pop() || 'personal';
+  const portal = `/customer/${role}`;
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setReady(false); setError(''); paused.current = true; finished.current = false; saveFailed.current = false;
+    void (async () => {
+      const result = await supabase.rpc('matmove_customer_kyc_draft');
+      if (result.error) throw new Error(result.error.message);
+      if (!active) return;
+      const record = result.data;
+      if (!record || record.role !== role) throw new Error('The saved verification account could not be confirmed.');
+      setLocked(record.locked === true);
+      version.current = Number(record.version);
+      if (!Number.isSafeInteger(version.current) || version.current < 0) throw new Error('The saved draft version is invalid.');
+      const localTime = Number(sessionStorage.getItem('ob_local_updated_at') || 0);
+      const serverTime = Date.parse(record.updatedAt || '') || 0;
+      const hasLocal = KYC_DRAFT_KEYS.some(key => sessionStorage.getItem(key));
+      const restore = reload > 0 || (!hasLocal && record.payload) || (serverTime > 0 && serverTime >= localTime);
+      if (!record.locked && restore) {
+        for (const key of KYC_DRAFT_KEYS) {
+          if (record.payload && Object.prototype.hasOwnProperty.call(record.payload, key)) sessionStorage.setItem(key, JSON.stringify(record.payload[key]));
+          else sessionStorage.removeItem(key);
+        }
+        sessionStorage.setItem('ob_local_updated_at', String(serverTime));
+      }
+      sessionStorage.setItem('ob_role', role);
+      savedDigest.current = restore ? JSON.stringify({step: record.step, payload: readKycDraft(userId, role)}) : '';
+      paused.current = record.locked === true;
+      setSaveStatus(serverTime ? `Progress saved ${new Date(serverTime).toLocaleTimeString()}` : 'Your progress will save automatically.');
+      setFormKey(key => key + 1); setReady(true);
+      if (!record.locked && new URLSearchParams(location.search).get('resume') === '1') {
+        const resumeStep = restore && ['personal','identity','documents','selfie','vehicle','review'].includes(record.step) ? record.step : 'personal';
+        navigate(`/onboarding/${resumeStep}`, {replace: true});
+      }
+    })().catch(error => { if (active) { setError(error.message || 'Unable to load verification progress.'); setSaveStatus('Progress is not ready.'); } });
+    return () => { active = false; };
+  }, [userId, role, reload]);
+
+  const persist = async (force = false): Promise<void> => {
+    if (finished.current || (!force && paused.current)) return;
+    if (inFlight.current) { await inFlight.current; return persist(force); }
+    const payload = readKycDraft(userId, role);
+    const digest = JSON.stringify({step: step.current, payload});
+    if (digest === savedDigest.current) return;
+    const work = (async () => {
+      if (mounted.current) setSaveStatus('Saving progress…');
+      const result = await supabase.rpc('matmove_save_kyc_draft', {p_expected: version.current, p_step: step.current, p_payload: payload});
+      if (result.error) throw new Error(result.error.message);
+      const next = Number(result.data?.version);
+      if (!Number.isSafeInteger(next) || next !== version.current + 1) throw new Error('Draft saving was not confirmed. Reload your saved draft.');
+      version.current = next; savedDigest.current = digest;
+      if (mounted.current) { setError(''); setSaveStatus(`Progress saved ${new Date(result.data.savedAt).toLocaleTimeString()}`); }
+    })();
+    inFlight.current = work;
+    try { await work; }
+    catch (error) {
+      paused.current = true; saveFailed.current = true;
+      if (mounted.current) {
+        const message = error instanceof Error ? error.message : 'Unable to save progress.';
+        setError(message); setSaveStatus('Progress could not be saved.');
+        if (message.startsWith('LOCKED:')) { setLocked(true); void refreshSession().catch(() => {}); }
+      }
+      throw error;
+    } finally { inFlight.current = null; }
+  };
+
+  useEffect(() => {
+    if (!ready || locked) return;
+    const timer = window.setInterval(() => { void persist().catch(() => {}); }, 1200);
+    const statusTimer = window.setInterval(() => {
+      void supabase.from('profiles').select('kyc_status').eq('id', userId).single().then(({data}) => {
+        if (mounted.current && data?.kyc_status === 'approved') { paused.current = true; setLocked(true); void refreshSession().catch(() => {}); }
+      });
+    }, 10000);
+    return () => { window.clearInterval(timer); window.clearInterval(statusTimer); };
+  }, [ready, locked, userId]);
+
+  const beforeSubmit = async () => { paused.current = true; try { await persist(true); } catch (error) { throw error; } };
+  const lockAndExit = async () => {
+    if (inFlight.current) await inFlight.current.catch(() => {});
+    try { paused.current = true; await persist(true); navigate(portal); }
+    catch { /* Keep the form open and show the save error. */ }
+  };
+  if (locked) return <div className="mx-auto max-w-xl space-y-4 p-8"><ShieldCheck size={42} className="text-green-700"/><h1 className="text-2xl font-bold">Verified identity — locked</h1><p>Your identity is approved. Contact MatMove support or an administrator for changes.</p><button className="primary-button" onClick={() => navigate(portal)}>Access dashboard</button></div>;
+  return <KycDraftContext.Provider value={{beforeSubmit, cancelSubmit: () => { if (!saveFailed.current) paused.current = false; }, finishSubmit: () => { finished.current = true; paused.current = true; }}}>
+    <div className="sticky top-0 z-40 border-b bg-white p-3 shadow-sm"><div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
+      <p role="status" className="text-sm text-slate-600">{saveStatus}</p>
+      {ready && <button type="button" onClick={() => void lockAndExit()} className="rounded-xl border border-blue-200 px-4 py-2 text-sm font-bold text-blue-800">Save & lock</button>}
+    </div>{error && <div role="alert" className="mx-auto mt-2 max-w-5xl rounded-xl bg-red-50 p-3 text-sm text-red-800"><p>{error}</p><button className="mt-2 font-bold underline" onClick={() => { if (sessionStorage.getItem('ob_owner_id') === userId) { const backup = Object.fromEntries(KYC_DRAFT_KEYS.map(key => [key, sessionStorage.getItem(key)])); sessionStorage.setItem('ob_draft_backup', JSON.stringify(backup)); } setReload(n => n + 1); }}>Load saved version</button></div>}</div>
+    {ready ? <div key={formKey}>{children}</div> : !error ? <p role="status" className="p-8">Loading your verification draft…</p> : null}
+  </KycDraftContext.Provider>;
+}
 
 type OnboardingPersonalInfo = Partial<PersonalInfo> & { phone?: string; };
 
@@ -27,7 +153,7 @@ function useOnboardingState<T>(key: string, initialValue: T) {
   const setPersistentState = (value: SetStateAction<T>) => {
     setState(previous => {
       const next = typeof value === 'function' ? (value as (old:T)=>T)(previous) : value;
-      try {sessionStorage.setItem(key, JSON.stringify(next));} catch {/* Keep draft in memory. */}
+      try {sessionStorage.setItem(key, JSON.stringify(next)); sessionStorage.setItem('ob_local_updated_at', String(Date.now()));} catch {/* Keep draft in memory. */}
       return next;
     });
   };
@@ -649,7 +775,7 @@ export function SelfiePage() {
 
   const handleSelfieUpload = (document: UploadedDocument) => {
     setSelfie(document);
-    if(isUploadedKyc(document,session?.user.id)) sessionStorage.setItem('ob_selfie', JSON.stringify(document));
+    if(isUploadedKyc(document,session?.user.id)) { sessionStorage.setItem('ob_selfie', JSON.stringify(document)); sessionStorage.setItem('ob_local_updated_at', String(Date.now())); }
     else sessionStorage.removeItem('ob_selfie');
   };
 
@@ -832,6 +958,7 @@ export function ReviewPage() {
   const role = getActiveRole();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const draft = useContext(KycDraftContext);
 
   const [info] =
     useOnboardingState<OnboardingPersonalInfo>('ob_personal', {});
@@ -872,10 +999,12 @@ export function ReviewPage() {
 
   const handleFinalSubmit = async () => {
     if (isSubmitting || loading) return;
+    if (session?.kycStatus === 'approved') { setSubmitError('Your verified identity is locked. Contact MatMove support for changes.'); return; }
     if (!session) { navigate('/login'); return; }
     if (!displayPhone) { setSubmitError('Please complete your phone number in Personal information.'); return; }
     setIsSubmitting(true); setSubmitError('');
     try {
+      await draft.beforeSubmit();
       const userId = session.user.id;
       const required = role === 'driver' ? ['license_doc'] : role === 'merchant' && merchant.infrastructure !== 'Digital / Online Only' ? ['business_doc'] : ['id_front', 'id_back'];
       for (const key of required) await verifyKycDocument(docs[key], userId);
@@ -894,10 +1023,11 @@ export function ReviewPage() {
         p_documents: documents
       });
       if (result.error || result.data?.success !== true) throw new Error(result.error?.message || 'Verification submission was not confirmed. Retry without creating another account.');
+      draft.finishSubmit();
       await refreshSession();
-      ['ob_personal','ob_identity','ob_docs','ob_selfie','ob_vehicle','ob_driver','ob_merchant'].forEach(key => sessionStorage.removeItem(key));
+      ['ob_local_updated_at','ob_personal','ob_identity','ob_docs','ob_selfie','ob_vehicle','ob_driver','ob_merchant'].forEach(key => sessionStorage.removeItem(key));
       navigate('/onboarding/submitted');
-    } catch (error: any) { setSubmitError(error.message || 'Unable to submit. Please retry.'); }
+    } catch (error: any) { draft.cancelSubmit(); setSubmitError(error.message || 'Unable to submit. Please retry.'); }
     finally { setIsSubmitting(false); }
   };
 

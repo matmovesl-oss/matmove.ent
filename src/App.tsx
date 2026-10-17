@@ -2,7 +2,8 @@
 
 
 
-import { SpinGame } from '@/components/SpinGame';
+
+import { ArcadeGames } from '@/components/ArcadeGames';
 
 import ActivityAnalytics from '@/components/ActivityAnalytics';
 import MerchantAnalytics from '@/components/MerchantAnalytics';
@@ -41,6 +42,7 @@ import {
 
 import {
   RoleSelectionPage,
+  KycWorkspace,
   PersonalInfoPage,
   IdentityPage,
   DocumentsPage,
@@ -483,6 +485,20 @@ export function PortalApp() {
     fetchUserData();
   }, [fetchUserData]);
 
+  useEffect(() => {
+    const userId = profile?.id;
+    if (!userId) return;
+    let active = true;
+    const refresh = async () => {
+      const {data, error} = await supabase.from('profiles').select('*').eq('id', userId).single();
+      if (active && !error && data) setProfile((old: any) => old?.id === userId ? {...old, ...data} : old);
+    };
+    const channel = supabase.channel(`customer-kyc-status:${userId}`).on('postgres_changes', {event:'UPDATE', schema:'public', table:'profiles', filter:`id=eq.${userId}`}, () => void refresh()).subscribe();
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 15000);
+    window.addEventListener('focus', refresh);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); void supabase.removeChannel(channel); };
+  }, [profile?.id]);
+
   if (portalError) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
@@ -556,6 +572,7 @@ export function PortalApp() {
           wallet={wallet}
           loggingOut={loggingOut}
           onLogout={handleLogout}
+          onLock={() => setPinStatus(profile.passcode ? 'locked' : 'create')}
           onBack={() =>
             setActiveSection('home')
           }
@@ -572,13 +589,7 @@ export function PortalApp() {
 
   return (
     <div className="relative min-h-screen bg-slate-50 pb-24">
-      {profile.kyc_status !== 'approved' && activeSection === 'home' && <div className="mx-auto max-w-6xl p-4">
-        {profile.role !== 'rider' && ['submitted','pending','under_review'].includes(profile.kyc_status) ?
-          <p role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">Approval pending. Your dashboard is available; wallet features unlock after approval.</p> :
-          <button className="w-full rounded-2xl border border-blue-200 bg-blue-50 p-4 text-left text-blue-900" onClick={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal'); }}>
-            <strong>Verify your identity →</strong><span className="mt-1 block text-sm">Complete verification to unlock transfers and withdrawals.</span>
-          </button>}
-      </div>}
+      <div className="mx-auto max-w-6xl px-4"><KycStatusNotice profile={profile} onVerify={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal?resume=1'); }}/></div>
       {role === 'rider' && (
         <RiderDashboard
           profile={profile}
@@ -612,15 +623,27 @@ export function PortalApp() {
   );
 }
 
+function KycStatusNotice({profile, onVerify}: {profile: any; onVerify: () => void}) {
+  if (!profile || profile.kyc_status === 'approved') return null;
+  const rejected = ['rejected','declined','resubmission_required'].includes(profile.kyc_status);
+  const pending = profile.role !== 'rider' && ['submitted','pending','under_review'].includes(profile.kyc_status);
+  return <section role="status" className={`my-4 rounded-2xl border p-4 ${rejected ? 'border-red-200 bg-red-50 text-red-900' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
+    <h2 className="font-bold">{rejected ? profile.kyc_status === 'resubmission_required' ? 'Verification update required' : 'Verification rejected' : pending ? 'Approval pending' : 'Verify your identity'}</h2>
+    <p className="mt-1 whitespace-pre-wrap text-sm">{rejected ? profile.kyc_rejection_reason || 'Contact MatMove support for your review details.' : pending ? 'Your dashboard is available. Wallet features unlock after administrator approval.' : 'You can load your rider wallet. Complete verification to unlock transfers and withdrawals.'}</p>
+    <button type="button" onClick={onVerify} className="mt-3 font-bold underline">{rejected ? 'Correct and resubmit verification' : pending ? 'Continue verification draft' : 'Verify identity →'}</button>
+  </section>;
+}
+
 function AccountSection({
   profile,
   wallet,
   loggingOut,
   onLogout,
   onBack,
+  onLock,
 }: any) {
   const navigate = useNavigate();
-  const resumeVerification = () => { sessionStorage.setItem('ob_role', profile.role); navigate('/onboarding/personal'); };
+  const resumeVerification = () => { if (profile.kyc_status === 'approved') return; sessionStorage.setItem('ob_role', profile.role); navigate('/onboarding/personal?resume=1'); };
   const [viewingGames, setViewingGames] = useState(false);
   const [
     showDeleteConfirm,
@@ -974,7 +997,7 @@ function AccountSection({
     );
 
   if (viewingGames) {
-    return <SpinGame userId={profile.id} onBack={() => setViewingGames(false)} />;
+    return <ArcadeGames key={profile.id} userId={profile.id} onBack={() => setViewingGames(false)} />;
   }
 
   if (viewingAnalytics && (profile.role === 'rider' || profile.role === 'driver')) {
@@ -1358,6 +1381,8 @@ function AccountSection({
         Account & Profile
       </h1>
 
+      <div className="mb-5 flex justify-end"><button type="button" onClick={onLock} className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2 font-bold text-slate-700"><LockKeyhole size={18}/>Lock app</button></div>
+      <KycStatusNotice profile={profile} onVerify={resumeVerification}/>
       <AccountPolicy />
 
       <button onClick={() => setViewingGames(true)} className="mb-6 w-full rounded-3xl border border-amber-300 bg-gradient-to-r from-purple-950 to-slate-950 p-6 text-left text-white">
@@ -1366,7 +1391,7 @@ function AccountSection({
         <p className="mt-2 text-xs text-slate-300">18+ · Play responsibly · View rules and prize chances</p>
       </button>
 
-      <button type="button" onClick={resumeVerification} className="w-full text-left bg-white border border-slate-200 rounded-3xl p-6 mb-6 flex items-center gap-4">
+      <button type="button" disabled={profile.kyc_status === 'approved'} onClick={resumeVerification} className="w-full text-left bg-white border border-slate-200 rounded-3xl p-6 mb-6 flex items-center gap-4">
         <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
           <UserCircle size={34} />
         </div>
@@ -1383,7 +1408,7 @@ function AccountSection({
             {profile.phone || 'No Phone'}
           </div>
         </div>
-      <span className="ml-auto text-sm font-bold text-blue-700">{profile.kyc_status === 'approved' ? 'View verification' : 'Verify identity →'}</span></button>
+      <span className="ml-auto text-sm font-bold text-blue-700">{profile.kyc_status === 'approved' ? 'Verified · Locked' : 'Continue verification →'}</span></button>
 
       <button
         onClick={() =>
@@ -1820,11 +1845,15 @@ function CustomerPortal() {
 
 function OnboardingGuard({ children, needsRole = true }: { children: React.ReactNode; needsRole?: boolean }) {
   const { session, loading, authError, refreshSession, signOut } = useAuth();
+  const location = useLocation();
   if (loading) return <p role="status" className="p-8">Loading your account…</p>;
   if (authError) return <div className="p-8"><p role="alert">{authError}</p><button className="primary-button mt-4" onClick={() => void refreshSession().catch(() => {})}>Retry</button><button className="ml-4" onClick={() => void signOut()}>Sign out</button></div>;
   if (!session) return <Navigate to="/login" replace />;
   if (needsRole && (session.roles.length !== 1 || !session.user.phone)) return <Navigate to="/select-role" replace />;
   if (session.roles[0]) sessionStorage.setItem('ob_role', session.roles[0]);
+  const finished = ['/onboarding/submitted','/verification'].includes(location.pathname);
+  if (!needsRole && session.kycStatus === 'approved') return <Navigate to={`/customer/${session.roles[0]}`} replace />;
+  if (needsRole && !finished) return <KycWorkspace>{children}</KycWorkspace>;
   return <>{children}</>;
 }
 

@@ -1,3 +1,5 @@
+
+import GameDemos from '@/components/GameDemos';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Car, Truck, Package, Bike, ChevronRight, ChevronLeft } from 'lucide-react';
@@ -42,7 +44,7 @@ export function LandingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 overflow-hidden font-sans">
-      <nav className="absolute top-0 w-full z-50 px-6 py-4 flex justify-between items-center max-w-7xl mx-auto left-0 right-0">
+      <nav className="relative z-50 mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
         <div className="flex items-center">
           <img src="/logo.jpg" alt="MatMove" className="h-14 w-auto object-contain mix-blend-multiply" />
         </div>
@@ -52,11 +54,13 @@ export function LandingPage() {
         </div>
       </nav>
 
-      <section className="relative pt-32 pb-20 lg:pt-40 lg:pb-32 px-6 max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-12">
+      <GameDemos />
+
+      <section className="relative pt-16 pb-20 lg:pt-20 lg:pb-24 px-6 max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-12">
         <div className="w-full lg:w-1/2 relative z-10 space-y-8">
-          <h1 className="text-5xl lg:text-7xl font-extrabold text-slate-900 leading-[1.1] tracking-tight">
+          <h2 className="text-5xl lg:text-7xl font-extrabold text-slate-900 leading-[1.1] tracking-tight">
             Moving <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#32a84a] to-[#184f9a]">Sierra Leone</span> Forward.
-          </h1>
+          </h2>
           <p className="text-xl text-slate-600 max-w-xl leading-relaxed">
             The all-in-one platform for rides, deliveries, and merchant payments. Safe, reliable, and built for our community.
           </p>
@@ -70,7 +74,7 @@ export function LandingPage() {
         <div className="w-full lg:w-1/2 relative z-10 h-[450px] lg:h-[550px] rounded-3xl overflow-hidden shadow-2xl group bg-slate-900">
           {slides.map((slide, index) => (
             <div key={slide.id} className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === currentSlide ? 'opacity-100' : 'opacity-0'}`}>
-              <img src={slide.image} alt={slide.title} className="w-full h-full object-cover" />
+              <img loading="lazy" src={slide.image} alt={slide.title} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/40 to-transparent" />
               <div className="absolute bottom-0 left-0 p-8 lg:p-12 w-full text-white transform transition-transform duration-700 translate-y-0">
                 <span className="inline-block px-3 py-1 bg-[#32a84a] rounded-full text-xs font-bold tracking-wider mb-4 uppercase">{slide.tag}</span>
