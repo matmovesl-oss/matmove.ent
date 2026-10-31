@@ -1,0 +1,12 @@
+-- READ ONLY. Return the production_ride_audit result. No transfer is requested.
+select jsonb_build_object(
+ 'catalog_bucket',(select to_jsonb(b) from (select id,name,public,file_size_limit,allowed_mime_types from storage.buckets where id='product_images') b),
+ 'storage_policies',coalesce((select jsonb_agg(to_jsonb(p)) from (select policyname,permissive,roles,cmd,qual,with_check from pg_policies where schemaname='storage' and tablename='objects' order by policyname) p),'[]'::jsonb),
+ 'ride_functions',coalesce((select jsonb_agg(to_jsonb(f)) from (select p.proname as function_name,pg_get_function_identity_arguments(p.oid) as arguments,pg_get_functiondef(p.oid) as definition from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('prepare_ride_payment','finalize_ride_payment','claim_ride_transfer','record_ride_transfer') order by p.proname) f),'[]'::jsonb),
+ 'payment_columns',coalesce((select jsonb_agg(to_jsonb(c)) from (select table_name,column_name,data_type,is_nullable,column_default from information_schema.columns where table_schema='public' and table_name in ('ride_payments','ride_payment_transfers') order by table_name,ordinal_position) c),'[]'::jsonb),
+ 'ride_constraints',coalesce((select jsonb_agg(to_jsonb(c)) from (select c.conrelid::regclass::text as table_name,c.conname,pg_get_constraintdef(c.oid) as definition from pg_constraint c where c.conrelid in ('public.bookings'::regclass,'public.ride_payments'::regclass,'public.ride_payment_transfers'::regclass) order by c.conname) c),'[]'::jsonb),
+ 'trip_money_triggers',coalesce((select jsonb_agg(to_jsonb(t)) from (select tg.tgrelid::regclass::text as table_name,tg.tgname,pg_get_triggerdef(tg.oid) as trigger_definition,pg_get_functiondef(tg.tgfoid) as function_definition from pg_trigger tg where not tg.tgisinternal and tg.tgrelid in ('public.bookings'::regclass,'public.ride_payments'::regclass,'public.ride_payment_transfers'::regclass) order by tg.tgname) t),'[]'::jsonb),
+ 'referral_campaign',(select to_jsonb(c) from (select accepting_referrals,payments_enabled,reward_minor,currency,treasury_account is not null as treasury_configured from public.matmove_referral_campaign where singleton) c),
+ 'scheduler_installed',to_regclass('public.matmove_referral_scheduler') is not null,
+ 'scheduler_check_installed',to_regprocedure('public.matmove_referral_scheduler_ready()') is not null
+) as production_ride_audit;

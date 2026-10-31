@@ -1,0 +1,255 @@
+{
+  "storage_policies": [
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "Allow authenticated uploads",
+      "with_check": "((bucket_id = 'kyc-documents'::text) AND (auth.uid() = owner))"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "(bucket_id = 'documents'::text)",
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "Allow authenticated views",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "Auth Upload",
+      "with_check": "((bucket_id = 'product_images'::text) AND (auth.role() = 'authenticated'::text))"
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "Merchant Image Upload",
+      "with_check": "((bucket_id = 'product-images'::text) AND (auth.role() = 'authenticated'::text))"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "(bucket_id = 'product_images'::text)",
+      "roles": [
+        "public"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "Public Access",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "(bucket_id = 'kyc-documents'::text)",
+      "roles": [
+        "public"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "Public Access KYC",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "(bucket_id = 'product-images'::text)",
+      "roles": [
+        "public"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "Public Image Access",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can upload their own documents",
+      "with_check": "((bucket_id = 'kyc-documents'::text) AND ((auth.uid())::text = (storage.foldername(name))[1]))"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((bucket_id = 'kyc-documents'::text) AND ((auth.uid())::text = (storage.foldername(name))[1]))",
+      "roles": [
+        "public"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can view their own documents",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "Users upload KYC Documents",
+      "with_check": "(bucket_id = 'kyc-documents'::text)"
+    },
+    {
+      "cmd": "DELETE",
+      "qual": "(bucket_id <> 'product_images'::text)",
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "RESTRICTIVE",
+      "policyname": "matmove_catalog_no_delete",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "qual": "(bucket_id <> 'product_images'::text)",
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "RESTRICTIVE",
+      "policyname": "matmove_catalog_no_overwrite",
+      "with_check": "(bucket_id <> 'product_images'::text)"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((bucket_id = 'product_images'::text) AND matmove_catalog_is_merchant() AND ((name ~~ ((auth.uid())::text || '/%'::text)) OR (name ~~ ((auth.uid())::text || '-%'::text))))",
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "matmove_catalog_photo_read",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "matmove_catalog_upload",
+      "with_check": "((bucket_id = 'product_images'::text) AND matmove_catalog_is_merchant() AND ((name ~~ ((auth.uid())::text || '/%'::text)) OR (name ~~ ((auth.uid())::text || '-%'::text))))"
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "RESTRICTIVE",
+      "policyname": "matmove_catalog_upload_scope",
+      "with_check": "((bucket_id <> 'product_images'::text) OR (matmove_catalog_is_merchant() AND ((name ~~ ((auth.uid())::text || '/%'::text)) OR (name ~~ ((auth.uid())::text || '-%'::text)))))"
+    },
+    {
+      "cmd": "UPDATE",
+      "qual": "(bucket_id <> 'product_images'::text)",
+      "roles": [
+        "public"
+      ],
+      "permissive": "RESTRICTIVE",
+      "policyname": "matmove_product_image_no_overwrite",
+      "with_check": "(bucket_id <> 'product_images'::text)"
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "permissive": "RESTRICTIVE",
+      "policyname": "matmove_product_image_owner_guard",
+      "with_check": "((bucket_id <> 'product_images'::text) OR ((auth.uid() IS NOT NULL) AND (strpos(name, ((auth.uid())::text || '-'::text)) = 1)))"
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "matmove_product_image_upload",
+      "with_check": "((bucket_id = 'product_images'::text) AND (auth.uid() IS NOT NULL) AND (strpos(name, ((auth.uid())::text || '-'::text)) = 1))"
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "matmove_profile_photo_insert",
+      "with_check": "((bucket_id = 'matmove-profile-photos'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text))"
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "RESTRICTIVE",
+      "policyname": "matmove_profile_photo_insert_scope",
+      "with_check": "((bucket_id <> 'matmove-profile-photos'::text) OR ((storage.foldername(name))[1] = (auth.uid())::text))"
+    },
+    {
+      "cmd": "ALL",
+      "qual": "(bucket_id <> 'matmove-profile-photos'::text)",
+      "roles": [
+        "anon"
+      ],
+      "permissive": "RESTRICTIVE",
+      "policyname": "matmove_profile_photo_no_anonymous",
+      "with_check": "(bucket_id <> 'matmove-profile-photos'::text)"
+    },
+    {
+      "cmd": "DELETE",
+      "qual": "(bucket_id <> 'matmove-profile-photos'::text)",
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "RESTRICTIVE",
+      "policyname": "matmove_profile_photo_no_delete",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "qual": "(bucket_id <> 'matmove-profile-photos'::text)",
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "RESTRICTIVE",
+      "policyname": "matmove_profile_photo_no_overwrite",
+      "with_check": "(bucket_id <> 'matmove-profile-photos'::text)"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((bucket_id = 'matmove-profile-photos'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text))",
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "PERMISSIVE",
+      "policyname": "matmove_profile_photo_read",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((bucket_id <> 'matmove-profile-photos'::text) OR ((storage.foldername(name))[1] = (auth.uid())::text))",
+      "roles": [
+        "authenticated"
+      ],
+      "permissive": "RESTRICTIVE",
+      "policyname": "matmove_profile_photo_read_scope",
+      "with_check": null
+    }
+  ],
+  "service_constraint": "CHECK ((service_type = ANY (ARRAY['ride'::text, 'delivery'::text, 'truck'::text, 'bus'::text])))"
+}

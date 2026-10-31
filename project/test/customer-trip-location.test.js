@@ -1,0 +1,26 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {PGlite} from '@electric-sql/pglite';import {readFile} from 'node:fs/promises';
+const rider='11111111-1111-4111-8111-111111111111',driver='22222222-2222-4222-8222-222222222222',other='33333333-3333-4333-8333-333333333333',booking='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+test('customer GPS is private, consent-based and independent of driver GPS and trip money',async t=>{const pg=new PGlite({postgresqlconf:['shared_buffers=16MB','max_connections=10','work_mem=1MB']});try{
+ await pg.exec(`create role anon;create role authenticated;create role service_role;create schema auth;
+ create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+ create table auth.users(id uuid primary key);insert into auth.users values('${rider}'),('${driver}'),('${other}');
+ create table profiles(id uuid primary key,role text,kyc_status text,is_wallet_frozen boolean default false);insert into profiles values('${rider}','rider','approved',false),('${driver}','driver','approved',false),('${other}','driver','approved',false);
+ create table user_roles(profile_id uuid,role text);insert into user_roles select id,role from profiles;
+ create table wallets(user_id uuid,is_frozen boolean default false);insert into wallets(user_id) values('${rider}'),('${driver}'),('${other}');
+ create table matmove_staff_access(id uuid primary key,is_active boolean,removed_at timestamptz);
+ create table bookings(id uuid primary key,rider_id uuid,driver_id uuid,status text,fare_amount numeric);insert into bookings values('${booking}','${rider}','${driver}','accepted',25);
+ grant usage on schema auth,public to authenticated,anon,service_role;grant select,update on bookings to authenticated;
+ `);
+ const home=await readFile('docs/PORTAL_HOME_SETUP.sql','utf8');await pg.exec(home.slice(home.indexOf('create or replace function public.matmove_preferences_role('),home.indexOf('create or replace function public.matmove_home_preferences(')));
+ const sql=await readFile('docs/ACTIVE_TRIP_LOCATION_SETUP.sql','utf8');await pg.exec(sql);
+
+ const extra=await readFile('docs/CUSTOMER_TRIP_LOCATION_SETUP.sql','utf8');await pg.exec(extra);
+ const session=async(id,role='authenticated')=>{await pg.exec('reset role');await pg.query("select set_config('request.jwt.claim.sub',$1,false)",[id||'']);await pg.exec('set role '+role);};
+ const rpc=async(action='read',key=null,lat=null,lng=null,accuracy=null,observed=null)=>(await pg.query('select matmove_customer_trip_location($1,$2,$3,$4,$5,$6,$7) d',[booking,action,lat,lng,accuracy,observed,key])).rows[0].d;
+ let key;
+ await t.test('only the trip customer starts sharing and unrelated accounts cannot read it',async()=>{await session(other);await assert.rejects(()=>rpc(),/FORBIDDEN/);await session(driver);await assert.rejects(()=>rpc('start'),/FORBIDDEN/);await session(rider);const r=await rpc('start');key=r.shareKey;assert.ok(key);assert.equal(r.position,null);});
+ await t.test('assigned driver sees an exact fresh customer sample without changing the saved pickup or fare',async()=>{await session(rider);await rpc('publish',key,8.481,-13.231,12,new Date().toISOString());await session(driver);const r=await rpc();assert.equal(r.position.lat,8.481);assert.equal(r.locationState,'fresh');await pg.exec('reset role');assert.equal((await pg.query('select fare_amount from bookings')).rows[0].fare_amount,'25');assert.equal((await pg.query('select count(*)::int n from matmove_trip_positions')).rows[0].n,0);});
+ await t.test('old sharing keys cannot clear or overwrite a new customer session',async()=>{await session(rider);const old=key;key=(await rpc('start')).shareKey;await rpc('clear',old);await rpc('publish',key,8.482,-13.232,10,new Date().toISOString());await assert.rejects(()=>rpc('publish',old,8.483,-13.233,10,new Date().toISOString()),/FORBIDDEN/);assert.equal((await rpc()).position.lat,8.482);});
+ await t.test('bad GPS, direct table reads, anonymous calls and frozen publishing stay denied',async()=>{await session(rider);await assert.rejects(()=>rpc('publish',key,8.48,-13.23,500,new Date().toISOString()),/INVALID/);await assert.rejects(()=>pg.query('select * from matmove_customer_trip_positions'),/permission denied/);await pg.exec('reset role');await pg.query('update wallets set is_frozen=true where user_id=$1',[rider]);await session(rider);await assert.rejects(()=>rpc('publish',key,8.48,-13.23,10,new Date().toISOString()),/FORBIDDEN/);await session('', 'anon');await assert.rejects(()=>rpc(),/permission denied/);await pg.exec('reset role');await pg.query('update wallets set is_frozen=false where user_id=$1',[rider]);});
+ await t.test('reruns retain consent; closing a trip removes customer samples and leases',async()=>{await pg.exec('reset role');await pg.exec(extra);await session(driver);assert.equal((await rpc()).position.lat,8.482);await pg.exec('reset role');await pg.query("update bookings set status='completed' where id=$1",[booking]);assert.equal((await pg.query('select count(*)::int n from matmove_customer_trip_positions')).rows[0].n,0);assert.equal((await pg.query('select count(*)::int n from matmove_customer_trip_sharing')).rows[0].n,0);await session(driver);await assert.rejects(()=>rpc(),/FORBIDDEN/);});
+ }finally{await pg.close();}});

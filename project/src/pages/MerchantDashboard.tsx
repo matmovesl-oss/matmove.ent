@@ -1,0 +1,587 @@
+import {useTripRequest} from '@/lib/useTripRequest';
+import CustomerTripSwitcher from '@/components/CustomerTripSwitcher';
+import ActiveTripMap from '@/components/ActiveTripMap';
+import {MerchantProductCatalog, catalogMoney} from '@/components/ProductCatalog';
+
+import FareNegotiation from '@/components/FareNegotiation';
+import { useCustomerActiveRide } from '@/lib/useRideNegotiation';
+
+
+import WalletCardsView from '@/components/WalletCards';
+import TransactionHistory from '@/components/TransactionHistory';
+
+import TripHistory from '@/components/TripHistory';
+
+import PayoutPanel from '@/components/PayoutPanel';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
+import { RideLocationPicker, TripLocations } from '@/components/RideLocationPicker';
+import { WalletTopUp } from '@/components/WalletTopUp';
+import { TransactionModal } from '@/components/TransactionModal';
+import { useWalletAccess } from '@/lib/useWalletAccess';
+import { walletFetch } from '@/lib/apiFetch';
+import { updateRide, readRidePayment } from '@/services/rideService';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import {
+  Store, Plus, Package, RefreshCw, X, Loader2, MapPin,
+  Car, CalendarClock, Phone, Minus, Smartphone,
+  ArrowDownLeft, ArrowUpRight, Users, ArrowRight,
+  Trash2, Wallet, Activity, Copy, Check, Share2,
+  Image as ImageIcon, User, MessageCircle, ShieldCheck, Banknote
+} from 'lucide-react';
+
+type ServiceType = 'delivery' | 'ride' | 'scheduled';
+type VehicleType = 'keke' | 'bike' | 'car' | 'van';
+
+export function MerchantDashboard(props: any) {
+  if (props.activeSection === 'inventory') return <MerchantInventory profile={props.profile} />;
+  if (props.activeSection === 'trips') return <MerchantTrips profile={props.profile} />;
+  return <MerchantMain key={props.profile.id} {...props} />;
+}
+
+function MerchantMain({ profile, wallet, activeSection }: any) {
+  const [sleWallet, setSleWallet] = useState<any>(wallet);
+  const [rideNotice, setRideNotice] = useState('');
+  const [walletNotice, setWalletNotice] = useState('');
+  const balanceBusy = useRef(false);
+  const setupBusy = useRef(false);
+  const [isSettingUpWallet, setIsSettingUpWallet] = useState(false);
+  const [walletSetupError, setWalletSetupError] = useState('');
+  const [usdWallet, setUsdWallet] = useState<any>(null);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [txFilter, setTxFilter] = useState<'recent' | 'all'>('recent');
+  const [isCreatingUsd, setIsCreatingUsd] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedTx, setSelectedTx] = useState<any>(null);
+
+  const [pricingRates, setPricingRates] = useState<any>({ car: { min: 30, perKm: 8 }, bike: { min: 15, perKm: 3 }, keke: { min: 20, perKm: 5 }, van: { min: 50, perKm: 15 } });
+  const [pickup, setPickup] = useState('');
+  const [destination, setDestination] = useState('');
+  const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
+  const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
+
+  const [serviceType,setServiceType] = useState<ServiceType>('delivery');
+  const [vehicleType, setVehicleType] = useState<VehicleType>('car');
+  const [offerAmount, setOfferAmount] = useState('');
+  const [tripDistanceKm, setTripDistanceKm] = useState<number | null>(null);
+  const [scheduledTime, setScheduledTime] = useState('');
+  const [isRequesting, setIsRequesting] = useState(false);
+  const tripRequest=useTripRequest(profile.id);
+  const [passengerCount,setPassengerCount]=useState(1);
+  const [passengerName,setPassengerName]=useState('');
+  const { booking: activeBooking, setBooking: setActiveBooking, loading: tripLoading, error: tripError, retry: retryTrip, applySnapshot: applyFareSnapshot,bookings:activeTrips,creating:creatingTrip,canCreate:canCreateTrip,selectBooking:selectTrip,startNewBooking } = useCustomerActiveRide(profile.id);
+
+  const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
+  const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState('');
+  const [payoutPhone, setPayoutPhone] = useState('');
+  const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
+  const [isProcessingPayout, setIsProcessingPayout] = useState(false);
+
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferCurrency, setTransferCurrency] = useState<'SLE' | 'USD'>('SLE');
+  const [transferError, setTransferError] = useState('');
+  const [transferNotice, setTransferNotice] = useState('');
+  const [transferRecipient, setTransferRecipient] = useState('');
+  const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
+
+  // Confirmation Modal
+  const [paymentModalData, setPaymentModalData] = useState<any>(null);
+  const [showPolicy, setShowPolicy] = useState(false);
+
+  const { frozen: isFrozen, approved: isApproved } = useWalletAccess(profile.id);
+  const canTransact = !isFrozen && isApproved;
+  const monimeAccountId = sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || 'Pending Setup';
+
+  useEffect(() => {
+    if (tripDistanceKm === null) return;
+    const rate = pricingRates[vehicleType] || { min: 15, perKm: 3 };
+    setOfferAmount(Math.max(rate.min, Math.ceil((rate.min + tripDistanceKm * rate.perKm) / 5) * 5).toString());
+  }, [tripDistanceKm, vehicleType, pricingRates]);
+
+  useEffect(() => {
+    supabase.from('pricing_settings').select('*').then(({ data }) => {
+      if (data?.length) {
+        const rates: any = {};
+        data.forEach(r => { rates[r.vehicle_type] = { min: Number(r.min_fare), perKm: Number(r.per_km_rate) }; });
+        setPricingRates(rates);
+      }
+    });
+    if (profile?.id && !localStorage.getItem(`matmove_policy_${profile.id}`)) setShowPolicy(true);
+  }, [profile?.id]);
+
+  const handleAcceptPolicy = () => { localStorage.setItem(`matmove_policy_${profile.id}`, 'true'); setShowPolicy(false); };
+
+  const fetchLiveBalance = async () => {
+    if (!profile?.id || balanceBusy.current) return;
+    balanceBusy.current = true;
+    setIsRefreshing(true);
+    try {
+      const { response, data } = await walletFetch('/api/get-live-wallet', {});
+      if (!response.ok) throw new Error(data.error || 'Unable to read wallet balances.');
+      if (data.sleWallet) setSleWallet(data.sleWallet);
+      if (data.usdWallet) setUsdWallet(data.usdWallet);
+      if (data.transactions) setTransactions(data.transactions);
+      setWalletNotice(data.sleWallet?.balanceAvailable === false ? data.sleWallet.balanceError || 'Balance unavailable.' : (data.warnings || []).join(' '));
+    } catch (err: any) { setWalletNotice(err.message || 'Wallet refresh failed.'); setSleWallet((previous: any) => previous ? { ...previous, balanceAvailable: false } : null); } finally { balanceBusy.current = false; setIsRefreshing(false); }
+  };
+
+  const hasSleAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || ''));
+  const setupSleWallet = async () => {
+    if (!canTransact || setupBusy.current) return;
+    setupBusy.current = true;
+    setIsSettingUpWallet(true);
+    setWalletSetupError('');
+    try {
+      // Reuse the authenticated account reference and request key on every retry.
+      const { response, data, finish } = await walletFetch('/api/create-monime-wallet', {});
+      if (!response.ok || !/^fac-[A-Za-z0-9_-]+$/.test(String(data.wallet?.monime_account_id || ''))) {
+        throw new Error(data.error || 'Wallet setup was not confirmed. Retry without creating another account.');
+      }
+      finish();
+      setSleWallet({ ...data.wallet, balance: null, balanceAvailable: false });
+      await fetchLiveBalance();
+    } catch (error: any) {
+      setWalletSetupError(error.message || 'Wallet setup is unavailable. Please retry.');
+    } finally { setupBusy.current = false; setIsSettingUpWallet(false); }
+  };
+
+  useEffect(() => {
+    if (canTransact && !hasSleAccount) void setupSleWallet();
+    // One automatic attempt when access becomes available; failures use explicit Retry.
+  }, [profile?.id, canTransact]);
+
+  const walletSetupPanel = canTransact && !hasSleAccount ? <section role="status" className="m-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
+    <p className="font-bold">{isSettingUpWallet ? 'Setting up your SLE wallet…' : 'Finish wallet setup'}</p>
+    <p className="mt-1 text-sm">Your dashboard is available. Loading becomes available when your wallet account is ready.</p>
+    {walletSetupError && <p role="alert" className="mt-2 text-red-700">{walletSetupError}</p>}
+    <button type="button" disabled={isSettingUpWallet} onClick={() => void setupSleWallet()} className="mt-3 rounded-xl bg-blue-700 px-4 py-2 font-bold text-white disabled:opacity-50">{isSettingUpWallet ? 'Setting up…' : 'Retry wallet setup'}</button>
+  </section> : null;
+
+  useEffect(() => { void fetchLiveBalance(); }, [profile?.id]);
+
+  const handleCopy = async (id: string) => {
+    if (!id || id === 'Pending Setup') return;
+    try { await navigator.clipboard.writeText(id); setCopiedId(id); window.setTimeout(() => setCopiedId(null), 2000); } catch { alert(`Account ID: ${id}`); }
+  };
+
+
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    const refresh = () => { if (document.visibilityState === 'visible') void fetchLiveBalance(); };
+    const timer = window.setInterval(refresh, 10000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [profile?.id]);
+
+  const handleCreateUsdWallet = async () => {
+    if (!canTransact || isCreatingUsd) { setWalletNotice('Approval pending or wallet unavailable.'); return; }
+    setIsCreatingUsd(true);
+    try {
+      const { response, data, finish } = await walletFetch('/api/create-usd-wallet', {});
+      if (!response.ok) throw new Error(data.error || 'Unable to create USD wallet.');
+      finish(); await fetchLiveBalance(); setWalletNotice('USD wallet created successfully.');
+    } catch (err: any) { setWalletNotice(err.message || 'Unable to create USD wallet.'); } finally { setIsCreatingUsd(false); }
+  };
+
+  const handleDispatchDelivery = async () => {
+    if (tripLoading || tripError || activeBooking || !canCreateTrip || tripRequest.retained || tripRequest.error || isRequesting) return;
+    if (isRequesting) return;
+    if (!pickupCoords || !destinationCoords) return alert('Choose pickup and destination using search or map pins.');
+    if (serviceType === 'scheduled' && !scheduledTime) return alert('Select a time for your scheduled request.');
+
+    if(!Number.isInteger(passengerCount)||passengerCount<1||passengerCount>3||(passengerName.trim()&&passengerName.trim().length<2)) {setRideNotice('Choose one to three passengers and check the optional passenger name.');return;}
+    const finalAmount = Number(offerAmount);
+    if (!/^\d+(\.\d{1,2})?$/.test(offerAmount.trim()) || !Number.isFinite(finalAmount) || finalAmount <= 0 || finalAmount > 1000000) return alert('Enter and review a positive fare with at most two decimal places, up to SLE 1,000,000.');
+    const minimumFare = pricingRates[vehicleType]?.min || 1;
+    if (finalAmount < minimumFare) return alert(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minimumFare}.`);
+    if (serviceType === 'scheduled' && (!Number.isFinite(Date.parse(scheduledTime)) || Date.parse(scheduledTime) <= Date.now())) return alert('Choose a future scheduled time.');
+
+    if (Number(sleWallet?.balance || 0) < finalAmount) return alert(`Insufficient balance. You need SLE ${finalAmount} for this request.`);
+
+    setIsRequesting(true);
+    try {
+      const data=await tripRequest.submit({client_version:1,service_type:serviceType,vehicle_type:vehicleType,pickup_location:pickup,destination_location:destination,fare_amount:finalAmount.toFixed(2),scheduled_time:serviceType==='scheduled'?new Date(scheduledTime).toISOString():null,passenger_count:passengerCount,passenger_name:passengerName.trim()||null,pickup_pin:{lat:pickupCoords[1],lng:pickupCoords[0]},destination_pin:{lat:destinationCoords[1],lng:destinationCoords[0]}});
+      setActiveBooking(data);
+    } catch (err: any) { alert(err.message); } finally { setIsRequesting(false); }
+  };
+
+  const cancelTrip = async () => {
+    if (!activeBooking || isRequesting) return;
+    setIsRequesting(true); setRideNotice('');
+    try {
+      const result = await updateRide('cancel', activeBooking.id);
+      setRideNotice(result.pending ? 'Refund is processing. The cancellation is not settled yet.' : 'Trip cancelled. Any held fare has been returned to your wallet.');
+      setActiveBooking(result.pending ? { ...activeBooking, ...result.booking } : result.booking);
+      if (!result.pending) setPaymentModalData(null);
+      await fetchLiveBalance();
+    } catch (err: any) { setRideNotice(err.message); }
+    finally { setIsRequesting(false); }
+  };
+
+  const executeRidePayment = async () => {
+    if (!activeBooking || isRequesting) return;
+    setIsRequesting(true); setRideNotice('');
+    try {
+      const result = await updateRide('complete', activeBooking.id);
+      if (!result.pending && result.payment?.settled !== true) throw new Error('Driver credit is not confirmed. Do not make a new payment.');
+      const driverLeg = result.payment?.transfers?.find((leg: any) => leg.kind === 'driver');
+      setRideNotice(result.pending ? 'Driver credit is processing; the trip is not completed yet. Check again.' :`Driver credited SLE ${Number(result.payment.driverEarnings).toFixed(2)}. Receipt: ${driverLeg?.transferId}.`);
+      setActiveBooking(result.pending ? { ...activeBooking, ...result.booking } : result.booking);
+      if (!result.pending) setPaymentModalData(null);
+      await fetchLiveBalance();
+    } catch (err: any) { setRideNotice(err.message); }
+    finally { setIsRequesting(false); }
+  };
+
+  const handleOpenPaymentModal = async () => {
+    if (!activeBooking || isRequesting) return;
+    setIsRequesting(true); setRideNotice('');
+    try {
+      const result = await readRidePayment(activeBooking.id);
+      if (!result.payment?.holdConfirmed) throw new Error('This trip has no verified escrow receipt. Support must reconcile it before payment.');
+      setPaymentModalData({ driverAccountId: result.payment.driverAccountId,
+        driverName: activeBooking.driver?.full_name || 'Driver', amount: result.payment.fare,
+        driverEarnings: result.payment.driverEarnings, platformFee: result.payment.platformFee });
+    } catch (err: any) { setRideNotice(err.message); }
+    finally { setIsRequesting(false); }
+  };
+
+  const closeModals = () => {
+    if (isProcessingPayout || isProcessingTransfer) return;
+    setIsLoadModalOpen(false); setIsPayoutModalOpen(false); setIsTransferModalOpen(false);
+    setPayoutAmount(''); setPayoutPhone(''); setTransferAmount(''); setTransferRecipient(''); setTransferError(''); setTransferNotice('');
+  };
+
+
+
+  const executeTransfer = async () => {
+    if (isProcessingTransfer) return;
+    if (!canTransact) return setTransferError('Wallet access is unavailable.');
+    if (!/^fac-[A-Za-z0-9_-]+$/.test(transferRecipient.trim())) return setTransferError('Enter the recipient MatMove account ID.');
+
+    setIsProcessingTransfer(true); setTransferError(''); setTransferNotice('');
+    try {
+      const { response, data, finish } = await walletFetch('/api/create-monime-transfer', { amount: transferAmount, currency: transferCurrency, recipientAccountId: transferRecipient.trim() });
+      if (!response.ok) throw new Error(data.error || 'Transfer could not be submitted.');
+      const status = data.data?.status;
+      setTransferNotice(status === 'completed' ? 'Transfer completed.' : `Transfer ${status || 'submitted'}. Do not create another payment while this transfer is pending.`);
+      if (status === 'completed' || status === 'failed') { finish(); setTransferAmount(''); }
+      await fetchLiveBalance();
+    } catch (err: any) { setTransferError(err.message || 'Transfer could not be submitted.'); } finally { setIsProcessingTransfer(false); }
+  };
+
+  const walletCards = <WalletCardsView sleWallet={sleWallet} usdWallet={usdWallet}
+    refresh={fetchLiveBalance} refreshing={isRefreshing} createUsd={handleCreateUsdWallet} creatingUsd={isCreatingUsd} />;
+
+  const validTransactions = Array.isArray(transactions) ? transactions : [];
+  const displayedTransactions = txFilter === 'recent' ? validTransactions.slice(0, 5) : validTransactions;
+
+  return (
+    <div className="min-h-screen flex-1 bg-slate-50">
+      <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b bg-white px-4 py-4 shadow-sm sm:px-6">
+        <div className="flex items-center gap-3"><div className="rounded-xl bg-orange-100 p-2 text-orange-600"><Store size={20} /></div><h2 className="font-bold text-slate-900">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
+        <div className="flex gap-2">
+          {!canTransact ? <span className="rounded-xl border border-red-200 bg-red-100 px-4 py-2 text-xs font-bold text-red-700">{isFrozen ? 'Wallet unavailable' : 'Approval pending'}</span> : (
+            <><button onClick={() => setIsLoadModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">Load</button><button onClick={() => setIsPayoutModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Withdraw</button><button onClick={() => setIsTransferModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Transfer</button></>
+          )}
+        </div>
+      </header>
+      {walletSetupPanel}
+      {(rideNotice || walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice && <p>{rideNotice}</p>}{walletNotice && <p>{walletNotice}</p>}</div>}
+
+      {activeSection==='home'&&(tripRequest.retained||tripRequest.error)&&<div role="alert" className="m-3 rounded-xl border border-amber-300 bg-amber-50 p-3"><p>{tripRequest.error||'A trip request needs confirmation. Check the original request before creating another.'}</p>{tripRequest.retained&&<button type="button" disabled={tripRequest.working||isRequesting} onClick={async()=>{try{const row=await tripRequest.submit();setActiveBooking(row);setRideNotice('Original trip request confirmed.');}catch(e){setRideNotice(e instanceof Error?e.message:'Original request unavailable.');}}} className="min-h-11 font-bold underline">Check original request</button>}</div>}
+      {activeSection==='home'&&<CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} onSelect={selectTrip} onNew={()=>{startNewBooking();setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerName('');setPassengerCount(1);setRideNotice('Your previous trip remains active. Review the new pickup, destination and fare.');}}/>}
+      {activeSection === 'home' && (
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 p-3 lg:flex-row">
+          <div className="w-full space-y-4 border-r bg-white p-4 lg:w-[340px] lg:shrink-0">
+            <p className="text-xs text-slate-500">Your balance and wallet actions are in Home and Wallet.</p>
+            <h3 className="text-lg font-bold">Dispatch Request</h3>
+            {tripError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{tripError}<button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry active trip</button></p>}
+              {tripLoading && !activeBooking ? <p role="status" className="rounded-xl bg-slate-50 p-4 text-sm">Checking your active trip…</p> : tripError && !activeBooking ? null : !activeBooking ? (
+              <>
+                <div className="flex gap-2 rounded-xl bg-slate-100 p-1">
+                  <button onClick={() => setServiceType('delivery')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' :'text-slate-500'}`}><Package size={16} /> Delivery</button>
+                  <button onClick={() => setServiceType('ride')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16} /> Ride</button>
+                  <button onClick={() => setServiceType('scheduled')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size={16} /> Schedule</button>
+                </div>
+                {['ride','delivery','scheduled'].includes(serviceType) && (
+                  <div className="grid grid-cols-4 gap-2">{(['keke', 'bike', 'car', 'van'] as VehicleType[]).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`rounded-xl py-2 text-xs font-bold uppercase ${vehicleType === v ? 'bg-orange-100 text-orange-700 ring-2 ring-orange-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}</div>
+                )}
+                <p className="text-sm text-slate-600">Choose pickup and destination in the map panel, then preview your route.</p>
+                {['ride','delivery','scheduled'].includes(serviceType) && (
+                  <div className="rounded-xl border bg-slate-50 p-3">
+                    <label className="text-sm font-bold text-slate-600">Total Fare (SLE)</label>
+                    <div className="mt-2 flex items-center gap-2">
+                      <input type="number" min="0" step="0.01" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="min-w-0 flex-1 rounded-lg border bg-white p-2 text-lg font-bold" placeholder="Amount" />
+                      <button onClick={() => setOfferAmount(previous => Math.max(pricingRates[vehicleType]?.min || 1, Number(previous || 0) - 5).toString())} className="rounded-lg border bg-white p-2"><Minus size={16} /></button>
+                      <button onClick={() => setOfferAmount(previous => (Number(previous || 0) + 5).toString())} className="rounded-lg border bg-white p-2"><Plus size={16} /></button>
+                    </div>
+                    {Number(offerAmount) > 0 && (
+                      <div className="mt-3 flex justify-between gap-2 text-xs font-bold"><span className="text-emerald-600">Driver: SLE {(Number(offerAmount) * 0.85).toFixed(2)}</span><span className="text-rose-600">Platform: SLE {(Number(offerAmount) * 0.15).toFixed(2)}</span></div>
+                    )}
+                  </div>
+                )}
+                <div className="space-y-2 rounded-xl border p-3"><label className="block text-sm font-bold">Passengers<select aria-label="Passenger count" value={passengerCount} onChange={e=>setPassengerCount(Number(e.target.value))} className="ml-3 rounded-lg border p-2"><option value={1}>1 passenger</option><option value={2}>2 passengers</option><option value={3}>3 passengers</option></select></label><p className="text-xs text-slate-600">Maximum three passengers. Contact support for larger groups. The reviewed fare is the total trip fare.</p><label className="block text-sm">Optional passenger name<input aria-label="Passenger name" maxLength={120} value={passengerName} onChange={e=>setPassengerName(e.target.value)} className="mt-1 w-full rounded-lg border p-2"/></label></div>
+                {serviceType === 'scheduled' && <label className="block text-sm font-bold">Schedule delivery<input type="datetime-local" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="mt-2 w-full rounded-xl border p-3" /></label>}
+                <button onClick={() => void handleDispatchDelivery()} disabled={isRequesting} className="w-full rounded-xl bg-slate-900 py-4 font-bold text-white disabled:opacity-50">{isRequesting ? <Loader2 size={20} className="mx-auto animate-spin" /> : 'Request Dispatch'}</button>
+              </>
+            ) : (
+              <div className="py-6 text-center">
+                {['accepted', 'in_progress'].includes(activeBooking.status) ? (
+                  <>
+                    <Car size={48} className="mx-auto mb-4 text-emerald-600" />
+                    <h4 className="text-xl font-bold">{activeBooking.status === 'in_progress' ? 'Trip in progress' : 'Driver is on the way'}</h4>
+                    {activeBooking.driver && (
+                      <div className="my-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-left">
+                        <p className="text-xs font-bold uppercase text-emerald-600">Your Driver</p>
+                        <p className="mt-1 font-bold">{activeBooking.driver.full_name}</p>
+                        <p className="mt-1 flex items-center gap-2 text-sm"><Smartphone size={14} />{activeBooking.driver.phone}</p>
+                      </div>
+                    )}
+                    {activeBooking.status === 'accepted' && <button onClick={cancelTrip} disabled={isRequesting} className="mb-4 text-red-600 font-bold">Cancel & Refund Held Fare</button>}
+                    {activeBooking.status === 'in_progress' && (
+                      <div className="mt-4 mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm text-left">
+                        <h5 className="font-bold text-slate-900 border-b pb-2 mb-2 flex items-center gap-2"><ShieldCheck size={16} className="text-orange-600" />Payment Breakdown</h5>
+                        <div className="flex justify-between mb-1"><span className="text-slate-500">Total Fare (in Escrow)</span><span className="font-bold text-slate-900">SLE {activeBooking.fare_amount}</span></div>
+                        <div className="flex justify-between mb-1"><span className="text-slate-500">Driver Take-Home (85%)</span><span className="font-bold text-emerald-600">SLE {(activeBooking.fare_amount * 0.85).toFixed(2)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Platform Fee (15%)</span><span className="font-bold text-rose-500">SLE {(activeBooking.fare_amount * 0.15).toFixed(2)}</span></div>
+                        <div className="mt-3 pt-3 border-t text-xs text-slate-400">Funds will be transferred directly to the driver's Monime wallet upon completion.</div>
+                      </div>
+                    )}
+                    {activeBooking.status === 'in_progress' && (
+                      <button onClick={handleOpenPaymentModal} disabled={isRequesting} className="w-full rounded-xl bg-emerald-600 py-4 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2">
+                        {isRequesting ? <Loader2 size={20} className="animate-spin" /> : <><Banknote size={20}/> Confirm Arrival & Release Payment</>}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Loader2 size={40} className="mx-auto mb-4 animate-spin text-orange-600" />
+                    <h4 className="text-lg font-bold">{activeBooking.status === 'pending_admin' ? 'Request sent to Dispatch' : 'Finding a driver'}</h4>
+                    <button onClick={cancelTrip} disabled={isRequesting} className="mt-4 text-sm font-bold text-red-600">Cancel Request</button>
+                  </>
+                )}
+                {['pending', 'pending_admin'].includes(activeBooking.status) && ['ride', 'delivery'].includes(activeBooking.service_type) && (
+                  <div className="mt-4 text-left"><FareNegotiation key={`${profile.id}:${activeBooking.id}`} userId={profile.id} bookingId={activeBooking.id} role="merchant" onFareChange={applyFareSnapshot} /></div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">{activeBooking&&['accepted','in_progress'].includes(activeBooking.status)?<ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/>:<RideLocationPicker key={profile.id} userId={profile.id} onChange={(selection: TripLocations) => { setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />}</div>
+        </div>
+      )}
+
+      {activeSection === 'wallet' && (
+        <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
+          <h2 className="text-2xl font-bold">My Wallets</h2>
+          {walletCards}
+          <div className="rounded-3xl border bg-white p-6 text-center">
+            <h3 className="text-xl font-bold">Wallet Actions</h3>
+            <p className="mb-6 mt-2 text-sm text-slate-500">Transfers support SLE to SLE and USD to USD.</p>
+            {!canTransact && <p className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{isFrozen ? 'Your wallet is frozen. Contact support.' : 'Approval pending. Complete verification in Account & Profile; wallet features unlock after administrator approval.'}</p>}
+            <div className="grid grid-cols-3 gap-3">
+              <button onClick={() => setIsLoadModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="flex flex-col items-center gap-3 rounded-2xl bg-blue-50 p-4 font-bold text-blue-700 disabled:opacity-50"><ArrowDownLeft size={24} /> Load</button>
+              <button onClick={() => setIsPayoutModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="flex flex-col items-center gap-3 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700 disabled:opacity-50"><ArrowUpRight size={24} /> Withdraw</button>
+              <button onClick={() => setIsTransferModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="flex flex-col items-center gap-3 rounded-2xl bg-purple-50 p-4 font-bold text-purple-700 disabled:opacity-50"><Users size={24} /> Transfer</button>
+            </div>
+          </div>
+          <TransactionHistory transactions={transactions} onSelect={setSelectedTx} />
+        </div>
+      )}
+
+      {paymentModalData && (
+        <div className="m-4 flex justify-center rounded-2xl border bg-slate-100 p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl relative">
+            <button onClick={() => setPaymentModalData(null)} className="absolute right-4 top-4 p-2 text-slate-400 hover:text-slate-600 rounded-full bg-slate-50"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Confirm Completion</h2>
+            <p className="text-sm text-slate-500 mb-6">Review transfer details below.</p>
+
+            <div className="space-y-4 text-sm mb-8 bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-inner">
+              <p className="flex justify-between items-center"><span className="text-slate-500">Driver</span> <b className="text-slate-900">{paymentModalData.driverName}</b></p>
+              <div className="flex flex-col gap-1">
+                <span className="text-slate-500">Driver Account ID</span>
+                <b className="text-[11px] bg-slate-200 px-2 py-1.5 rounded font-mono text-slate-700 break-all">{paymentModalData.driverAccountId}</b>
+              </div>
+              <div className="border-t border-slate-200 pt-3 mt-1 space-y-2">
+                <p className="flex justify-between items-center"><span className="text-slate-500">Driver Cut (85%)</span> <b className="text-emerald-600">SLE {Number(paymentModalData.driverEarnings).toFixed(2)}</b></p>
+                <p className="flex justify-between items-center"><span className="text-slate-500">Platform Fee (15%)</span> <b className="text-rose-500">SLE {Number(paymentModalData.platformFee).toFixed(2)}</b></p>
+              </div>
+              <p className="flex justify-between items-center text-lg border-t border-slate-200 pt-3 mt-1"><span className="text-slate-800 font-bold">Total Payment</span> <b className="text-slate-900 font-black">SLE {paymentModalData.amount}</b></p>
+            </div>
+
+            <button onClick={executeRidePayment} disabled={isRequesting} className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 transition font-bold rounded-xl text-white flex justify-center items-center gap-2 shadow-md">
+              {isRequesting ? <Loader2 className="animate-spin" size={20} /> : <><ShieldCheck size={20}/> Confirm & Transfer</>}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selectedTx && <TransactionModal tx={selectedTx} onClose={() => setSelectedTx(null)} />}
+      {isLoadModalOpen && <WalletTopUp userId={profile.id} allowed={canTransact && hasSleAccount} onClose={() => setIsLoadModalOpen(false)} onPaid={fetchLiveBalance} />}
+
+      {isPayoutModalOpen && (
+        <PayoutPanel userId={profile.id} allowed={canTransact && hasSleAccount}
+          onClose={() => setIsPayoutModalOpen(false)} onBalanceChange={fetchLiveBalance} />
+      )}
+
+      {isTransferModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <button onClick={closeModals} disabled={isProcessingTransfer} className="absolute right-4 top-4 p-2 text-slate-400"><X size={20} /></button>
+            <h2 className="text-2xl font-bold mb-1">Account Transfer</h2>
+            <label className="my-4 block text-sm font-bold">Send from<select value={transferCurrency} disabled={isProcessingTransfer} onChange={e => { setTransferCurrency(e.target.value as 'SLE' | 'USD'); setTransferError(''); setTransferNotice(''); }} className="mt-2 block w-full rounded-xl border p-3"><option value="SLE">SLE wallet → SLE account</option><option value="USD">USD wallet → USD account</option></select></label>
+            {transferError && <p role="alert" className="mb-3 text-sm text-red-700">{transferError}</p>}
+            {transferNotice && <p role="status" className="mb-3 text-sm text-blue-700">{transferNotice}</p>}
+            <p className="mb-4 text-sm text-slate-500">Paste the recipient’s account ID for the selected currency.</p>
+            <div className="mb-6 space-y-4">
+              <input type="number" min="0.01" step="0.01" disabled={isProcessingTransfer} placeholder={`Amount (${transferCurrency})`} value={transferAmount} onChange={e => setTransferAmount(e.target.value)} className="w-full rounded-xl border p-4 text-xl font-bold" />
+              <input type="text" disabled={isProcessingTransfer} placeholder="Recipient account ID (fac-...)" value={transferRecipient} onChange={e => setTransferRecipient(e.target.value)} className="w-full rounded-xl border p-4" />
+            </div>
+            <button onClick={() => void executeTransfer()} disabled={!canTransact || isProcessingTransfer || !transferAmount || !transferRecipient} className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 p-4 font-bold text-white disabled:opacity-50">
+              {isProcessingTransfer ? <Loader2 size={20} className="animate-spin" /> :<Users size={20} />} Send Transfer
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showPolicy && <PolicyModal onAccept={handleAcceptPolicy} />}
+    </div>
+  );
+}
+
+function MerchantInventory({ profile }: any) {
+  const [activeTab, setActiveTab] = useState<'products' | 'orders'>('products');
+  const [products, setProducts] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [orderFilter, setOrderFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [error, setError] = useState('');
+  const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
+
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [productsError, setProductsError] = useState('');
+  const [ordersError, setOrdersError] = useState('');
+  const productsGeneration = useRef(0), ordersGeneration = useRef(0);
+  const fetchProducts = useCallback(async () => {
+    const generation = ++productsGeneration.current;
+    setProductsLoading(true); setProductsError('');
+    try {
+      const { data, error: queryError } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
+      if (queryError) throw queryError;
+      if (!Array.isArray(data)) throw new Error('Invalid product response.');
+      if (generation === productsGeneration.current) setProducts(data);
+    } catch { if (generation === productsGeneration.current) setProductsError('Could not load your catalog. Please retry.'); }
+    finally { if (generation === productsGeneration.current) setProductsLoading(false); }
+  }, [profile.id]);
+  const fetchOrders = useCallback(async () => {
+    const generation = ++ordersGeneration.current;
+    setOrdersLoading(true); setOrdersError('');
+    try {
+      const { data, error: queryError } = await supabase.from('app_orders').select('*, rider:rider_id(full_name, phone)').eq('merchant_id', profile.id).order('created_at', { ascending: false });
+      if (queryError) throw queryError;
+      if (!Array.isArray(data)) throw new Error('Invalid order response.');
+      if (generation === ordersGeneration.current) setOrders(data);
+    } catch { if (generation === ordersGeneration.current) setOrdersError('Could not load your orders. Please retry.'); }
+    finally { if (generation === ordersGeneration.current) setOrdersLoading(false); }
+  }, [profile.id]);
+  useEffect(() => {
+    setProducts([]); setOrders([]); void fetchProducts(); void fetchOrders();
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void fetchOrders(); }, 15000);
+    const channel = supabase.channel(`merchant-orders-${profile.id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'app_orders', filter: `merchant_id=eq.${profile.id}` }, () => void fetchOrders()).subscribe();
+    return () => { productsGeneration.current++; ordersGeneration.current++; window.clearInterval(timer); void supabase.removeChannel(channel); };
+  }, [profile.id, fetchProducts, fetchOrders]);
+
+  const handleUpdateOrderStatus = async (orderId: string, status: string) => {
+    if (updatingOrder) return;
+    setUpdatingOrder(orderId); setError('');
+    try {
+      const { error: updateError } = await supabase.from('app_orders').update({ status }).eq('id', orderId).eq('merchant_id', profile.id);
+      if (updateError) throw updateError;
+      await fetchOrders();
+    } catch (err: any) { setError(err.message || 'Unable to update this order.'); } finally { setUpdatingOrder(null); }
+  };
+
+  const handleWhatsAppCustomer = (order: any) => {
+    let digits = String(order.customer_phone || order.rider?.phone || '').replace(/\D/g, '');
+    if (digits.startsWith('0') && digits.length === 9) { digits = `232${digits.slice(1)}`; }
+    if (!/^[1-9]\d{6,14}$/.test(digits)) { setError('This order does not have a valid customer phone number.'); return; }
+    const message = encodeURIComponent(`Hello ${order.rider?.full_name || 'there'}, regarding your MatMove order for ${order.product_name}.`);
+    window.open(`https://wa.me/${digits}?text=${message}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const displayedOrders = orders.filter(order => orderFilter === 'all' || order.status === orderFilter);
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
+        <h1 className="text-3xl font-bold">Inventory & Orders</h1>
+        <div className="flex rounded-xl bg-slate-100 p-1">
+          <button onClick={() => setActiveTab('products')} className={`rounded-lg px-4 py-2 text-sm font-bold ${activeTab === 'products' ? 'bg-white shadow-sm' : ''}`}>My Catalog</button>
+          <button onClick={() => setActiveTab('orders')} className={`rounded-lg px-4 py-2 text-sm font-bold ${activeTab === 'orders' ? 'bg-white shadow-sm' : ''}`}>In-App Orders</button>
+        </div>
+      </div>
+      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
+      {activeTab === 'products' ? (
+        <MerchantProductCatalog key={profile.id} userId={profile.id} products={products} loading={productsLoading} loadError={productsError} onReload={fetchProducts}/>
+      ) :(
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex rounded-lg bg-slate-100 p-1">{(['all', 'pending', 'completed'] as const).map(filter => <button key={filter} onClick={() => setOrderFilter(filter)} className={`rounded-md px-3 py-2 text-sm font-bold capitalize ${orderFilter === filter ? 'bg-white shadow-sm' : ''}`}>{filter}</button>)}</div>
+            <button onClick={() => void fetchOrders()} className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm"><RefreshCw size={16} /> Refresh</button>
+          </div>
+          {ordersLoading && !orders.length ? <p role="status" className="flex items-center justify-center gap-2 py-6 text-sm text-slate-600"><Loader2 size={18} className="animate-spin"/> Loading your orders…</p> : ordersError ? <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{ordersError}<button type="button" className="ml-2 min-h-11 px-2 font-bold underline" onClick={() => void fetchOrders()}>Retry orders</button></p> : !displayedOrders.length ? <p className="rounded-2xl border bg-white py-10 text-center text-slate-500">No orders found.</p> : null}
+          {displayedOrders.map(order => (
+            <article key={order.id} className="flex flex-col justify-between gap-4 rounded-2xl border bg-white p-5 sm:flex-row">
+              <div>
+                <h3 className="text-lg font-bold">{order.product_name}</h3>
+                <p className={`mt-2 text-sm font-bold ${order.wallet_payment_status === 'paid' ? 'text-emerald-700' : 'text-amber-700'}`}>{order.wallet_payment_status === 'paid' ? 'Paid in-app — merchant wallet credited' : 'Payment not confirmed'}</p>
+                {order.wallet_payment_id && <p className="mt-1 break-all text-xs text-slate-500">Payment receipt: {order.wallet_payment_id}</p>}
+                <p className="mt-1 text-xs font-bold text-slate-500">Quantity: {order.quantity || 1} · {order.status}</p>
+                <div className="mt-3 space-y-2 text-sm text-slate-600">
+                  <p className="flex items-center gap-2"><User size={14} />{order.rider?.full_name || 'Customer'}</p>
+                  <p className="flex items-center gap-2"><Phone size={14} />{order.customer_phone || order.rider?.phone || 'No phone provided'}</p>
+                  <p className="flex items-center gap-2"><MapPin size={14} />{order.delivery_location || 'No location provided'}</p>
+                  {order.delivery_time && <p className="flex items-center gap-2"><CalendarClock size={14} />{new Date(order.delivery_time).toLocaleString()}</p>}
+                </div>
+                <p className="mt-3 text-xs text-slate-400">{new Date(order.created_at).toLocaleString()}</p>
+              </div>
+              <div className="sm:text-right">
+                <p className="text-xl font-bold text-orange-600">{catalogMoney(order.price,'SLE')}</p>
+                <div className="mt-3 flex flex-wrap gap-2 sm:justify-end">
+                  <button onClick={() => handleWhatsAppCustomer(order)} className="flex items-center gap-1 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700"><MessageCircle size={14} /> WhatsApp Customer</button>
+                  <button disabled={updatingOrder !== null} onClick={() => void handleUpdateOrderStatus(order.id, order.status === 'pending' ? 'completed' : 'pending')} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{updatingOrder === order.id ? 'Saving…' : order.status === 'pending' ? 'Mark Completed' : 'Mark Pending'}</button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MerchantTrips({ profile }: any) {
+  return <TripHistory userId={profile.id} role="merchant" />;
+}
+
+function PolicyModal({ onAccept }: { onAccept: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="shrink-0 bg-slate-900 p-6 text-white"><h2 className="text-xl font-bold">MatMove Safety & Compliance Policy</h2><p className="mt-1 text-xs text-slate-400">Sierra Leone Road Safety Authority (SLRSA) Guidelines</p></div>
+        <div className="flex-1 space-y-4 overflow-y-auto p-6 text-sm text-slate-600">
+          <p><strong>1. Compliance with SLRSA:</strong> All users must adhere to the traffic rules and regulations set forth by the Sierra Leone Road Safety Authority.</p>
+          <p><strong>2. Liability & Accidents:</strong> MatMove Enterprise acts as a technology platform connecting users. Its published terms govern responsibilities relating to accidents, injuries, property loss and damage during transit.</p>
+          <p><strong>3. Vehicle Safety:</strong> Drivers must ensure their vehicles are roadworthy, insured and licensed.</p>
+          <p><strong>4. Account Suspension:</strong> Safety violations or reports of reckless behaviour may result in wallet freezing and account suspension.</p>
+          <p className="border-t pt-3 font-bold text-slate-900">By clicking “I Accept”, you acknowledge that you have read and agree to this policy.</p>
+        </div>
+        <div className="shrink-0 border-t bg-slate-50 p-4"><button onClick={onAccept} className="w-full rounded-xl bg-indigo-600 py-4 font-bold text-white">I Accept & Agree</button></div>
+      </div>
+    </div>
+  );
+}
