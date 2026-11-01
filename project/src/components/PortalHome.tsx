@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Briefcase, Car, CreditCard, Eye, EyeOff, Home, Loader2, MapPin, Navigation, RefreshCw, ShieldCheck, ShoppingBag, Store, Trash2, Wallet, X, Bus, Ticket, Sparkles, CheckCircle2, Calendar } from 'lucide-react';
+import { ArrowRight, Briefcase, Car, CreditCard, Eye, EyeOff, Home, Loader2, MapPin, Navigation, RefreshCw, ShieldCheck, ShoppingBag, Store, Trash2, Wallet, X, Bus, Ticket, Sparkles, CheckCircle2, Calendar, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { walletFetch } from '@/lib/apiFetch';
 import { ArcadeGames } from '@/components/ArcadeGames';
@@ -23,7 +23,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
   const [trips, setTrips] = useState<any[]>([]);
   const [tripsLoading, setTripsLoading] = useState(true);
   const [tripsError, setTripsError] = useState('');
-  const [panel, setPanel] = useState<'places' | 'cards' | 'travel' | 'events' | null>(null);
+  const [panel, setPanel] = useState<'places' | 'cards' | 'travel' | 'events' | 'cancel_travel' | null>(null);
   const [busSettings, setBusSettings] = useState<any>({ id: 'bus_ghana', total_seats: 50, price_usd: 100, price_sle: 2400 });
   const [confirmedSeats, setConfirmedSeats] = useState(0);
   const [existingBooking, setExistingBooking] = useState<any>(null);
@@ -216,26 +216,54 @@ export default function PortalHome({ profile, onNavigate }: Props) {
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
                 <div className="flex justify-between items-center text-xs">
                   <span className="font-bold text-slate-500 uppercase">Your Reservation</span>
-                  <span className={`px-2.5 py-0.5 rounded-full font-bold ${
+                  <span className={`px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                    existingBooking.status === 'cancel_requested' ? 'bg-rose-100 text-rose-800 animate-pulse' :
+                    existingBooking.status === 'cancelled' ? 'bg-slate-200 text-slate-700' :
                     existingBooking.is_paid ? 'bg-emerald-100 text-emerald-800' :
                     existingBooking.status === 'approved' ? 'bg-indigo-100 text-indigo-800' :
                     existingBooking.status === 'boarded' ? 'bg-purple-100 text-purple-800' :
                     existingBooking.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
                   }`}>
-                    {existingBooking.is_paid ? 'Paid & Confirmed' : existingBooking.status === 'approved' ? 'Approved (Ready to Pay)' : existingBooking.status}
+                    {existingBooking.status === 'cancel_requested' ? 'Cancel Requested' : existingBooking.is_paid ? 'Paid & Confirmed' : existingBooking.status === 'approved' ? 'Approved (Ready to Pay)' : existingBooking.status}
                   </span>
                 </div>
                 <p className="text-sm font-bold text-slate-900">
                   Freetown – Accra Direct ({existingBooking.passengers_count} Seat{existingBooking.passengers_count > 1 ? 's' : ''})
                 </p>
+
                 {existingBooking.status === 'approved' && !existingBooking.is_paid && (
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setPanel('travel')}
+                      className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-md hover:bg-emerald-500"
+                    >
+                      Confirm & Pay SLE {Number(existingBooking.fare_amount).toLocaleString()}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPanel('cancel_travel')}
+                      className="px-4 py-2.5 rounded-xl border border-rose-300 text-rose-700 font-bold text-xs hover:bg-rose-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
+                {existingBooking.status === 'pending_approval' && (
                   <button
                     type="button"
-                    onClick={() => setPanel('travel')}
-                    className="w-full mt-2 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-md hover:bg-emerald-500"
+                    onClick={() => setPanel('cancel_travel')}
+                    className="w-full mt-2 rounded-xl border border-slate-300 text-slate-600 font-bold text-xs py-2 hover:bg-slate-100"
                   >
-                    Confirm & Pay SLE {Number(existingBooking.fare_amount).toLocaleString()}
+                    Withdraw Booking Request
                   </button>
+                )}
+
+                {existingBooking.status === 'cancel_requested' && (
+                  <p className="text-[11px] text-rose-700 font-medium pt-1">
+                    Your cancellation request is pending dispatch review. Reason: {existingBooking.cancel_reason}
+                  </p>
                 )}
               </div>
             ) : (
@@ -322,6 +350,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
       
       {(panel === 'places' || panel === 'cards') && <PersonalTools key={`${uid}:${panel}`} uid={uid} panel={panel} preferences={preferences} error={preferencesError} loading={preferencesLoading} refresh={refreshPreferences} onClose={() => setPanel(null)}/>}
       {panel === 'travel' && <TravelBookingModal uid={uid} userName={profile.full_name || profile.first_name || ''} userPhone={userPhone} walletBalance={travelWalletBalance} priceSle={Number(busSettings.price_sle || 2400)} departureDate={busSettings.departure_date} availableSeats={availableSeats} existingBooking={existingBooking} onSuccess={() => { setPanel(null); void fetchTravelAndEvents(); void refreshWallets(); }} onClose={() => setPanel(null)} />}
+      {panel === 'cancel_travel' && existingBooking && <CancelTravelModal booking={existingBooking} onSuccess={() => { setPanel(null); void fetchTravelAndEvents(); }} onClose={() => setPanel(null)} />}
       {panel === 'events' && <EventsModal uid={uid} userPhone={userPhone} walletBalance={travelWalletBalance} events={events} eventsError={eventsError} onRetry={fetchTravelAndEvents} onWalletRefresh={refreshWallets} onClose={() => setPanel(null)} />}
       
       <section className="mm-surface"><div className="mm-row"><h2>Recent trips</h2><button type="button" className="mm-text-button" onClick={() => onNavigate('trips')}>View all</button></div>
@@ -414,6 +443,79 @@ function PersonalTools({ uid, panel, preferences, error, loading, refresh, onClo
       {failure && <p className="mm-alert" role="alert">{failure}</p>}
       {notice && <p className="mm-success" role="status">{notice}</p>}
     </section>
+  );
+}
+
+function CancelTravelModal({ booking, onSuccess, onClose }: any) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleConfirmCancel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reason.trim()) { setError('Please enter a cancellation reason.'); return; }
+    setBusy(true);
+    setError('');
+
+    try {
+      const { error: cancelError } = await supabase.from('travel_bookings').update({
+        status: 'cancel_requested',
+        cancel_reason: reason.trim(),
+        cancel_requested_at: new Date().toISOString()
+      }).eq('id', booking.id);
+
+      if (cancelError) throw cancelError;
+      onSuccess();
+    } catch (err: any) {
+      setError(err.message || 'Failed to submit cancellation.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+            <XCircle className="text-rose-600" size={18} /> Cancel Travel Booking
+          </h3>
+          <button onClick={onClose}><X size={18} className="text-slate-400" /></button>
+        </div>
+        <p className="text-xs text-slate-600 leading-relaxed">
+          Are you sure you want to cancel your Freetown – Accra travel booking? Please provide a reason for Dispatch review:
+        </p>
+
+        {error && <div className="p-3 bg-rose-50 text-rose-700 text-xs rounded-xl font-bold">{error}</div>}
+
+        <form onSubmit={handleConfirmCancel} className="space-y-4">
+          <textarea
+            required
+            rows={3}
+            placeholder="e.g. Change of schedule, unable to travel on this date..."
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            className="w-full p-3 border border-slate-200 rounded-xl text-xs outline-none focus:border-rose-500"
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={busy || !reason.trim()}
+              className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs shadow-md transition disabled:opacity-50"
+            >
+              {busy ? 'Submitting…' : 'Submit Cancellation'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs"
+            >
+              Keep Booking
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -653,7 +755,7 @@ function EventsModal({ uid, userPhone, walletBalance, events, eventsError, onRet
 
             return (
               <div key={evt.id} className="border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row gap-4 items-center bg-slate-50">
-                <img src={evt.flyer_url || '/logo.jpg'} alt={evt.title} className="w-full sm:w-28 h-28 rounded-xl object-cover bg-slate-200" />
+                <img src={evt.flyer_url || '/logo.png'} alt={evt.title} className="w-full sm:w-28 h-28 rounded-xl object-cover bg-slate-200" />
                 <div className="flex-1">
                   <h3 className="font-bold text-slate-900 text-sm">{evt.title}</h3>
                   <p className="text-xs text-slate-500 mt-0.5">{evt.venue} · {new Date(evt.event_date).toLocaleDateString()}</p>
