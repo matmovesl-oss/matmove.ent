@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Briefcase, Car, CreditCard, Eye, EyeOff, Home, Loader2, MapPin, Navigation, RefreshCw, ShieldCheck, ShoppingBag, Store, Trash2, Wallet, X, Bus, Ticket, Sparkles, CheckCircle2, Calendar } from 'lucide-react';
+import { ArrowRight, Briefcase, Car, CreditCard, Eye, EyeOff, Home, Loader2, MapPin, Navigation, RefreshCw, ShieldCheck, ShoppingBag, Store, Trash2, Wallet, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { walletFetch } from '@/lib/apiFetch';
 import { ArcadeGames } from '@/components/ArcadeGames';
+import { Bus, Ticket, Sparkles, CheckCircle2, Calendar } from 'lucide-react';
+
 
 type Place = { kind: 'home' | 'work'; address: string; latitude: number | null; longitude: number | null; version: number };
 type CardReference = { id: string; nickname: string; brand: string; last_four: string };
@@ -22,16 +24,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
   const [trips, setTrips] = useState<any[]>([]);
   const [tripsLoading, setTripsLoading] = useState(true);
   const [tripsError, setTripsError] = useState('');
-  const [panel, setPanel] = useState<'places' | 'cards' | 'travel' | 'events' | null>(null);
-
-  // Travel Bus dynamic settings & booking state
-  const [busSettings, setBusSettings] = useState<any>({ total_seats: 50, price_usd: 100, price_sle: 2400 });
-  const [confirmedSeats, setConfirmedSeats] = useState(0);
-  const [existingBooking, setExistingBooking] = useState<any>(null);
-
-  // Events Hub state
-  const [events, setEvents] = useState<any[]>([]);
-
+  const [panel, setPanel] = useState<'places' | 'cards' | 'travel' | null>(null);
   const mounted = useRef(false);
   const balanceBusy = useRef(false);
   const preferencesBusy = useRef(false);
@@ -84,7 +77,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
     }
   }, [sameIdentity]);
 
-  const fetchTravelAndEvents = useCallback(async () => {
+    const fetchTravelAndEvents = useCallback(async () => {
     try {
       // 1. Settings
       const { data: sData } = await supabase.from('travel_settings').select('*').eq('id', 'bus_ghana').maybeSingle();
@@ -150,9 +143,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
   const isBusFull = availableSeats <= 0;
 
   if(selectedGame)return <ArcadeGames key={`${uid}:${selectedGame}`} userId={uid} initialGame={selectedGame} onBack={()=>setSelectedGame(null)}/>;
-  
-  return (
-  <main className="mm-home">
+  return <main className="mm-home">
     <header className="mm-home-heading">
       <div className="mm-brand"><img src="/logo.jpg" alt="MatMove" width="40" height="40"/><span>Wi dey move<span className="mm-muted">Your everyday, connected.</span></span></div>
       <button className="mm-icon-button" type="button" aria-label="Open your account" onClick={() => onNavigate('account')}><ShieldCheck size={22}/></button>
@@ -166,15 +157,9 @@ export default function PortalHome({ profile, onNavigate }: Props) {
         <p className="mm-wallet-caption">{balanceLoading ? 'Checking your wallet…' : balanceError ? 'Balance could not be loaded.' : wallet?.is_frozen || profile.is_wallet_frozen ? 'Wallet frozen · contact support' : !wallet ? 'Open Wallet to check setup.' : !verifiedBalance ? 'Open Wallet to check account status.' : 'Available balance · verified with your wallet provider'}</p>
         <button className="mm-wallet-open" type="button" onClick={() => onNavigate('wallet')}>Open wallet <ArrowRight size={17}/></button>
       </section>
-      <section className="mm-services" aria-label="Quick actions">
-        {shortcuts.map(({ section, label, detail, Icon }) => <button type="button" className="mm-service" key={section} onClick={() => onNavigate(section)}><span className="mm-service-icon"><Icon size={25}/></span><span><b>{label}</b><small>{detail}</small></span><ArrowRight size={18}/></button>)}
-        <div className="mm-small-actions"><button type="button" onClick={() => onNavigate('wallet')}><Wallet size={18}/> Load with Mobile Money</button><button type="button" onClick={() => onNavigate('account')}><ShieldCheck size={18}/> My account</button></div>
-      </section>
-
-      {/* Travel to Ghana Section */}
       <section className="mm-surface" aria-label="Travel & Bus Booking">
         <div className="mm-row">
-          <h2 className="flex items-center gap-2"><Bus className="text-blue-600" size={20} /> Travel to Ghana</h2>
+          <h2>Travel to Ghana</h2>
           <span className="text-xs text-slate-500 font-bold">1st & 15th every month</span>
         </div>
         <p className="mb-2 text-sm text-slate-600">
@@ -268,40 +253,47 @@ export default function PortalHome({ profile, onNavigate }: Props) {
           </div>
         )}
       </section>
+      <section className="mm-services" aria-label="Quick actions">
+        {shortcuts.map(({ section, label, detail, Icon }) => <button type="button" className="mm-service" key={section} onClick={() => onNavigate(section)}><span className="mm-service-icon"><Icon size={25}/></span><span><b>{label}</b><small>{detail}</small></span><ArrowRight size={18}/></button>)}
+        <div className="mm-small-actions"><button type="button" onClick={() => onNavigate('wallet')}><Wallet size={18}/> Load with Mobile Money</button><button type="button" onClick={() => onNavigate('account')}><ShieldCheck size={18}/> My account</button></div>
+      
+      </section>
+      <section className="mm-surface" aria-label="Travel & Bus Booking">
+        <div className="mm-row">
+          <h2>Travel to Ghana</h2>
+          <span className="text-xs text-slate-500 font-bold">1st & 15th every month</span>
+        </div>
+        <p className="mb-3 text-sm text-slate-600">Sierra Leone to Ghana direct bus. Secure your seat instantly for 6,000 SLE.</p>
+        <button type="button" onClick={() => setPanel('travel')} className="w-full min-h-24 rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-900 to-indigo-900 p-4 text-left text-white shadow-sm flex items-center justify-between">
+          <div>
+             <b className="block text-lg font-bold">Freetown - Accra Direct</b>
+             <span className="mt-1 block text-sm text-blue-100">Book up to 3 passengers. Departures 7:00 AM sharp.</span>
+          </div>
+          <ArrowRight size={24} className="text-blue-300"/>
+        </button>
+      </section>
+
     </div>
     {balanceError && <div role="alert" className="mm-alert">{balanceError} <button type="button" disabled={balanceLoading} onClick={() => void refreshWallets()}>Retry</button></div>}
-    
-    <section className="mm-surface" aria-label="MatMove games">
-      <div className="mm-row"><h2>Play MatMove Games</h2><span className="text-xs text-slate-500">18+ · Play responsibly</span></div>
-      <p className="mb-3 text-sm text-slate-600">Explore the games and view the rules and possible prizes before playing. Account eligibility applies.</p>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {([
-          ['spin','Spin Wheel','🎡','Spin for a possible prize.'],
-          ['dice','RICH DICE','🎲','Choose your prediction.'],
-          ['fruity','Fruity Flue','🍍','Match all four fruits.'],
-          ['crankling','CRANKLING','777','Match your chosen number.'],
-        ] as const).map(([id,title,icon,description])=><button type="button" key={id} onClick={()=>setSelectedGame(id as any)} className="min-h-36 rounded-2xl border border-amber-300 bg-gradient-to-br from-slate-950 to-purple-950 p-4 text-left text-white"><span aria-hidden="true" className="text-3xl font-black text-amber-300">{icon}</span><b className="mt-3 block text-sm">{title}</b><span className="mt-1 block text-xs text-slate-200">{description}</span><span className="mt-3 block text-xs font-bold text-amber-300">Open game →</span></button>)}
-      </div>
-    </section>
-
+    <section className="mm-surface" aria-label="MatMove games"><div className="mm-row"><h2>Play MatMove Games</h2><span className="text-xs text-slate-500">18+ · Play responsibly</span></div><p className="mb-3 text-sm text-slate-600">Explore the games and view the rules and possible prizes before playing. Account eligibility applies.</p><div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{([
+      ['spin','Spin Wheel','🎡','Spin for a possible prize.'],
+      ['dice','RICH DICE','🎲','Choose your prediction.'],
+      ['fruity','Fruity Flue','🍍','Match all four fruits.'],
+      ['crankling','CRANKLING','777','Match your chosen number.'],
+    ] as const).map(([id,title,icon,description])=><button type="button" key={id} onClick={()=>setSelectedGame(id)} className="min-h-36 rounded-2xl border border-amber-300 bg-gradient-to-br from-slate-950 to-purple-950 p-4 text-left text-white"><span aria-hidden="true" className="text-3xl font-black text-amber-300">{icon}</span><b className="mt-3 block text-sm">{title}</b><span className="mt-1 block text-xs text-slate-200">{description}</span><span className="mt-3 block text-xs font-bold text-amber-300">Open game →</span></button>)}</div></section>
     <section className="mm-surface"><div className="mm-row"><h2>Your shortcuts</h2><button type="button" className="mm-text-button" onClick={() => setPanel(panel === 'places' ? null : 'places')}>{panel === 'places' ? 'Close' : 'Manage places'}</button></div>
       {preferencesLoading && !preferences ? <div className="space-y-2 animate-pulse"><div className="h-12 bg-slate-100 rounded-xl"></div></div> : preferencesError ? <div role="alert" className="mm-alert">{preferencesError} <button type="button" onClick={() => void refreshPreferences()}>Retry</button></div> : <div className="mm-place-grid">{(['home','work'] as const).map(kind => { const place = preferences?.places.find(p => p.kind === kind); const Icon = kind === 'home' ? Home : Briefcase; return <button type="button" key={kind} className="mm-place-tile" onClick={() => setPanel('places')}><Icon size={20}/><span><b>{kind === 'home' ? 'Home' : 'Work'}</b><small>{place?.address || `Add your ${kind} address`}</small></span></button>; })}</div>}
     </section>
-    
     {role !== 'driver' && <button type="button" className="mm-payment-link" aria-expanded={panel === 'cards'} onClick={() => setPanel(panel === 'cards' ? null : 'cards')}><CreditCard size={23}/><span><b>Payment methods</b><small>Mobile Money · optional card references</small></span><ArrowRight size={18}/></button>}
-    
-    {panel && panel !== 'travel' && panel !== 'events' && <PersonalTools key={`${uid}:${panel}`} uid={uid} panel={panel as any} preferences={preferences} error={preferencesError} loading={preferencesLoading} refresh={refreshPreferences} onClose={() => setPanel(null)}/>}
-    
-    {panel === 'travel' && <TravelBookingModal uid={uid} userName={profile.full_name || ''} userPhone={profile.phone || ''} walletBalance={wallet?.balance || 0} priceSle={Number(busSettings.price_sle || 2400)} availableSeats={availableSeats} existingBooking={existingBooking} onSuccess={() => { fetchTravelAndEvents(); setPanel(null); }} onClose={() => setPanel(null)} />}
-    
-    {panel === 'events' && <EventsModal uid={uid} userPhone={profile.phone || ''} walletBalance={wallet?.balance || 0} events={events} onClose={() => setPanel(null)} />}
-
+    {panel && panel !== 'travel' && <PersonalTools key={`${uid}:${panel}`} uid={uid} panel={panel} preferences={preferences} error={preferencesError} loading={preferencesLoading} refresh={refreshPreferences} onClose={() => setPanel(null)}/>}
+    {panel === 'travel' && <TravelBookingPanel uid={uid} walletBalance={wallet?.balance || 0} refreshWallets={refreshWallets} onClose={() => setPanel(null)} />}
     <section className="mm-surface"><div className="mm-row"><h2>Recent trips</h2><button type="button" className="mm-text-button" onClick={() => onNavigate('trips')}>View all</button></div>
       {tripsLoading && !trips.length ? <div className="space-y-2 animate-pulse"><div className="h-14 bg-slate-100 rounded-xl"></div></div> : tripsError ? <div role="alert" className="mm-alert">{tripsError} <button type="button" onClick={() => void refreshTrips()}>Retry</button></div> : !trips.length ? <p className="mm-empty">Your trips will appear here after your first booking.</p> : trips.map(trip => <button type="button" className="mm-trip-row" key={trip.id} onClick={() => onNavigate('trips')}><MapPin size={19}/><span><b>{trip.destination_location || trip.service_type}</b><small>{trip.status} · {new Date(trip.created_at).toLocaleDateString()}</small></span><ArrowRight size={16}/></button>)}
     </section>
     <p className="mm-home-footer">Made for your everyday moves.</p>
   </main>;
 }
+
 
 function PersonalTools({ uid, panel, preferences, error, loading, refresh, onClose }: {
   uid: string; panel: 'places' | 'cards'; preferences: Preferences | null; error: string; loading: boolean; refresh: () => Promise<boolean>; onClose: () => void;
@@ -381,6 +373,134 @@ function PersonalTools({ uid, panel, preferences, error, loading, refresh, onClo
     {failure && <p className="mm-alert" role="alert">{failure}</p>}
     {notice && <p className="mm-success" role="status">{notice}</p>}
   </section>;
+}
+
+
+function TravelBookingPanel({ uid, walletBalance, onClose, refreshWallets }: { uid: string; walletBalance: number; onClose: () => void; refreshWallets: () => void }) {
+  const [passengers, setPassengers] = useState<string[]>(['']); // Array of wallet IDs (at least 1 for the current user)
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [failure, setFailure] = useState('');
+
+  const totalCost = passengers.length * 6000;
+
+  const handleAddPassenger = () => {
+    if (passengers.length < 3) setPassengers([...passengers, '']);
+  };
+
+  const handleUpdatePassenger = (index: number, val: string) => {
+    const newPass = [...passengers];
+    newPass[index] = val;
+    setPassengers(newPass);
+  };
+
+  const handleRemovePassenger = (index: number) => {
+    const newPass = [...passengers];
+    newPass.splice(index, 1);
+    setPassengers(newPass);
+  };
+
+  const handleBook = async () => {
+    if (totalCost > walletBalance) {
+      setFailure(`Insufficient balance. You need ${totalCost.toLocaleString()} SLE.`);
+      return;
+    }
+    
+    // Check if any wallet ID is empty (except the first one which can implicitly be the current user)
+    if (passengers.some((p, i) => i > 0 && !p.trim())) {
+      setFailure('Please provide valid Wallet IDs for all additional passengers.');
+      return;
+    }
+
+    setBusy(true);
+    setFailure('');
+    setNotice('');
+
+    try {
+      // Direct checkout trigger to Travel Backend Account
+      const res = await walletFetch('/api/create-monime-transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: totalCost,
+          destinationId: import.meta.env.VITE_MONIME_TRAVEL_ACCOUNT_ID || 'travel-backend-placeholder',
+          description: `Travel Booking: Freetown to Accra for ${passengers.length} passengers. IDs: ${passengers.join(', ')}`
+        })
+      });
+      
+      if (!res.ok) throw new Error('Booking failed to process. Try again later.');
+      
+      setNotice('Booking successful! 6,000 SLE per passenger has been debited. Have a safe trip!');
+      refreshWallets();
+    } catch (err: any) {
+      setFailure(err.message || 'An error occurred during booking.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mm-modal-overlay" onClick={onClose}>
+      <div className="mm-modal-surface" onClick={e => e.stopPropagation()}>
+        <div className="mm-row">
+          <h2 className="text-xl font-bold">Freetown - Accra Direct</h2>
+          <button type="button" onClick={onClose} aria-label="Close"><X size={20}/></button>
+        </div>
+        <p className="text-sm text-slate-600 mb-4">Departures on 1st & 15th every month. 6,000 SLE per passenger.</p>
+        
+        {failure && <div className="mm-alert bg-red-50 text-red-700 p-3 rounded-lg mb-4">{failure}</div>}
+        {notice && <div className="mm-alert bg-green-50 text-green-700 p-3 rounded-lg mb-4">{notice}</div>}
+        
+        <div className="space-y-4 mb-6">
+          {passengers.map((p, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <div className="flex-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1">Passenger {index + 1} {index === 0 ? '(You)' : 'Wallet ID'}</label>
+                <input 
+                  type="text" 
+                  value={p}
+                  onChange={(e) => handleUpdatePassenger(index, e.target.value)}
+                  placeholder={index === 0 ? 'Your Wallet (Auto-charged)' : 'Enter MatMove Wallet ID'}
+                  disabled={index === 0 || busy}
+                  className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                />
+              </div>
+              {index > 0 && (
+                <button type="button" onClick={() => handleRemovePassenger(index)} disabled={busy} className="mt-5 text-red-500 hover:text-red-700">
+                  <Trash2 size={18}/>
+                </button>
+              )}
+            </div>
+          ))}
+          
+          {passengers.length < 3 && !busy && !notice && (
+            <button type="button" onClick={handleAddPassenger} className="text-sm text-blue-600 font-bold hover:underline">
+              + Add another passenger (Max 3)
+            </button>
+          )}
+        </div>
+        
+        <div className="border-t border-slate-200 pt-4 flex justify-between items-center">
+          <div>
+            <p className="text-xs text-slate-500">Total Cost</p>
+            <p className="text-lg font-bold">{totalCost.toLocaleString()} SLE</p>
+          </div>
+          {!notice ? (
+            <button 
+              type="button" 
+              onClick={handleBook} 
+              disabled={busy}
+              className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg disabled:opacity-50"
+            >
+              {busy ? 'Processing...' : 'Pay Now'}
+            </button>
+          ) : (
+            <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 font-bold py-2 px-6 rounded-lg">Done</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle, availableSeats, existingBooking, onSuccess, onClose }: any) {
