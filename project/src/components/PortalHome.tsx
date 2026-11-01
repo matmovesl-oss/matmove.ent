@@ -30,6 +30,8 @@ export default function PortalHome({ profile, onNavigate }: Props) {
   const [confirmedSeats, setConfirmedSeats] = useState(0);
   const [existingBooking, setExistingBooking] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [eventsError, setEventsError] = useState('');
   const [travelLoading, setTravelLoading] = useState(true);
   const [travelError, setTravelError] = useState('');
   const travelBusy = useRef(false);
@@ -89,29 +91,39 @@ export default function PortalHome({ profile, onNavigate }: Props) {
   const fetchTravelAndEvents = useCallback(async () => {
     if (travelBusy.current) { travelRefreshQueued.current = true; return; }
     travelBusy.current = true;
-    if (mounted.current) { setTravelLoading(true); setTravelError(''); }
+    if (mounted.current) {
+      setTravelLoading(true); setTravelError('');
+      setEventsLoading(true); setEventsError('');
+    }
     try {
       const [availabilityResult, ownBookingResult, eventsResult] = await Promise.all([
         supabase.rpc('matmove_get_travel_availability'),
         supabase.from('travel_bookings').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('platform_events').select('*').eq('is_active', true).order('event_date', { ascending: true }),
       ]);
-      if (availabilityResult.error) throw availabilityResult.error;
-      if (ownBookingResult.error) throw ownBookingResult.error;
-      if (eventsResult.error) throw eventsResult.error;
-      const availability = Array.isArray(availabilityResult.data) ? availabilityResult.data[0] : availabilityResult.data;
-      if (!availability) throw new Error('Travel pricing and seat availability have not been configured.');
-      if (mounted.current && await sameIdentity()) {
-        setBusSettings({ id: 'bus_ghana', ...availability });
-        setConfirmedSeats(Number(availability.held_seats) || 0);
-        setExistingBooking(ownBookingResult.data);
-        setEvents(eventsResult.data || []);
+      if (!mounted.current || !await sameIdentity()) return;
+
+      // Keep travel and events independent: a missing travel RPC must not hide events.
+      if (availabilityResult.error) {
+        setTravelError(availabilityResult.error.message || 'Travel availability is unavailable.');
+      } else {
+        const availability = Array.isArray(availabilityResult.data) ? availabilityResult.data[0] : availabilityResult.data;
+        if (!availability) setTravelError('Travel pricing and seat availability have not been configured.');
+        else {
+          setBusSettings({ id: 'bus_ghana', ...availability });
+          setConfirmedSeats(Number(availability.held_seats) || 0);
+        }
       }
+      if (ownBookingResult.error) setTravelError(current => current || ownBookingResult.error.message || 'Your travel booking could not be loaded.');
+      else setExistingBooking(ownBookingResult.data);
+
+      if (eventsResult.error) setEventsError(eventsResult.error.message || 'Events could not be loaded.');
+      else setEvents(eventsResult.data || []);
     } catch (error: any) {
-      if (mounted.current) setTravelError(error?.message || 'Travel and events could not be refreshed.');
+      if (mounted.current) setTravelError(error?.message || 'Travel availability could not be refreshed.');
     } finally {
       travelBusy.current = false;
-      if (mounted.current) setTravelLoading(false);
+      if (mounted.current) { setTravelLoading(false); setEventsLoading(false); }
       if (travelRefreshQueued.current && mounted.current) {
         travelRefreshQueued.current = false;
         window.setTimeout(() => { if (mounted.current) void fetchTravelAndEvents(); }, 0);
@@ -185,7 +197,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
       <section className="mm-surface" aria-label="Travel & Bus Booking">
         <div className="mm-row">
           <h2>Travel to Ghana</h2>
-          <span className="text-xs text-slate-500 font-bold">1st & 15th every month</span>
+          <span className="text-xs text-slate-500 font-bold">Next departure: {busSettings.departure_date ? new Date(`${busSettings.departure_date}T12:00:00`).toLocaleDateString() : '1st & 15th'}</span>
         </div>
         {travelLoading ? <div role="status" aria-label="Loading travel details" className="mt-4 space-y-3 animate-pulse"><SkeletonBlock className="h-4 w-3/4" /><SkeletonBlock className="h-3 w-1/2" /><SkeletonBlock className="h-24 w-full" /></div> : travelError ? <p role="alert" className="mm-alert">{travelError} <button type="button" onClick={() => void fetchTravelAndEvents()}>Retry</button></p> : <>
         <p className="mb-2 text-sm text-slate-600">
@@ -259,7 +271,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
           <button type="button" className="mm-text-button" onClick={() => setPanel('events')}>View all</button>
         </div>
         <p className="mb-3 text-sm text-slate-600">Official tickets with single checkout for up to 3 passes.</p>
-        {travelLoading ? <div role="status" aria-label="Loading events" className="grid gap-3 sm:grid-cols-2 animate-pulse"><SkeletonBlock className="h-28" /><SkeletonBlock className="h-28" /></div> : travelError ? <p role="alert" className="mm-alert">{travelError}</p> : events.length === 0 ? (
+        {eventsLoading ? <div role="status" aria-label="Loading events" className="grid gap-3 sm:grid-cols-2 animate-pulse"><SkeletonBlock className="h-28" /><SkeletonBlock className="h-28" /></div> : eventsError ? <p role="alert" className="mm-alert">{eventsError} <button type="button" onClick={() => void fetchTravelAndEvents()}>Retry</button></p> : events.length === 0 ? (
           <p className="text-xs text-slate-400 py-3">No active events posted yet.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -299,8 +311,8 @@ export default function PortalHome({ profile, onNavigate }: Props) {
     </section>
     {role !== 'driver' && <button type="button" className="mm-payment-link" aria-expanded={panel === 'cards'} onClick={() => setPanel(panel === 'cards' ? null : 'cards')}><CreditCard size={23}/><span><b>Payment methods</b><small>Mobile Money · optional card references</small></span><ArrowRight size={18}/></button>}
     {(panel === 'places' || panel === 'cards') && <PersonalTools key={`${uid}:${panel}`} uid={uid} panel={panel} preferences={preferences} error={preferencesError} loading={preferencesLoading} refresh={refreshPreferences} onClose={() => setPanel(null)}/>}
-    {panel === 'travel' && <TravelBookingModal uid={uid} userName={profile.full_name || profile.first_name || ''} userPhone={userPhone} walletBalance={travelWalletBalance} priceSle={Number(busSettings.price_sle)} availableSeats={availableSeats} existingBooking={existingBooking} onSuccess={() => { setPanel(null); void fetchTravelAndEvents(); void refreshWallets(); }} onClose={() => setPanel(null)} />}
-    {panel === 'events' && <EventsModal uid={uid} userPhone={userPhone} walletBalance={travelWalletBalance} events={events} onClose={() => setPanel(null)} />}
+    {panel === 'travel' && <TravelBookingModal uid={uid} userName={profile.full_name || profile.first_name || ''} userPhone={userPhone} walletBalance={travelWalletBalance} priceSle={Number(busSettings.price_sle)} departureDate={busSettings.departure_date} availableSeats={availableSeats} existingBooking={existingBooking} onSuccess={() => { setPanel(null); void fetchTravelAndEvents(); void refreshWallets(); }} onClose={() => setPanel(null)} />}
+    {panel === 'events' && <EventsModal uid={uid} userPhone={userPhone} walletBalance={travelWalletBalance} events={events} eventsError={eventsError} onRetry={fetchTravelAndEvents} onClose={() => setPanel(null)} />}
     <section className="mm-surface"><div className="mm-row"><h2>Recent trips</h2><button type="button" className="mm-text-button" onClick={() => onNavigate('trips')}>View all</button></div>
       {tripsLoading && !trips.length ? <SkeletonList count={2} /> : tripsError ? <div role="alert" className="mm-alert">{tripsError} <button type="button" onClick={() => void refreshTrips()}>Retry</button></div> : !trips.length ? <p className="mm-empty">Your trips will appear here after your first booking.</p> : trips.map(trip => <button type="button" className="mm-trip-row" key={trip.id} onClick={() => onNavigate('trips')}><MapPin size={19}/><span><b>{trip.destination_location || trip.service_type}</b><small>{trip.status} · {new Date(trip.created_at).toLocaleDateString()}</small></span><ArrowRight size={16}/></button>)}
     </section>
@@ -390,7 +402,7 @@ function PersonalTools({ uid, panel, preferences, error, loading, refresh, onClo
 }
 
 
-function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle, availableSeats, existingBooking, onSuccess, onClose }: any) {
+function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle, departureDate, availableSeats, existingBooking, onSuccess, onClose }: any) {
   const [passengerCount, setPassengerCount] = useState(1);
   const [fullName, setFullName] = useState(userName);
   const [phone, setPhone] = useState(userPhone);
@@ -429,6 +441,7 @@ function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle,
         emergency_name: emergencyName,
         emergency_phone: emergencyPhone,
         passengers_count: passengerCount,
+        departure_date: departureDate,
         fare_amount: totalCost,
         status: 'pending_approval',
         is_paid: false
@@ -457,7 +470,9 @@ function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle,
     try {
       const res = await walletFetch('/api/create-monime-transfer', {
         amount: existingBooking.fare_amount,
+        currency: 'SLE',
         target: 'travel',
+        bookingId: existingBooking.id,
         description: `Travel Payment Freetown-Accra (${existingBooking.passengers_count} seat)`
       });
 
@@ -478,10 +493,9 @@ function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle,
         return;
       }
 
-      const { data: paidBooking, error: updateError } = await supabase.from('travel_bookings').update({ is_paid: true }).eq('id', existingBooking.id).select('id,is_paid').maybeSingle();
-      if (updateError || !paidBooking?.is_paid) {
+      if (res.data?.fulfilled !== true) {
         setPaymentReviewRequired(true);
-        throw new Error('Monime confirmed payment, but the booking update was not confirmed. Do not pay again. Contact MatMove support with your booking details.');
+        throw new Error('Monime reported completion, but MatMove has not confirmed the booking. Do not pay again; contact MatMove support.');
       }
       res.finish?.();
       setSuccess('Payment completed and booking confirmed.');
@@ -498,7 +512,7 @@ function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle,
       <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <button onClick={onClose} className="absolute top-5 right-5 text-slate-400"><X size={20} /></button>
         <h2 className="text-xl font-black text-slate-900">Freetown – Accra Direct Bus</h2>
-        <p className="text-xs text-slate-500 mt-0.5">Departures 1st & 15th every month · SLE {priceSle.toLocaleString()} / seat</p>
+        <p className="text-xs text-slate-500 mt-0.5">Departure {departureDate ? new Date(`${departureDate}T12:00:00`).toLocaleDateString() : 'date to be confirmed'} · SLE {priceSle.toLocaleString()} / seat · SLE wallet checkout</p>
 
         {error && <div className="mt-4 p-3 bg-rose-50 text-rose-700 text-xs rounded-xl">{error}</div>}
         {success && <div className="mt-4 p-3 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-xl">{success}</div>}
@@ -574,7 +588,7 @@ function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle,
   );
 }
 
-function EventsModal({ uid, userPhone, walletBalance, events, onClose }: any) {
+function EventsModal({ uid, userPhone, walletBalance, events, eventsError, onRetry, onClose }: any) {
   const [selectedTicketCount, setSelectedTicketCount] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -599,7 +613,10 @@ function EventsModal({ uid, userPhone, walletBalance, events, onClose }: any) {
     try {
       const res = await walletFetch('/api/create-monime-transfer', {
         amount: total,
+        currency: 'SLE',
         target: 'event',
+        eventId: evt.id,
+        quantity: count,
         description: `Ticket Purchase (${count} pass): ${evt.title}`
       });
 
@@ -620,18 +637,9 @@ function EventsModal({ uid, userPhone, walletBalance, events, onClose }: any) {
         return;
       }
 
-      const { error: ticketError } = await supabase.from('event_tickets').insert({
-        event_id: evt.id,
-        user_id: uid,
-        user_phone: userPhone,
-        tickets_count: count,
-        amount_paid: total,
-        ticket_code: `TKT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-        status: 'confirmed'
-      });
-      if (ticketError) {
+      if (res.data?.fulfilled !== true) {
         setReviewEventIds(ids => [...new Set([...ids, evt.id])]);
-        throw new Error('Monime confirmed payment, but the ticket record could not be saved. Do not click again or pay again. Contact MatMove support with the event and payment time.');
+        throw new Error('Monime reported completion, but MatMove has not confirmed the ticket. Do not pay again; contact MatMove support.');
       }
 
       res.finish?.();
@@ -652,10 +660,11 @@ function EventsModal({ uid, userPhone, walletBalance, events, onClose }: any) {
         <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
           <Sparkles className="text-sky-600" size={22} /> MatMove Events Hub
         </h2>
-        <p className="text-xs text-slate-500">Book up to 3 tickets per event in one direct payment</p>
+        <p className="text-xs text-slate-500">Book up to 3 tickets per event in one direct SLE wallet payment</p>
 
         {error && <div className="p-3 bg-rose-50 text-rose-700 text-xs rounded-xl">{error}</div>}
         {notice && <div className="p-3 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-xl">{notice}</div>}
+        {eventsError && <div role="alert" className="p-3 bg-rose-50 text-rose-700 text-xs rounded-xl">{eventsError} <button type="button" className="underline font-bold" onClick={() => void onRetry?.()}>Retry</button></div>}
 
         <div className="space-y-4">
           {events.map((evt: any) => {
@@ -675,8 +684,9 @@ function EventsModal({ uid, userPhone, walletBalance, events, onClose }: any) {
                       <button
                         key={n}
                         type="button"
+                        disabled={busy || pendingEventIds.includes(evt.id) || reviewEventIds.includes(evt.id) || completedEventIds.includes(evt.id)}
                         onClick={() => setSelectedTicketCount({ ...selectedTicketCount, [evt.id]: n })}
-                        className={`w-7 h-7 rounded-lg text-xs font-bold border ${
+                        className={`w-7 h-7 rounded-lg text-xs font-bold border disabled:opacity-50 ${
                           count === n ? 'bg-sky-600 text-white border-sky-600' : 'bg-slate-50 text-slate-700 border-slate-200'
                         }`}
                       >
