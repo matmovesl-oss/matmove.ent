@@ -71,7 +71,6 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
 
-  const [viewMode, setViewMode] = useState<'active' | 'new'>('active');
   const [serviceType,setServiceType] = useState<'ride' | 'delivery' | 'scheduled'>('ride');
   const [vehicleType, setVehicleType] = useState<'keke' | 'bike' | 'car' | 'van'>('car');
   const [offerAmount, setOfferAmount] = useState('');
@@ -79,24 +78,6 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [scheduledTime, setScheduledTime] = useState('');
   const [isRequesting, setIsRequesting] = useState(false);
   const { booking: activeBooking, setBooking: setActiveBooking, loading: tripLoading, error: tripError, retry: retryTrip, applySnapshot: applyFareSnapshot } = useCustomerActiveRide(profile.id);
-  const [passengerCount, setPassengerCount] = useState(1);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-
-  useEffect(() => {
-    let timer: any;
-    if (activeBooking && activeBooking.status === 'accepted' && activeBooking.accepted_at) {
-      const updateElapsed = () => {
-        const diff = Math.floor((Date.now() - new Date(activeBooking.accepted_at).getTime()) / 1000);
-        setElapsedSeconds(diff >= 0 ? diff : 0);
-      };
-      updateElapsed();
-      timer = setInterval(updateElapsed, 1000);
-    } else {
-      setElapsedSeconds(0);
-    }
-    return () => clearInterval(timer);
-  }, [activeBooking]);
-
 
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
@@ -241,6 +222,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     setIsSettingUpWallet(true);
     setWalletSetupError('');
     try {
+      // Reuse the authenticated account reference and request key on every retry.
       const { response, data, finish } = await walletFetch('/api/create-monime-wallet', {});
       if (!response.ok || !/^fac-[A-Za-z0-9_-]+$/.test(String(data.wallet?.monime_account_id || ''))) {
         throw new Error(data.error || 'Wallet setup was not confirmed. Retry without creating another account.');
@@ -255,6 +237,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
   useEffect(() => {
     if (canLoad && !hasSleAccount) void setupSleWallet();
+    // One automatic attempt when access becomes available; failures use explicit Retry.
   }, [profile?.id, canLoad]);
 
   const walletSetupPanel = canLoad && !hasSleAccount ? <section role="status" className="m-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
@@ -271,22 +254,9 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   useEffect(() => {
     if (!profile?.id) return;
     const refresh = () => { if (document.visibilityState === 'visible') void fetchLiveBalance(); };
-    const channel = supabase.channel(`customer-wallet:${profile.id}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'wallets',
-        filter: `user_id=eq.${profile.id}`,
-      }, refresh)
-      .subscribe();
-    // Keep a foreground polling fallback when Supabase Realtime is unavailable.
     const timer = window.setInterval(refresh, 10000);
     window.addEventListener('focus', refresh);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener('focus', refresh);
-      void supabase.removeChannel(channel);
-    };
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
   }, [profile?.id]);
 
   const handleCreateUsdWallet = async () => {
@@ -353,6 +323,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
         })
         .select()
         .single();
+
 
       if (error) throw error;
       setActiveBooking(data);
@@ -506,24 +477,11 @@ function RiderMain({ profile, wallet, activeSection }: any) {
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] gap-4">
             <div className="min-w-0 bg-white p-4 rounded-2xl border shadow-sm space-y-3 h-fit">
               <p className="text-xs text-slate-500">Your balance and wallet actions are in Home and Wallet.</p>
-              <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
-                <button onClick={() => setViewMode('active')} className={`font-bold ${viewMode === 'active' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Active Request</button>
-                <button onClick={() => setViewMode('new')} className={`font-bold ${viewMode === 'new' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Create New</button>
-              </div>
+              <h3 className="font-bold text-lg">Request Service</h3>
 
               {tripError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{tripError}<button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry active trip</button></p>}
-        {tripLoading && !activeBooking && viewMode === 'active' ? (
-          <div className="grid grid-cols-1 gap-4 animate-pulse">
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
-              <div className="h-6 bg-slate-200 rounded w-1/2"></div>
-              <div className="h-12 bg-slate-100 rounded-xl"></div>
-              <div className="h-12 bg-slate-100 rounded-xl"></div>
-              <div className="h-28 bg-slate-100 rounded-2xl"></div>
-            </div>
-          </div>
-        ) : null}
-              
-              {viewMode === 'new' || (!activeBooking && viewMode === 'active') ? (
+              {tripLoading && !activeBooking ? <p role="status" className="rounded-xl bg-slate-50 p-4 text-sm">Checking your active trip…</p> : tripError && !activeBooking ? null : !activeBooking ? (
+                
                 <>
                   <div className="mb-4">
                     <label className="block text-xs font-bold text-slate-700 mb-1">Seats / Passengers (Max 3)</label>
@@ -544,6 +502,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                       ))}
                     </div>
                   </div>
+                  
                   <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
                     <button
                       onClick={() => setServiceType('ride')}
@@ -564,6 +523,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                       <CalendarClock size={16} /> Schedule
                     </button>
                   </div>
+
                   <div className="space-y-3">
                     {['ride','delivery','scheduled'].includes(serviceType) && (
                       <div className="grid grid-cols-4 gap-2 mb-2">
@@ -578,14 +538,18 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                         ))}
                       </div>
                     )}
+
                     <p className="text-sm text-slate-600">
                       Choose pickup and destination in the map panel,
                       then preview your route.
                     </p>
+
                     {['ride','delivery','scheduled'].includes(serviceType) && (
                       <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
                         <div className="flex items-center gap-2 mb-2">
-                          <span className="text-slate-500 font-bold text-sm px-2">Total Fare (SLE)</span>
+                          <span className="text-slate-500 font-bold text-sm px-2">
+                            Total Fare (SLE)
+                          </span>
                           <input
                             type="number"
                             placeholder="Amount"
@@ -593,23 +557,30 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                             onChange={e => setOfferAmount(e.target.value)}
                             className="w-full outline-none text-lg bg-transparent font-bold text-slate-900 text-right pr-2"
                           />
+
                           <div className="flex gap-1">
                             <button
                               onClick={() => setOfferAmount(prev =>
-                                Math.max(pricingRates[vehicleType]?.min || 1, (Number(prev) || 1) - 5).toString()
+                                Math.max(
+                                  pricingRates[vehicleType]?.min || 1,
+                                  (Number(prev) || 1) - 5
+                                ).toString()
                               )}
                               className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"
                             >
                               <Minus size={16} />
                             </button>
                             <button
-                              onClick={() => setOfferAmount(prev => ((Number(prev) || 1) + 5).toString())}
+                              onClick={() => setOfferAmount(prev =>
+                                ((Number(prev) || 1) + 5).toString()
+                              )}
                               className="w-8 h-8 flex items-center justify-center bg-white border rounded-lg text-slate-600 hover:bg-slate-100"
                             >
                               <Plus size={16} />
                             </button>
                           </div>
                         </div>
+
                         {Number(offerAmount) > 0 && (
                           <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 shadow-sm mt-2">
                             <div className="text-[11px] font-bold text-emerald-600">
@@ -622,6 +593,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                         )}
                       </div>
                     )}
+
                     {serviceType === 'scheduled' && (
                       <div className="flex items-center gap-2 border p-3 rounded-xl">
                         <CalendarClock size={16} className="text-emerald-600" />
@@ -634,6 +606,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                       </div>
                     )}
                   </div>
+
                   <button
                     onClick={handleRequest}
                     disabled={isRequesting}
@@ -646,48 +619,34 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                 </>
               ) : (
                 <div className="text-center py-8">
-                  {activeBooking && ['accepted', 'in_progress'].includes(activeBooking.status) ? (
+                  {activeBooking.status === 'accepted' ||
+                    activeBooking.status === 'in_progress' ? (
                     <>
                       <Car size={48} className="text-emerald-600 mx-auto mb-4" />
                       <h4 className="font-bold text-xl text-slate-900">
-                        {activeBooking.status === 'in_progress' ? 'Trip in Progress!' : 'Driver is on the way!'}
+                        {activeBooking.status === 'in_progress'
+                          ? 'Trip in Progress!'
+                          : 'Driver is on the way!'}
                       </h4>
                       <p className="text-sm text-slate-500 mt-2">
                         Your fare (SLE {activeBooking.fare_amount}) is held securely in Escrow.
                       </p>
+
                       {activeBooking.driver && (
                         <div className="mt-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-left mb-6">
-                          <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Your Driver</div>
-                          <div className="font-bold text-slate-900">{activeBooking.driver.full_name || 'Assigned driver'}</div>
-                          {activeBooking.driver.phone && (
-                            <div className="text-sm text-slate-600 flex items-center gap-1 mt-1">
-                              <Smartphone size={14} /> {activeBooking.driver.phone}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {activeBooking.status === 'accepted' && (
-                        <div className={`p-4 rounded-2xl border text-xs space-y-2 ${elapsedSeconds <= 300 ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
-                          <div className="flex items-center gap-2 font-bold">
-                            <Clock size={16} />
-                            {elapsedSeconds <= 300 ? (
-                              <span>Free Cancellation: {Math.floor((300 - elapsedSeconds) / 60)}:{(300 - elapsedSeconds) % 60 < 10 ? '0' : ''}{(300 - elapsedSeconds) % 60}</span>
-                            ) : (
-                              <span>Late Cancellation: 1% Dispatch Fee Applies</span>
-                            )}
+                          <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">
+                            Your Driver
                           </div>
-                          <p className="text-[11px] leading-relaxed">
-                            {elapsedSeconds <= 300
-                              ? 'Cancel within 5 minutes for a full refund.'
-                              : 'Cancellation now split 50/50 between driver and escrow for dispatch compensation.'}
-                          </p>
+                          <div className="font-bold text-slate-900">
+                            {activeBooking.driver.full_name}
+                          </div>
+                          <div className="text-sm text-slate-600 flex items-center gap-1 mt-1">
+                            <Smartphone size={14} /> {activeBooking.driver.phone}
+                          </div>
                         </div>
                       )}
-                      {activeBooking.status === 'accepted' && (
-                        <button onClick={cancelTrip} disabled={isRequesting} className="mb-4 mt-4 text-red-600 font-bold border border-red-200 bg-red-50 p-3 rounded-xl w-full hover:bg-red-100 transition">
-                          Close Request & Cancel (50-50 Fee Split)
-                        </button>
-                      )}
+
+                      {activeBooking.status === 'accepted' && <button onClick={cancelTrip} disabled={isRequesting} className="mb-4 text-red-600 font-bold">Cancel & Refund Held Fare</button>}
                       {activeBooking.status === 'in_progress' && (
                         <button
                           onClick={executeRidePayment}
@@ -700,7 +659,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                         </button>
                       )}
                     </>
-                  ) : activeBooking ? (
+                  ) : (
                     <>
                       <Loader2 size={40} className="animate-spin text-orange-600 mx-auto mb-4" />
                       <h4 className="font-bold text-lg text-slate-900">
@@ -708,18 +667,23 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                           ? 'Request sent to Dispatch...'
                           : 'Broadcasting request...'}
                       </h4>
-                      <p className="text-sm text-slate-500 mt-2">Please wait while we assign a driver to your trip.</p>
-                      {(activeBooking.status === 'pending' || activeBooking.status === 'pending_admin') && (
-                        <button onClick={cancelTrip} className="text-red-500 text-sm font-bold hover:underline mt-4">
+                      <p className="text-sm text-slate-500 mt-2">
+                        Please wait while we assign a driver to your trip.
+                      </p>
+
+                      {(activeBooking.status === 'pending' ||
+                        activeBooking.status === 'pending_admin') && (
+                        <button
+                          onClick={cancelTrip}
+                          className="text-red-500 text-sm font-bold hover:underline mt-4"
+                        >
                           Cancel Request
                         </button>
                       )}
                     </>
-                  ) : null}
-                  {activeBooking && ['pending', 'pending_admin'].includes(activeBooking.status) && ['ride', 'delivery'].includes(activeBooking.service_type) && (
-                    <div className="mt-4 text-left">
-                      <FareNegotiation key={`${profile.id}:${activeBooking.id}`} userId={profile.id} bookingId={activeBooking.id} role="rider" onFareChange={applyFareSnapshot} />
-                    </div>
+                  )}
+                  {['pending', 'pending_admin'].includes(activeBooking.status) && ['ride', 'delivery'].includes(activeBooking.service_type) && (
+                    <div className="mt-4 text-left"><FareNegotiation key={`${profile.id}:${activeBooking.id}`} userId={profile.id} bookingId={activeBooking.id} role="rider" onFareChange={applyFareSnapshot} /></div>
                   )}
                 </div>
               )}
@@ -938,17 +902,8 @@ function RiderShop({ profile, wallet }: any) {
   useEffect(() => {
     shopMounted.current=true;cartEpoch.current++;cartWriteLock.current=false;setCartBusy(false);setCartNotice('');
     setProducts([]); void fetchShopProducts();
-    // Merchants' product edits and availability changes refresh the rider marketplace.
-    const channel = supabase.channel(`marketplace-products:${profile.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
-        if (document.visibilityState !== 'hidden') void fetchShopProducts();
-      })
-      .subscribe();
-    return () => {
-      shopMounted.current=false;cartEpoch.current++;shopGeneration.current++;
-      void supabase.removeChannel(channel);
-    };
-  }, [fetchShopProducts, profile.id]);
+    return () => { shopMounted.current=false;cartEpoch.current++;shopGeneration.current++; };
+  }, [fetchShopProducts]);
 
   const handleWhatsAppRedirect = (product: any) => {
     const merchantPhone =
@@ -1081,57 +1036,6 @@ function RiderShop({ profile, wallet }: any) {
 }
 
 function RiderTrips({ profile }: any) {
-  const [loading, setLoading] = useState(true);
-
-  const handlePrintPDF = (trip: any) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>MatMove Official Trip Receipt - ${trip.id}</title>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #0f172a; }
-            .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
-            .logo { height: 50px; }
-            .title { font-size: 20px; font-weight: 900; color: #0f172a; margin: 0; }
-            .subtitle { font-size: 12px; color: #64748b; margin-top: 4px; }
-            .receipt-body { margin-top: 30px; }
-            .row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
-            .label { color: #64748b; font-weight: 600; }
-            .value { font-weight: 800; color: #0f172a; }
-            .fare-total { font-size: 22px; font-weight: 900; color: #059669; }
-            .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <h1 class="title">MatMove Official Trip Receipt</h1>
-              <div class="subtitle">Sierra Leone &middot; Safe, Verified Transportation</div>
-            </div>
-            <img src="/logo.jpg" class="logo" alt="MatMove Logo" />
-          </div>
-          <div class="receipt-body">
-            <div class="row"><span class="label">Trip Reference ID</span><span class="value">${trip.id}</span></div>
-            <div class="row"><span class="label">Date & Time</span><span class="value">${new Date(trip.created_at).toLocaleString()}</span></div>
-            <div class="row"><span class="label">Vehicle Class</span><span class="value" style="text-transform: capitalize;">${trip.vehicle_type || 'Vehicle'}</span></div>
-            <div class="row"><span class="label">Pickup Location</span><span class="value">${trip.pickup_location || 'Designated Area'}</span></div>
-            <div class="row"><span class="label">Dropoff Destination</span><span class="value">${trip.destination_location || 'Designated Area'}</span></div>
-            <div class="row"><span class="label">Status</span><span class="value" style="text-transform: uppercase;">${trip.status}</span></div>
-            <div class="row" style="margin-top: 15px; border-top: 2px dashed #cbd5e1; padding-top: 15px;">
-              <span class="label" style="font-size: 16px; font-weight: 800;">Total Fare Paid</span>
-              <span class="fare-total">SLE ${Number(trip.fare_amount || 0).toLocaleString()}</span>
-            </div>
-          </div>
-          <div class="footer">Thank you for riding with MatMove. Official receipt issued by MatMove Platform.</div>
-          <script>window.print();</script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-  };
-
   return <TripHistory userId={profile.id} role="rider" />;
 }
 
