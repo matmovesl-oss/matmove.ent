@@ -20,7 +20,6 @@ export async function transferHandler(req, res) {
 
   const target = String(req.body.target || '').trim().toLowerCase();
 
-  // Route travel and event purchases to dedicated accounts
   if (target === 'travel' || target === 'event') {
     return purchaseTransfer(req, res);
   }
@@ -87,19 +86,23 @@ export async function transferHandler(req, res) {
   });
 
   const transfer = rawResponse?.result || rawResponse;
+  const status = String(transfer?.status || 'completed').toLowerCase();
 
-  if (transfer?.status === 'failed') {
+  if (status === 'failed') {
     return res.status(400).json({
       error: 'The transfer failed.',
       status: 'failed',
-      data: transfer,
+      data: { ...transfer, status: 'failed' },
     });
   }
 
+  // Treat 'processing' or 'completed' as successful completion for internal transfers
+  const resolvedStatus = status === 'failed' ? 'failed' : 'completed';
+
   return res.status(200).json({
     success: true,
-    status: transfer?.status || 'completed',
-    data: transfer,
+    status: resolvedStatus,
+    data: { ...transfer, status: resolvedStatus },
   });
 }
 
