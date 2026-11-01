@@ -3,6 +3,7 @@ import { ArrowRight, Briefcase, Car, CreditCard, Eye, EyeOff, Home, Loader2, Map
 import { supabase } from '@/lib/supabase';
 import { walletFetch } from '@/lib/apiFetch';
 import { ArcadeGames } from '@/components/ArcadeGames';
+import { SkeletonBlock, SkeletonGrid, SkeletonList } from '@/components/Skeleton';
 import { Bus, Ticket, Sparkles, CheckCircle2, Calendar } from 'lucide-react';
 
 
@@ -24,7 +25,15 @@ export default function PortalHome({ profile, onNavigate }: Props) {
   const [trips, setTrips] = useState<any[]>([]);
   const [tripsLoading, setTripsLoading] = useState(true);
   const [tripsError, setTripsError] = useState('');
-  const [panel, setPanel] = useState<'places' | 'cards' | 'travel' | null>(null);
+  const [panel, setPanel] = useState<'places' | 'cards' | 'travel' | 'events' | null>(null);
+  const [busSettings, setBusSettings] = useState<any>({ id: 'bus_ghana', total_seats: 50, price_usd: 100, price_sle: 2400 });
+  const [confirmedSeats, setConfirmedSeats] = useState(0);
+  const [existingBooking, setExistingBooking] = useState<any>(null);
+  const [events, setEvents] = useState<any[]>([]);
+  const [travelLoading, setTravelLoading] = useState(true);
+  const [travelError, setTravelError] = useState('');
+  const travelBusy = useRef(false);
+  const travelRefreshQueued = useRef(false);
   const mounted = useRef(false);
   const balanceBusy = useRef(false);
   const preferencesBusy = useRef(false);
@@ -77,30 +86,38 @@ export default function PortalHome({ profile, onNavigate }: Props) {
     }
   }, [sameIdentity]);
 
-    const fetchTravelAndEvents = useCallback(async () => {
+  const fetchTravelAndEvents = useCallback(async () => {
+    if (travelBusy.current) { travelRefreshQueued.current = true; return; }
+    travelBusy.current = true;
+    if (mounted.current) { setTravelLoading(true); setTravelError(''); }
     try {
-      // 1. Settings
-      const { data: sData } = await supabase.from('travel_settings').select('*').eq('id', 'bus_ghana').maybeSingle();
-      if (sData) setBusSettings(sData);
-
-      // 2. Confirmed Seats
-      const { data: bData } = await supabase.from('travel_bookings').select('passengers_count, is_paid, status');
-      if (bData) {
-        const total = bData.filter(b => b.is_paid || b.status === 'boarded').reduce((acc, curr) => acc + (curr.passengers_count || 1), 0);
-        setConfirmedSeats(total);
+      const [availabilityResult, ownBookingResult, eventsResult] = await Promise.all([
+        supabase.rpc('matmove_get_travel_availability'),
+        supabase.from('travel_bookings').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('platform_events').select('*').eq('is_active', true).order('event_date', { ascending: true }),
+      ]);
+      if (availabilityResult.error) throw availabilityResult.error;
+      if (ownBookingResult.error) throw ownBookingResult.error;
+      if (eventsResult.error) throw eventsResult.error;
+      const availability = Array.isArray(availabilityResult.data) ? availabilityResult.data[0] : availabilityResult.data;
+      if (!availability) throw new Error('Travel pricing and seat availability have not been configured.');
+      if (mounted.current && await sameIdentity()) {
+        setBusSettings({ id: 'bus_ghana', ...availability });
+        setConfirmedSeats(Number(availability.held_seats) || 0);
+        setExistingBooking(ownBookingResult.data);
+        setEvents(eventsResult.data || []);
       }
-
-      // 3. User's existing travel booking
-      const { data: userBooking } = await supabase.from('travel_bookings').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(1).maybeSingle();
-      setExistingBooking(userBooking);
-
-      // 4. Events
-      const { data: evtData } = await supabase.from('platform_events').select('*').eq('is_active', true).order('event_date', { ascending: true });
-      if (evtData) setEvents(evtData);
-    } catch {
-      // Handled silently
+    } catch (error: any) {
+      if (mounted.current) setTravelError(error?.message || 'Travel and events could not be refreshed.');
+    } finally {
+      travelBusy.current = false;
+      if (mounted.current) setTravelLoading(false);
+      if (travelRefreshQueued.current && mounted.current) {
+        travelRefreshQueued.current = false;
+        window.setTimeout(() => { if (mounted.current) void fetchTravelAndEvents(); }, 0);
+      }
     }
-  }, [uid]);
+  }, [uid, sameIdentity]);
 
   const refreshTrips = useCallback(async () => {
     if (tripsBusy.current) return;
@@ -128,8 +145,13 @@ export default function PortalHome({ profile, onNavigate }: Props) {
       if (document.visibilityState === 'visible') { void refreshWallets(); void refreshTrips(); void fetchTravelAndEvents(); }
     };
     const timer = window.setInterval(refreshVisible, 30000);
+    const liveChannel = supabase.channel(`customer-travel-events-${uid}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'travel_settings', filter: 'id=eq.bus_ghana' }, () => { void fetchTravelAndEvents(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'travel_bookings' }, () => { void fetchTravelAndEvents(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'platform_events' }, () => { void fetchTravelAndEvents(); })
+      .subscribe();
     document.addEventListener('visibilitychange', refreshVisible);
-    return () => { mounted.current = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshVisible); };
+    return () => { mounted.current = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshVisible); void supabase.removeChannel(liveChannel); };
   }, [refreshPreferences, refreshWallets, refreshTrips, fetchTravelAndEvents]);
 
   const wallet = wallets?.[currency === 'SLE' ? 'sleWallet' : 'usdWallet'];
@@ -139,7 +161,10 @@ export default function PortalHome({ profile, onNavigate }: Props) {
     ? [{ section: 'ride', label: 'Driver radar', detail: 'Go online and find requests', Icon: Navigation }, { section: 'trips', label: 'My trips', detail: 'View trip details and history', Icon: Car }]
     : [{ section: 'ride', label: 'Book a ride', detail: 'Choose pickup and destination', Icon: Car }, { section: role === 'merchant' ? 'inventory' : 'shop', label: role === 'merchant' ? 'My business' : 'Shop', detail: role === 'merchant' ? 'Manage products and orders' : 'Explore local products', Icon: role === 'merchant' ? Store : ShoppingBag }];
 
-  const availableSeats = Math.max(0, (busSettings.total_seats || 50) - confirmedSeats);
+  const availableSeats = Math.max(0, Number(busSettings.total_seats || 0) - confirmedSeats);
+  const sleWalletForTravel = wallets?.sleWallet;
+  const travelWalletBalance = sleWalletForTravel?.user_id === uid && sleWalletForTravel?.balanceAvailable === true && typeof sleWalletForTravel.balance === 'number' ? sleWalletForTravel.balance : 0;
+  const userPhone = String(profile.phone || profile.phone_number || '');
   const isBusFull = availableSeats <= 0;
 
   if(selectedGame)return <ArcadeGames key={`${uid}:${selectedGame}`} userId={uid} initialGame={selectedGame} onBack={()=>setSelectedGame(null)}/>;
@@ -154,7 +179,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
         <div className="mm-row"><div className="mm-currency-tabs" aria-label="Wallet currency">{(['SLE','USD'] as const).map(c => <button key={c} type="button" aria-pressed={currency === c} onClick={() => { setCurrency(c); setVisible(false); }}>{c}</button>)}</div><button type="button" className="mm-glass-button" aria-label="Refresh balances" disabled={balanceLoading} onClick={() => void refreshWallets()}><RefreshCw size={18} className={balanceLoading ? 'animate-spin' : ''}/></button></div>
         <p className="mm-wallet-label">{currency === 'SLE' ? 'Leone wallet' : 'US dollar wallet'}</p>
         <div className="mm-balance-row"><strong aria-live="polite">{currency} {visible ? balanceLoading ? <span className="inline-block h-6 w-24 bg-white/20 rounded animate-pulse"></span> : verifiedBalance ? wallet.balance.toFixed(2) : '—' : <span aria-label="Balance hidden">••••••</span>}</strong><button type="button" className="mm-glass-button" aria-label={visible ? 'Hide balance' : 'Show balance'} aria-pressed={visible} onClick={() => setVisible(v => !v)}>{visible ? <EyeOff size={20}/> : <Eye size={20}/>}</button></div>
-        <p className="mm-wallet-caption">{balanceLoading ? 'Checking your wallet…' : balanceError ? 'Balance could not be loaded.' : wallet?.is_frozen || profile.is_wallet_frozen ? 'Wallet frozen · contact support' : !wallet ? 'Open Wallet to check setup.' : !verifiedBalance ? 'Open Wallet to check account status.' : 'Available balance · verified with your wallet provider'}</p>
+        <p className="mm-wallet-caption">{balanceLoading ? <span className="inline-block h-3 w-36 rounded bg-white/20 animate-pulse align-middle" aria-label="Loading wallet status" /> : balanceError ? 'Balance could not be loaded.' : wallet?.is_frozen || profile.is_wallet_frozen ? 'Wallet frozen · contact support' : !wallet ? 'Open Wallet to check setup.' : !verifiedBalance ? 'Open Wallet to check account status.' : 'Available balance · verified with your wallet provider'}</p>
         <button className="mm-wallet-open" type="button" onClick={() => onNavigate('wallet')}>Open wallet <ArrowRight size={17}/></button>
       </section>
       <section className="mm-surface" aria-label="Travel & Bus Booking">
@@ -162,12 +187,13 @@ export default function PortalHome({ profile, onNavigate }: Props) {
           <h2>Travel to Ghana</h2>
           <span className="text-xs text-slate-500 font-bold">1st & 15th every month</span>
         </div>
+        {travelLoading ? <div role="status" aria-label="Loading travel details" className="mt-4 space-y-3 animate-pulse"><SkeletonBlock className="h-4 w-3/4" /><SkeletonBlock className="h-3 w-1/2" /><SkeletonBlock className="h-24 w-full" /></div> : travelError ? <p role="alert" className="mm-alert">{travelError} <button type="button" onClick={() => void fetchTravelAndEvents()}>Retry</button></p> : <>
         <p className="mb-2 text-sm text-slate-600">
-          Freetown to Accra Direct Bus. Price: <b>${busSettings.price_usd || 100} / SLE {Number(busSettings.price_sle || 2400).toLocaleString()}</b> per seat.
+          Freetown to Accra Direct Bus. Price: <b>${Number(busSettings.price_usd).toLocaleString()} / SLE {Number(busSettings.price_sle).toLocaleString()}</b> per seat.
         </p>
 
         <div className="mb-3 flex items-center justify-between text-xs font-bold text-slate-500">
-          <span>Seat Capacity: {busSettings.total_seats || 50} Seats</span>
+          <span>Seat Capacity: {Number(busSettings.total_seats).toLocaleString()} Seats</span>
           <span className={isBusFull ? 'text-rose-600' : 'text-emerald-700'}>
             {isBusFull ? 'BUS FULL' : `${availableSeats} Seats Available`}
           </span>
@@ -215,12 +241,13 @@ export default function PortalHome({ profile, onNavigate }: Props) {
                 {isBusFull ? 'Bus is Full for this Departure' : 'Freetown - Accra Direct'}
               </b>
               <span className="mt-1 block text-sm opacity-90">
-                {isBusFull ? 'All 50 seats occupied. Next session opens soon.' : 'Book up to 3 passengers. Departures 7:00 AM sharp.'}
+                {isBusFull ? `All ${Number(busSettings.total_seats).toLocaleString()} seats are reserved or awaiting review.` : 'Book up to 3 passengers. Departures 7:00 AM sharp.'}
               </span>
             </div>
             <ArrowRight size={24} className={isBusFull ? 'text-slate-300' : 'text-blue-300'}/>
           </button>
         )}
+        </>}
       </section>
 
       {/* Upcoming Events Hub Card */}
@@ -232,13 +259,14 @@ export default function PortalHome({ profile, onNavigate }: Props) {
           <button type="button" className="mm-text-button" onClick={() => setPanel('events')}>View all</button>
         </div>
         <p className="mb-3 text-sm text-slate-600">Official tickets with single checkout for up to 3 passes.</p>
-        {events.length === 0 ? (
+        {travelLoading ? <div role="status" aria-label="Loading events" className="grid gap-3 sm:grid-cols-2 animate-pulse"><SkeletonBlock className="h-28" /><SkeletonBlock className="h-28" /></div> : travelError ? <p role="alert" className="mm-alert">{travelError}</p> : events.length === 0 ? (
           <p className="text-xs text-slate-400 py-3">No active events posted yet.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {events.slice(0, 2).map(evt => (
               <div key={evt.id} className="rounded-2xl border border-slate-200 overflow-hidden flex flex-col justify-between p-3 bg-slate-50">
                 <div>
+                  <img src={evt.flyer_url || '/logo.jpg'} alt={`${evt.title} event flyer`} loading="lazy" className="mb-3 h-28 w-full rounded-xl bg-slate-100 object-cover" />
                   <h4 className="font-bold text-slate-900 text-sm line-clamp-1">{evt.title}</h4>
                   <p className="text-xs text-slate-500 mt-1">{evt.venue} · {new Date(evt.event_date).toLocaleDateString()}</p>
                 </div>
@@ -258,21 +286,6 @@ export default function PortalHome({ profile, onNavigate }: Props) {
         <div className="mm-small-actions"><button type="button" onClick={() => onNavigate('wallet')}><Wallet size={18}/> Load with Mobile Money</button><button type="button" onClick={() => onNavigate('account')}><ShieldCheck size={18}/> My account</button></div>
       
       </section>
-      <section className="mm-surface" aria-label="Travel & Bus Booking">
-        <div className="mm-row">
-          <h2>Travel to Ghana</h2>
-          <span className="text-xs text-slate-500 font-bold">1st & 15th every month</span>
-        </div>
-        <p className="mb-3 text-sm text-slate-600">Sierra Leone to Ghana direct bus. Secure your seat instantly for 6,000 SLE.</p>
-        <button type="button" onClick={() => setPanel('travel')} className="w-full min-h-24 rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-900 to-indigo-900 p-4 text-left text-white shadow-sm flex items-center justify-between">
-          <div>
-             <b className="block text-lg font-bold">Freetown - Accra Direct</b>
-             <span className="mt-1 block text-sm text-blue-100">Book up to 3 passengers. Departures 7:00 AM sharp.</span>
-          </div>
-          <ArrowRight size={24} className="text-blue-300"/>
-        </button>
-      </section>
-
     </div>
     {balanceError && <div role="alert" className="mm-alert">{balanceError} <button type="button" disabled={balanceLoading} onClick={() => void refreshWallets()}>Retry</button></div>}
     <section className="mm-surface" aria-label="MatMove games"><div className="mm-row"><h2>Play MatMove Games</h2><span className="text-xs text-slate-500">18+ · Play responsibly</span></div><p className="mb-3 text-sm text-slate-600">Explore the games and view the rules and possible prizes before playing. Account eligibility applies.</p><div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{([
@@ -285,10 +298,11 @@ export default function PortalHome({ profile, onNavigate }: Props) {
       {preferencesLoading && !preferences ? <div className="space-y-2 animate-pulse"><div className="h-12 bg-slate-100 rounded-xl"></div></div> : preferencesError ? <div role="alert" className="mm-alert">{preferencesError} <button type="button" onClick={() => void refreshPreferences()}>Retry</button></div> : <div className="mm-place-grid">{(['home','work'] as const).map(kind => { const place = preferences?.places.find(p => p.kind === kind); const Icon = kind === 'home' ? Home : Briefcase; return <button type="button" key={kind} className="mm-place-tile" onClick={() => setPanel('places')}><Icon size={20}/><span><b>{kind === 'home' ? 'Home' : 'Work'}</b><small>{place?.address || `Add your ${kind} address`}</small></span></button>; })}</div>}
     </section>
     {role !== 'driver' && <button type="button" className="mm-payment-link" aria-expanded={panel === 'cards'} onClick={() => setPanel(panel === 'cards' ? null : 'cards')}><CreditCard size={23}/><span><b>Payment methods</b><small>Mobile Money · optional card references</small></span><ArrowRight size={18}/></button>}
-    {panel && panel !== 'travel' && <PersonalTools key={`${uid}:${panel}`} uid={uid} panel={panel} preferences={preferences} error={preferencesError} loading={preferencesLoading} refresh={refreshPreferences} onClose={() => setPanel(null)}/>}
-    {panel === 'travel' && <TravelBookingPanel uid={uid} walletBalance={wallet?.balance || 0} refreshWallets={refreshWallets} onClose={() => setPanel(null)} />}
+    {(panel === 'places' || panel === 'cards') && <PersonalTools key={`${uid}:${panel}`} uid={uid} panel={panel} preferences={preferences} error={preferencesError} loading={preferencesLoading} refresh={refreshPreferences} onClose={() => setPanel(null)}/>}
+    {panel === 'travel' && <TravelBookingModal uid={uid} userName={profile.full_name || profile.first_name || ''} userPhone={userPhone} walletBalance={travelWalletBalance} priceSle={Number(busSettings.price_sle)} availableSeats={availableSeats} existingBooking={existingBooking} onSuccess={() => { setPanel(null); void fetchTravelAndEvents(); void refreshWallets(); }} onClose={() => setPanel(null)} />}
+    {panel === 'events' && <EventsModal uid={uid} userPhone={userPhone} walletBalance={travelWalletBalance} events={events} onClose={() => setPanel(null)} />}
     <section className="mm-surface"><div className="mm-row"><h2>Recent trips</h2><button type="button" className="mm-text-button" onClick={() => onNavigate('trips')}>View all</button></div>
-      {tripsLoading && !trips.length ? <div className="space-y-2 animate-pulse"><div className="h-14 bg-slate-100 rounded-xl"></div></div> : tripsError ? <div role="alert" className="mm-alert">{tripsError} <button type="button" onClick={() => void refreshTrips()}>Retry</button></div> : !trips.length ? <p className="mm-empty">Your trips will appear here after your first booking.</p> : trips.map(trip => <button type="button" className="mm-trip-row" key={trip.id} onClick={() => onNavigate('trips')}><MapPin size={19}/><span><b>{trip.destination_location || trip.service_type}</b><small>{trip.status} · {new Date(trip.created_at).toLocaleDateString()}</small></span><ArrowRight size={16}/></button>)}
+      {tripsLoading && !trips.length ? <SkeletonList count={2} /> : tripsError ? <div role="alert" className="mm-alert">{tripsError} <button type="button" onClick={() => void refreshTrips()}>Retry</button></div> : !trips.length ? <p className="mm-empty">Your trips will appear here after your first booking.</p> : trips.map(trip => <button type="button" className="mm-trip-row" key={trip.id} onClick={() => onNavigate('trips')}><MapPin size={19}/><span><b>{trip.destination_location || trip.service_type}</b><small>{trip.status} · {new Date(trip.created_at).toLocaleDateString()}</small></span><ArrowRight size={16}/></button>)}
     </section>
     <p className="mm-home-footer">Made for your everyday moves.</p>
   </main>;
@@ -376,133 +390,6 @@ function PersonalTools({ uid, panel, preferences, error, loading, refresh, onClo
 }
 
 
-function TravelBookingPanel({ uid, walletBalance, onClose, refreshWallets }: { uid: string; walletBalance: number; onClose: () => void; refreshWallets: () => void }) {
-  const [passengers, setPassengers] = useState<string[]>(['']); // Array of wallet IDs (at least 1 for the current user)
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState('');
-  const [failure, setFailure] = useState('');
-
-  const totalCost = passengers.length * 6000;
-
-  const handleAddPassenger = () => {
-    if (passengers.length < 3) setPassengers([...passengers, '']);
-  };
-
-  const handleUpdatePassenger = (index: number, val: string) => {
-    const newPass = [...passengers];
-    newPass[index] = val;
-    setPassengers(newPass);
-  };
-
-  const handleRemovePassenger = (index: number) => {
-    const newPass = [...passengers];
-    newPass.splice(index, 1);
-    setPassengers(newPass);
-  };
-
-  const handleBook = async () => {
-    if (totalCost > walletBalance) {
-      setFailure(`Insufficient balance. You need ${totalCost.toLocaleString()} SLE.`);
-      return;
-    }
-    
-    // Check if any wallet ID is empty (except the first one which can implicitly be the current user)
-    if (passengers.some((p, i) => i > 0 && !p.trim())) {
-      setFailure('Please provide valid Wallet IDs for all additional passengers.');
-      return;
-    }
-
-    setBusy(true);
-    setFailure('');
-    setNotice('');
-
-    try {
-      // Direct checkout trigger to Travel Backend Account
-      const res = await walletFetch('/api/create-monime-transfer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: totalCost,
-          destinationId: import.meta.env.VITE_MONIME_TRAVEL_ACCOUNT_ID || 'travel-backend-placeholder',
-          description: `Travel Booking: Freetown to Accra for ${passengers.length} passengers. IDs: ${passengers.join(', ')}`
-        })
-      });
-      
-      if (!res.ok) throw new Error('Booking failed to process. Try again later.');
-      
-      setNotice('Booking successful! 6,000 SLE per passenger has been debited. Have a safe trip!');
-      refreshWallets();
-    } catch (err: any) {
-      setFailure(err.message || 'An error occurred during booking.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="mm-modal-overlay" onClick={onClose}>
-      <div className="mm-modal-surface" onClick={e => e.stopPropagation()}>
-        <div className="mm-row">
-          <h2 className="text-xl font-bold">Freetown - Accra Direct</h2>
-          <button type="button" onClick={onClose} aria-label="Close"><X size={20}/></button>
-        </div>
-        <p className="text-sm text-slate-600 mb-4">Departures on 1st & 15th every month. 6,000 SLE per passenger.</p>
-        
-        {failure && <div className="mm-alert bg-red-50 text-red-700 p-3 rounded-lg mb-4">{failure}</div>}
-        {notice && <div className="mm-alert bg-green-50 text-green-700 p-3 rounded-lg mb-4">{notice}</div>}
-        
-        <div className="space-y-4 mb-6">
-          {passengers.map((p, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <div className="flex-1">
-                <label className="block text-xs font-bold text-slate-700 mb-1">Passenger {index + 1} {index === 0 ? '(You)' : 'Wallet ID'}</label>
-                <input 
-                  type="text" 
-                  value={p}
-                  onChange={(e) => handleUpdatePassenger(index, e.target.value)}
-                  placeholder={index === 0 ? 'Your Wallet (Auto-charged)' : 'Enter MatMove Wallet ID'}
-                  disabled={index === 0 || busy}
-                  className="w-full border border-slate-300 rounded-lg p-2 text-sm"
-                />
-              </div>
-              {index > 0 && (
-                <button type="button" onClick={() => handleRemovePassenger(index)} disabled={busy} className="mt-5 text-red-500 hover:text-red-700">
-                  <Trash2 size={18}/>
-                </button>
-              )}
-            </div>
-          ))}
-          
-          {passengers.length < 3 && !busy && !notice && (
-            <button type="button" onClick={handleAddPassenger} className="text-sm text-blue-600 font-bold hover:underline">
-              + Add another passenger (Max 3)
-            </button>
-          )}
-        </div>
-        
-        <div className="border-t border-slate-200 pt-4 flex justify-between items-center">
-          <div>
-            <p className="text-xs text-slate-500">Total Cost</p>
-            <p className="text-lg font-bold">{totalCost.toLocaleString()} SLE</p>
-          </div>
-          {!notice ? (
-            <button 
-              type="button" 
-              onClick={handleBook} 
-              disabled={busy}
-              className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg disabled:opacity-50"
-            >
-              {busy ? 'Processing...' : 'Pay Now'}
-            </button>
-          ) : (
-            <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 font-bold py-2 px-6 rounded-lg">Done</button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle, availableSeats, existingBooking, onSuccess, onClose }: any) {
   const [passengerCount, setPassengerCount] = useState(1);
   const [fullName, setFullName] = useState(userName);
@@ -514,6 +401,8 @@ function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle,
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [paymentPending, setPaymentPending] = useState(false);
+  const [paymentReviewRequired, setPaymentReviewRequired] = useState(false);
 
   const totalCost = passengerCount * priceSle;
 
@@ -563,6 +452,7 @@ function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle,
 
     setBusy(true);
     setError('');
+    setSuccess('');
 
     try {
       const res = await walletFetch('/api/create-monime-transfer', {
@@ -571,10 +461,30 @@ function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle,
         description: `Travel Payment Freetown-Accra (${existingBooking.passengers_count} seat)`
       });
 
-      if (!res.response.ok) throw new Error(res.data?.error || 'Payment debit failed.');
+      const providerStatus = String(res.data?.data?.status || '').toLowerCase();
+      if (providerStatus === 'failed') {
+        res.finish?.();
+        throw new Error(res.data?.error || 'The wallet transfer failed. No booking payment was recorded.');
+      }
+      if (!res.response.ok && !providerStatus) throw new Error(res.data?.error || 'Payment status could not be verified. Do not retry as a new payment; check again using this same request.');
+      if (providerStatus === 'review_required') {
+        setPaymentReviewRequired(true);
+        setSuccess('This transfer requires MatMove support review. Your booking is not marked paid. Do not submit another payment.');
+        return;
+      }
+      if (providerStatus !== 'completed') {
+        setPaymentPending(true);
+        setSuccess(`Your payment is ${providerStatus || 'being processed'}. Your seats are not yet confirmed as paid. Use “Check payment status” to safely check this same transfer; do not make another payment.`);
+        return;
+      }
 
-      await supabase.from('travel_bookings').update({ is_paid: true }).eq('id', existingBooking.id);
-      setSuccess('Paid in full! Seats are officially confirmed.');
+      const { data: paidBooking, error: updateError } = await supabase.from('travel_bookings').update({ is_paid: true }).eq('id', existingBooking.id).select('id,is_paid').maybeSingle();
+      if (updateError || !paidBooking?.is_paid) {
+        setPaymentReviewRequired(true);
+        throw new Error('Monime confirmed payment, but the booking update was not confirmed. Do not pay again. Contact MatMove support with your booking details.');
+      }
+      res.finish?.();
+      setSuccess('Payment completed and booking confirmed.');
       setTimeout(() => onSuccess(), 1500);
     } catch (err: any) {
       setError(err.message || 'Payment processing failed.');
@@ -599,8 +509,8 @@ function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle,
               <p className="text-sm font-bold text-emerald-900">Seats Approved by Dispatch!</p>
               <div className="text-2xl font-black text-slate-900 mt-2">SLE {Number(existingBooking.fare_amount).toLocaleString()}</div>
             </div>
-            <button onClick={handlePayApproved} disabled={busy} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl text-sm">
-              {busy ? 'Processing…' : 'Debit Wallet & Confirm Seats'}
+            <button onClick={handlePayApproved} disabled={busy || paymentReviewRequired} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl text-sm disabled:opacity-50">
+              {busy ? 'Processing…' : paymentReviewRequired ? 'Contact MatMove Support' : paymentPending ? 'Check payment status' : 'Debit Wallet & Confirm Seats'}
             </button>
           </div>
         ) : (
@@ -669,6 +579,9 @@ function EventsModal({ uid, userPhone, walletBalance, events, onClose }: any) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [pendingEventIds, setPendingEventIds] = useState<string[]>([]);
+  const [reviewEventIds, setReviewEventIds] = useState<string[]>([]);
+  const [completedEventIds, setCompletedEventIds] = useState<string[]>([]);
 
   const handleBuyTickets = async (evt: any) => {
     const count = selectedTicketCount[evt.id] || 1;
@@ -690,9 +603,24 @@ function EventsModal({ uid, userPhone, walletBalance, events, onClose }: any) {
         description: `Ticket Purchase (${count} pass): ${evt.title}`
       });
 
-      if (!res.response.ok) throw new Error(res.data?.error || 'Payment rejected.');
+      const providerStatus = String(res.data?.data?.status || '').toLowerCase();
+      if (providerStatus === 'failed') {
+        res.finish?.();
+        throw new Error(res.data?.error || 'The ticket payment failed. No ticket was issued.');
+      }
+      if (!res.response.ok && !providerStatus) throw new Error(res.data?.error || 'Payment status could not be verified. Do not start a new payment; check again using this same request.');
+      if (providerStatus === 'review_required') {
+        setReviewEventIds(ids => [...new Set([...ids, evt.id])]);
+        setNotice('This transfer requires MatMove support review. No ticket has been issued. Do not submit another payment.');
+        return;
+      }
+      if (providerStatus !== 'completed') {
+        setPendingEventIds(ids => [...new Set([...ids, evt.id])]);
+        setNotice(`Your payment is ${providerStatus || 'being processed'}. No ticket has been issued yet. Click “Check payment status” to safely check this same transfer; do not pay again.`);
+        return;
+      }
 
-      await supabase.from('event_tickets').insert({
+      const { error: ticketError } = await supabase.from('event_tickets').insert({
         event_id: evt.id,
         user_id: uid,
         user_phone: userPhone,
@@ -701,8 +629,15 @@ function EventsModal({ uid, userPhone, walletBalance, events, onClose }: any) {
         ticket_code: `TKT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
         status: 'confirmed'
       });
+      if (ticketError) {
+        setReviewEventIds(ids => [...new Set([...ids, evt.id])]);
+        throw new Error('Monime confirmed payment, but the ticket record could not be saved. Do not click again or pay again. Contact MatMove support with the event and payment time.');
+      }
 
-      setNotice(`Purchased ${count} ticket(s) successfully!`);
+      res.finish?.();
+      setPendingEventIds(ids => ids.filter(id => id !== evt.id));
+      setCompletedEventIds(ids => [...new Set([...ids, evt.id])]);
+      setNotice(`Payment completed and ${count} ticket(s) issued successfully!`);
     } catch (err: any) {
       setError(err.message || 'Payment processing failed.');
     } finally {
@@ -729,7 +664,7 @@ function EventsModal({ uid, userPhone, walletBalance, events, onClose }: any) {
 
             return (
               <div key={evt.id} className="border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row gap-4 items-center">
-                <img src={evt.flyer_url || '/logo.png'} alt={evt.title} className="w-full sm:w-28 h-28 rounded-xl object-cover bg-slate-100" />
+                <img src={evt.flyer_url || '/logo.jpg'} alt={evt.title} className="w-full sm:w-28 h-28 rounded-xl object-cover bg-slate-100" />
                 <div className="flex-1">
                   <h3 className="font-bold text-slate-900 text-sm">{evt.title}</h3>
                   <p className="text-xs text-slate-500 mt-0.5">{evt.venue} · {new Date(evt.event_date).toLocaleDateString()}</p>
@@ -754,11 +689,11 @@ function EventsModal({ uid, userPhone, walletBalance, events, onClose }: any) {
                 <div className="text-right shrink-0">
                   <span className="text-base font-black text-sky-600 block mb-2">SLE {total.toLocaleString()}</span>
                   <button
-                    disabled={busy}
+                    disabled={busy || reviewEventIds.includes(evt.id) || completedEventIds.includes(evt.id)}
                     onClick={() => handleBuyTickets(evt)}
-                    className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl"
+                    className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl disabled:opacity-50"
                   >
-                    Buy {count} Ticket{count > 1 ? 's' : ''}
+                    {completedEventIds.includes(evt.id) ? 'Tickets issued' : reviewEventIds.includes(evt.id) ? 'Contact support' : pendingEventIds.includes(evt.id) ? 'Check payment status' : `Buy ${count} Ticket${count > 1 ? 's' : ''}`}
                   </button>
                 </div>
               </div>

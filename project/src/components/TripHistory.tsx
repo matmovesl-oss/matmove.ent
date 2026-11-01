@@ -1,6 +1,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { shareReceiptPdf } from '@/lib/pdfReceipt';
+import { SkeletonList } from '@/components/Skeleton';
 
 type Props = { userId: string; role: 'rider' | 'driver' | 'merchant' };
 const date = (value: unknown) => {
@@ -24,6 +26,29 @@ export function tripShareText(t: any) {
     ...(t.rider?.full_name ? [`Customer: ${t.rider.full_name}`] : []),
     ...(t.vehicle_type ? [`Vehicle: ${t.vehicle_type}`] : []),
   ].join('\n');
+}
+
+function tripReceiptFields(t: any, role: Props['role']) {
+  return [
+    { label: 'Trip reference', value: t.id },
+    { label: 'Service', value: t.service_type || 'Ride' },
+    { label: 'Status', value: t.status },
+    { label: 'Pickup', value: t.pickup_location },
+    { label: 'Destination', value: t.destination_location },
+    { label: 'Requested', value: date(t.created_at) },
+    { label: 'Scheduled', value: t.scheduled_time ? date(t.scheduled_time) : 'Not scheduled' },
+    { label: 'Accepted', value: t.accepted_at ? date(t.accepted_at) : 'Not recorded' },
+    { label: 'Started', value: t.started_at ? date(t.started_at) : 'Not recorded' },
+    { label: 'Completed', value: t.completed_at ? date(t.completed_at) : 'Not recorded' },
+    { label: 'Passenger count', value: t.passenger_count ?? 1 },
+    { label: 'Passenger', value: t.passenger_name },
+    { label: 'Customer', value: t.rider?.full_name },
+    { label: 'Driver', value: t.driver?.full_name },
+    { label: 'Vehicle', value: t.vehicle_type },
+    { label: 'Fare', value: `SLE ${Number(t.fare_amount || 0).toFixed(2)}` },
+    ...(role === 'driver' ? [{ label: 'Expected driver share (85%)', value: `SLE ${(Number(t.fare_amount || 0) * 0.85).toFixed(2)}` }] : []),
+    ...(t.payment_status ? [{ label: 'Payment status', value: t.payment_status }] : []),
+  ];
 }
 export default function TripHistory({ userId, role }: Props) {
   const [trips, setTrips] = useState<any[]>([]);
@@ -54,9 +79,26 @@ export default function TripHistory({ userId, role }: Props) {
   useEffect(() => {
     mounted.current=true;revision.current++;inFlight.current=false;setTrips([]);setLoadedOwner(userId);setSelectedId(null);setLoading(true);setError('');
     void refresh();
+    // Supabase Realtime provides prompt trip-status updates. The polling fallback
+    // remains enabled in case Realtime is unavailable or the table is not published.
+    const ownerColumn = role === 'driver' ? 'driver_id' : 'rider_id';
+    const channel = supabase.channel(`trip-history:${role}:${userId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'bookings',
+        filter: `${ownerColumn}=eq.${userId}`,
+      }, () => {
+        if (document.visibilityState !== 'hidden') void refresh();
+      })
+      .subscribe();
     const timer = window.setInterval(() => { if(document.visibilityState!=='hidden')void refresh(); }, 15000);
-    return () => { mounted.current=false;revision.current++;inFlight.current=false;abort.current?.abort();window.clearInterval(timer); };
-  }, [refresh,userId]);
+    return () => {
+      mounted.current=false;revision.current++;inFlight.current=false;abort.current?.abort();
+      window.clearInterval(timer);
+      void supabase.removeChannel(channel);
+    };
+  }, [refresh,userId,role]);
   const ownedTrips=loadedOwner===userId?trips:[];
   const selected = ownedTrips.find(t => t.id === selectedId);
   useEffect(() => {
@@ -64,20 +106,20 @@ export default function TripHistory({ userId, role }: Props) {
   }, [selectedId]);
   async function share(t: any) {
     setNotice('');
-    const text = tripShareText(t);
     try {
-      if (navigator.share) await navigator.share({ title: 'MatMove trip receipt', text });
-      else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        setNotice('Trip receipt copied. Paste it into WhatsApp or another app.');
-      } else {
-        const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
-        const a = document.createElement('a'); a.href = url; a.download = `MatMove-trip-${t.id}.txt`; a.click();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        setNotice('Trip receipt downloaded.');
-      }
-    } catch (e: any) { if (e.name !== 'AbortError') setNotice('Sharing failed. Try again or copy the details below.'); }
+      const result = await shareReceiptPdf({
+        title: 'MatMove Trip Receipt',
+        subtitle: 'Trip details from your MatMove account',
+        reference: t.id,
+        filename: `MatMove-trip-${t.id}`,
+        fields: tripReceiptFields(t, role),
+      });
+      setNotice(result === 'shared' ? 'Trip receipt PDF shared.' : 'Trip receipt PDF downloaded. You can attach it to WhatsApp or email.');
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') setNotice(error?.message || 'Trip receipt PDF could not be created.');
+    }
   }
+
   const fields = selected ? [
     ['Reference', selected.id], ['Passengers',String(selected.passenger_count??1)], ['Passenger name',selected.passenger_name], ['Service', selected.service_type], ['Status', selected.status],
     ['Customer', selected.rider?.full_name], ['Driver', selected.driver?.full_name],
@@ -95,7 +137,7 @@ export default function TripHistory({ userId, role }: Props) {
       <button className="rounded-xl border bg-white px-4 py-2" onClick={() => void refresh()}>Refresh</button></div>
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
     {!selectedId && notice && <p role="status" className="rounded-xl bg-emerald-50 p-3">{notice}</p>}
-    {loading ? <p>Loading trips...</p> : !ownedTrips.length && !error ? <p>No trips or deliveries yet.</p> : null}
+    {loading ? <SkeletonList count={4} /> : !ownedTrips.length && !error ? <p className="rounded-2xl border bg-white py-10 text-center text-slate-500">No trips or deliveries yet.</p> : null}
     {ownedTrips.map(t => <article key={t.id} className="rounded-2xl border bg-white p-4 shadow-sm">
       <button onClick={() => { setNotice(''); setSelectedId(t.id); }} className="w-full text-left">
         <div className="flex justify-between gap-3"><strong className="capitalize">{t.service_type || 'Ride'}</strong><span>{t.status}</span></div>
@@ -105,13 +147,13 @@ export default function TripHistory({ userId, role }: Props) {
         {role === 'driver' && <p className="mt-1 text-sm text-emerald-700">Expected driver share: SLE {(Number(t.fare_amount || 0) * 0.85).toFixed(2)}</p>}
         <p className="mt-2 text-sm text-blue-700">View full trip details</p>
       </button>
-      <button className="mt-3 rounded-lg border px-3 py-2 text-sm" onClick={() => void share(t)}>Share trip receipt</button>
+      <button className="mt-3 rounded-lg border px-3 py-2 text-sm" onClick={() => void share(t)}>Share PDF receipt</button>
     </article>)}
     <dialog ref={dialog} onClose={() => { setSelectedId(null); setNotice(''); }} className="max-h-[85vh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-2xl p-6 backdrop:bg-slate-950/60">
       {selected && <><div className="flex justify-between gap-3"><h2 className="text-xl font-bold">Trip details</h2><button autoFocus onClick={() => dialog.current?.close()} className="rounded-lg border px-3 py-2">Close</button></div>
         <dl className="my-4 space-y-3">{fields.map(([label, value]) => <div key={label} className="border-b pb-2"><dt className="text-sm text-slate-500">{label}</dt><dd className="break-words font-medium">{value || 'Not recorded'}</dd></div>)}</dl>
         {notice && <p role="status" className="mb-3 rounded-lg bg-emerald-50 p-3">{notice}</p>}
-        <button onClick={() => void share(selected)} className="rounded-xl bg-blue-600 px-4 py-3 font-bold text-white">Share trip receipt</button>
+        <button onClick={() => void share(selected)} className="rounded-xl bg-blue-600 px-4 py-3 font-bold text-white">Share PDF receipt</button>
         <p className="mt-3 text-xs text-slate-500">Sharing includes your trip areas, fare and times. Only recorded times are shown.</p>
       </>}
     </dialog>

@@ -2,6 +2,7 @@ import {useTripRequest} from '@/lib/useTripRequest';
 import CustomerTripSwitcher from '@/components/CustomerTripSwitcher';
 import ActiveTripMap from '@/components/ActiveTripMap';
 import {MerchantProductCatalog, catalogMoney} from '@/components/ProductCatalog';
+import { SkeletonBlock, SkeletonList } from '@/components/Skeleton';
 
 import FareNegotiation from '@/components/FareNegotiation';
 import { useCustomerActiveRide } from '@/lib/useRideNegotiation';
@@ -301,7 +302,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
             <p className="text-xs text-slate-500">Your balance and wallet actions are in Home and Wallet.</p>
             <h3 className="text-lg font-bold">Dispatch Request</h3>
             {tripError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{tripError}<button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry active trip</button></p>}
-              {tripLoading && !activeBooking ? <p role="status" className="rounded-xl bg-slate-50 p-4 text-sm">Checking your active trip…</p> : tripError && !activeBooking ? null : !activeBooking ? (
+              {tripLoading && !activeBooking ? <div role="status" aria-label="Loading active trip" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4"><SkeletonBlock className="h-4 w-2/5" rounded="rounded-md"/><SkeletonBlock className="h-3 w-4/5" rounded="rounded-md"/><SkeletonBlock className="h-24 w-full" rounded="rounded-lg"/></div> : tripError && !activeBooking ? null : !activeBooking ? (
               <>
                 <div className="flex gap-2 rounded-xl bg-slate-100 p-1">
                   <button onClick={() => setServiceType('delivery')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' :'text-slate-500'}`}><Package size={16} /> Delivery</button>
@@ -533,7 +534,7 @@ function MerchantInventory({ profile }: any) {
             <div className="flex rounded-lg bg-slate-100 p-1">{(['all', 'pending', 'completed'] as const).map(filter => <button key={filter} onClick={() => setOrderFilter(filter)} className={`rounded-md px-3 py-2 text-sm font-bold capitalize ${orderFilter === filter ? 'bg-white shadow-sm' : ''}`}>{filter}</button>)}</div>
             <button onClick={() => void fetchOrders()} className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm"><RefreshCw size={16} /> Refresh</button>
           </div>
-          {ordersLoading && !orders.length ? <p role="status" className="flex items-center justify-center gap-2 py-6 text-sm text-slate-600"><Loader2 size={18} className="animate-spin"/> Loading your orders…</p> : ordersError ? <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{ordersError}<button type="button" className="ml-2 min-h-11 px-2 font-bold underline" onClick={() => void fetchOrders()}>Retry orders</button></p> : !displayedOrders.length ? <p className="rounded-2xl border bg-white py-10 text-center text-slate-500">No orders found.</p> : null}
+          {ordersLoading && !orders.length ? <SkeletonList count={3} /> : ordersError ? <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{ordersError}<button type="button" className="ml-2 min-h-11 px-2 font-bold underline" onClick={() => void fetchOrders()}>Retry orders</button></p> : !displayedOrders.length ? <p className="rounded-2xl border bg-white py-10 text-center text-slate-500">No orders found.</p> : null}
           {displayedOrders.map(order => (
             <article key={order.id} className="flex flex-col justify-between gap-4 rounded-2xl border bg-white p-5 sm:flex-row">
               <div>
