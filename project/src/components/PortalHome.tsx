@@ -179,7 +179,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
   if (selectedGame) return <ArcadeGames key={`${uid}:${selectedGame}`} userId={uid} initialGame={selectedGame} onBack={() => setSelectedGame(null)} />;
   
   return (
-    <main className="mm-home">
+    <main className="mm-home overflow-hidden mx-auto max-w-[100vw]">
       <header className="mm-home-heading">
         <div className="mm-brand"><img src="/logo.jpg" alt="MatMove" width="40" height="40"/><span>Wi dey move<span className="mm-muted">Your everyday, connected.</span></span></div>
         <button className="mm-icon-button" type="button" aria-label="Open your account" onClick={() => onNavigate('account')}><ShieldCheck size={22}/></button>
@@ -212,7 +212,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
               </span>
             </div>
 
-            {existingBooking ? (
+            {existingBooking && existingBooking.status !== 'cancelled' ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
                 <div className="flex justify-between items-center text-xs">
                   <span className="font-bold text-slate-500 uppercase">Your Reservation</span>
@@ -267,26 +267,34 @@ export default function PortalHome({ profile, onNavigate }: Props) {
                 )}
               </div>
             ) : (
-              <button
-                type="button"
-                disabled={isBusFull}
-                onClick={() => setPanel('travel')}
-                className={`w-full min-h-24 rounded-2xl border p-4 text-left shadow-sm flex items-center justify-between transition ${
-                  isBusFull 
-                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                    : 'border-blue-200 bg-gradient-to-r from-blue-900 to-indigo-900 text-white hover:opacity-95'
-                }`}
-              >
-                <div>
-                  <b className="block text-lg font-bold">
-                    {isBusFull ? 'Bus is Full for this Departure' : 'Freetown - Accra Direct'}
-                  </b>
-                  <span className="mt-1 block text-sm opacity-90">
-                    {isBusFull ? `All ${Number(busSettings.total_seats || 50).toLocaleString()} seats reserved.` : 'Book up to 3 passengers. Departures 7:00 AM sharp.'}
-                  </span>
-                </div>
-                <ArrowRight size={24} className={isBusFull ? 'text-slate-300' : 'text-blue-300'}/>
-              </button>
+              <div className="space-y-3">
+                {existingBooking?.status === 'cancelled' && (
+                  <div className="p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-center justify-between">
+                    <span>Previous reservation cancelled.</span>
+                    <button onClick={() => setExistingBooking(null)} className="font-bold underline text-indigo-600">Dismiss</button>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  disabled={isBusFull}
+                  onClick={() => { setExistingBooking(null); setPanel('travel'); }}
+                  className={`w-full min-h-24 rounded-2xl border p-4 text-left shadow-sm flex items-center justify-between transition ${
+                    isBusFull 
+                      ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                      : 'border-blue-200 bg-gradient-to-r from-blue-900 to-indigo-900 text-white hover:opacity-95'
+                  }`}
+                >
+                  <div>
+                    <b className="block text-lg font-bold">
+                      {isBusFull ? 'Bus is Full for this Departure' : 'Freetown - Accra Direct'}
+                    </b>
+                    <span className="mt-1 block text-sm opacity-90">
+                      {isBusFull ? `All ${Number(busSettings.total_seats || 50).toLocaleString()} seats reserved.` : 'Book up to 3 passengers. Departures 7:00 AM sharp.'}
+                    </span>
+                  </div>
+                  <ArrowRight size={24} className={isBusFull ? 'text-slate-300' : 'text-blue-300'}/>
+                </button>
+              </div>
             )}
           </>}
         </section>
