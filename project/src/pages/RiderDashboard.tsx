@@ -86,7 +86,6 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     applySnapshot: applyFareSnapshot
   } = useCustomerActiveRide(profile?.id);
 
-  // 5-minute cancellation timer tracker
   useEffect(() => {
     let timer: any;
     if (activeBooking && activeBooking.status === 'accepted' && activeBooking.accepted_at) {
@@ -450,7 +449,6 @@ function RiderMain({ profile, wallet, activeSection }: any) {
       {walletSetupPanel}
 
       <div className="p-4 max-w-6xl mx-auto space-y-4">
-        {/* Renders for both 'home' and 'ride' navigation so clicking Ride never renders an empty crash screen */}
         {(activeSection === 'home' || activeSection === 'ride' || !activeSection) && (
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] gap-4">
             <div className="min-w-0 bg-white p-4 rounded-2xl border shadow-sm space-y-3 h-fit">
@@ -593,7 +591,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                 </>
               ) : (
                 <div className="text-center py-6">
-                  {activeBooking.status === 'accepted' || activeBooking.status === 'in_progress' ? (
+                  {activeBooking && (activeBooking.status === 'accepted' || activeBooking.status === 'in_progress') ? (
                     <>
                       <Car size={44} className="text-emerald-600 mx-auto mb-3" />
                       <h4 className="font-bold text-lg text-slate-900">
@@ -640,7 +638,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                         </button>
                       )}
                     </>
-                  ) : (
+                  ) : activeBooking ? (
                     <>
                       <Loader2 size={36} className="animate-spin text-orange-600 mx-auto mb-3" />
                       <h4 className="font-bold text-base text-slate-900">
@@ -649,9 +647,9 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                       <p className="text-xs text-slate-500 mt-1">Please wait while nearby drivers review your request.</p>
                       <button onClick={cancelTrip} className="text-rose-600 text-xs font-bold hover:underline mt-3">Cancel Request</button>
                     </>
-                  )}
+                  ) : null}
 
-                  {['pending', 'pending_admin'].includes(activeBooking.status) && (
+                  {activeBooking && ['pending', 'pending_admin'].includes(activeBooking.status) && ['ride', 'delivery'].includes(activeBooking.service_type) && (
                     <div className="mt-3 text-left">
                       <FareNegotiation key={`${profile?.id}:${activeBooking.id}`} userId={profile?.id} bookingId={activeBooking.id} role="rider" onFareChange={applyFareSnapshot} />
                     </div>
