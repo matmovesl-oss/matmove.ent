@@ -5,6 +5,7 @@ import {profilePhotoPickerOpen,onProfilePhotoPickerEnd,clearProfilePhotoPicker} 
 
 type Receipt={userId:string;configured:boolean;digits:4|6;ok:boolean;code:string;attemptsRemaining:number;retryAfterSeconds:number};
 const codes=['status','cooldown','already_configured','saved','setup_required','upgrade_required','verified','incorrect'];
+
 export async function customerPasscode(userId:string,action:'status'|'create'|'verify'|'change',pin:string|null=null,newPin:string|null=null):Promise<Receipt>{
  if(!userId||!['status','create','verify','change'].includes(action))throw Error('Invalid passcode request.');
  if(['create','change'].includes(action)&&!/^\d{6}$/.test(newPin||''))throw Error('Choose exactly six digits.');
@@ -31,6 +32,7 @@ export async function customerPasscode(userId:string,action:'status'|'create'|'v
  }catch(e){if(controller.signal.aborted)throw Error('Passcode check timed out. Reload to confirm the saved state.');throw e;}
  finally{clearTimeout(timer);}
 }
+
 export function watchPasscodeBackground(onLock:()=>void,userId='',isUnlocked:()=>boolean=()=>false){
  const hidden=()=>{if(document.visibilityState==='hidden'&&!(isUnlocked()&&profilePhotoPickerOpen(userId)))onLock();};
  const pickerEnded=()=>{setTimeout(hidden,0);};
@@ -39,21 +41,29 @@ export function watchPasscodeBackground(onLock:()=>void,userId='',isUnlocked:()=
  document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',onLock);window.addEventListener('pageshow',restored);
  return()=>{stopPicker();clearProfilePhotoPicker(userId);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',onLock);window.removeEventListener('pageshow',restored);};
 }
+
 export default function CustomerPasscode({userId,onLogout,children}:{userId:string;onLogout:()=>void|Promise<void>;children:(lock:()=>void)=>ReactNode}){
  const privacyDialog=useRef<HTMLDialogElement|null>(null),workspace=useRef<HTMLDivElement|null>(null);
  const [enteredUser,setEnteredUser]=useState('');
  const [status,setStatus]=useState<Receipt|null>(null),[unlocked,setUnlocked]=useState(false),[upgrade,setUpgrade]=useState(false);
  const [pin,setPin]=useState(''),[next,setNext]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [forgotMode, setForgotMode] = useState(false);
+ const [resetEmail, setResetEmail] = useState('');
+
  const unlockedNow=useRef(false),statusNow=useRef<Receipt|null>(null);statusNow.current=status;
  const current=useRef(userId);current.current=userId;const mounted=useRef(false),revision=useRef(0),mutex=useRef(false);
  const clear=()=>{setPin('');setNext('');setConfirm('');};
  const valid=(id:string,n:number)=>mounted.current&&current.current===id&&revision.current===n;
- function lock(){setPortalUnlocked(userId,false);unlockedNow.current=false;clearProfilePhotoPicker(userId);revision.current++;mutex.current=false;setBusy(false);setUnlocked(false);setUpgrade(false);clear();setError('');}
- async function load(){if(mutex.current)return;mutex.current=true;const n=++revision.current,id=userId;setBusy(true);setError('');clear();unlockedNow.current=false;setUnlocked(false);setUpgrade(false);
+ 
+ function lock(){setPortalUnlocked(userId,false);unlockedNow.current=false;clearProfilePhotoPicker(userId);revision.current++;mutex.current=false;setBusy(false);setUnlocked(false);setUpgrade(false);setForgotMode(false);setResetEmail('');clear();setError('');}
+ 
+ async function load(){if(mutex.current)return;mutex.current=true;const n=++revision.current,id=userId;setBusy(true);setError('');clear();unlockedNow.current=false;setUnlocked(false);setUpgrade(false);setForgotMode(false);
   try{const d=await customerPasscode(id,'status');if(valid(id,n))setStatus(d);}catch(e){if(valid(id,n)){setStatus(null);setError(e instanceof Error?e.message:'Passcode service unavailable.');}}
   finally{if(valid(id,n)){mutex.current=false;setBusy(false);}}
  }
+ 
  useEffect(()=>{mounted.current=true;setStatus(null);lock();void load();const stop=watchPasscodeBackground(lock,userId,()=>unlockedNow.current);const resume=()=>{if(document.visibilityState==='visible'&&!statusNow.current&&!mutex.current)void load();};document.addEventListener('visibilitychange',resume);return()=>{document.removeEventListener('visibilitychange',resume);mounted.current=false;revision.current++;mutex.current=false;stop();};},[userId]);
+ 
  async function submit(){
   if(mutex.current||!status)return;
   const creating=!status.configured,changing=upgrade;
@@ -69,6 +79,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
   }catch(e){if(valid(id,n)){clear();setUpgrade(false);setError(e instanceof Error?e.message:'Passcode service unavailable.');}}
   finally{if(valid(id,n)){mutex.current=false;setBusy(false);}}
  }
+ 
  const allowed=unlocked&&status?.userId===userId&&status.configured&&status.digits===6;
  useLayoutEffect(()=>{
   const dialog=privacyDialog.current,root=workspace.current;
@@ -82,18 +93,74 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
   }
   return()=>{observer?.disconnect();};
  },[allowed,enteredUser,userId]);
+ 
  const creating=status&&!status.configured;
  const field=(label:string,value:string,set:(v:string)=>void,length:number)=><label className="block text-xs font-semibold text-slate-600">{label}<input aria-label={label} type="password" inputMode="numeric" autoComplete="off" maxLength={length} value={value} disabled={busy} onChange={e=>set(e.target.value.replace(/\D/g,'').slice(0,length))} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-center text-xl tracking-[.45em] text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"/></label>;
- return <><dialog ref={privacyDialog} aria-label="MATMOVE privacy lock" aria-hidden={allowed} onCancel={e=>e.preventDefault()} className="fixed inset-0 m-0 h-[100dvh] max-h-none w-screen max-w-none border-0 bg-slate-100 p-0 backdrop:bg-slate-100"><main className="flex min-h-[100dvh] items-center justify-center bg-slate-100 px-5 py-8"><form aria-label="Customer passcode" onSubmit={e=>{e.preventDefault();void submit();}} className="w-full max-w-xs space-y-4 rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
-  <div className="text-center"><p className="text-xs font-bold tracking-[.2em] text-emerald-700">MATMOVE</p><h1 className="mt-2 text-xl font-bold">{upgrade?'Upgrade to six digits':creating?'Create passcode':'Unlock your account'}</h1><p className="mt-1 text-xs text-slate-500">{upgrade?'Choose your new six-digit passcode.':creating?'Choose and confirm six digits.':'Enter your passcode to continue.'}</p></div>
-  {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose six digits.</p>}
-  {!status?<p role="status" className="text-center text-sm text-slate-600">{busy?'Checking passcode…':'Passcode setup unavailable.'}</p>:<>
-   {!creating&&!upgrade&&field(`Current ${status.digits}-digit passcode`,pin,setPin,status.digits)}
-   {(creating||upgrade)&&<>{field('New six-digit passcode',next,setNext,6)}{field('Confirm six-digit passcode',confirm,setConfirm,6)}</>}
-   <button type="submit" disabled={busy} className="h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">{busy?'Checking…':creating||upgrade?'Save passcode':'Unlock'}</button>
-  </>}
-  {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p>}
-  <div className="flex justify-between gap-3"><button type="button" disabled={busy} onClick={()=>void load()} className="min-h-11 text-xs text-slate-600 underline">Reload passcode setup</button><button type="button" onClick={()=>{lock();void onLogout();}} className="min-h-11 text-xs text-slate-600 underline">Sign out</button></div>
-  <details className="text-xs text-slate-500"><summary className="cursor-pointer py-1">Forgot passcode?</summary><p className="mt-2">Contact MatMove support. Signing in again does not reset your passcode.</p></details>
- </form></main></dialog><div ref={workspace} hidden={!allowed} aria-hidden={!allowed} style={allowed?undefined:{display:'none'}}>{enteredUser===userId&&children(lock)}</div></>;
+
+ return (
+   <>
+     <dialog ref={privacyDialog} aria-label="MATMOVE privacy lock" aria-hidden={allowed} onCancel={e=>e.preventDefault()} className="fixed inset-0 m-0 h-[100dvh] max-h-none w-screen max-w-none border-0 bg-slate-100 p-0 backdrop:bg-slate-100">
+       <main className="flex min-h-[100dvh] items-center justify-center bg-slate-100 px-5 py-8">
+         <form aria-label="Customer passcode" onSubmit={e=>{e.preventDefault(); if(!forgotMode) void submit();}} className="w-full max-w-xs space-y-4 rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
+           
+           <div className="text-center">
+             <p className="text-xs font-bold tracking-[.2em] text-emerald-700">MATMOVE</p>
+             {forgotMode ? (
+               <>
+                 <h1 className="mt-2 text-xl font-bold">Reset Passcode</h1>
+                 <p className="mt-1 text-xs text-slate-500">Provide your account email to continue to the secure passcode reset portal.</p>
+               </>
+             ) : (
+               <>
+                 <h1 className="mt-2 text-xl font-bold">{upgrade?'Upgrade to six digits':creating?'Create passcode':'Unlock your account'}</h1>
+                 <p className="mt-1 text-xs text-slate-500">{upgrade?'Choose your new six-digit passcode.':creating?'Choose and confirm six digits.':'Enter your passcode to continue.'}</p>
+               </>
+             )}
+           </div>
+
+           {forgotMode ? (
+             <>
+                <label className="block text-xs font-semibold text-slate-600">
+                  Account Email Address
+                  <input type="email" required value={resetEmail} onChange={e => setResetEmail(e.target.value)} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" />
+                </label>
+                <a href={`https://matmove.com/reset-passcode?email=${encodeURIComponent(resetEmail)}`} target="_blank" rel="noreferrer" className="flex h-11 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white transition hover:bg-emerald-600">
+                  Go to Reset Portal
+                </a>
+                <button type="button" onClick={() => { setForgotMode(false); setResetEmail(''); }} className="min-h-11 w-full text-xs text-slate-600 underline">
+                  Back to passcode
+                </button>
+             </>
+           ) : (
+             <>
+               {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose six digits.</p>}
+               {!status?<p role="status" className="text-center text-sm text-slate-600">{busy?'Checking passcode…':'Passcode setup unavailable.'}</p>:<>
+                {!creating&&!upgrade&&field(`Current ${status.digits}-digit passcode`,pin,setPin,status.digits)}
+                {(creating||upgrade)&&<>{field('New six-digit passcode',next,setNext,6)}{field('Confirm six-digit passcode',confirm,setConfirm,6)}</>}
+                <button type="submit" disabled={busy} className="h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">{busy?'Checking…':creating||upgrade?'Save passcode':'Unlock'}</button>
+               </>}
+               
+               {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p>}
+               
+               <div className="flex justify-between gap-3">
+                 <button type="button" disabled={busy} onClick={()=>void load()} className="min-h-11 text-xs text-slate-600 underline">Reload passcode setup</button>
+                 <button type="button" onClick={()=>{lock();void onLogout();}} className="min-h-11 text-xs text-slate-600 underline">Sign out</button>
+               </div>
+               
+               {!creating && (
+                 <button type="button" onClick={() => setForgotMode(true)} className="w-full text-left pt-2 pb-1 text-xs text-slate-500 hover:text-emerald-700 transition">
+                   Forgot passcode?
+                 </button>
+               )}
+             </>
+           )}
+         </form>
+       </main>
+     </dialog>
+     
+     <div ref={workspace} hidden={!allowed} aria-hidden={!allowed} style={allowed?undefined:{display:'none'}}>
+       {enteredUser===userId&&children(lock)}
+     </div>
+   </>
+ );
 }
