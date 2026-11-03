@@ -1,4 +1,3 @@
-
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Bell,X} from 'lucide-react';
 import {supabase} from '@/lib/supabase';
@@ -38,8 +37,20 @@ export default function NotificationBell({userId,onNavigate}:{userId:string;onNa
  useEffect(()=>{
   mounted.current=true;lock.current=false;setPage(null);setItems([]);setError('');setLoading(true);setOpen(false);void read();
   const refresh=()=>{if(document.visibilityState==='visible'&&!dialog.current?.open)void read(null,true);};
+  
+  // Real-time listener for instant deletion and incoming messages
+  const channel = supabase.channel(`notifications-bell-${userId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
+      void read(null, true);
+    })
+    .subscribe();
+
   const timer=window.setInterval(refresh,30000);document.addEventListener('visibilitychange',refresh);
-  return()=>{mounted.current=false;generation.current++;controller.current?.abort();window.clearInterval(timer);document.removeEventListener('visibilitychange',refresh);};
+  return()=>{
+    mounted.current=false;generation.current++;controller.current?.abort();
+    window.clearInterval(timer);document.removeEventListener('visibilitychange',refresh);
+    void supabase.removeChannel(channel);
+  };
  },[userId,read]);
  useEffect(()=>{const el=dialog.current;if(open&&el&&!el.open)el.showModal();if(!open&&el?.open)el.close();return()=>{if(el?.open)el.close();};},[open]);
  async function mark(id:string,through=false){
