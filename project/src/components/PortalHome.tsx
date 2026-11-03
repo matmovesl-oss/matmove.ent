@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Briefcase, Car, CreditCard, Eye, EyeOff, Home, Loader2, MapPin, Navigation, RefreshCw, ShieldCheck, ShoppingBag, Store, Trash2, Wallet, X, Bus, Ticket, Sparkles, CheckCircle2, Calendar, XCircle, Smartphone, Clock } from 'lucide-react';
+import { ArrowRight, Briefcase, Car, CreditCard, Eye, EyeOff, Home, Loader2, MapPin, Navigation, RefreshCw, ShieldCheck, ShoppingBag, Store, Trash2, Wallet, X, Bus, Ticket, Sparkles, CheckCircle2, Calendar, XCircle, Smartphone, Clock, Plane, Package, Ship } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { walletFetch } from '@/lib/apiFetch';
 import { ArcadeGames } from '@/components/ArcadeGames';
@@ -19,6 +19,8 @@ import { useWalletAccess } from '@/lib/useWalletAccess';
 import { updateRide } from '@/services/rideService';
 import { locationVoiceAvailable, startLocationVoice } from '@/lib/voiceLocation';
 import 'mapbox-gl/dist/mapbox-gl.css';
+
+const WHATSAPP_NUMBER = '23290330362';
 
 // -----------------------------------------------------------------------------
 // Shared Types & Maps Configuration
@@ -67,9 +69,6 @@ export function loadGoogleMaps(apiKey: string): Promise<void> {
   return sdkPromise;
 }
 
-// -----------------------------------------------------------------------------
-// Base Routing Component: RiderDashboard
-// -----------------------------------------------------------------------------
 export function RiderDashboard(props: any) {
   if (props.activeSection === 'shop') {
     return <RiderShop profile={props.profile} wallet={props.wallet} />;
@@ -80,9 +79,6 @@ export function RiderDashboard(props: any) {
   return <RiderMain key={props.profile?.id || 'rider-main'} {...props} />;
 }
 
-// -----------------------------------------------------------------------------
-// PortalHome (previously embedded within RiderMain, renamed for clarity/export)
-// -----------------------------------------------------------------------------
 export default function PortalHome({ profile, onNavigate }: Props) {
   const [selectedGame, setSelectedGame] = useState<'spin'|'dice'|'fruity'|'crankling'|null>(null);
   const [currency, setCurrency] = useState<'SLE' | 'USD'>('SLE');
@@ -236,7 +232,6 @@ export default function PortalHome({ profile, onNavigate }: Props) {
     return () => { mounted.current = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshVisible); void supabase.removeChannel(liveChannel); };
   }, [refreshPreferences, refreshWallets, refreshTrips, fetchTravelAndEvents, uid]);
 
-  // Handle removing a pending/unpaid booking so the user can start over
   const handleWithdrawUnpaidBooking = async () => {
     if (!existingBooking) return;
     const confirmed = window.confirm("Are you sure you want to cancel this booking and start a fresh one?");
@@ -251,6 +246,11 @@ export default function PortalHome({ profile, onNavigate }: Props) {
     } catch (err: any) {
       alert(err.message || 'Failed to cancel the booking.');
     }
+  };
+
+  const openWhatsApp = (message: string) => {
+    const text = encodeURIComponent(message);
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${text}`, '_blank');
   };
 
   const wallet = wallets?.[currency === 'SLE' ? 'sleWallet' : 'usdWallet'];
@@ -282,6 +282,49 @@ export default function PortalHome({ profile, onNavigate }: Props) {
           <div className="mm-balance-row"><strong aria-live="polite">{currency} {visible ? balanceLoading ? <span className="inline-block h-6 w-24 bg-white/20 rounded animate-pulse"></span> : verifiedBalance ? wallet.balance.toFixed(2) : '—' : <span aria-label="Balance hidden">••••••</span>}</strong><button type="button" className="mm-glass-button" aria-label={visible ? 'Hide balance' : 'Show balance'} aria-pressed={visible} onClick={() => setVisible(v => !v)}>{visible ? <EyeOff size={20}/> : <Eye size={20}/>}</button></div>
           <p className="mm-wallet-caption">{balanceLoading ? <span className="inline-block h-3 w-36 rounded bg-white/20 animate-pulse align-middle" aria-label="Loading wallet status" /> : balanceError ? 'Balance could not be loaded.' : wallet?.is_frozen || profile.is_wallet_frozen ? 'Wallet frozen · contact support' : !wallet ? 'Open Wallet to check setup.' : !verifiedBalance ? 'Open Wallet to check account status.' : 'Available balance · verified with your wallet provider'}</p>
           <button className="mm-wallet-open" type="button" onClick={() => onNavigate('wallet')}>Open wallet <ArrowRight size={17}/></button>
+        </section>
+
+        {/* Concierge Services */}
+        <section className="mm-surface" aria-label="MatMove Concierge Services">
+          <div className="mm-row">
+            <h2 className="flex items-center gap-2 text-indigo-700 font-black"><Briefcase size={20} /> MatMove Concierge</h2>
+          </div>
+          <p className="mb-4 text-sm text-slate-600">Exclusive, high-ticket services supported directly by our team. Tap any service to chat with us immediately.</p>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button 
+              onClick={() => openWhatsApp("Hi MatMove, I'm interested in the 6 Days & 5 Nights Istanbul Turkey Tour for $3,900. Can I get more details?")}
+              className="bg-sky-50 border border-sky-100 hover:border-sky-300 rounded-xl p-4 text-left transition flex flex-col items-start gap-2"
+            >
+              <Plane size={24} className="text-sky-600" />
+              <div>
+                <strong className="block text-sm text-sky-900">Istanbul Turkey Tour</strong>
+                <span className="text-xs text-sky-700 block mt-0.5">6 Days, 5 Nights • $3,900</span>
+              </div>
+            </button>
+
+            <button 
+              onClick={() => openWhatsApp("Hi MatMove, I need help with vehicle buying facilitation. I saw the pricing ranges from $15,000 to $95,000.")}
+              className="bg-emerald-50 border border-emerald-100 hover:border-emerald-300 rounded-xl p-4 text-left transition flex flex-col items-start gap-2"
+            >
+              <Car size={24} className="text-emerald-600" />
+              <div>
+                <strong className="block text-sm text-emerald-900">Vehicle Buying Help</strong>
+                <span className="text-xs text-emerald-700 block mt-0.5">Prados & More • $15k - $95k</span>
+              </div>
+            </button>
+
+            <button 
+              onClick={() => openWhatsApp("Hi MatMove, I'm interested in your Air/Sea Freight Shipping service at $20/kg.")}
+              className="bg-amber-50 border border-amber-100 hover:border-amber-300 rounded-xl p-4 text-left transition flex flex-col items-start gap-2"
+            >
+              <Ship size={24} className="text-amber-600" />
+              <div>
+                <strong className="block text-sm text-amber-900">Air & Sea Cargo</strong>
+                <span className="text-xs text-amber-700 block mt-0.5">Global Procurement • $20/kg</span>
+              </div>
+            </button>
+          </div>
         </section>
 
         {/* Travel to Ghana */}
