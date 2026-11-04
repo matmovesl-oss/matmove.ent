@@ -85,7 +85,13 @@ export default function WalletCards({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-slate-600">Your wallets · swipe to change currency</p>
+        <div>
+          <p className="text-sm font-semibold text-slate-600">Your wallets · swipe to change currency</p>
+          <p className="mt-1 max-w-xl text-[11px] leading-relaxed text-slate-500">
+            SLE and USD are separate balances; MatMove does not automatically convert between them.
+            Mobile Money loads and payouts currently use SLE. Wallet transfers must use the same currency on both sides.
+          </p>
+        </div>
         <div className="flex gap-2">
           <button type="button" aria-label="Previous wallet" disabled={active === 0} onClick={() => move(active - 1)} className="rounded-full border p-2 disabled:opacity-40"><ChevronLeft size={18}/></button>
           <button type="button" aria-label="Next wallet" disabled={active === 1} onClick={() => move(active + 1)} className="rounded-full border p-2 disabled:opacity-40"><ChevronRight size={18}/></button>
