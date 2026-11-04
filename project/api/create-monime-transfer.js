@@ -154,6 +154,29 @@ export async function transferHandler(req, res, {
 }
 
 
+export function transferStatusMatches(transfer, {
+  transferId,
+  userId,
+  recipientUserId,
+  currency,
+  amountMinor,
+  sourceId,
+  destinationId,
+}) {
+  return Boolean(
+    transfer &&
+    transfer.id === transferId &&
+    transfer.metadata?.userId === userId &&
+    transfer.metadata?.recipientUserId === recipientUserId &&
+    transfer.amount?.currency === currency &&
+    Number.isSafeInteger(transfer.amount?.value) &&
+    transfer.amount.value === amountMinor &&
+    transfer.sourceFinancialAccount?.id === sourceId &&
+    transfer.destinationFinancialAccount?.id === destinationId &&
+    TRANSFER_STATES.has(String(transfer.status || '').toLowerCase())
+  );
+}
+
 export function checkTransferHandler(req, res, {
   provider = monime,
   verifyAccount = verifiedAccount,
