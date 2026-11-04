@@ -8,7 +8,27 @@ import {
   HttpError,
 } from '../server/wallet-security.js';
 
-export async function transferHandler(req, res) {
+const TRANSFER_STATES = new Set(['pending', 'processing', 'completed', 'failed']);
+
+export function transferResponseMatches(transfer, { currency, minor, sourceId, destinationId }) {
+  return Boolean(
+    transfer &&
+    typeof transfer.id === 'string' &&
+    transfer.id.trim() !== '' &&
+    transfer.amount?.currency === currency &&
+    Number.isSafeInteger(transfer.amount?.value) &&
+    transfer.amount.value === minor &&
+    transfer.sourceFinancialAccount?.id === sourceId &&
+    transfer.destinationFinancialAccount?.id === destinationId &&
+    TRANSFER_STATES.has(String(transfer.status || '').toLowerCase())
+  );
+}
+
+export async function transferHandler(req, res, {
+  provider = monime,
+  verifyAccount = verifiedAccount,
+  assertRecipientAllowed = assertAllowed,
+} = {}) {
   const {
     db,
     user,
@@ -58,10 +78,10 @@ export async function transferHandler(req, res) {
     throw new HttpError(503, 'Unable to verify recipient permissions.');
   }
 
-  assertAllowed(profileResult.data, walletsResult.data || [], 'transfer');
-  await verifiedAccount(db, recipient);
+  assertRecipientAllowed(profileResult.data, walletsResult.data || [], 'transfer');
+  await verifyAccount(db, recipient);
 
-  const rawResponse = await monime('internal-transfers', {
+  const rawResponse = await provider('internal-transfers', {
     method: 'POST',
     headers: {
       'Idempotency-Key': idempotencyKey,
@@ -86,23 +106,49 @@ export async function transferHandler(req, res) {
   });
 
   const transfer = rawResponse?.result || rawResponse;
-  const status = String(transfer?.status || 'completed').toLowerCase();
-
-  if (status === 'failed') {
-    return res.status(400).json({
-      error: 'The transfer failed.',
-      status: 'failed',
-      data: { ...transfer, status: 'failed' },
+  if (!transferResponseMatches(transfer, {
+    currency,
+    minor,
+    sourceId: accountId,
+    destinationId: recipientId,
+  })) {
+    return res.status(502).json({
+      success: false,
+      status: 'review_required',
+      pending: true,
+      error: 'The provider response could not be matched to this transfer. Do not submit a new transfer; refresh the transaction history and contact support if it remains unresolved.',
     });
   }
 
-  // Treat 'processing' or 'completed' as successful completion for internal transfers
-  const resolvedStatus = status === 'failed' ? 'failed' : 'completed';
+  const status = String(transfer.status).toLowerCase();
+  if (status === 'failed') {
+    // This is a confirmed terminal provider result. Return JSON 200 so the client
+    // can release this idempotency key and allow a new, distinct attempt.
+    return res.status(200).json({
+      success: false,
+      status: 'failed',
+      transferId: transfer.id,
+      error: transfer.failureDetail?.message || 'The provider confirmed that this transfer failed.',
+      data: transfer,
+    });
+  }
+
+  if (status === 'pending' || status === 'processing') {
+    return res.status(202).json({
+      success: false,
+      pending: true,
+      status,
+      transferId: transfer.id,
+      message: `Transfer is ${status}. It is not completed yet. Do not submit another transfer until its status is confirmed.`,
+      data: transfer,
+    });
+  }
 
   return res.status(200).json({
     success: true,
-    status: resolvedStatus,
-    data: { ...transfer, status: resolvedStatus },
+    status: 'completed',
+    transferId: transfer.id,
+    data: transfer,
   });
 }
 
