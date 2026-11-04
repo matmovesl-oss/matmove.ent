@@ -177,7 +177,7 @@ export function transferStatusMatches(transfer, {
   );
 }
 
-export function checkTransferHandler(req, res, {
+export async function checkTransferHandler(req, res, {
   provider = monime,
   verifyAccount = verifiedAccount,
 } = {}) {
