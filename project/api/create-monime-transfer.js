@@ -6,9 +6,30 @@ import {
   assertAllowed,
   monime,
   HttpError,
+  toMinorUnits,
 } from '../server/wallet-security.js';
 
-export async function transferHandler(req, res) {
+const TRANSFER_STATES = new Set(['pending', 'processing', 'completed', 'failed']);
+
+export function transferResponseMatches(transfer, { currency, minor, sourceId, destinationId }) {
+  return Boolean(
+    transfer &&
+    typeof transfer.id === 'string' &&
+    transfer.id.trim() !== '' &&
+    transfer.amount?.currency === currency &&
+    Number.isSafeInteger(transfer.amount?.value) &&
+    transfer.amount.value === minor &&
+    transfer.sourceFinancialAccount?.id === sourceId &&
+    transfer.destinationFinancialAccount?.id === destinationId &&
+    TRANSFER_STATES.has(String(transfer.status || '').toLowerCase())
+  );
+}
+
+export async function transferHandler(req, res, {
+  provider = monime,
+  verifyAccount = verifiedAccount,
+  assertRecipientAllowed = assertAllowed,
+} = {}) {
   const {
     db,
     user,
@@ -58,10 +79,10 @@ export async function transferHandler(req, res) {
     throw new HttpError(503, 'Unable to verify recipient permissions.');
   }
 
-  assertAllowed(profileResult.data, walletsResult.data || [], 'transfer');
-  await verifiedAccount(db, recipient);
+  assertRecipientAllowed(profileResult.data, walletsResult.data || [], 'transfer');
+  await verifyAccount(db, recipient);
 
-  const rawResponse = await monime('internal-transfers', {
+  const rawResponse = await provider('internal-transfers', {
     method: 'POST',
     headers: {
       'Idempotency-Key': idempotencyKey,
@@ -86,32 +107,169 @@ export async function transferHandler(req, res) {
   });
 
   const transfer = rawResponse?.result || rawResponse;
-  const status = String(transfer?.status || 'completed').toLowerCase();
-
-  if (status === 'failed') {
-    return res.status(400).json({
-      error: 'The transfer failed.',
-      status: 'failed',
-      data: { ...transfer, status: 'failed' },
+  if (!transferResponseMatches(transfer, {
+    currency,
+    minor,
+    sourceId: accountId,
+    destinationId: recipientId,
+  })) {
+    return res.status(502).json({
+      success: false,
+      status: 'review_required',
+      pending: true,
+      error: 'The provider response could not be matched to this transfer. Do not submit a new transfer; refresh the transaction history and contact support if it remains unresolved.',
     });
   }
 
-  // Treat 'processing' or 'completed' as successful completion for internal transfers
-  const resolvedStatus = status === 'failed' ? 'failed' : 'completed';
+  const status = String(transfer.status).toLowerCase();
+  if (status === 'failed') {
+    // This is a confirmed terminal provider result. Return JSON 200 so the client
+    // can release this idempotency key and allow a new, distinct attempt.
+    return res.status(200).json({
+      success: false,
+      status: 'failed',
+      transferId: transfer.id,
+      error: transfer.failureDetail?.message || 'The provider confirmed that this transfer failed.',
+      data: transfer,
+    });
+  }
+
+  if (status === 'pending' || status === 'processing') {
+    return res.status(202).json({
+      success: false,
+      pending: true,
+      status,
+      transferId: transfer.id,
+      message: `Transfer is ${status}. It is not completed yet. Do not submit another transfer until its status is confirmed.`,
+      data: transfer,
+    });
+  }
 
   return res.status(200).json({
     success: true,
-    status: resolvedStatus,
-    data: { ...transfer, status: resolvedStatus },
+    status: 'completed',
+    transferId: transfer.id,
+    data: transfer,
+  });
+}
+
+
+export function transferStatusMatches(transfer, {
+  transferId,
+  userId,
+  recipientUserId,
+  currency,
+  amountMinor,
+  sourceId,
+  destinationId,
+}) {
+  return Boolean(
+    transfer &&
+    transfer.id === transferId &&
+    transfer.metadata?.userId === userId &&
+    transfer.metadata?.recipientUserId === recipientUserId &&
+    transfer.amount?.currency === currency &&
+    Number.isSafeInteger(transfer.amount?.value) &&
+    transfer.amount.value === amountMinor &&
+    transfer.sourceFinancialAccount?.id === sourceId &&
+    transfer.destinationFinancialAccount?.id === destinationId &&
+    TRANSFER_STATES.has(String(transfer.status || '').toLowerCase())
+  );
+}
+
+export async function checkTransferHandler(req, res, {
+  provider = monime,
+  verifyAccount = verifiedAccount,
+} = {}) {
+  const { db, user, wallets } = req.matmove;
+  const transferId = String(req.body.transferId || '').trim();
+  const currency = String(req.body.currency || '').toUpperCase();
+  const recipientId = String(req.body.recipientAccountId || '').trim();
+
+  if (!/^[A-Za-z0-9_-]{1,120}$/.test(transferId)) {
+    throw new HttpError(400, 'A valid transfer reference is required.');
+  }
+  if (!['SLE', 'USD'].includes(currency)) {
+    throw new HttpError(400, 'Choose SLE or USD.');
+  }
+  if (!/^fac-[A-Za-z0-9_-]+$/.test(recipientId)) {
+    throw new HttpError(400, 'A valid recipient account ID is required.');
+  }
+
+  const amountMinor = toMinorUnits(req.body.amount);
+  const sourceWallets = (wallets || []).filter(wallet => wallet.currency === currency);
+  if (sourceWallets.length !== 1) {
+    throw new HttpError(409, 'Your sending wallet could not be uniquely verified.');
+  }
+  const source = await verifyAccount(db, sourceWallets[0]);
+
+  const recipientResult = await db.from('wallets')
+    .select('*')
+    .or(`monime_account_id.eq.${recipientId},metadata->>monime_account_id.eq.${recipientId}`);
+  if (recipientResult.error) throw new HttpError(503, 'Unable to verify the transfer recipient.');
+  if (recipientResult.data?.length !== 1) {
+    throw new HttpError(409, 'The transfer recipient could not be uniquely verified.');
+  }
+
+  const recipient = recipientResult.data[0];
+  if (recipient.currency !== currency) {
+    throw new HttpError(409, 'Transfers must use matching currencies: USD to USD or SLE to SLE.', 'CURRENCY_MISMATCH');
+  }
+  if (recipient.user_id === user.id) {
+    throw new HttpError(409, 'Choose a different recipient account.');
+  }
+  const destination = await verifyAccount(db, recipient);
+
+  const rawResponse = await provider(
+    `internal-transfers/${encodeURIComponent(transferId)}`
+  );
+  const transfer = rawResponse?.result || rawResponse;
+  if (!transferStatusMatches(transfer, {
+    transferId,
+    userId: user.id,
+    recipientUserId: recipient.user_id,
+    currency,
+    amountMinor,
+    sourceId: source.id,
+    destinationId: destination.id,
+  })) {
+    throw new HttpError(409, 'This transfer reference does not match your account, recipient, amount and currency.');
+  }
+
+  const status = String(transfer.status).toLowerCase();
+  if (status === 'failed') {
+    return res.status(200).json({
+      success: false,
+      status: 'failed',
+      transferId,
+      error: transfer.failureDetail?.message || 'The provider confirmed that this transfer failed.',
+    });
+  }
+  if (status === 'pending' || status === 'processing') {
+    return res.status(202).json({
+      success: false,
+      pending: true,
+      status,
+      transferId,
+      message: `Transfer is ${status}. It is not completed yet.`,
+    });
+  }
+  return res.status(200).json({
+    success: true,
+    status: 'completed',
+    transferId,
   });
 }
 
 const transfers = protectedWallet('transfer', transferHandler);
+const transferStatus = protectedWallet('read', checkTransferHandler);
 const merchantPayments = protectedWallet('read', merchantPaymentAction);
 
 export default function handler(req, res) {
   if (req.query?.action === 'merchant_reconcile') return reconcileMerchantPayments(req, res);
-  return String(req.body?.action || '').startsWith('merchant_')
+  const action = String(req.body?.action || '');
+  if (action === 'status') return transferStatus(req, res);
+  return action.startsWith('merchant_')
     ? merchantPayments(req, res)
     : transfers(req, res);
 }

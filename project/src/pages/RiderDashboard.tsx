@@ -26,6 +26,13 @@ import {
 
 const WHATSAPP_NUMBER = '23290330362';
 
+type PendingTransfer = {
+  transferId: string;
+  amount: string;
+  currency: 'SLE' | 'USD';
+  recipientAccountId: string;
+};
+
 export function RiderDashboard(props: any) {
   if (props.activeSection === 'shop') {
     return <RiderShop profile={props.profile} wallet={props.wallet} />;
@@ -115,12 +122,45 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [transferNotice, setTransferNotice] = useState('');
   const [transferRecipient, setTransferRecipient] = useState('');
   const [isProcessingTransfer, setIsProcessingTransfer] = useState(false);
+  const [pendingTransfer, setPendingTransfer] = useState<PendingTransfer | null>(null);
 
   const [showPolicy, setShowPolicy] = useState(false);
 
   const { frozen: isFrozen, approved: isApproved } = useWalletAccess(profile?.id);
   const canLoad = !isFrozen && profile?.role === 'rider';
   const canSend = canLoad && isApproved;
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(`matmove-pending-transfer:${profile.id}`) || 'null');
+      if (
+        stored &&
+        typeof stored.transferId === 'string' &&
+        typeof stored.amount === 'string' &&
+        ['SLE', 'USD'].includes(stored.currency) &&
+        typeof stored.recipientAccountId === 'string' &&
+        /^fac-[A-Za-z0-9_-]+$/.test(stored.recipientAccountId)
+      ) {
+        const restored = stored as PendingTransfer;
+        setPendingTransfer(restored);
+        setTransferAmount(restored.amount);
+        setTransferCurrency(restored.currency);
+        setTransferRecipient(restored.recipientAccountId);
+        setTransferNotice('An earlier transfer is awaiting confirmation. Check its status before starting another transfer.');
+        setIsTransferModalOpen(true);
+      }
+    } catch {
+      // An invalid local pending marker must not block the rest of the dashboard.
+    }
+  }, [profile?.id]);
+
+  useEffect(() => {
+    if (!isTransferModalOpen || !pendingTransfer) return;
+    setTransferAmount(pendingTransfer.amount);
+    setTransferCurrency(pendingTransfer.currency);
+    setTransferRecipient(pendingTransfer.recipientAccountId);
+  }, [isTransferModalOpen, pendingTransfer]);
 
   useEffect(() => {
     if (tripDistanceKm === null) return;
@@ -192,6 +232,9 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   };
 
   const hasSleAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || ''));
+  const hasUsdAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(usdWallet?.monime_account_id || usdWallet?.metadata?.monime_account_id || ''));
+  const hasAnyTransferAccount = hasSleAccount || hasUsdAccount;
+  const hasTransferAccount = transferCurrency === 'SLE' ? hasSleAccount : hasUsdAccount;
   const setupSleWallet = async () => {
     if (!canLoad || setupBusy.current) return;
     setupBusy.current = true;
@@ -371,10 +414,86 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     setPayoutPhone('');
   };
 
+  const clearPendingTransfer = (pending: PendingTransfer | null = pendingTransfer) => {
+    if (profile?.id) {
+      try {
+        sessionStorage.removeItem(`matmove-pending-transfer:${profile.id}`);
+        if (pending) {
+          const body = {
+            amount: pending.amount,
+            currency: pending.currency,
+            recipientAccountId: pending.recipientAccountId,
+          };
+          const fingerprint = JSON.stringify({
+            user: profile.id,
+            url: '/api/create-monime-transfer',
+            body,
+          });
+          sessionStorage.removeItem(`matmove-request:${fingerprint}`);
+        }
+      } catch {
+        // Session storage is optional; provider transfer identity remains authoritative.
+      }
+    }
+    setPendingTransfer(null);
+  };
+
+  const checkPendingTransfer = async () => {
+    if (!pendingTransfer || isProcessingTransfer) return;
+    setIsProcessingTransfer(true);
+    setTransferError('');
+    setTransferNotice('');
+    try {
+      const { response, data, finish } = await walletFetch('/api/create-monime-transfer', {
+        action: 'status',
+        transferId: pendingTransfer.transferId,
+        amount: pendingTransfer.amount,
+        currency: pendingTransfer.currency,
+        recipientAccountId: pendingTransfer.recipientAccountId,
+      });
+      if (!response.ok && response.status !== 202) {
+        throw new Error(data.error || 'Transfer status could not be verified. Keep the same transfer and check again.');
+      }
+
+      const status = String(data?.status || '').toLowerCase();
+      if (status === 'pending' || status === 'processing') {
+        setTransferNotice(`Transfer is still ${status}. It has not been confirmed as completed. Do not start another transfer.`);
+      } else if (status === 'completed') {
+        finish?.();
+        clearPendingTransfer();
+        setTransferNotice('Transfer completed successfully.');
+        setTransferAmount('');
+        setTransferRecipient('');
+        await fetchLiveBalance();
+      } else if (status === 'failed') {
+        finish?.();
+        clearPendingTransfer();
+        setTransferError(data.error || 'The provider confirmed that this transfer failed.');
+        setTransferAmount('');
+        setTransferRecipient('');
+        await fetchLiveBalance();
+      } else {
+        throw new Error('The provider returned an unrecognised transfer status. Keep the same transfer and contact support if it remains unresolved.');
+      }
+    } catch (err: any) {
+      setTransferError(err.message || 'Transfer status could not be verified. Keep the same transfer and check again.');
+    } finally {
+      setIsProcessingTransfer(false);
+    }
+  };
+
   const executeTransfer = async () => {
     if (isProcessingTransfer) return;
+    if (pendingTransfer) {
+      await checkPendingTransfer();
+      return;
+    }
     if (!canSend) {
       setTransferError(isFrozen ? 'Your wallet is unavailable.' : 'Verify your identity before transferring.');
+      return;
+    }
+    if (!hasTransferAccount) {
+      setTransferError(`Your ${transferCurrency} wallet is not ready for transfers.`);
       return;
     }
     if (!/^fac-[A-Za-z0-9_-]+$/.test(transferRecipient.trim())) {
@@ -393,20 +512,50 @@ function RiderMain({ profile, wallet, activeSection }: any) {
         recipientAccountId: transferRecipient.trim()
       });
 
-      if (!response.ok) throw new Error(data.error || 'Transfer could not be submitted.');
-
-      const status = String(data?.status || data?.data?.status || 'completed').toLowerCase();
-      setTransferNotice(status === 'completed' ? 'Transfer completed successfully.' : `Transfer ${status}.`);
-
-      if (status === 'completed' || status === 'failed') {
-        finish?.();
-        setTransferAmount('');
-        setTransferRecipient('');
+      if (!response.ok && response.status !== 202) {
+        throw new Error(data.error || 'Transfer could not be submitted.');
       }
 
-      await fetchLiveBalance();
+      const status = String(data?.status || '').toLowerCase();
+      if (status === 'completed') {
+        finish?.();
+        setTransferNotice('Transfer completed successfully.');
+        setTransferAmount('');
+        setTransferRecipient('');
+        clearPendingTransfer(null);
+        await fetchLiveBalance();
+      } else if (status === 'failed') {
+        finish?.();
+        clearPendingTransfer(null);
+        setTransferError(data.error || 'The provider confirmed that this transfer failed.');
+        setTransferAmount('');
+        setTransferRecipient('');
+        await fetchLiveBalance();
+      } else if (status === 'pending' || status === 'processing') {
+        if (typeof data.transferId !== 'string' || !data.transferId) {
+          throw new Error('The transfer is not confirmed and its provider reference is missing. Do not submit another transfer; contact support.');
+        }
+        const pending = {
+          transferId: data.transferId,
+          amount: transferAmount,
+          currency: transferCurrency,
+          recipientAccountId: transferRecipient.trim(),
+        } as PendingTransfer;
+        setPendingTransfer(pending);
+        try {
+          if (profile?.id) {
+            sessionStorage.setItem(`matmove-pending-transfer:${profile.id}`, JSON.stringify(pending));
+          }
+        } catch {
+          // The provider still retains the original idempotency key.
+        }
+        setTransferNotice(`Transfer is ${status}. It is not completed yet. Use Check transfer status before trying anything else.`);
+        await fetchLiveBalance();
+      } else {
+        throw new Error('The provider did not confirm the transfer status. Do not create a new transfer.');
+      }
     } catch (err: any) {
-      setTransferError(err.message || 'Transfer failed.');
+      setTransferError(err.message || 'Transfer status could not be confirmed. Keep the same request and retry the status check.');
     } finally {
       setIsProcessingTransfer(false);
     }
@@ -435,7 +584,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
         <div className="flex gap-2">
           <button onClick={() => setIsLoadModalOpen(true)} disabled={!canLoad || !hasSleAccount || isSettingUpWallet} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Load</button>
           <button onClick={() => setIsPayoutModalOpen(true)} disabled={!canSend || !hasSleAccount} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Payout</button>
-          <button onClick={() => setIsTransferModalOpen(true)} disabled={!canSend || !hasSleAccount} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Transfer</button>
+          <button onClick={() => setIsTransferModalOpen(true)} disabled={!canSend || !hasAnyTransferAccount} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Transfer</button>
         </div>
       </header>
 
@@ -718,7 +867,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
                 <button
                   onClick={() => setIsTransferModalOpen(true)}
-                  disabled={!canSend || !hasSleAccount}
+                  disabled={!canSend || !hasAnyTransferAccount}
                   className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
                 >
                   <div className="p-3 bg-white rounded-full shadow-sm"><Users size={24} /></div>
@@ -749,7 +898,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
               Send from
               <select
                 value={transferCurrency}
-                disabled={isProcessingTransfer}
+                disabled={isProcessingTransfer || !!pendingTransfer}
                 onChange={e => { setTransferCurrency(e.target.value as 'SLE' | 'USD'); setTransferError(''); setTransferNotice(''); }}
                 className="block w-full rounded-xl border p-3 mt-2"
               >
@@ -766,13 +915,13 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                 type="number"
                 placeholder={`Amount (${transferCurrency})`}
                 value={transferAmount}
-                disabled={isProcessingTransfer}
+                disabled={isProcessingTransfer || !!pendingTransfer}
                 onChange={e => setTransferAmount(e.target.value)}
                 className="w-full border p-4 rounded-xl font-bold text-xl outline-none focus:border-purple-500"
               />
               <input
                 type="text"
-                disabled={isProcessingTransfer}
+                disabled={isProcessingTransfer || !!pendingTransfer}
                 placeholder="Recipient Account ID (e.g. fac-k6V8...)"
                 value={transferRecipient}
                 onChange={e => setTransferRecipient(e.target.value)}
@@ -780,14 +929,27 @@ function RiderMain({ profile, wallet, activeSection }: any) {
               />
             </div>
 
+            {pendingTransfer && (
+              <button
+                type="button"
+                onClick={() => void checkPendingTransfer()}
+                disabled={isProcessingTransfer}
+                className="w-full rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-900 disabled:opacity-50"
+              >
+                {isProcessingTransfer ? 'Checking transfer status…' : 'Check transfer status'}
+              </button>
+            )}
             <button
               onClick={executeTransfer}
-              disabled={!canSend || !hasSleAccount || isProcessingTransfer || !transferAmount || !transferRecipient}
+              disabled={!canSend || !hasTransferAccount || isProcessingTransfer || !!pendingTransfer || !transferAmount || !transferRecipient}
               className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50"
             >
               {isProcessingTransfer ? <Loader2 size={20} className="animate-spin" /> : <Users size={20} />}
-              Send Transfer
+              {pendingTransfer ? 'Transfer awaiting confirmation' : 'Send Transfer'}
             </button>
+            {!hasTransferAccount && (
+              <p className="text-xs text-amber-800">Your {transferCurrency} wallet is not linked to a verified Monime account yet.</p>
+            )}
           </div>
         </div>
       )}
