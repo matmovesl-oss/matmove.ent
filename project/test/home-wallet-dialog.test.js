@@ -24,7 +24,7 @@ async function page(name,fn,{role='rider',saved=null,preferencesError=null}={}){
  globalThis.window={setTimeout:(fn,ms)=>{timers.set(++timer,{fn,ms});return timer;},clearTimeout:i=>timers.delete(i),setInterval:()=>++timer,clearInterval(){}};
  globalThis.document={visibilityState:'visible',addEventListener(){},removeEventListener(){}};
  globalThis.localStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
- globalThis.__hwDb={auth:{getSession:async()=>({data:{session:{user:{id:uid}}},error:null})},rpc:async(name,args)=>{calls.push({kind:'rpc',name,args});return{data:{user_id:uid,places:[],cardReferences:[]},error:preferencesError};},from(){const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:(yes,no)=>Promise.resolve({data:[],error:null}).then(yes,no)};return q;}};
+ globalThis.__hwDb={channel(){const c={on(){return c;},subscribe(){return c;}};return c;},removeChannel(){},auth:{getSession:async()=>({data:{session:{user:{id:uid}}},error:null})},rpc:async(name,args)=>{calls.push({kind:'rpc',name,args});return{data:{user_id:uid,places:[],cardReferences:[]},error:preferencesError};},from(){const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:(yes,no)=>Promise.resolve({data:[],error:null}).then(yes,no)};return q;}};
  globalThis.__hwPayout=async body=>{calls.push({kind:'payout',body});throw Error('Unexpected payout');};
  try{
   await build({entryPoints:[`src/components/${name}.tsx`],tsconfig:'tsconfig.app.json',outfile:out,bundle:true,platform:'node',format:'esm',jsx:'automatic',external:['react/*','lucide-react'],plugins:[{name:'home-wallet-mocks',setup(b){

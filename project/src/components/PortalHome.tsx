@@ -1,5 +1,7 @@
+import {RideLocationPicker} from '@/components/RideLocationPicker';
+import ConciergeServices from '@/components/ConciergeServices';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Briefcase, Car, CreditCard, Eye, EyeOff, Home, Loader2, MapPin, Navigation, RefreshCw, ShieldCheck, ShoppingBag, Store, Trash2, Wallet, X, Bus, Ticket, Sparkles, CheckCircle2, Calendar, XCircle, Smartphone, Clock, Plane, Package, Ship } from 'lucide-react';
+import { ArrowRight, Briefcase, Car, CreditCard, Eye, EyeOff, Home, Loader2, MapPin, Navigation, RefreshCw, ShieldCheck, ShoppingBag, Store, Trash2, Wallet, X, Bus, Ticket, Sparkles, CheckCircle2, Calendar, XCircle, Smartphone, Clock, Plane, Package, Ship, CalendarClock, Minus, Plus, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { walletFetch } from '@/lib/apiFetch';
 import { ArcadeGames } from '@/components/ArcadeGames';
@@ -284,48 +286,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
           <button className="mm-wallet-open" type="button" onClick={() => onNavigate('wallet')}>Open wallet <ArrowRight size={17}/></button>
         </section>
 
-        {/* Concierge Services */}
-        <section className="mm-surface" aria-label="MatMove Concierge Services">
-          <div className="mm-row">
-            <h2 className="flex items-center gap-2 text-indigo-700 font-black"><Briefcase size={20} /> MatMove Concierge</h2>
-          </div>
-          <p className="mb-4 text-sm text-slate-600">Exclusive, high-ticket services supported directly by our team. Tap any service to chat with us immediately.</p>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <button 
-              onClick={() => openWhatsApp("Hi MatMove, I'm interested in the 6 Days & 5 Nights Istanbul Turkey Tour for $3,900. Can I get more details?")}
-              className="bg-sky-50 border border-sky-100 hover:border-sky-300 rounded-xl p-4 text-left transition flex flex-col items-start gap-2"
-            >
-              <Plane size={24} className="text-sky-600" />
-              <div>
-                <strong className="block text-sm text-sky-900">Istanbul Turkey Tour</strong>
-                <span className="text-xs text-sky-700 block mt-0.5">6 Days, 5 Nights • $3,900</span>
-              </div>
-            </button>
-
-            <button 
-              onClick={() => openWhatsApp("Hi MatMove, I need help with vehicle buying facilitation. I saw the pricing ranges from $15,000 to $95,000.")}
-              className="bg-emerald-50 border border-emerald-100 hover:border-emerald-300 rounded-xl p-4 text-left transition flex flex-col items-start gap-2"
-            >
-              <Car size={24} className="text-emerald-600" />
-              <div>
-                <strong className="block text-sm text-emerald-900">Vehicle Buying Help</strong>
-                <span className="text-xs text-emerald-700 block mt-0.5">Prados & More • $15k - $95k</span>
-              </div>
-            </button>
-
-            <button 
-              onClick={() => openWhatsApp("Hi MatMove, I'm interested in your Air/Sea Freight Shipping service at $20/kg.")}
-              className="bg-amber-50 border border-amber-100 hover:border-amber-300 rounded-xl p-4 text-left transition flex flex-col items-start gap-2"
-            >
-              <Ship size={24} className="text-amber-600" />
-              <div>
-                <strong className="block text-sm text-amber-900">Air & Sea Cargo</strong>
-                <span className="text-xs text-amber-700 block mt-0.5">Global Procurement • $20/kg</span>
-              </div>
-            </button>
-          </div>
-        </section>
+        <ConciergeServices userId={uid}/>
 
         {/* Travel to Ghana */}
         <section className="mm-surface" aria-label="Travel & Bus Booking">
@@ -494,7 +455,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
       </section>
 
       <section className="mm-surface"><div className="mm-row"><h2>Your shortcuts</h2><button type="button" className="mm-text-button" onClick={() => setPanel(panel === 'places' ? null : 'places')}>{panel === 'places' ? 'Close' : 'Manage places'}</button></div>
-        {preferencesLoading && !preferences ? <div className="space-y-2 animate-pulse"><div className="h-12 bg-slate-100 rounded-xl"></div></div> : preferencesError ? <div role="alert" className="mm-alert">{preferencesError} <button type="button" onClick={() => void refreshPreferences()}>Retry</button></div> : <div className="mm-place-grid">{(['home','work'] as const).map(kind => { const place = preferences?.places.find(p => p.kind === kind); const Icon = kind === 'home' ? Home : Briefcase; return <button type="button" key={kind} className="mm-place-tile" onClick={() => setPanel('places')}><Icon size={20}/><span><b>{kind === 'home' ? 'Home' : 'Work'}</b><small>{place?.address || `Add your ${kind} address`}</small></span></button>; })}</div>}
+        {preferencesLoading && !preferences ? <div role="status" aria-label="Loading saved places" className="space-y-2 animate-pulse"><div className="h-12 bg-slate-100 rounded-xl"></div></div> : preferencesError ? <div role="alert" className="mm-alert">{preferencesError} <button type="button" onClick={() => void refreshPreferences()}>Retry</button></div> : <div className="mm-place-grid">{(['home','work'] as const).map(kind => { const place = preferences?.places.find(p => p.kind === kind); const Icon = kind === 'home' ? Home : Briefcase; return <button type="button" key={kind} className="mm-place-tile" onClick={() => setPanel('places')}><Icon size={20}/><span><b>{kind === 'home' ? 'Home' : 'Work'}</b><small>{place?.address || `Add your ${kind} address`}</small></span></button>; })}</div>}
       </section>
 
       {role !== 'driver' && <button type="button" className="mm-payment-link" aria-expanded={panel === 'cards'} onClick={() => setPanel(panel === 'cards' ? null : 'cards')}><CreditCard size={23}/><span><b>Payment methods</b><small>Mobile Money · optional card references</small></span><ArrowRight size={18}/></button>}
@@ -793,11 +754,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     setIsRequesting(true);
     setRideNotice('');
     try {
-      const result = await updateRide('cancel', activeBooking.id, {
-        penaltyFee: isAfterFiveMinutes ? penaltyAmount : 0,
-        driverCompensation: isAfterFiveMinutes ? driverShare : 0,
-        escrowCompensation: isAfterFiveMinutes ? escrowShare : 0
-      });
+      const result = await updateRide('cancel', activeBooking.id);
       
       if (activeBooking.status === 'accepted') {
         setRideNotice(
