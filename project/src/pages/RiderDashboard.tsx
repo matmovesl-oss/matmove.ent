@@ -542,7 +542,9 @@ function RiderMain({ profile, wallet, activeSection }: any) {
         } as PendingTransfer;
         setPendingTransfer(pending);
         try {
-          sessionStorage.setItem(`matmove-pending-transfer:${profile.id}`, JSON.stringify(pending));
+          if (profile?.id) {
+            sessionStorage.setItem(`matmove-pending-transfer:${profile.id}`, JSON.stringify(pending));
+          }
         } catch {
           // The provider still retains the original idempotency key.
         }
@@ -864,7 +866,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
                 <button
                   onClick={() => setIsTransferModalOpen(true)}
-                  disabled={!canSend || !hasSleAccount}
+                  disabled={!canSend || !hasAnyTransferAccount}
                   className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
                 >
                   <div className="p-3 bg-white rounded-full shadow-sm"><Users size={24} /></div>
