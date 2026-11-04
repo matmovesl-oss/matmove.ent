@@ -444,7 +444,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     setTransferError('');
     setTransferNotice('');
     try {
-      const { response, data, finish } = await walletFetch('/api/check-monime-transfer', {
+      const { response, data, finish } = await walletFetch('/api/create-monime-transfer', {
+        action: 'status',
         transferId: pendingTransfer.transferId,
         amount: pendingTransfer.amount,
         currency: pendingTransfer.currency,
