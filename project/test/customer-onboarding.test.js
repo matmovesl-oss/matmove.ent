@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {assertAllowed,authorize} from '../server/wallet-security.js';
 import {normalizeCustomerPhone,resolveCustomerRole,customerCapabilities} from '../shared/customer-access.js';
-const rider='11111111-1111-4111-8111-111111111111',driver='22222222-2222-4222-8222-222222222222',merchant='33333333-3333-4333-8333-333333333333',admin='44444444-4444-4444-8444-444444444444';
+const rider='11111111-1111-4111-8111-111111111111',driver='22222222-2222-4222-8222-222222222222',merchant='33333333-3333-4333-8333-333333333333',admin='44444444-4444-4444-8444-444444444444',adminWithoutProfile='55555555-5555-4555-8555-555555555555';
 const sql=()=>readFile(new URL('../docs/CUSTOMER_ONBOARDING_SETUP.sql',import.meta.url),'utf8');
 async function fixture(){
  const pg=new PGlite();
@@ -21,11 +21,13 @@ async function fixture(){
  create table wallets(id uuid primary key default gen_random_uuid(),user_id uuid,currency text,balance numeric default 0,is_frozen boolean default false,monime_account_id text);
  create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
  create table test_staff_assignments(id uuid primary key,is_active boolean,permissions jsonb);
+ create table matmove_staff_access(id uuid primary key,is_active boolean,removed_at timestamptz);
+ insert into matmove_staff_access values('${admin}',true,null),('${adminWithoutProfile}',true,null);
  insert into test_staff_assignments values('${admin}',true,'["kyc"]');
  create function matmove_admin_any(p_sections text[]) returns boolean language sql stable security definer set search_path=pg_catalog,public as $$select exists(select 1 from public.test_staff_assignments a where a.id=auth.uid() and a.is_active and exists(select 1 from unnest(p_sections) s where a.permissions ? s))$$;
 
  create function ensure_matmove_wallets(p_id uuid) returns void language plpgsql security definer as $$begin insert into wallets(user_id,currency) select p_id,c from unnest(array['SLE','USD']) c where not exists(select 1 from wallets w where w.user_id=p_id and w.currency=c);end;$$;
- insert into auth.users(id,email) values('${rider}','rider@example.com'),('${driver}','driver@example.com'),('${merchant}','merchant@example.com'),('${admin}','admin@example.com');
+ insert into auth.users(id,email) values('${rider}','rider@example.com'),('${driver}','driver@example.com'),('${merchant}','merchant@example.com'),('${admin}','admin@example.com'),('${adminWithoutProfile}','invited-admin@example.com');
  insert into profiles(id,email) select id,email from auth.users;
  insert into user_roles(profile_id,role) values('${rider}','rider'),('${admin}','admin');
  update profiles set role='admin' where id='${admin}';
@@ -108,6 +110,13 @@ test('browser writes cannot forge verification, customer roles or approval recei
  await assert.rejects(()=>f.pg.query("insert into kyc_submissions(profile_id,status) values($1,'approved')",[rider]),/permission denied/);
  await f.pg.exec('reset role');await f.pg.query('update profiles set is_wallet_frozen=true where id=$1',[rider]);
  const p=(await f.pg.query('select * from profiles where id=$1',[rider])).rows[0];assert.throws(()=>assertAllowed(p,[],'load'),e=>e.status===423);
+}));
+
+test('active Admin identities without a Customer profile cannot enter onboarding or create a Rider account',()=>withDb(async f=>{
+ await f.session(adminWithoutProfile);
+ await assert.rejects(()=>f.rpc('matmove_customer_me'),/active Admin account cannot use the Customer Portal/);
+ await assert.rejects(()=>f.rpc('matmove_save_customer_account',['rider','+23276000009']),/active Admin account cannot create a Customer account/);
+ assert.equal((await f.pg.query('select * from profiles where id=$1',[adminWithoutProfile])).rows.length,0);
 }));
 
 test('phone normalization and role resolution reject ambiguous identities and preserve explicit customer membership',()=>{
