@@ -43,9 +43,13 @@ $phone$;
 
 create or replace function public.matmove_customer_me()
 returns jsonb language plpgsql stable security definer set search_path=pg_catalog,public as $me$
-declare p public.profiles%rowtype;v_role text;v_roles jsonb;
+declare p public.profiles%rowtype;v_role text;v_roles jsonb;v_active_admin boolean:=false;
 begin
  if auth.uid() is null then raise exception 'FORBIDDEN: Sign in first.';end if;
+ if to_regclass('public.matmove_staff_access') is not null then
+  execute 'select exists(select 1 from public.matmove_staff_access s where s.id=$1 and s.is_active=true and s.removed_at is null)' into v_active_admin using auth.uid();
+  if v_active_admin then raise exception 'FORBIDDEN: An active Admin account cannot use the Customer Portal.';end if;
+ end if;
  select * into p from public.profiles where id=auth.uid();
  if not found then return null;end if;
  if p.role is not null and p.role not in ('rider','driver','merchant') then raise exception 'FORBIDDEN: A customer account is required.';end if;
@@ -62,9 +66,13 @@ $me$;
 
 create or replace function public.matmove_save_customer_account(p_role text,p_phone text)
 returns jsonb language plpgsql security definer set search_path=pg_catalog,public as $account$
-declare u auth.users%rowtype;p public.profiles%rowtype;v_role text:=lower(trim(coalesce(p_role,'')));v_phone text;v_existing text;v_count integer;
+declare u auth.users%rowtype;p public.profiles%rowtype;v_role text:=lower(trim(coalesce(p_role,'')));v_phone text;v_existing text;v_count integer;v_active_admin boolean:=false;
 begin
  if auth.uid() is null then raise exception 'FORBIDDEN: Sign in before completing your account.';end if;
+ if to_regclass('public.matmove_staff_access') is not null then
+  execute 'select exists(select 1 from public.matmove_staff_access s where s.id=$1 and s.is_active=true and s.removed_at is null)' into v_active_admin using auth.uid();
+  if v_active_admin then raise exception 'FORBIDDEN: An active Admin account cannot create a Customer account.';end if;
+ end if;
  if v_role not in ('rider','driver','merchant') then raise exception 'INVALID: Choose rider, driver or merchant.';end if;
  select * into u from auth.users where id=auth.uid() for update;
  if not found or nullif(u.email,'') is null then raise exception 'FORBIDDEN: An authenticated email account is required.';end if;
