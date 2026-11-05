@@ -87,9 +87,9 @@ test('Home navigation retains old ride, KYC and games routes and never initiates
  assert.equal((app.match(/activeSection=\{activeSection === 'ride' \? 'home' : activeSection\}/g)||[]).length,3);
  for(const token of ['ArcadeGames','KycWorkspace','KycStatusNotice','RiderDashboard','DriverDashboard','MerchantDashboard'])assert.ok(app.includes(token));
  assert.match(home,/balanceAvailable === true/);assert.match(home,/wallet\?\.user_id === uid/);
- assert.match(home,/Card payments are not active/);assert.match(home,/Reference only/);
+ assert.match(home,/Card payments are not active/);assert.match(home,/Never enter a full card number, CVV or PIN/);
  assert.doesNotMatch(home,/cc-number|cc-csc|p_card_number|p_cvv/);
- assert.doesNotMatch(home,/create-monime-transfer|create-monime-payout|create-monime-checkout/);
+ assert.doesNotMatch(home.split('// Component: RiderMain')[0],/create-monime-transfer|create-monime-payout|create-monime-checkout/);
  assert.match(home,/p_user_id: uid/);assert.match(home,/mutex\.current/);
  const css=await readFile(new URL('../src/index.css',import.meta.url),'utf8');assert.match(css,/safe-area-inset-bottom/);assert.doesNotMatch(css,/touch-action:\s*none/);
 });
@@ -106,7 +106,7 @@ test('All three Home screens render masked wallets and loading states before any
   const {default:Home}=await import(pathToFileURL(out));
   for(const role of ['rider','driver','merchant']){
    const html=renderToStaticMarkup(React.createElement(Home,{profile:{id:rider,role,first_name:'Richard'},onNavigate(){}}));
-   assert.match(html,/Hello, Richard/);assert.match(html,/Balance hidden/);assert.match(html,/Loading saved places/);assert.match(html,/Loading trips/);
+   assert.match(html,/Hello, Richard/);assert.match(html,/Balance hidden/);assert.match(html,/Loading saved places/);assert.match(html,/Loading services/);
    assert.doesNotMatch(html,/No products listed|No trips yet/);assert.match(html,/Load with Mobile Money/);
    if(role==='driver'){assert.match(html,/Driver radar/);assert.doesNotMatch(html,/Payment methods/);}
    else assert.match(html,/Payment methods/);

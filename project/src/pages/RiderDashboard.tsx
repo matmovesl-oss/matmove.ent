@@ -316,11 +316,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     setIsRequesting(true);
     setRideNotice('');
     try {
-      const result = await updateRide('cancel', activeBooking.id, {
-        penaltyFee: isAfterFiveMinutes ? penaltyAmount : 0,
-        driverCompensation: isAfterFiveMinutes ? driverShare : 0,
-        escrowCompensation: isAfterFiveMinutes ? escrowShare : 0
-      });
+      const result = await updateRide('cancel', activeBooking.id);
       
       if (activeBooking.status === 'accepted') {
         setRideNotice(
