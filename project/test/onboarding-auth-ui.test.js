@@ -26,6 +26,11 @@ test('RPC failure and administrative memberships fail closed instead of becoming
  await withAuth({auth:{getSession:async()=>({data:{session:{user}}})},rpc:async()=>({error:{message:'Permission denied'}})},async auth=>{await assert.rejects(()=>auth.getCustomerSession(),/Permission denied/);});
  await withAuth({auth:{getSession:async()=>({data:{session:{user}}})},rpc:async()=>({data:{user,roles:['admin']}})},async auth=>{await assert.rejects(()=>auth.getCustomerSession(),/cannot access/);});
 });
+test('active Admin and missing Customer roles produce clear guidance without bypassing role checks',async()=>{
+ await withAuth({auth:{getSession:async()=>({data:{session:{user}}})},rpc:async()=>({error:{message:'FORBIDDEN: A customer account is required.'}})},async auth=>{await assert.rejects(()=>auth.getCustomerSession(),/not currently linked to a Rider, Driver or Merchant account/);});
+ await withAuth({auth:{getSession:async()=>({data:{session:{user}}})},rpc:async()=>({error:{message:'FORBIDDEN: An active Admin account cannot use the Customer Portal.'}})},async auth=>{await assert.rejects(()=>auth.getCustomerSession(),/active Admin access/);});
+ await withAuth({auth:{getSession:async()=>({data:{session:{user}}})},rpc:async()=>({error:{message:'CONFLICT: Customer roles need support review.'}})},async auth=>{await assert.rejects(()=>auth.getCustomerSession(),/conflicting Customer roles/);});
+});
 test('Google redirect uses customer callback and email password is never passed to OAuth',()=>withAuth({auth:{signInWithOAuth:async input=>{assert.deepEqual(input,{provider:'google',options:{redirectTo:'https://matmoveent.vercel.app/auth/callback'}});return {};}}},async auth=>{await auth.signInWithGoogle();}));
 test('KYC review uses one secured submission, has no wallet prerequisite, and exposes inline errors',async()=>{
  const src=await readFile('src/pages/OnboardingPages.tsx','utf8');const review=src.slice(src.indexOf('export function ReviewPage'),src.indexOf('export function SubmittedPage'));
