@@ -56,6 +56,8 @@ export default function TripHistory({ userId, role }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [period,setPeriod]=useState<'30'|'90'|'all'>('30');
+  const [statusFilter,setStatusFilter]=useState<'all'|'pending'|'pending_admin'|'accepted'|'in_progress'|'completed'|'cancelled'>('all');
   const dialog = useRef<HTMLDialogElement>(null);
   const owner=useRef(userId);owner.current=userId;
   const mounted=useRef(false),inFlight=useRef(false),revision=useRef(0),abort=useRef<AbortController|null>(null);
@@ -101,6 +103,12 @@ export default function TripHistory({ userId, role }: Props) {
   }, [refresh,userId,role]);
   const ownedTrips=loadedOwner===userId?trips:[];
   const selected = ownedTrips.find(t => t.id === selectedId);
+  const filteredTrips=ownedTrips.filter(t=>{
+    const statusMatches=statusFilter==='all'||t.status===statusFilter;
+    const created=Date.parse(String(t.created_at||''));
+    const periodMatches=period==='all'||Number.isFinite(created)&&created>=Date.now()-(period==='30'?30:90)*86400000;
+    return statusMatches&&periodMatches;
+  });
   useEffect(() => {
     if (selectedId && dialog.current && !dialog.current.open) dialog.current.showModal();
   }, [selectedId]);
@@ -133,12 +141,30 @@ export default function TripHistory({ userId, role }: Props) {
     ...(selected.payment_status ? [['Payment status', selected.payment_status]] : []),
   ] : [];
   return <section className="mx-auto max-w-4xl space-y-4 p-4 pb-24 sm:p-6">
-    <div className="flex items-center justify-between gap-3"><h1 className="text-3xl font-bold">Trips & Deliveries</h1>
-      <button className="rounded-xl border bg-white px-4 py-2" onClick={() => void refresh()}>Refresh</button></div>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><h1 className="text-3xl font-bold">Trips & Deliveries</h1><p className="mt-1 text-sm text-slate-500">Review recent activity or open your full trip history.</p></div>
+        <button className="min-h-11 rounded-xl border bg-white px-4 py-2 font-semibold" onClick={() => void refresh()}>Refresh</button>
+      </div>
+      <div className="grid gap-3 rounded-2xl border bg-white p-3 sm:grid-cols-2">
+        <label className="block text-sm font-semibold text-slate-700">Time period
+          <select aria-label="Filter trips by time period" value={period} onChange={e=>setPeriod(e.target.value as '30'|'90'|'all')} className="mt-1 min-h-11 w-full rounded-xl border p-3">
+            <option value="30">Recent — last 30 days</option><option value="90">Last 90 days</option><option value="all">All history</option>
+          </select>
+        </label>
+        <label className="block text-sm font-semibold text-slate-700">Trip status
+          <select aria-label="Filter trips by status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value as typeof statusFilter)} className="mt-1 min-h-11 w-full rounded-xl border p-3">
+            <option value="all">All statuses</option><option value="pending">Pending</option><option value="pending_admin">Pending Admin review</option><option value="accepted">Accepted</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>
+          </select>
+        </label>
+        <p className="text-xs text-slate-500 sm:col-span-2">Showing {filteredTrips.length} of {ownedTrips.length} trip records.</p>
+      </div>
+    </div>
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
     {!selectedId && notice && <p role="status" className="rounded-xl bg-emerald-50 p-3">{notice}</p>}
     {loading ? <SkeletonList count={4} /> : !ownedTrips.length && !error ? <p className="rounded-2xl border bg-white py-10 text-center text-slate-500">No trips or deliveries yet.</p> : null}
-    {ownedTrips.map(t => <article key={t.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+    {!loading&&ownedTrips.length>0&&filteredTrips.length===0&&<p className="rounded-2xl border bg-white p-6 text-center text-sm text-slate-600">No trips match these filters. Try a wider time period or another status.</p>}
+    {filteredTrips.map(t => <article key={t.id} className="rounded-2xl border bg-white p-4 shadow-sm">
       <button onClick={() => { setNotice(''); setSelectedId(t.id); }} className="w-full text-left">
         <div className="flex justify-between gap-3"><strong className="capitalize">{t.service_type || 'Ride'}</strong><span>{t.status}</span></div>
         <p className="mt-2 text-sm text-slate-500">{date(t.created_at)}</p>
