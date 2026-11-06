@@ -81,3 +81,36 @@ test('Customer account closure creates a reviewed request rather than deleting f
   assert.match(app,/does not instantly erase your account/);
   assert.match(app,/Submit deletion request/);
 });
+
+
+test('Forgot passcode sends a Supabase recovery email to the active app origin, not the parked domain',async()=>{
+  const fs=await import('node:fs/promises');
+  const [lock,recovery,service]=await Promise.all([
+    fs.readFile('src/components/CustomerPasscode.tsx','utf8'),
+    fs.readFile('src/pages/UpdatePassword.tsx','utf8'),
+    fs.readFile('src/services/authService.ts','utf8')
+  ]);
+  assert.match(lock,/resetPasswordForEmail\(resetEmail\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(lock,/new URL\('\/reset-password',window\.location\.origin\)/);
+  assert.doesNotMatch(lock,/https:\/\/matmove\.com\/reset-passcode/);
+  assert.match(recovery,/PASSWORD_RECOVERY/);
+  assert.match(recovery,/customerPasscode\(sessionData\.session\.user\.id,'recover',null,newPin\)/);
+  assert.match(recovery,/^.*Save password and six-digit passcode.*$/m);
+  assert.match(service,/phone:customer\.user\.phone\|\|session\.user\.phone/);
+});
+
+test('Event USD is a display quote and ticket purchases continue to debit the SLE amount',async()=>{
+  const fs=await import('node:fs/promises');
+  const portal=await fs.readFile('src/components/PortalHome.tsx','utf8');
+  assert.match(portal,/evt\.ticket_price_usd!=null/);
+  assert.match(portal,/amount:\s*total/);
+  assert.match(portal,/currency:\s*'SLE'/);
+  assert.match(portal,/Number\(evt\.ticket_price\)\s*\*\s*count/);
+});
+
+test('Cancelled Travel reservation dismissal is saved per customer and reservation',async()=>{
+  const fs=await import('node:fs/promises');
+  const portal=await fs.readFile('src/components/PortalHome.tsx','utf8');
+  assert.match(portal,/matmove\.travel\.cancelled\.dismissed\.\$\{uid\}\.\$\{ownBookingResult\.data\.id\}/);
+  assert.match(portal,/matmove\.travel\.cancelled\.dismissed\.\$\{uid\}\.\$\{existingBooking\.id\}/);
+});
