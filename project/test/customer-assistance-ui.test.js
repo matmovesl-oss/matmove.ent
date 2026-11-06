@@ -137,7 +137,8 @@ test('an Admin global notification deletion event refreshes the recipient inbox 
  const channel=h.channels.find(c=>c.events.some(e=>e.filter.table==='matmove_notification_messages'));
  assert.ok(channel,'shared message realtime subscription missing');
  const event=channel.events.find(e=>e.filter.table==='matmove_notification_messages');
- assert.equal(event.event,'*');
+ assert.equal(event.event,'postgres_changes');
+ assert.equal(event.filter.event,'*');
  const before=h.calls.filter(c=>c.name==='matmove_notifications').length;
  event.callback({eventType:'UPDATE'});
  await h.settle();
