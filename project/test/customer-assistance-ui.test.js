@@ -6,12 +6,15 @@ function nodes(n){if(!n||typeof n!=='object')return[];if(Array.isArray(n))return
 function text(n){if(n==null||typeof n==='boolean')return'';if(typeof n!=='object')return String(n);if(Array.isArray(n))return n.map(text).join('');return text(n.props?.children);}
 async function page(which,fn,{reply=base(),failure=null}={}){
  const dir=await mkdtemp(join(process.cwd(),'.assistance-ui-')),out=join(dir,'ui.mjs'),original={window:globalThis.window,document:globalThis.document};
- const slots=[],effects=[],calls=[],navigation=[],intervals=new Map();let cursor=0,dirty=true,tree,unmounted=false,identity=uid,handler=null,nextTimer=0;
+ const slots=[],effects=[],calls=[],navigation=[],intervals=new Map(),channels=[];let cursor=0,dirty=true,tree,unmounted=false,identity=uid,handler=null,nextTimer=0;
  let props=which==='MatMoveHelp'?{userId:uid,context:{role:'rider'},onNavigate:d=>navigation.push(d)}:{userId:uid,onNavigate:d=>navigation.push(d)};
  const changed=(a,b)=>!a||a.length!==b?.length||a.some((v,i)=>!Object.is(v,b[i]));
  globalThis.__assistanceHooks={useState(initial){const i=cursor++;if(!(i in slots))slots[i]={value:typeof initial==='function'?initial():initial};return[slots[i].value,v=>{slots[i].value=typeof v==='function'?v(slots[i].value):v;dirty=true;}];},useRef(initial){const i=cursor++;if(!(i in slots))slots[i]={current:initial};return slots[i];},useCallback(fn,deps){const i=cursor++;if(!(i in slots)||changed(slots[i].deps,deps))slots[i]={fn,deps};return slots[i].fn;},useEffect(fn,deps){const i=cursor++,old=slots[i];if(!old||changed(old.deps,deps)){const s={deps,cleanup:old?.cleanup};slots[i]=s;effects.push(()=>{s.cleanup?.();s.cleanup=fn();});}}};
  globalThis.window={setTimeout:()=>++nextTimer,clearTimeout(){},setInterval(fn,ms){const id=++nextTimer;intervals.set(id,{fn,ms});return id;},clearInterval:id=>intervals.delete(id)};globalThis.document={visibilityState:'visible',addEventListener(){},removeEventListener(){}};
- globalThis.__assistanceDb={auth:{getSession:async()=>({data:{session:{user:{id:identity}}},error:null})},rpc(name,args){calls.push({name,args});const q={abortSignal:()=>q,then:(yes,no)=>Promise.resolve().then(async()=>{
+ globalThis.__assistanceDb={auth:{getSession:async()=>({data:{session:{user:{id:identity}}},error:null})},channel(name){
+  const channel={name,events:[],on(event,filter,callback){this.events.push({event,filter,callback});return this;},subscribe(){this.subscribed=true;return this;}};
+  channels.push(channel);return channel;
+ },removeChannel(channel){channel.removed=true;return Promise.resolve('ok');},rpc(name,args){calls.push({name,args});const q={abortSignal:()=>q,then:(yes,no)=>Promise.resolve().then(async()=>{
   if(handler)return handler(name,args);
   if(failure)return{data:null,error:{message:failure}};
   if(name==='matmove_notifications')return{data:reply,error:null};
@@ -23,7 +26,7 @@ async function page(which,fn,{reply=base(),failure=null}={}){
   const module=await import(pathToFileURL(out));function render(){cursor=0;dirty=false;tree=module.default(props);for(const n of nodes(tree))if(n.type==='dialog'&&n.ref&&!n.ref.current)n.ref.current={open:false,showModal(){this.open=true;},close(){this.open=false;}};while(effects.length)effects.shift()();}
   async function settle(){for(let n=0;n<15;n++){if(dirty&&!unmounted)render();await new Promise(r=>setImmediate(r));if(n>7&&!dirty)break;}}
   const button=label=>{const n=nodes(tree).find(n=>n.type==='button'&&(text(n).trim()===label||n.props['aria-label']===label));assert.ok(n,`Missing ${label}: ${text(tree)}`);return n;};
-  const h={module,calls,navigation,intervals,button,settle,get nodes(){return nodes(tree);},get text(){return text(tree);},get dialog(){return nodes(tree).find(n=>n.type==='dialog');},setHandler:fn=>handler=fn,setUser:id=>identity=id,setReply:value=>reply=value,async update(value){props={...props,...value};dirty=true;await settle();},async click(label){const b=button(label);assert.ok(!b.props.disabled,`${label} disabled`);b.props.onClick();await settle();},async ask(q){nodes(tree).find(n=>n.type==='input').props.onChange({target:{value:q}});await settle();nodes(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});await settle();},unmount(){unmounted=true;for(const s of slots)s?.cleanup?.();}};
+  const h={module,calls,navigation,intervals,channels,button,settle,get nodes(){return nodes(tree);},get text(){return text(tree);},get dialog(){return nodes(tree).find(n=>n.type==='dialog');},setHandler:fn=>handler=fn,setUser:id=>identity=id,setReply:value=>reply=value,async update(value){props={...props,...value};dirty=true;await settle();},async click(label){const b=button(label);assert.ok(!b.props.disabled,`${label} disabled`);b.props.onClick();await settle();},async ask(q){nodes(tree).find(n=>n.type==='input').props.onChange({target:{value:q}});await settle();nodes(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});await settle();},unmount(){unmounted=true;for(const s of slots)s?.cleanup?.();}};
   await settle();await fn(h);
  }finally{if(!unmounted)for(const s of slots)s?.cleanup?.();for(const[k,v]of Object.entries(original)){if(v===undefined)delete globalThis[k];else globalThis[k]=v;}delete globalThis.__assistanceHooks;delete globalThis.__assistanceDb;await rm(dir,{recursive:true,force:true});}
 }
@@ -130,3 +133,15 @@ test('existing Portal routes, Account tools and deletion request use the shared 
 });
 
 }
+test('an Admin global notification deletion event refreshes the recipient inbox from the shared message RPC',()=>page('NotificationBell',async h=>{
+ const channel=h.channels.find(c=>c.events.some(e=>e.filter.table==='matmove_notification_messages'));
+ assert.ok(channel,'shared message realtime subscription missing');
+ const event=channel.events.find(e=>e.filter.table==='matmove_notification_messages');
+ assert.equal(event.event,'*');
+ const before=h.calls.filter(c=>c.name==='matmove_notifications').length;
+ event.callback({eventType:'UPDATE'});
+ await h.settle();
+ const after=h.calls.filter(c=>c.name==='matmove_notifications').length;
+ assert.equal(after,before+1);
+ assert.ok(h.calls.every(c=>c.name==='matmove_notifications'||c.name==='matmove_notification_read'));
+}));
