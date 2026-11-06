@@ -107,41 +107,32 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
            <div className="text-center">
              <p className="text-xs font-bold tracking-[.2em] text-emerald-700">MATMOVE</p>
              {forgotMode ? (
-              <>
-                 <label className="block text-xs font-semibold text-slate-600">
-                   Account email address
-                   <input type="email" required autoComplete="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" />
-                 </label>
-                 {resetSent&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">Recovery email requested. Open the link in your inbox to return to MatMove and choose a new password and six-digit passcode.</p>}
-                 <button type="submit" disabled={busy||!resetEmail.trim()} className="flex h-11 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:opacity-50">
-                   {busy?'Sending recovery link…':'Email me a recovery link'}
-                 </button>
-                 {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p>}
-                 <button type="button" disabled={busy} onClick={() => { setForgotMode(false); setResetEmail(''); setResetSent(false); setError(''); }} className="min-h-11 w-full text-xs text-slate-600 underline">
-                   Back to passcode
-                 </button>
-              </>
-            ) : (
-               <>
-                 <h1 className="mt-2 text-xl font-bold">{upgrade?'Upgrade to six digits':creating?'Create passcode':'Unlock your account'}</h1>
-                 <p className="mt-1 text-xs text-slate-500">{upgrade?'Choose your new six-digit passcode.':creating?'Choose and confirm six digits.':'Enter your passcode to continue.'}</p>
-               </>
-             )}
+                <>
+                  <h1 className="mt-2 text-xl font-bold">Reset Passcode</h1>
+                  <p className="mt-1 text-xs text-slate-500">We will email you a secure MatMove recovery link. It opens this app so you can set a new password and six-digit passcode.</p>
+                </>
+              ) : (
+                <>
+                  <h1 className="mt-2 text-xl font-bold">{upgrade?'Upgrade to six digits':creating?'Create passcode':'Unlock your account'}</h1>
+                  <p className="mt-1 text-xs text-slate-500">{upgrade?'Choose your new six-digit passcode.':creating?'Choose and confirm six digits.':'Enter your passcode to continue.'}</p>
+                </>
+              )})}
            </div>
 
            {forgotMode ? (
              <>
-                <label className="block text-xs font-semibold text-slate-600">
-                  Account Email Address
-                  <input type="email" required value={resetEmail} onChange={e => setResetEmail(e.target.value)} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" />
-                </label>
-                <a href={`https://matmove.com/reset-passcode?email=${encodeURIComponent(resetEmail)}`} target="_blank" rel="noreferrer" className="flex h-11 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white transition hover:bg-emerald-600">
-                  Go to Reset Portal
-                </a>
-                <button type="button" onClick={() => { setForgotMode(false); setResetEmail(''); }} className="min-h-11 w-full text-xs text-slate-600 underline">
-                  Back to passcode
-                </button>
+               <label className="block text-xs font-semibold text-slate-600">
+                 Account email address
+                 <input type="email" required autoComplete="email" value={resetEmail} onChange={e=>setResetEmail(e.target.value)} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" />
+               </label>
+               {resetSent&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">Recovery email requested. Open the link in your inbox to return to MatMove and choose a new password and six-digit passcode.</p>}
+               <button type="submit" disabled={busy||!resetEmail.trim()} className="flex h-11 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:opacity-50">
+                 {busy?'Sending recovery link…':'Email me a recovery link'}
+               </button>
+               {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p>}
+               <button type="button" disabled={busy} onClick={()=>{setForgotMode(false);setResetEmail('');setResetSent(false);setError('');}} className="min-h-11 w-full text-xs text-slate-600 underline">Back to passcode</button>
              </>
+
            ) : (
              <>
                {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose six digits.</p>}
