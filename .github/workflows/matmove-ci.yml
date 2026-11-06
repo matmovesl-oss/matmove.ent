@@ -24,10 +24,12 @@ jobs:
         run: npm ci
       - name: Run regression tests
         working-directory: project
-        run: npm test
+        run: npm run test:release
       - name: Type check
+        if: always()
         working-directory: project
         run: npm run typecheck
       - name: Build production bundle
+        if: always()
         working-directory: project
         run: npm run build
