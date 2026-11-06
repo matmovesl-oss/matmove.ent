@@ -183,7 +183,14 @@ export default function PortalHome({ profile, onNavigate }: Props) {
         }
       }
       if (ownBookingResult.error) setTravelError(current => current || ownBookingResult.error.message || 'Your travel booking could not be loaded.');
-      else setExistingBooking(ownBookingResult.data);
+      else {
+        const cancelled=ownBookingResult.data?.status==='cancelled'&&ownBookingResult.data?.id;
+        let dismissed=false;
+        if(cancelled){
+          try{dismissed=localStorage.getItem(`matmove.travel.cancelled.dismissed.${uid}.${ownBookingResult.data.id}`)==='1';}catch{/* Storage may be unavailable; the in-memory dismiss still works. */}
+        }
+        setExistingBooking(dismissed?null:ownBookingResult.data);
+      }
 
       if (eventsResult.error) setEventsError(eventsResult.error.message || 'Events could not be loaded.');
       else setEvents(eventsResult.data || []);
@@ -375,7 +382,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
                 {existingBooking?.status === 'cancelled' && (
                   <div className="p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-center justify-between">
                     <span>Previous reservation cancelled.</span>
-                    <button onClick={() => setExistingBooking(null)} className="font-bold underline text-indigo-600">Dismiss</button>
+                    <button type="button" onClick={() => {try{localStorage.setItem(`matmove.travel.cancelled.dismissed.${uid}.${existingBooking.id}`,"1");}catch{/* Keep this dismissal for the current view if browser storage is disabled. */}setExistingBooking(null);}} className="font-bold underline text-indigo-600">Dismiss</button>
                   </div>
                 )}
                 <button
