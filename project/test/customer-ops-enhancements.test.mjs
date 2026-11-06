@@ -91,13 +91,13 @@ test('Forgot passcode sends a Supabase recovery email to the active app origin, 
     fs.readFile('src/services/authService.ts','utf8')
   ]);
   assert.match(lock,/resetPasswordForEmail\(resetEmail\.trim\(\)\.toLowerCase\(\)/);
-  assert.match(lock,/customerAuthRedirect\('\/auth\/callback\\?type=recovery&next=%2Freset-password'\)/);
+  assert.match(lock,/customerAuthRedirect\('\/auth\/callback\?type=recovery&next=%2Freset-password'\)/);
   assert.doesNotMatch(lock,/https:\/\/matmove\.com\/reset-passcode/);
   assert.match(recovery,/PASSWORD_RECOVERY/);
   assert.match(recovery,/customerPasscode\(sessionData\.session\.user\.id,'recover',null,newPin\)/);
   assert.match(recovery,/^.*Save password and six-digit passcode.*$/m);
   assert.match(service,/phone:customer\.user\.phone\|\|session\.user\.phone/);
-  assert.match(service,/customerAuthRedirect\('\/auth\/callback\\?type=recovery&next=%2Freset-password'\)/);
+  assert.match(service,/customerAuthRedirect\('\/auth\/callback\?type=recovery&next=%2Freset-password'\)/);
   assert.match(service,/customerAuthRedirect\('\/auth\/callback'\)/);
   const redirect=await fs.readFile('src/services/authRedirect.ts','utf8');
   assert.match(redirect,/https:\/\/matmoveent\.vercel\.app/);
