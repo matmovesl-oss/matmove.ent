@@ -20,7 +20,7 @@ export function UpdatePassword() {
     let active=true;
     const hashParams=new URLSearchParams(window.location.hash.replace(/^#/,'')); 
     const searchParams=new URLSearchParams(window.location.search);
-    const marker=hashParams.get('type')==='recovery'||searchParams.get('type')==='recovery';
+    const marker=hashParams.get('type')==='recovery'||searchParams.get('type')==='recovery'||searchParams.has('code');
     const providerError=hashParams.get('error_description')||searchParams.get('error_description');
     if(providerError){setError(providerError);setCheckingRecovery(false);}
     const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
