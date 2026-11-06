@@ -431,7 +431,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
                     <p className="text-xs text-slate-500 mt-1">{evt.venue} · {new Date(evt.event_date).toLocaleDateString()}</p>
                   </div>
                   <div className="mt-3 flex items-center justify-between pt-2 border-t border-slate-200">
-                    <span className="font-black text-sky-600 text-sm">SLE {Number(evt.ticket_price).toLocaleString()}</span>
+                    <div><span className="font-black text-sky-600 text-sm">SLE {Number(evt.ticket_price).toLocaleString()}</span>{evt.ticket_price_usd!=null&&<span className="ml-2 text-xs font-bold text-emerald-700">USD ${Number(evt.ticket_price_usd).toFixed(2)}</span>}</div>
                     <button type="button" onClick={() => setPanel('events')} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
                       Book Ticket
                     </button>
@@ -1663,7 +1663,7 @@ function EventsModal({ uid, userPhone, walletBalance, events, eventsError, onRet
                 </div>
 
                 <div className="text-right shrink-0">
-                  <span className="text-base font-black text-sky-600 block mb-2">SLE {total.toLocaleString()}</span>
+                  <span className="text-base font-black text-sky-600 block mb-1">SLE {total.toLocaleString()}</span>{evt.ticket_price_usd!=null&&<span className="mb-2 block text-xs font-bold text-emerald-700">USD ${(Number(evt.ticket_price_usd)*count).toFixed(2)} display quote</span>}
                   <button
                     disabled={busy}
                     onClick={() => handleBuyTickets(evt)}
