@@ -44,7 +44,7 @@ export function UpdatePassword() {
     if (!recoveryReady) return setError('Open the recovery link from your email before changing credentials.');
     if (password.length < 8) return setError('Password must be at least 8 characters long.');
     if (password !== confirmPassword) return setError('Passwords do not match.');
-    if (!/^\\d{6}$/.test(newPin)) return setError('Choose a new six-digit passcode.');
+    if (!/^\d{6}$/.test(newPin)) return setError('Choose a new six-digit passcode.');
     if (newPin !== confirmPin) return setError('The six-digit passcodes do not match.');
 
     setLoading(true);
