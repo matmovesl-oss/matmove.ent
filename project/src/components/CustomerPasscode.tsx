@@ -50,6 +50,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const [pin,setPin]=useState(''),[next,setNext]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [forgotMode, setForgotMode] = useState(false);
  const [resetEmail, setResetEmail] = useState('');
+ const [resetSent,setResetSent]=useState(false);
 
  const unlockedNow=useRef(false),statusNow=useRef<Receipt|null>(null);statusNow.current=status;
  const current=useRef(userId);current.current=userId;const mounted=useRef(false),revision=useRef(0),mutex=useRef(false);
@@ -65,6 +66,17 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  
  useEffect(()=>{mounted.current=true;setStatus(null);lock();void load();const stop=watchPasscodeBackground(lock,userId,()=>unlockedNow.current);const resume=()=>{if(document.visibilityState==='visible'&&!statusNow.current&&!mutex.current)void load();};document.addEventListener('visibilitychange',resume);return()=>{document.removeEventListener('visibilitychange',resume);mounted.current=false;revision.current++;mutex.current=false;stop();};},[userId]);
  
+ async function sendPasscodeReset(){
+  if(mutex.current||!resetEmail.trim())return;
+  mutex.current=true;setBusy(true);setError('');setResetSent(false);
+  try{
+   const {error}=await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(),{redirectTo:new URL('/reset-password',window.location.origin).toString()});
+   if(error)throw error;
+   setResetSent(true);
+  }catch(e){setError(e instanceof Error?e.message:'Could not send the recovery email. Try again.');}
+  finally{mutex.current=false;setBusy(false);}
+ }
+
  async function submit(){
   if(mutex.current||!status)return;
   const creating=!status.configured,changing=upgrade;
@@ -116,7 +128,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
                   <h1 className="mt-2 text-xl font-bold">{upgrade?'Upgrade to six digits':creating?'Create passcode':'Unlock your account'}</h1>
                   <p className="mt-1 text-xs text-slate-500">{upgrade?'Choose your new six-digit passcode.':creating?'Choose and confirm six digits.':'Enter your passcode to continue.'}</p>
                 </>
-              )})}
+              )}
            </div>
 
            {forgotMode ? (
