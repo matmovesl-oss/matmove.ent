@@ -38,7 +38,16 @@ export async function getCustomerSession(): Promise<AuthSession | null> {
       throw new Error(customerSessionErrorMessage('FORBIDDEN: A customer account is required.'));
     }
     captureReferralIdentity(session.user);
-    return result.data as AuthSession;
+    const customer=result.data as AuthSession;
+    // A phone may already be verified in Supabase Auth before the profile phone is saved.
+    // Hydrate the existing value for routing and role selection; do not create another profile.
+    return {...customer,user:{
+      ...customer.user,
+      email:customer.user.email||session.user.email||'',
+      phone:customer.user.phone||session.user.phone||session.user.user_metadata?.phone||'',
+      firstName:customer.user.firstName||session.user.user_metadata?.first_name||'',
+      lastName:customer.user.lastName||session.user.user_metadata?.last_name||''
+    }};
   }
   captureReferralIdentity(session.user);
   // An actual Auth session exists, but phone and customer role still need completing.
