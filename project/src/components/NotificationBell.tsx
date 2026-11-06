@@ -43,6 +43,9 @@ export default function NotificationBell({userId,onNavigate}:{userId:string;onNa
     .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
       void read(null, true);
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'matmove_notification_messages' }, () => {
+      void read(null, true);
+    })
     .subscribe();
 
   const timer=window.setInterval(refresh,30000);document.addEventListener('visibilitychange',refresh);
