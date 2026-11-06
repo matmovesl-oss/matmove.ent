@@ -9,7 +9,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "test": "node --test test"
+    "test": "node --test test/*.test.js test/*.test.mjs",
+    "test:release": "node --test test/customer-ops-enhancements.test.mjs test/customer-assistance-ui.test.js",
+    "test:legacy": "node --test test/*.test.js test/*.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

@@ -813,8 +813,8 @@ function RiderShop({ profile, wallet }: any) {
   const fetchShopProducts = useCallback(async () => {
     setProductsLoading(true); setProductsError('');
     try {
-      let result = await supabase.from('products').select('*, merchant:merchant_id(business_name, whatsapp_number)').order('created_at', { ascending: false });
-      if (result.error) result = await supabase.from('products').select('*').order('created_at', { ascending: false });
+      let result = await supabase.from('products').select('*, merchant:merchant_id(business_name, whatsapp_number)').is('deleted_at',null).order('created_at', { ascending: false });
+      if (result.error) result = await supabase.from('products').select('*').is('deleted_at',null).order('created_at', { ascending: false });
       if (result.error) throw result.error;
       setProducts(result.data || []);
     } catch {

@@ -471,7 +471,7 @@ function MerchantInventory({ profile }: any) {
     const generation = ++productsGeneration.current;
     setProductsLoading(true); setProductsError('');
     try {
-      const { data, error: queryError } = await supabase.from('products').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
+      const { data, error: queryError } = await supabase.from('products').select('*').eq('merchant_id', profile.id).is('deleted_at',null).order('created_at', { ascending: false });
       if (queryError) throw queryError;
       if (!Array.isArray(data)) throw new Error('Invalid product response.');
       if (generation === productsGeneration.current) setProducts(data);

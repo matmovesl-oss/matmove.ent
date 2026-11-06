@@ -44,6 +44,7 @@ export function MerchantCatalog({ profile }: Props) {
           'id,name,price,description,image_url,whatsapp_number'
         )
         .eq('merchant_id', profile.id)
+        .is('deleted_at',null)
         .order('created_at', {
           ascending: false,
         }),
@@ -204,17 +205,12 @@ export function MerchantCatalog({ profile }: Props) {
 
   const remove = async (id: string) => {
     try {
-      const { error: err } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', id)
-        .eq('merchant_id', profile.id); // Extra safety
-
-      if (err) throw err;
+      const result = await supabase.rpc('matmove_merchant_delete_product',{p_product_id:id});
+      if (result.error || result.data?.deleted!==true || result.data.productId!==id) throw result.error||new Error('Listing deletion was not confirmed.');
 
       setProducts(current => current.filter(p => p.id !== id));
       setDeleteId(null);
-      setMessage('Product deleted successfully.');
+      setMessage('Listing removed from your public catalogue. Existing orders and payment records were retained.');
     } catch (err: any) {
       setDeleteId(null);
       setError(err.message || 'Product could not be deleted.');

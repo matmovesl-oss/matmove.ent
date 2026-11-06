@@ -437,8 +437,11 @@ function AccountSection({
     setShowDeleteConfirm,
   ] = useState(false);
 
-  const [deletePin, setDeletePin] =
-    useState('');
+  const [deletePin, setDeletePin] = useState('');
+  const [deleteRequestBusy,setDeleteRequestBusy]=useState(false);
+  const [deleteRequestError,setDeleteRequestError]=useState('');
+  const [deleteRequestNotice,setDeleteRequestNotice]=useState('');
+  const [deleteRequestStatus,setDeleteRequestStatus]=useState<string|null>(null);
 
   const [
     viewingAnalytics,
@@ -736,15 +739,29 @@ function AccountSection({
   ]);
 
   const deletionBusy = useRef(false);
+  useEffect(()=>{
+    let active=true;
+    void supabase.rpc('matmove_customer_account_deletion_status').then(({data,error})=>{
+      if(!active||error)return;
+      if(data&&typeof data.status==='string')setDeleteRequestStatus(data.status);
+    });
+    return()=>{active=false;};
+  },[profile.id]);
   const handleDeleteAccount = async () => {
-    if(deletionBusy.current)return;deletionBusy.current=true;
+    if(deletionBusy.current||deleteRequestBusy)return;
+    deletionBusy.current=true;setDeleteRequestBusy(true);setDeleteRequestError('');setDeleteRequestNotice('');
     try{
       const receipt=await customerPasscode(profile.id,'verify',deletePin);
       setDeletePin('');
-      if(!receipt.ok||receipt.digits!==6||receipt.code!=='verified')throw Error(receipt.code==='cooldown'?`Try again in ${receipt.retryAfterSeconds} seconds.`:'Incorrect passcode.');
-      window.location.href=`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hello MatMove Support, I am requesting account deletion for ${profile.email} (${profile.phone||''}). Please assist me with final settlement.`)}`;
-    }catch(e){setDeletePin('');alert(e instanceof Error?e.message:'Passcode check failed.');}
-    finally{deletionBusy.current=false;}
+      if(!receipt.ok||receipt.digits!==6||receipt.code!=='verified')throw Error(receipt.code==='cooldown'?'Try again in '+receipt.retryAfterSeconds+' seconds.':'Incorrect passcode.');
+      const result=await supabase.rpc('matmove_customer_request_account_deletion',{p_reason:'Customer requested account deletion from Account Settings.'});
+      if(result.error)throw result.error;
+      if(result.data?.success!==true||typeof result.data.status!=='string')throw Error('MatMove did not confirm the deletion request. Check its status before retrying.');
+      setDeleteRequestStatus(result.data.status);
+      setDeleteRequestNotice(result.data.alreadyRequested?'Your existing account deletion request is already recorded.':'Your account deletion request has been recorded. MatMove will review open trips, orders, wallet balances and payment records before completing the process.');
+      setShowDeleteConfirm(false);
+    }catch(e){setDeletePin('');setDeleteRequestError(e instanceof Error?e.message:'Passcode verification failed.');}
+    finally{deletionBusy.current=false;setDeleteRequestBusy(false);}
   };
 
   const handleRemoveFromCart = async (
@@ -1282,20 +1299,22 @@ function AccountSection({
           Danger Zone
         </h2>
 
+        <p className="mb-3 text-sm text-slate-600">Request account closure securely. MatMove checks for unsettled wallet funds, active trips, orders and pending payments first. Your login and historical financial records are not erased automatically.</p>
+        {deleteRequestStatus&&deleteRequestStatus!=='rejected'&&<p role="status" className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Deletion request status: <b>{deleteRequestStatus.replace('_',' ')}</b>. Your account remains available while the request is reviewed.</p>}
+        {deleteRequestNotice&&<p role="status" className="mb-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{deleteRequestNotice}</p>}
+        {deleteRequestError&&<p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">{deleteRequestError}</p>}
         {!showDeleteConfirm ? (
           <button
-            onClick={() =>
-              setShowDeleteConfirm(true)
-            }
-            className="text-sm font-bold text-red-600 border border-red-200 bg-red-50 px-5 py-2.5 rounded-xl hover:bg-red-100"
+            disabled={deleteRequestStatus==='requested'||deleteRequestStatus==='under_review'||deleteRequestBusy}
+            onClick={() => {setDeleteRequestError('');setShowDeleteConfirm(true);}}
+            className="min-h-11 rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-sm font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
           >
-            Request Account Deletion
+            {deleteRequestStatus==='requested'||deleteRequestStatus==='under_review'?'Deletion request already submitted':'Request Account Deletion'}
           </button>
         ) : (
           <div className="bg-red-50 border border-red-200 p-5 rounded-xl">
             <p className="text-sm text-red-800 font-bold mb-3">
-              Enter your 6-digit Passcode
-              to proceed:
+              Enter your 6-digit passcode to confirm the deletion request. This submits a request for review; it does not instantly erase your account.
             </p>
 
             <div className="flex gap-2 mb-4">
@@ -1313,17 +1332,16 @@ function AccountSection({
 
               <button
                 onClick={handleDeleteAccount}
-                className="bg-red-600 text-white font-bold px-4 rounded-lg"
+                disabled={deleteRequestBusy||deletePin.length!==6}
+                className="min-h-11 rounded-lg bg-red-600 px-4 font-bold text-white disabled:opacity-50"
               >
-                Confirm
+                {deleteRequestBusy?'Submitting…':'Submit deletion request'}
               </button>
             </div>
 
             <button
-              onClick={() =>
-                setShowDeleteConfirm(false)
-              }
-              className="text-xs font-bold text-slate-500 hover:text-slate-700"
+              onClick={() => {setShowDeleteConfirm(false);setDeletePin('');}}
+              className="min-h-11 text-xs font-bold text-slate-500 hover:text-slate-700"
             >
               Cancel
             </button>

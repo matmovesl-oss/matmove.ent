@@ -1,0 +1,39 @@
+name: MatMove Customer CI
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+      - feature/matmove-customer-portal-enhancements
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: project/package-lock.json
+      - name: Install dependencies
+        working-directory: project
+        run: npm ci
+      - name: Run regression tests
+        working-directory: project
+        run: npm run test:release
+      - name: Type check
+        if: always()
+        working-directory: project
+        run: npm run typecheck
+      - name: Build production bundle
+        if: always()
+        working-directory: project
+        run: npm run build
