@@ -1,5 +1,6 @@
 import {useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import {supabase} from '@/lib/supabase';
+import {customerAuthRedirect} from '@/services/authRedirect';
 import {setPortalUnlocked} from '@/lib/portalPrivacy';
 import {profilePhotoPickerOpen,onProfilePhotoPickerEnd,clearProfilePhotoPicker} from '@/lib/profilePhotoPicker';
 
@@ -69,7 +70,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
   if(mutex.current||!resetEmail.trim())return;
   mutex.current=true;setBusy(true);setError('');setResetSent(false);
   try{
-   const {error}=await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(),{redirectTo:new URL('/reset-password',window.location.origin).toString()});
+   const {error}=await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(),{redirectTo:customerAuthRedirect('/auth/callback?type=recovery&next=%2Freset-password')});
    if(error)throw error;
    setResetSent(true);
   }catch(e){setError(e instanceof Error?e.message:'Could not send the recovery email. Try again.');}

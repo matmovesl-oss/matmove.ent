@@ -65,7 +65,7 @@ export function ForgotPasswordPage() {
         )}
         
         <div className="mt-6 text-center">
-          <button onClick={() => navigate('/signin')} className="text-sm font-semibold text-slate-600 flex items-center justify-center gap-2 mx-auto hover:text-[#184f9a]">
+          <button onClick={() => navigate('/login')} className="text-sm font-semibold text-slate-600 flex items-center justify-center gap-2 mx-auto hover:text-[#184f9a]">
             <ArrowLeft size={16} /> Back to sign in
           </button>
         </div>
