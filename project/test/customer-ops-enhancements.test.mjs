@@ -91,12 +91,18 @@ test('Forgot passcode sends a Supabase recovery email to the active app origin, 
     fs.readFile('src/services/authService.ts','utf8')
   ]);
   assert.match(lock,/resetPasswordForEmail\(resetEmail\.trim\(\)\.toLowerCase\(\)/);
-  assert.match(lock,/new URL\('\/reset-password',window\.location\.origin\)/);
+  assert.match(lock,/customerAuthRedirect\('\/reset-password'\)/);
   assert.doesNotMatch(lock,/https:\/\/matmove\.com\/reset-passcode/);
   assert.match(recovery,/PASSWORD_RECOVERY/);
   assert.match(recovery,/customerPasscode\(sessionData\.session\.user\.id,'recover',null,newPin\)/);
   assert.match(recovery,/^.*Save password and six-digit passcode.*$/m);
   assert.match(service,/phone:customer\.user\.phone\|\|session\.user\.phone/);
+  assert.match(service,/customerAuthRedirect\('\/reset-password'\)/);
+  assert.match(service,/customerAuthRedirect\('\/auth\/callback'\)/);
+  const redirect=await fs.readFile('src/services/authRedirect.ts','utf8');
+  assert.match(redirect,/https:\/\/matmoveent\.vercel\.app/);
+  assert.match(redirect,/VITE_CUSTOMER_APP_URL/);
+  assert.match(recovery,/setSuccess\(true\)/);
 });
 
 test('Event USD is a display quote and ticket purchases continue to debit the SLE amount',async()=>{
