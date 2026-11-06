@@ -11,17 +11,31 @@ export function scopeOnboardingDraft(userId: string | null) {
   }
 }
 
+export function customerSessionErrorMessage(message: unknown): string {
+  const raw = String(message || 'Unable to load your MatMove account.').trim();
+  if (/A customer account is required/i.test(raw)) {
+    return 'This login is not currently linked to a Rider, Driver or Merchant account. If you previously had a Customer account, ask the MatMove Admin owner to restore your original role. Do not create another account.';
+  }
+  if (/active Admin account cannot use the Customer Portal|active Admin account cannot create a Customer account/i.test(raw)) {
+    return 'This account has active Admin access. Use the MatMove Admin portal, or ask the Admin owner to remove Admin access before returning to the Customer Portal.';
+  }
+  if (/Customer roles need support review|Approved account roles need support review/i.test(raw)) {
+    return 'Your account has conflicting Customer roles and needs support review. Your existing login, wallet and financial history have not been replaced.';
+  }
+  return raw.replace(/^(FORBIDDEN|INVALID|CONFLICT):\s*/i, '');
+}
+
 export async function getCustomerSession(): Promise<AuthSession | null> {
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error) throw error;
   if (!session?.user) { scopeOnboardingDraft(null); return null; }
   scopeOnboardingDraft(session.user.id);
   const result = await supabase.rpc('matmove_customer_me');
-  if (result.error) throw new Error(result.error.message);
+  if (result.error) throw new Error(customerSessionErrorMessage(result.error.message));
   if (result.data) {
     if (result.data.user?.id !== session.user.id || !Array.isArray(result.data.roles) ||
       result.data.roles.some((role: string) => !['rider','driver','merchant'].includes(role))) {
-      throw new Error('This account cannot access the customer portal.');
+      throw new Error(customerSessionErrorMessage('FORBIDDEN: A customer account is required.'));
     }
     captureReferralIdentity(session.user);
     return result.data as AuthSession;
