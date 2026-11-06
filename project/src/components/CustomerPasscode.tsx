@@ -6,9 +6,9 @@ import {profilePhotoPickerOpen,onProfilePhotoPickerEnd,clearProfilePhotoPicker} 
 type Receipt={userId:string;configured:boolean;digits:4|6;ok:boolean;code:string;attemptsRemaining:number;retryAfterSeconds:number};
 const codes=['status','cooldown','already_configured','saved','setup_required','upgrade_required','verified','incorrect'];
 
-export async function customerPasscode(userId:string,action:'status'|'create'|'verify'|'change',pin:string|null=null,newPin:string|null=null):Promise<Receipt>{
- if(!userId||!['status','create','verify','change'].includes(action))throw Error('Invalid passcode request.');
- if(['create','change'].includes(action)&&!/^\d{6}$/.test(newPin||''))throw Error('Choose exactly six digits.');
+export async function customerPasscode(userId:string,action:'status'|'create'|'verify'|'change'|'recover',pin:string|null=null,newPin:string|null=null):Promise<Receipt>{
+ if(!userId||!['status','create','verify','change','recover'].includes(action))throw Error('Invalid passcode request.');
+ if(['create','change','recover'].includes(action)&&!/^\d{6}$/.test(newPin||''))throw Error('Choose exactly six digits.');
  if(['verify','change'].includes(action)&&!/^([0-9]{4}|[0-9]{6})$/.test(pin||''))throw Error('Enter your current passcode.');
  const session=await supabase.auth.getSession();
  if(session.error||session.data.session?.user.id!==userId||!session.data.session.access_token)throw Error('Your sign-in changed. Sign in again.');
@@ -27,7 +27,7 @@ export async function customerPasscode(userId:string,action:'status'|'create'|'v
   if(d?.userId!==userId||typeof d.configured!=='boolean'||![4,6].includes(d.digits)||typeof d.ok!=='boolean'||!codes.includes(d.code)||!Number.isInteger(d.attemptsRemaining)||d.attemptsRemaining<0||d.attemptsRemaining>5||!Number.isInteger(d.retryAfterSeconds)||d.retryAfterSeconds<0||d.retryAfterSeconds>300||
    (d.ok&&(!d.configured||!['saved','verified','upgrade_required'].includes(d.code)))||(d.ok&&d.digits!==6&&d.code!=='upgrade_required')||
    (d.code==='upgrade_required'&&d.digits!==4)||
-   (d.code==='verified'&&action!=='verify')||(d.code==='saved'&&!['create','change'].includes(action)))throw Error('Passcode response could not be verified. Reload and try again.');
+   (d.code==='verified'&&action!=='verify')||(d.code==='saved'&&!['create','change','recover'].includes(action)))throw Error('Passcode response could not be verified. Reload and try again.');
   return d;
  }catch(e){if(controller.signal.aborted)throw Error('Passcode check timed out. Reload to confirm the saved state.');throw e;}
  finally{clearTimeout(timer);}
@@ -49,13 +49,14 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const [pin,setPin]=useState(''),[next,setNext]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [forgotMode, setForgotMode] = useState(false);
  const [resetEmail, setResetEmail] = useState('');
+ const [resetSent,setResetSent]=useState(false);
 
  const unlockedNow=useRef(false),statusNow=useRef<Receipt|null>(null);statusNow.current=status;
  const current=useRef(userId);current.current=userId;const mounted=useRef(false),revision=useRef(0),mutex=useRef(false);
  const clear=()=>{setPin('');setNext('');setConfirm('');};
  const valid=(id:string,n:number)=>mounted.current&&current.current===id&&revision.current===n;
  
- function lock(){setPortalUnlocked(userId,false);unlockedNow.current=false;clearProfilePhotoPicker(userId);revision.current++;mutex.current=false;setBusy(false);setUnlocked(false);setUpgrade(false);setForgotMode(false);setResetEmail('');clear();setError('');}
+ function lock(){setPortalUnlocked(userId,false);unlockedNow.current=false;clearProfilePhotoPicker(userId);revision.current++;mutex.current=false;setBusy(false);setUnlocked(false);setUpgrade(false);setForgotMode(false);setResetEmail('');setResetSent(false);clear();setError('');}
  
  async function load(){if(mutex.current)return;mutex.current=true;const n=++revision.current,id=userId;setBusy(true);setError('');clear();unlockedNow.current=false;setUnlocked(false);setUpgrade(false);setForgotMode(false);
   try{const d=await customerPasscode(id,'status');if(valid(id,n))setStatus(d);}catch(e){if(valid(id,n)){setStatus(null);setError(e instanceof Error?e.message:'Passcode service unavailable.');}}
@@ -64,6 +65,17 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  
  useEffect(()=>{mounted.current=true;setStatus(null);lock();void load();const stop=watchPasscodeBackground(lock,userId,()=>unlockedNow.current);const resume=()=>{if(document.visibilityState==='visible'&&!statusNow.current&&!mutex.current)void load();};document.addEventListener('visibilitychange',resume);return()=>{document.removeEventListener('visibilitychange',resume);mounted.current=false;revision.current++;mutex.current=false;stop();};},[userId]);
  
+ async function sendPasscodeReset(){
+  if(mutex.current||!resetEmail.trim())return;
+  mutex.current=true;setBusy(true);setError('');setResetSent(false);
+  try{
+   const {error}=await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(),{redirectTo:new URL('/reset-password',window.location.origin).toString()});
+   if(error)throw error;
+   setResetSent(true);
+  }catch(e){setError(e instanceof Error?e.message:'Could not send the recovery email. Try again.');}
+  finally{mutex.current=false;setBusy(false);}
+ }
+
  async function submit(){
   if(mutex.current||!status)return;
   const creating=!status.configured,changing=upgrade;
@@ -101,36 +113,37 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
    <>
      <dialog ref={privacyDialog} aria-label="MATMOVE privacy lock" aria-hidden={allowed} onCancel={e=>e.preventDefault()} className="fixed inset-0 m-0 h-[100dvh] max-h-none w-screen max-w-none border-0 bg-slate-100 p-0 backdrop:bg-slate-100">
        <main className="flex min-h-[100dvh] items-center justify-center bg-slate-100 px-5 py-8">
-         <form aria-label="Customer passcode" onSubmit={e=>{e.preventDefault(); if(!forgotMode) void submit();}} className="w-full max-w-xs space-y-4 rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
+         <form aria-label="Customer passcode" onSubmit={e=>{e.preventDefault(); if(forgotMode) void sendPasscodeReset(); else void submit();}} className="w-full max-w-xs space-y-4 rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
            
            <div className="text-center">
              <p className="text-xs font-bold tracking-[.2em] text-emerald-700">MATMOVE</p>
              {forgotMode ? (
-               <>
-                 <h1 className="mt-2 text-xl font-bold">Reset Passcode</h1>
-                 <p className="mt-1 text-xs text-slate-500">Provide your account email to continue to the secure passcode reset portal.</p>
-               </>
-             ) : (
-               <>
-                 <h1 className="mt-2 text-xl font-bold">{upgrade?'Upgrade to six digits':creating?'Create passcode':'Unlock your account'}</h1>
-                 <p className="mt-1 text-xs text-slate-500">{upgrade?'Choose your new six-digit passcode.':creating?'Choose and confirm six digits.':'Enter your passcode to continue.'}</p>
-               </>
-             )}
+                <>
+                  <h1 className="mt-2 text-xl font-bold">Reset Passcode</h1>
+                  <p className="mt-1 text-xs text-slate-500">We will email you a secure MatMove recovery link. It opens this app so you can set a new password and six-digit passcode.</p>
+                </>
+              ) : (
+                <>
+                  <h1 className="mt-2 text-xl font-bold">{upgrade?'Upgrade to six digits':creating?'Create passcode':'Unlock your account'}</h1>
+                  <p className="mt-1 text-xs text-slate-500">{upgrade?'Choose your new six-digit passcode.':creating?'Choose and confirm six digits.':'Enter your passcode to continue.'}</p>
+                </>
+              )}
            </div>
 
            {forgotMode ? (
              <>
-                <label className="block text-xs font-semibold text-slate-600">
-                  Account Email Address
-                  <input type="email" required value={resetEmail} onChange={e => setResetEmail(e.target.value)} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" />
-                </label>
-                <a href={`https://matmove.com/reset-passcode?email=${encodeURIComponent(resetEmail)}`} target="_blank" rel="noreferrer" className="flex h-11 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white transition hover:bg-emerald-600">
-                  Go to Reset Portal
-                </a>
-                <button type="button" onClick={() => { setForgotMode(false); setResetEmail(''); }} className="min-h-11 w-full text-xs text-slate-600 underline">
-                  Back to passcode
-                </button>
+               <label className="block text-xs font-semibold text-slate-600">
+                 Account email address
+                 <input type="email" required autoComplete="email" value={resetEmail} onChange={e=>setResetEmail(e.target.value)} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" />
+               </label>
+               {resetSent&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">Recovery email requested. Open the link in your inbox to return to MatMove and choose a new password and six-digit passcode.</p>}
+               <button type="submit" disabled={busy||!resetEmail.trim()} className="flex h-11 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:opacity-50">
+                 {busy?'Sending recovery link…':'Email me a recovery link'}
+               </button>
+               {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p>}
+               <button type="button" disabled={busy} onClick={()=>{setForgotMode(false);setResetEmail('');setResetSent(false);setError('');}} className="min-h-11 w-full text-xs text-slate-600 underline">Back to passcode</button>
              </>
+
            ) : (
              <>
                {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose six digits.</p>}
@@ -148,7 +161,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
                </div>
                
                {!creating && (
-                 <button type="button" onClick={() => setForgotMode(true)} className="w-full text-left pt-2 pb-1 text-xs text-slate-500 hover:text-emerald-700 transition">
+                 <button type="button" onClick={() => {setError('');setResetSent(false);setForgotMode(true);void supabase.auth.getUser().then(({data})=>{if(data.user?.email)setResetEmail(data.user.email);});}} className="w-full text-left pt-2 pb-1 text-xs text-slate-500 hover:text-emerald-700 transition">
                    Forgot passcode?
                  </button>
                )}

@@ -183,7 +183,14 @@ export default function PortalHome({ profile, onNavigate }: Props) {
         }
       }
       if (ownBookingResult.error) setTravelError(current => current || ownBookingResult.error.message || 'Your travel booking could not be loaded.');
-      else setExistingBooking(ownBookingResult.data);
+      else {
+        const cancelled=ownBookingResult.data?.status==='cancelled'&&ownBookingResult.data?.id;
+        let dismissed=false;
+        if(cancelled){
+          try{dismissed=localStorage.getItem(`matmove.travel.cancelled.dismissed.${uid}.${ownBookingResult.data.id}`)==='1';}catch{/* Storage may be unavailable; the in-memory dismiss still works. */}
+        }
+        setExistingBooking(dismissed?null:ownBookingResult.data);
+      }
 
       if (eventsResult.error) setEventsError(eventsResult.error.message || 'Events could not be loaded.');
       else setEvents(eventsResult.data || []);
@@ -375,7 +382,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
                 {existingBooking?.status === 'cancelled' && (
                   <div className="p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-center justify-between">
                     <span>Previous reservation cancelled.</span>
-                    <button onClick={() => setExistingBooking(null)} className="font-bold underline text-indigo-600">Dismiss</button>
+                    <button type="button" onClick={() => {try{localStorage.setItem(`matmove.travel.cancelled.dismissed.${uid}.${existingBooking.id}`,"1");}catch{/* Keep this dismissal for the current view if browser storage is disabled. */}setExistingBooking(null);}} className="font-bold underline text-indigo-600">Dismiss</button>
                   </div>
                 )}
                 <button
@@ -424,7 +431,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
                     <p className="text-xs text-slate-500 mt-1">{evt.venue} · {new Date(evt.event_date).toLocaleDateString()}</p>
                   </div>
                   <div className="mt-3 flex items-center justify-between pt-2 border-t border-slate-200">
-                    <span className="font-black text-sky-600 text-sm">SLE {Number(evt.ticket_price).toLocaleString()}</span>
+                    <div><span className="font-black text-sky-600 text-sm">SLE {Number(evt.ticket_price).toLocaleString()}</span>{evt.ticket_price_usd!=null&&<span className="ml-2 text-xs font-bold text-emerald-700">USD ${Number(evt.ticket_price_usd).toFixed(2)}</span>}</div>
                     <button type="button" onClick={() => setPanel('events')} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
                       Book Ticket
                     </button>
@@ -1656,7 +1663,7 @@ function EventsModal({ uid, userPhone, walletBalance, events, eventsError, onRet
                 </div>
 
                 <div className="text-right shrink-0">
-                  <span className="text-base font-black text-sky-600 block mb-2">SLE {total.toLocaleString()}</span>
+                  <span className="text-base font-black text-sky-600 block mb-1">SLE {total.toLocaleString()}</span>{evt.ticket_price_usd!=null&&<span className="mb-2 block text-xs font-bold text-emerald-700">USD ${(Number(evt.ticket_price_usd)*count).toFixed(2)} display quote</span>}
                   <button
                     disabled={busy}
                     onClick={() => handleBuyTickets(evt)}
