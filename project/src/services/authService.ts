@@ -1,6 +1,7 @@
 import {captureReferralIdentity,emailReferralMetadata,recordSignupReferral} from './referralSignup';
 
 import { supabase } from '@/lib/supabase';
+import { customerAuthRedirect } from './authRedirect';
 import type { AuthSession, UserRole } from '@/types';
 import { normalizeCustomerPhone } from '../../shared/customer-access.js';
 
@@ -60,7 +61,7 @@ export async function signUp(email: string, phone: string, password: string): Pr
   const normalizedPhone = normalizeCustomerPhone(phone);
   if (!email.trim() || !normalizedPhone || password.length < 8) throw new Error('Enter an email, valid phone number and password of at least 8 characters.');
   const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password,
-    options: { data: { phone: normalizedPhone, ...emailReferralMetadata(email) }, emailRedirectTo: `${window.location.origin}/auth/callback` } });
+    options: { data: { phone: normalizedPhone, ...emailReferralMetadata(email) }, emailRedirectTo: customerAuthRedirect('/auth/callback') } });
   if (error) throw error;
   // Email confirmation must finish before any customer session is created.
   return data.session ? getCustomerSession() : null;
@@ -76,7 +77,7 @@ export async function signIn(email: string, password: string): Promise<AuthSessi
 
 export async function signInWithGoogle(): Promise<void> {
   const { error } = await supabase.auth.signInWithOAuth({ provider: 'google',
-    options: { redirectTo: `${window.location.origin}/auth/callback` } });
+    options: { redirectTo: customerAuthRedirect('/auth/callback') } });
   if (error) throw error;
 }
 
@@ -99,6 +100,6 @@ export async function signOut(): Promise<void> {
 
 export async function resetPassword(email: string): Promise<void> {
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-    redirectTo: `${window.location.origin}/reset-password` });
+    redirectTo: customerAuthRedirect('/reset-password') });
   if (error) throw error;
 }
