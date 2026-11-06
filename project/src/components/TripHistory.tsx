@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { shareReceiptPdf } from '@/lib/pdfReceipt';
 import { SkeletonList } from '@/components/Skeleton';
+import { filterTripHistory } from '@/lib/tripHistory';
 
 type Props = { userId: string; role: 'rider' | 'driver' | 'merchant' };
 const date = (value: unknown) => {
@@ -103,12 +104,7 @@ export default function TripHistory({ userId, role }: Props) {
   }, [refresh,userId,role]);
   const ownedTrips=loadedOwner===userId?trips:[];
   const selected = ownedTrips.find(t => t.id === selectedId);
-  const filteredTrips=ownedTrips.filter(t=>{
-    const statusMatches=statusFilter==='all'||t.status===statusFilter;
-    const created=Date.parse(String(t.created_at||''));
-    const periodMatches=period==='all'||Number.isFinite(created)&&created>=Date.now()-(period==='30'?30:90)*86400000;
-    return statusMatches&&periodMatches;
-  });
+  const filteredTrips=filterTripHistory(ownedTrips,period,statusFilter);
   useEffect(() => {
     if (selectedId && dialog.current && !dialog.current.open) dialog.current.showModal();
   }, [selectedId]);
