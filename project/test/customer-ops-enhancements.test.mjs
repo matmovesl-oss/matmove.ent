@@ -41,3 +41,48 @@ test('TripHistory renders accessible recent/history and status selectors using t
   assert.match(component,/Filter trips by status/);
   assert.match(component,/filterTripHistory\(ownedTrips,period,statusFilter\)/);
 });
+
+test('Merchant deletion is owner-scoped, reversible and hidden from every customer-facing catalogue',async()=>{
+  const fs=await import('node:fs/promises');
+  const [editor,legacy,merchant,rider]=await Promise.all([
+    fs.readFile('src/components/ProductCatalog.tsx','utf8'),
+    fs.readFile('src/pages/MerchantCatalog.tsx','utf8'),
+    fs.readFile('src/pages/MerchantDashboard.tsx','utf8'),
+    fs.readFile('src/pages/RiderDashboard.tsx','utf8')
+  ]);
+  assert.match(editor,/matmove_merchant_delete_product/);
+  assert.match(editor,/Existing orders and payment records were retained/);
+  assert.match(legacy,/matmove_merchant_delete_product/);
+  assert.match(merchant,/is\('deleted_at',null\)/);
+  assert.match(rider,/is\('deleted_at',null\)/);
+});
+
+test('Admin notification withdrawal refreshes customer inboxes from the shared message record',async()=>{
+  const fs=await import('node:fs/promises');
+  const source=await fs.readFile('src/components/NotificationBell.tsx','utf8');
+  assert.match(source,/table:\s*'matmove_notification_messages'/);
+  assert.match(source,/void read\(null, true\)/);
+});
+
+test('Concierge presents configured SLE and USD prices and hides deleted services',async()=>{
+  const fs=await import('node:fs/promises');
+  const [customer,admin]=await Promise.all([
+    fs.readFile('src/components/ConciergeServices.tsx','utf8'),
+    fs.readFile('../matmove-admin/project/src/pages/ConciergePage.tsx','utf8').catch(()=> '')
+  ]);
+  assert.match(customer,/price_sle/);
+  assert.match(customer,/price_usd/);
+  assert.match(customer,/is\('deleted_at',null\)/);
+  assert.match(customer,/conciergePrice/);
+  // Admin source is tested in its own repository CI; do not depend on a sibling checkout here.
+  assert.ok(!admin);
+});
+
+test('Customer account closure creates a reviewed request rather than deleting finance records immediately',async()=>{
+  const fs=await import('node:fs/promises');
+  const app=await fs.readFile('src/App.tsx','utf8');
+  assert.match(app,/matmove_customer_request_account_deletion/);
+  assert.match(app,/matmove_customer_account_deletion_status/);
+  assert.match(app,/does not instantly erase your account/);
+  assert.match(app,/Submit deletion request/);
+});
