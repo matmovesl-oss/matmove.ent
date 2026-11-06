@@ -66,16 +66,11 @@ test('Admin notification withdrawal refreshes customer inboxes from the shared m
 
 test('Concierge presents configured SLE and USD prices and hides deleted services',async()=>{
   const fs=await import('node:fs/promises');
-  const [customer,admin]=await Promise.all([
-    fs.readFile('src/components/ConciergeServices.tsx','utf8'),
-    fs.readFile('../matmove-admin/project/src/pages/ConciergePage.tsx','utf8').catch(()=> '')
-  ]);
+  const customer=await fs.readFile('src/components/ConciergeServices.tsx','utf8');
   assert.match(customer,/price_sle/);
   assert.match(customer,/price_usd/);
   assert.match(customer,/is\('deleted_at',null\)/);
   assert.match(customer,/conciergePrice/);
-  // Admin source is tested in its own repository CI; do not depend on a sibling checkout here.
-  assert.ok(!admin);
 });
 
 test('Customer account closure creates a reviewed request rather than deleting finance records immediately',async()=>{
