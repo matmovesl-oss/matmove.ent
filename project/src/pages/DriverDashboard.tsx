@@ -254,15 +254,41 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       busy = true; const readVersion = radarMutation.current; setRequestsLoading(true);
       try {
         const { data, error } = await supabase.from('bookings')
-          .select('*, rider:profiles!rider_id(full_name, phone, phone_number)')
+          .select('*')
           .or(`status.in.(pending,pending_admin),driver_id.eq.${profile.id}`)
           .in('status', ['pending','pending_admin','accepted','in_progress'])
           .neq('status', 'cancelled').neq('status', 'completed')
           .order('created_at', { ascending: false });
         if (error) throw error;
         if (!Array.isArray(data)) throw new Error('Invalid radar response.');
+
+        // The booking list is scoped by RLS. Rider contact fields are returned
+        // separately by a server-authorised RPC, never by joining another profile.
+        const contactResult = await supabase.rpc('matmove_driver_radar_contacts', {
+          p_booking_ids: data.map(item => item.id),
+        });
+        if (contactResult.error || !Array.isArray(contactResult.data)) {
+          throw new Error('Rider details could not be securely verified. Retry the request list.');
+        }
+        const requested = new Set(data.map(item => item.id));
+        const contacts = new Map<string, any>();
+        for (const row of contactResult.data) {
+          if (!row || typeof row.booking_id !== 'string' || !requested.has(row.booking_id)
+              || contacts.has(row.booking_id) || !row.rider
+              || typeof row.rider.full_name !== 'string'
+              || !(row.rider.phone === null || typeof row.rider.phone === 'string')
+              || !(row.rider.phone_number === null || typeof row.rider.phone_number === 'string')) {
+            throw new Error('Rider details could not be verified. Retry the request list.');
+          }
+          contacts.set(row.booking_id, row.rider);
+        }
+        const enriched = data.map(item => ({
+          ...item,
+          rider: contacts.get(item.id) || { full_name: 'MatMove Customer', phone: null, phone_number: null },
+        }));
+
         if (!disposed && readVersion === radarMutation.current) {
-          const visible=data.filter(item=>item.driver_id===profile.id||(!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)));
+          const visible=enriched.filter(item=>item.driver_id===profile.id||(!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)));
           setActiveRequests(previous => visible.map(item => mergeRideRow(previous.find(old => old.id === item.id), item)));
           setNegotiatingId(previous => visible.some(item => !item.driver_id && item.id === previous && ['pending', 'pending_admin'].includes(item.status)) ? previous : null);
           setRequestsError('');
