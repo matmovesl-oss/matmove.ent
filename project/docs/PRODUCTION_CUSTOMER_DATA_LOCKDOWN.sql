@@ -394,7 +394,7 @@ using (
 );
 
 -- Public configuration remains read-only. Admin writes use server-side endpoints/RPCs.
-revoke insert, update, delete, truncate, references, trigger on table
+revoke all privileges on table
   public.platform_events,
   public.travel_settings,
   public.vehicle_pricing
@@ -403,6 +403,8 @@ from public, anon, authenticated;
 grant select on table public.platform_events to anon, authenticated;
 grant select on table public.travel_settings to anon, authenticated;
 grant select on table public.vehicle_pricing to anon, authenticated;
+grant insert, update, delete on table public.platform_events to authenticated;
+grant insert, update on table public.travel_settings to authenticated;
 grant select on table public.exchange_rates to anon, authenticated;
 grant select on table public.pricing_settings to anon, authenticated;
 grant select on table public.products to anon, authenticated;
