@@ -493,7 +493,7 @@ function MerchantInventory({ profile }: any) {
     const generation = ++ordersGeneration.current;
     setOrdersLoading(true); setOrdersError('');
     try {
-      const { data, error: queryError } = await supabase.from('app_orders').select('*, rider:rider_id(full_name, phone)').eq('merchant_id', profile.id).order('created_at', { ascending: false });
+      const { data, error: queryError } = await supabase.from('app_orders').select('*').eq('merchant_id', profile.id).order('created_at', { ascending: false });
       if (queryError) throw queryError;
       if (!Array.isArray(data)) throw new Error('Invalid order response.');
       if (generation === ordersGeneration.current) setOrders(data);
@@ -518,10 +518,10 @@ function MerchantInventory({ profile }: any) {
   };
 
   const handleWhatsAppCustomer = (order: any) => {
-    let digits = String(order.customer_phone || order.rider?.phone || '').replace(/\D/g, '');
+    let digits = String(order.customer_phone || '').replace(/\D/g, '');
     if (digits.startsWith('0') && digits.length === 9) { digits = `232${digits.slice(1)}`; }
     if (!/^[1-9]\d{6,14}$/.test(digits)) { setError('This order does not have a valid customer phone number.'); return; }
-    const message = encodeURIComponent(`Hello ${order.rider?.full_name || 'there'}, regarding your MatMove order for ${order.product_name}.`);
+    const message = encodeURIComponent(`Hello ${'there'}, regarding your MatMove order for ${order.product_name}.`);
     window.open(`https://wa.me/${digits}?text=${message}`, '_blank', 'noopener,noreferrer');
   };
 
@@ -554,8 +554,8 @@ function MerchantInventory({ profile }: any) {
                 {order.wallet_payment_id && <p className="mt-1 break-all text-xs text-slate-500">Payment receipt: {order.wallet_payment_id}</p>}
                 <p className="mt-1 text-xs font-bold text-slate-500">Quantity: {order.quantity || 1} · {order.status}</p>
                 <div className="mt-3 space-y-2 text-sm text-slate-600">
-                  <p className="flex items-center gap-2"><User size={14} />{order.rider?.full_name || 'Customer'}</p>
-                  <p className="flex items-center gap-2"><Phone size={14} />{order.customer_phone || order.rider?.phone || 'No phone provided'}</p>
+                  <p className="flex items-center gap-2"><User size={14} />{'Customer'}</p>
+                  <p className="flex items-center gap-2"><Phone size={14} />{order.customer_phone || 'No phone provided'}</p>
                   <p className="flex items-center gap-2"><MapPin size={14} />{order.delivery_location || 'No location provided'}</p>
                   {order.delivery_time && <p className="flex items-center gap-2"><CalendarClock size={14} />{new Date(order.delivery_time).toLocaleString()}</p>}
                 </div>
