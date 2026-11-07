@@ -147,18 +147,34 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
   const location = useLocation();
   const {session:portalSession}=useAuth();
   const sectionOwner=portalSession?.user.id||'';
+  const sessionRole=portalSession?.roles?.length===1?portalSession.roles[0]:null;
+  const firstName=portalSession?.user?.firstName||'';
+  const lastName=portalSession?.user?.lastName||'';
+  const sessionProfile=sectionOwner&&sessionRole?{
+    id:sectionOwner,
+    email:portalSession?.user?.email||'',
+    phone:portalSession?.user?.phone||'',
+    phone_number:portalSession?.user?.phone||'',
+    first_name:firstName,
+    last_name:lastName,
+    full_name:[firstName,lastName].filter(Boolean).join(' '),
+    role:sessionRole,
+    kyc_status:portalSession?.kycStatus||'not_started',
+  }:null;
+  const hasSessionProfile=!!sessionProfile;
 
   const [profile, setProfile] =
-    useState<any>(null);
+    useState<any>(()=>sessionProfile);
 
   const [wallet, setWallet] =
     useState<any>(null);
 
   const [loading, setLoading] =
-    useState(true);
+    useState(!sessionProfile);
 
   const [portalError, setPortalError] =
     useState('');
+  const [portalNotice,setPortalNotice]=useState('');
 
   const [activeSection, setActiveSection] =
     useState<PortalSection>(()=>{try{const saved=sessionStorage.getItem(`matmove:portal-section:v1:${sectionOwner}`);return ['home','ride','wallet','trips','shop','inventory','account'].includes(saved||'')?saved as PortalSection:'home';}catch{return 'home';}});
@@ -198,103 +214,106 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
 
   const fetchUserData =
     useCallback(async () => {
-      try {
-        setPortalError('');
-        setLoading(true);
+      const userId=sectionOwner;
+      if(!userId){
+        if(!hasSessionProfile){setPortalError('No verified customer session. Sign in again.');setLoading(false);}
+        return;
+      }
 
-        const {
-          data: { session },
-        } =
-          await supabase.auth.getSession();
-
-        if (!session?.user) {
-          throw new Error(
-            'No active session.'
-          );
+      if(!hasSessionProfile)setLoading(true);
+      setPortalError('');
+      try{
+        const {data:{session},error:sessionError}=await supabase.auth.getSession();
+        if(sessionError||!session?.user||session.user.id!==userId){
+          throw new Error('Your sign-in changed. Sign in again to continue.');
         }
 
-        const userId = session.user.id;
+        // These reads are independent. Fetch them together instead of making
+        // profile -> roles -> wallet a serial startup chain.
+        const [profileResult,roleResult,walletResult]=await Promise.all([
+          supabase.from('profiles').select('*').eq('id',userId).maybeSingle(),
+          supabase.from('user_roles').select('role').eq('profile_id',userId),
+          supabase.from('wallets').select('*').eq('user_id',userId),
+        ]);
 
-        const {
-          data: profileData,
-          error: profileError,
-        } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
-
-        if (profileError) {
-          throw profileError;
-        }
-
-        if (!profileData) {
-          navigate('/select-role', {
-            replace: true,
-          });
+        if(profileResult.error)throw profileResult.error;
+        if(!profileResult.data){
+          navigate('/select-role',{replace:true});
           return;
         }
+        if(roleResult.error)throw roleResult.error;
 
-        const { data: assignedRoles, error: roleError } = await supabase.from('user_roles').select('role').eq('profile_id', userId);
-        if (roleError) throw roleError;
-        const resolvedRole = resolveCustomerRole(profileData, assignedRoles || []);
-        if (!resolvedRole) throw new Error('Your customer account type needs completing. Sign in again and finish account setup.');
-        const {
-          data: walletData,
-        } = await supabase
-          .from('wallets')
-          .select('*')
-          .eq('user_id', userId);
+        const resolvedRole=resolveCustomerRole(profileResult.data,roleResult.data||[]);
+        if(!resolvedRole)throw new Error('Your customer account type needs completing. Sign in again and finish account setup.');
+        if(sessionRole&&resolvedRole!==sessionRole){
+          throw new Error('Your customer account type has changed. Sign in again to refresh your secure session.');
+        }
 
-        const sleWallet = (
-          walletData || []
-        ).find(
-          item =>
-            String(
-              item.currency || ''
-            ).toUpperCase() === 'SLE'
-        );
-
+        const walletData=walletResult.error?[]:(walletResult.data||[]);
+        const sleWallet=walletData.find(item=>String(item.currency||'').toUpperCase()==='SLE');
         setProfile({
-          ...profileData,
-          id: userId,
-          email: session.user.email,
-          role: resolvedRole,
+          ...profileResult.data,
+          id:userId,
+          email:session.user.email||profileResult.data.email,
+          role:resolvedRole,
         });
-
-        setWallet({
-          ...(sleWallet || {
-            balance: 0,
-          }),
-          wallets: walletData || [],
-        });
-      } catch (err: any) {
-        setPortalError(err.message);
-      } finally {
+        if(!walletResult.error){
+          setWallet({...((sleWallet)||{balance:0}),wallets:walletData});
+        }
+        setPortalNotice(walletResult.error?'Your home is ready. Wallet details are still being refreshed; retry from Open Wallet.':'');
+      }catch(err:any){
+        const message=err?.message||'Your customer details could not be refreshed.';
+        if(hasSessionProfile){
+          // matmove_customer_me already validated this user and role. A transient
+          // profile/wallet read must not hide the verified customer home screen.
+          setPortalNotice('Some account details could not be refreshed. Your home screen remains available. Check your connection and retry.');
+        }else{
+          setPortalError(message);
+        }
+      }finally{
         setLoading(false);
       }
-    }, [location.pathname]);
+    },[hasSessionProfile,navigate,sectionOwner,sessionRole]);
 
   useEffect(() => {
-    fetchUserData();
+    void fetchUserData();
   }, [fetchUserData]);
 
-  useEffect(() => {
-    const userId = profile?.id;
-    if (!userId) return;
-    let active = true;
-    const refresh = async () => {
-      const {data, error} = await supabase.from('profiles').select('*').eq('id', userId).single();
-      if (active && !error && data) setProfile((old: any) => old?.id === userId ? {...old, ...data} : old);
-    };
-    const channel = supabase.channel(`customer-kyc-status:${userId}`).on('postgres_changes', {event:'UPDATE', schema:'public', table:'profiles', filter:`id=eq.${userId}`}, () => void refresh()).subscribe();
-    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 15000);
-    window.addEventListener('focus', refresh);
-    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); void supabase.removeChannel(channel); };
-  }, [profile?.id]);
+  useEffect(()=>{
+    if(sessionProfile){
+      setProfile((old:any)=>old?.id===sectionOwner?old:sessionProfile);
+      setLoading(false);
+    }
+  },[sectionOwner,sessionRole]);
 
-  // The secure passcode gate mounts this screen before profile reads complete.
-  // Do not construct the guide, header or dashboards with a null profile.
+  useEffect(() => {
+    const userId=profile?.id;
+    if(!userId)return;
+    let active=true;
+    const refresh=async()=>{
+      const {data,error}=await supabase.from('profiles').select('*').eq('id',userId).maybeSingle();
+      if(active&&!error&&data){
+        setProfile((old:any)=>old?.id===userId?{...old,...data,role:old.role}:old);
+      }
+    };
+    const refreshWhenVisible=()=>{
+      if(document.visibilityState==='visible')void refresh();
+    };
+    const channel=supabase.channel(`customer-kyc-status:${userId}`)
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'profiles',filter:`id=eq.${userId}`},()=>void refresh())
+      .subscribe();
+    window.addEventListener('focus',refreshWhenVisible);
+    document.addEventListener('visibilitychange',refreshWhenVisible);
+    return()=>{
+      active=false;
+      window.removeEventListener('focus',refreshWhenVisible);
+      document.removeEventListener('visibilitychange',refreshWhenVisible);
+      void supabase.removeChannel(channel);
+    };
+  },[profile?.id]);
+
+  // A verified AuthContext customer session is enough to render the shell.
+  // The detailed profile and wallet hydration above continues in the background.
   if (loading || (!profile && !portalError)) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
@@ -374,7 +393,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     <>{guide}
     <div className="portal-shell relative min-h-screen bg-slate-50 pb-24 [&_.mm-home-heading>button]:hidden">
       {accountHeader}
-      <div className="mx-auto max-w-6xl px-4"><KycStatusNotice profile={profile} onVerify={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal?resume=1'); }}/></div>
+      <div className="mx-auto max-w-6xl px-4"><KycStatusNotice profile={profile} onVerify={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal?resume=1'); }}/>{portalNotice&&<div role="status" className="my-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{portalNotice} <button type="button" className="ml-2 font-bold underline" onClick={()=>void fetchUserData()}>Retry</button></div>}</div>
       {activeSection === 'home' && <PortalHome key={`${profile.id}:${role}`} profile={profile} onNavigate={setActiveSection} />}
       {activeSection !== 'home' && role === 'rider' && (
         <RiderDashboard
