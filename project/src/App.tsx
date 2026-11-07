@@ -531,7 +531,7 @@ function AccountSection({
     } = await supabase
       .from('app_orders')
       .select(
-        '*, merchant:merchant_id(business_name, full_name)'
+        '*'
       )
       .eq('rider_id', profile.id)
       .order('created_at', {
@@ -1140,9 +1140,7 @@ function AccountSection({
                       {o.wallet_payment_id && <p className="mt-1 break-all text-xs">Payment receipt: {o.wallet_payment_id}</p>}
                       <div className="text-sm text-slate-500 mt-2 flex items-center gap-1.5">
                         <Store size={14} />
-                        {o.merchant?.business_name ||
-                          o.merchant?.full_name ||
-                          'Store Merchant'}
+                        {'Store Merchant'}
                       </div>
 
                       <div className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
