@@ -87,7 +87,9 @@ export default function PortalHome({ profile, onNavigate }: Props) {
   const [visible, setVisible] = useState(false);
   const [wallets, setWallets] = useState<any>(null);
   const [balanceLoading, setBalanceLoading] = useState(true);
+  const [balanceRefreshing, setBalanceRefreshing] = useState(false);
   const [balanceError, setBalanceError] = useState('');
+  const walletSnapshot = useRef<any>(null);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
   const [preferencesLoading, setPreferencesLoading] = useState(true);
   const [preferencesError, setPreferencesError] = useState('');
@@ -136,26 +138,99 @@ export default function PortalHome({ profile, onNavigate }: Props) {
     }
   }, [uid, sameIdentity]);
 
-  const refreshWallets = useCallback(async () => {
+  const refreshWallets = useCallback(async (quiet = false) => {
     if (balanceBusy.current) return;
     balanceBusy.current = true;
-    if (mounted.current) setBalanceLoading(true);
+    const previous = walletSnapshot.current;
+    const hasSnapshot = previous?.user_id === uid;
+
+    if (mounted.current) {
+      if (!hasSnapshot) setBalanceLoading(true);
+      else if (!quiet) setBalanceRefreshing(true);
+      setBalanceError('');
+    }
+
+    const preserveLastConfirmed = (fresh: any, old: any) => {
+      const freshConfirmed =
+        fresh?.user_id === uid &&
+        fresh.balanceAvailable === true &&
+        typeof fresh.balance === 'number' &&
+        Number.isFinite(fresh.balance);
+
+      if (freshConfirmed) return { ...fresh, balanceStale: false };
+
+      const oldConfirmed =
+        old?.user_id === uid &&
+        old.balanceAvailable === true &&
+        typeof old.balance === 'number' &&
+        Number.isFinite(old.balance);
+
+      if (oldConfirmed) {
+        return {
+          ...old,
+          balanceStale: true,
+          balanceError: fresh?.balanceError || 'Live balance refresh is unavailable.',
+        };
+      }
+
+      return fresh ? { ...fresh, balanceStale: true } : null;
+    };
+
     try {
       if (!await sameIdentity()) throw new Error('Please sign in again.');
       const { response, data, finish } = await walletFetch('/api/get-live-wallet', {});
       if (!response.ok) throw new Error(data.error || 'Could not load balances.');
+
       if (mounted.current && await sameIdentity()) {
-        setWallets(data);
-        setBalanceError('');
+        const old = walletSnapshot.current;
+        const next = {
+          ...data,
+          sleWallet: preserveLastConfirmed(data.sleWallet, old?.sleWallet),
+          usdWallet: preserveLastConfirmed(data.usdWallet, old?.usdWallet),
+        };
+        walletSnapshot.current = next;
+        setWallets(next);
+
+        const hasStaleBalance =
+          next.sleWallet?.balanceStale === true ||
+          next.usdWallet?.balanceStale === true;
+        setBalanceError(
+          hasStaleBalance
+            ? (data.warnings || []).join(' ') || 'Showing your last confirmed balance while a live refresh is unavailable.'
+            : '',
+        );
         finish();
       }
     } catch (error: any) {
-      if (mounted.current) { setWallets(null); setBalanceError(error.message || 'Could not load balances.'); }
+      if (mounted.current) {
+        const last = walletSnapshot.current;
+        if (last?.user_id === uid) {
+          const stale = {
+            ...last,
+            sleWallet: last.sleWallet
+              ? { ...last.sleWallet, balanceStale: last.sleWallet.balanceAvailable === true }
+              : null,
+            usdWallet: last.usdWallet
+              ? { ...last.usdWallet, balanceStale: last.usdWallet.balanceAvailable === true }
+              : null,
+          };
+          walletSnapshot.current = stale;
+          setWallets(stale);
+        }
+        setBalanceError(
+          last?.user_id === uid
+            ? 'Live balance refresh failed. Your last confirmed amount is still shown; new transactions are checked by the server.'
+            : (error?.message || 'Could not load balances.'),
+        );
+      }
     } finally {
       balanceBusy.current = false;
-      if (mounted.current) setBalanceLoading(false);
+      if (mounted.current) {
+        setBalanceLoading(false);
+        setBalanceRefreshing(false);
+      }
     }
-  }, [sameIdentity]);
+  }, [sameIdentity, uid]);
 
   const fetchTravelAndEvents = useCallback(async () => {
     if (travelBusy.current) { travelRefreshQueued.current = true; return; }
@@ -229,9 +304,9 @@ export default function PortalHome({ profile, onNavigate }: Props) {
     mounted.current = true;
     void refreshPreferences(); void refreshWallets(); void refreshTrips(); void fetchTravelAndEvents();
     const refreshVisible = () => {
-      if (document.visibilityState === 'visible') { void refreshWallets(); void refreshTrips(); void fetchTravelAndEvents(); }
+      if (document.visibilityState === 'visible') { void refreshWallets(true); void refreshTrips(); void fetchTravelAndEvents(); }
     };
-    const timer = window.setInterval(refreshVisible, 30000);
+    const timer = window.setInterval(refreshVisible, 60000);
     const liveChannel = supabase.channel(`customer-travel-events-${uid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'travel_settings', filter: 'id=eq.bus_ghana' }, () => { void fetchTravelAndEvents(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'travel_bookings' }, () => { void fetchTravelAndEvents(); })
@@ -263,7 +338,8 @@ export default function PortalHome({ profile, onNavigate }: Props) {
   };
 
   const wallet = wallets?.[currency === 'SLE' ? 'sleWallet' : 'usdWallet'];
-  const verifiedBalance = wallet?.user_id === uid && wallet?.balanceAvailable === true && typeof wallet.balance === 'number' && Number.isFinite(wallet.balance);
+  const displayableBalance = wallet?.user_id === uid && wallet?.balanceAvailable === true && typeof wallet.balance === 'number' && Number.isFinite(wallet.balance);
+  const verifiedBalance = displayableBalance && wallet?.balanceStale !== true;
   const name = String(profile.first_name || profile.full_name || profile.business_name || 'there').split(' ')[0];
   const shortcuts = role === 'driver'
     ? [{ section: 'ride', label: 'Driver radar', detail: 'Go online and find requests', Icon: Navigation }, { section: 'trips', label: 'My trips', detail: 'View trip details and history', Icon: Car }]
@@ -271,7 +347,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
 
   const availableSeats = Math.max(0, Number(busSettings.total_seats || 50) - confirmedSeats);
   const sleWalletForTravel = wallets?.sleWallet;
-  const travelWalletBalance = sleWalletForTravel?.user_id === uid && sleWalletForTravel?.balanceAvailable === true && typeof sleWalletForTravel.balance === 'number' ? sleWalletForTravel.balance : 0;
+  const travelWalletBalance = sleWalletForTravel?.user_id === uid && sleWalletForTravel?.balanceAvailable === true && sleWalletForTravel?.balanceStale !== true && typeof sleWalletForTravel.balance === 'number' ? sleWalletForTravel.balance : 0;
   const userPhone = String(profile.phone || profile.phone_number || '');
   const isBusFull = availableSeats <= 0;
 
@@ -286,10 +362,10 @@ export default function PortalHome({ profile, onNavigate }: Props) {
       <div className="mm-welcome"><p className="mm-eyebrow">{role === 'merchant' ? 'Business space' : role === 'driver' ? 'Driver space' : 'Your MatMove'}</p><h1>Hello, {name}.</h1><p>Where will today take you?</p></div>
       <div className="mm-home-grid">
         <section className={`mm-home-wallet mm-home-wallet-${currency.toLowerCase()}`} aria-label="Wallet overview">
-          <div className="mm-row"><div className="mm-currency-tabs" aria-label="Wallet currency">{(['SLE','USD'] as const).map(c => <button key={c} type="button" aria-pressed={currency === c} onClick={() => { setCurrency(c); setVisible(false); }}>{c}</button>)}</div><button type="button" className="mm-glass-button" aria-label="Refresh balances" disabled={balanceLoading} onClick={() => void refreshWallets()}><RefreshCw size={18} className={balanceLoading ? 'animate-spin' : ''}/></button></div>
+          <div className="mm-row"><div className="mm-currency-tabs" aria-label="Wallet currency">{(['SLE','USD'] as const).map(c => <button key={c} type="button" aria-pressed={currency === c} onClick={() => { setCurrency(c); setVisible(false); }}>{c}</button>)}</div><button type="button" className="mm-glass-button" aria-label="Refresh balances" disabled={balanceLoading||balanceRefreshing} onClick={() => void refreshWallets()}><RefreshCw size={18} className={balanceLoading||balanceRefreshing ? 'animate-spin' : ''}/></button></div>
           <p className="mm-wallet-label">{currency === 'SLE' ? 'Leone wallet' : 'US dollar wallet'}</p>
-          <div className="mm-balance-row"><strong aria-live="polite">{currency} {visible ? balanceLoading ? <span className="inline-block h-6 w-24 bg-white/20 rounded animate-pulse"></span> : verifiedBalance ? wallet.balance.toFixed(2) : '—' : <span aria-label="Balance hidden">••••••</span>}</strong><button type="button" className="mm-glass-button" aria-label={visible ? 'Hide balance' : 'Show balance'} aria-pressed={visible} onClick={() => setVisible(v => !v)}>{visible ? <EyeOff size={20}/> : <Eye size={20}/>}</button></div>
-          <p className="mm-wallet-caption">{balanceLoading ? <span className="inline-block h-3 w-36 rounded bg-white/20 animate-pulse align-middle" aria-label="Loading wallet status" /> : balanceError ? 'Balance could not be loaded.' : wallet?.is_frozen || profile.is_wallet_frozen ? 'Wallet frozen · contact support' : !wallet ? 'Open Wallet to check setup.' : !verifiedBalance ? 'Open Wallet to check account status.' : 'Available balance · verified with your wallet provider'}</p>
+          <div className="mm-balance-row"><strong aria-live="polite">{currency} {visible ? balanceLoading ? <span className="inline-block h-6 w-24 bg-white/20 rounded animate-pulse"></span> : displayableBalance ? wallet.balance.toFixed(2) : '—' : <span aria-label="Balance hidden">••••••</span>}</strong><button type="button" className="mm-glass-button" aria-label={visible ? 'Hide balance' : 'Show balance'} aria-pressed={visible} onClick={() => setVisible(v => !v)}>{visible ? <EyeOff size={20}/> : <Eye size={20}/>}</button></div>
+          <p className="mm-wallet-caption">{balanceLoading ? <span className="inline-block h-3 w-36 rounded bg-white/20 animate-pulse align-middle" aria-label="Loading wallet status" /> : wallet?.balanceStale === true && displayableBalance ? 'Last confirmed balance · live refresh unavailable' : balanceError && !displayableBalance ? 'Balance could not be loaded.' : wallet?.is_frozen || profile.is_wallet_frozen ? 'Wallet frozen · contact support' : !wallet ? 'Open Wallet to check setup.' : !verifiedBalance ? 'Open Wallet to check account status.' : 'Available balance · verified with your wallet provider'}</p>
           <button className="mm-wallet-open" type="button" onClick={() => onNavigate('wallet')}>Open wallet <ArrowRight size={17}/></button>
         </section>
 
@@ -448,7 +524,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
         </section>
       </div>
 
-      {balanceError && <div role="alert" className="mm-alert">{balanceError} <button type="button" disabled={balanceLoading} onClick={() => void refreshWallets()}>Retry</button></div>}
+      {balanceError && <div role="status" className="mm-alert">{balanceError} <button type="button" disabled={balanceLoading||balanceRefreshing} onClick={() => void refreshWallets()}>Retry</button></div>}
       
       <section className="mm-surface" aria-label="MatMove games">
         <div className="mm-row"><h2>Play MatMove Games</h2><span className="text-xs text-slate-500">18+ · Play responsibly</span></div>
