@@ -70,10 +70,14 @@ export default function TripHistory({ userId, role }: Props) {
     try{
       const before=await supabase.auth.getSession();if(before.error||before.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
       if(!live())return;
-      const result = await supabase.from('bookings').select('*, driver:driver_id(full_name), rider:rider_id(full_name)')
-        .eq(role === 'driver' ? 'driver_id' : 'rider_id', id).order('created_at', { ascending: false }).abortSignal(controller.signal);
+      const result = await supabase.rpc('matmove_customer_trip_history', { p_role: role })
+        .abortSignal(controller.signal);
       if(result.error)throw Error('Trip history could not be loaded. Retry; no records have been deleted.');
-      if(!Array.isArray(result.data)||result.data.some(t=>t[role==='driver'?'driver_id':'rider_id']!==id))throw Error('Trip ownership could not be verified.');
+      if(!Array.isArray(result.data)||result.data.some(t=>!t||typeof t.id!=='string'||t[role==='driver'?'driver_id':'rider_id']!==id
+        || !(t.driver===null||t.driver===undefined||typeof t.driver.full_name==='string')
+        || !(t.rider===null||t.rider===undefined||typeof t.rider.full_name==='string'))) {
+        throw Error('Trip ownership could not be verified.');
+      }
       const after=await supabase.auth.getSession();if(after.error||after.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
       if(live()){setTrips(result.data);setLoadedOwner(id);setError('');}
     }catch(e){if(live()){setTrips([]);setError(e instanceof Error?e.message:'Trip history unavailable.');}}
