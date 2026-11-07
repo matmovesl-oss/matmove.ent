@@ -170,6 +170,12 @@ export default function WalletCards({
                 </button>
               </div>
 
+              {wallet?.balanceStale === true && available && (
+                <p role="status" className="mt-2 text-[11px] leading-relaxed text-white/85">
+                  Last confirmed balance. Live refresh is unavailable; new transactions are checked securely before processing.
+                </p>
+              )}
+
               {id ? (
                 <>
                   <p className="mt-4 break-all font-mono text-xs text-white/80">
