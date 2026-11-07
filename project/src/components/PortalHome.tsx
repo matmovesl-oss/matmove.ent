@@ -142,7 +142,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
     if (balanceBusy.current) return;
     balanceBusy.current = true;
     const previous = walletSnapshot.current;
-    const hasSnapshot = previous?.user_id === uid;
+    const hasSnapshot = previous?.sleWallet?.user_id === uid || previous?.usdWallet?.user_id === uid;
 
     if (mounted.current) {
       if (!hasSnapshot) setBalanceLoading(true);
@@ -204,7 +204,8 @@ export default function PortalHome({ profile, onNavigate }: Props) {
     } catch (error: any) {
       if (mounted.current) {
         const last = walletSnapshot.current;
-        if (last?.user_id === uid) {
+        const hasLastConfirmed = last?.sleWallet?.user_id === uid || last?.usdWallet?.user_id === uid;
+        if (hasLastConfirmed) {
           const stale = {
             ...last,
             sleWallet: last.sleWallet
@@ -218,7 +219,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
           setWallets(stale);
         }
         setBalanceError(
-          last?.user_id === uid
+          hasLastConfirmed
             ? 'Live balance refresh failed. Your last confirmed amount is still shown; new transactions are checked by the server.'
             : (error?.message || 'Could not load balances.'),
         );
