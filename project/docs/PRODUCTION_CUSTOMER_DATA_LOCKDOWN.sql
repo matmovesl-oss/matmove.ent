@@ -91,10 +91,11 @@ grant select, insert on table public.bookings to authenticated;
 
 revoke all privileges on table public.travel_bookings from authenticated;
 grant select, insert, delete on table public.travel_bookings to authenticated;
-grant update (status, cancel_reason, cancel_requested_at) on table public.travel_bookings to authenticated;
+grant update (status, cancel_reason, cancel_requested_at, admin_notes, boarded_at, boarded_by) on table public.travel_bookings to authenticated;
 
 revoke all privileges on table public.event_tickets from authenticated;
 grant select on table public.event_tickets to authenticated;
+grant update (status, admitted_at) on table public.event_tickets to authenticated;
 
 revoke all privileges on table public.app_orders from authenticated;
 grant select, insert on table public.app_orders to authenticated;
@@ -358,7 +359,24 @@ on public.audit_logs as restrictive for select to anon using (false);
 -- Legacy notifications are replaced by the per-recipient MatMove inbox/RPC.
 -- Do not expose audience/target records directly to browser clients.
 
--- Public events contain only published information. All event mutations are backend-owned.
+-- Published events are public. Event management stays available only to the owner or
+-- staff with the dashboard permission; there is no public client write access.
+drop policy if exists matmove_platform_events_published_read on public.platform_events;
+drop policy if exists matmove_platform_events_published_read_scope on public.platform_events;
+drop policy if exists matmove_platform_events_admin_write on public.platform_events;
+grant insert, update, delete on table public.platform_events to authenticated;
+create policy matmove_platform_events_admin_write
+on public.platform_events as permissive for all to authenticated
+using (
+  (select public.is_admin())
+  or (select public.matmove_admin_any(array['dashboard']::text[]))
+)
+with check (
+  (select public.is_admin())
+  or (select public.matmove_admin_any(array['dashboard']::text[]))
+);
+
+-- Published events are public and read-only for ordinary visitors.
 create policy matmove_platform_events_published_read
 on public.platform_events as permissive for select to anon, authenticated
 using (
@@ -568,6 +586,56 @@ begin
   return wallet_id;
 end;
 $function$;
+
+-- Travel booking settings remain public-readable, but only authorised Admin staff can edit them.
+grant insert, update on table public.travel_settings to authenticated;
+drop policy if exists matmove_travel_settings_admin_write on public.travel_settings;
+create policy matmove_travel_settings_admin_write
+on public.travel_settings as permissive for all to authenticated
+using (
+  (select public.is_admin())
+  or (select public.matmove_admin_any(array['dispatch']::text[]))
+)
+with check (
+  (select public.is_admin())
+  or (select public.matmove_admin_any(array['dispatch']::text[]))
+);
+
+-- Dispatch Admins retain the direct approval, rejection and boarding controls required by
+-- the Admin Travel page. Customer access stays limited to their own unpaid booking/cancellation.
+grant update (status, admin_notes, boarded_at, boarded_by) on table public.travel_bookings to authenticated;
+drop policy if exists matmove_travel_bookings_dispatch_update on public.travel_bookings;
+create policy matmove_travel_bookings_dispatch_update
+on public.travel_bookings as permissive for update to authenticated
+using (
+  (select public.is_admin())
+  or (select public.matmove_admin_any(array['dispatch']::text[]))
+)
+with check (
+  (select public.is_admin())
+  or (select public.matmove_admin_any(array['dispatch']::text[]))
+);
+
+-- Event gate staff may mark a ticket admitted; ticket ownership and payment fields stay backend-owned.
+drop policy if exists matmove_event_tickets_admin_read on public.event_tickets;
+create policy matmove_event_tickets_admin_read
+on public.event_tickets as permissive for select to authenticated
+using (
+  (select public.is_admin())
+  or (select public.matmove_admin_any(array['dashboard','dispatch']::text[]))
+);
+
+drop policy if exists matmove_event_tickets_dispatch_checkin on public.event_tickets;
+create policy matmove_event_tickets_dispatch_checkin
+on public.event_tickets as permissive for update to authenticated
+using (
+  (select public.is_admin())
+  or (select public.matmove_admin_any(array['dispatch']::text[]))
+)
+with check (
+  (select public.is_admin())
+  or (select public.matmove_admin_any(array['dispatch']::text[]))
+);
 
 -- Correct a legacy RLS helper which previously returned TRUE for every ordinary customer.
 create or replace function public.matmove_dispatch_booking_visible(
