@@ -144,7 +144,6 @@ export function PortalApp() {
 
 function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
   const navigate = useNavigate();
-  const location = useLocation();
   const {session:portalSession}=useAuth();
   const sectionOwner=portalSession?.user.id||'';
   const sessionRole=portalSession?.roles?.length===1?portalSession.roles[0]:null;
