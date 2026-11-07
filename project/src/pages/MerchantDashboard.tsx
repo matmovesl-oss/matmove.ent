@@ -122,11 +122,22 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     try {
       const { response, data } = await walletFetch('/api/get-live-wallet', {});
       if (!response.ok) throw new Error(data.error || 'Unable to read wallet balances.');
-      if (data.sleWallet) setSleWallet(data.sleWallet);
-      if (data.usdWallet) setUsdWallet(data.usdWallet);
+      if (data.sleWallet) setSleWallet((previous: any) => {
+        const fresh = data.sleWallet;
+        if (fresh.balanceAvailable === true && typeof fresh.balance === 'number' && Number.isFinite(fresh.balance)) return { ...fresh, balanceStale: false };
+        if (previous?.balanceAvailable === true && typeof previous.balance === 'number' && Number.isFinite(previous.balance)) return { ...previous, balanceStale: true, balanceError: fresh.balanceError || 'Live balance refresh is unavailable.' };
+        return { ...fresh, balanceStale: true };
+      });
+      if (data.usdWallet) setUsdWallet((previous: any) => {
+        const fresh = data.usdWallet;
+        if (fresh.balanceAvailable === true && typeof fresh.balance === 'number' && Number.isFinite(fresh.balance)) return { ...fresh, balanceStale: false };
+        if (previous?.balanceAvailable === true && typeof previous.balance === 'number' && Number.isFinite(previous.balance)) return { ...previous, balanceStale: true, balanceError: fresh.balanceError || 'Live balance refresh is unavailable.' };
+        return { ...fresh, balanceStale: true };
+      });
       if (data.transactions) setTransactions(data.transactions);
       setWalletNotice(data.sleWallet?.balanceAvailable === false ? data.sleWallet.balanceError || 'Balance unavailable.' : (data.warnings || []).join(' '));
-    } catch (err: any) { setWalletNotice(err.message || 'Wallet refresh failed.'); setSleWallet((previous: any) => previous ? { ...previous, balanceAvailable: false } : null); } finally { balanceBusy.current = false; setIsRefreshing(false); }
+    } catch (err: any) { setWalletNotice(err.message || 'Wallet refresh failed.'); setSleWallet((previous: any) => previous ? { ...previous, balanceStale: previous.balanceAvailable === true } : null);
+      setUsdWallet((previous: any) => previous ? { ...previous, balanceStale: previous.balanceAvailable === true } : null); } finally { balanceBusy.current = false; setIsRefreshing(false); }
   };
 
   const hasSleAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || ''));
