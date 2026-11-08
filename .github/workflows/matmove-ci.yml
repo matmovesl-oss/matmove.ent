@@ -28,7 +28,7 @@ jobs:
         run: npm ci
       - name: Run regression tests
         working-directory: project
-        run: npm run test:release && node --test test/driver-kyc-profile-id.test.js
+        run: npm run test:release && node --test test/driver-kyc-profile-id.test.js test/booking-visibility-isolation.test.js
       - name: Type check
         if: always()
         working-directory: project
