@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "test": "node --test test/*.test.js test/*.test.mjs",
-    "test:release": "node --test test/customer-ops-enhancements.test.mjs test/customer-assistance-ui.test.js",
+    "test:release": "node --test test/customer-ops-enhancements.test.mjs test/customer-assistance-ui.test.js test/travel-event-payments.test.js",
     "test:legacy": "node --test test/*.test.js test/*.test.mjs"
   },
   "dependencies": {
