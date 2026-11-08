@@ -9,6 +9,10 @@
       "dest": "/api/accept-ride-escrow?action=reconcile"
     },
     {
+      "src": "/api/process-monime-webhooks/?",
+      "dest": "/api/create-monime-payout?action=monime_webhooks"
+    },
+    {
       "handle": "filesystem"
     },
     {
@@ -22,7 +26,7 @@
   ],
   "crons": [
     {
-      "path": "/api/create-monime-payout?action=monime_webhooks",
+      "path": "/api/process-monime-webhooks",
       "schedule": "* * * * *"
     }
   ]
