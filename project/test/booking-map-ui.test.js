@@ -183,6 +183,6 @@ test('starting voice editing clears the previous destination and fare before any
 
 test('Ride booking insert uses the live bookings schema passenger_count column', async()=>{
  const source=await readFile('src/pages/RiderDashboard.tsx','utf8');
- assert.match(source,/passenger_count:\\s*passengerCount/);
- assert.doesNotMatch(source,/passengers_count:\\s*passengerCount/);
+ assert.match(source,/passenger_count:\s*passengerCount/);
+ assert.doesNotMatch(source,/passengers_count:\s*passengerCount/);
 });
