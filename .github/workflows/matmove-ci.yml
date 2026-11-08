@@ -28,7 +28,7 @@ jobs:
         run: npm ci
       - name: Run regression tests
         working-directory: project
-        run: npm run test:release
+        run: npm run test:release && node --test test/wallet-transfer-idempotency-isolation.test.js test/conversion-withdrawal-idempotency-isolation.test.js
       - name: Type check
         if: always()
         working-directory: project
