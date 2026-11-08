@@ -26,18 +26,20 @@ begin
   end if;
 
   if p_event_id is null or p_wallet_id is null or p_user_id is null
+     or nullif(trim(coalesce(p_financial_account_id,'')),'') is null
+     or nullif(trim(coalesce(p_checkout_session_id,'')),'') is null
      or p_amount_minor is null or p_amount_minor <= 0
      or p_amount_minor > 1000000000000 then
     raise exception 'INVALID: checkout credit parameters are invalid';
   end if;
 
   if p_verified_checkout is null
-     or p_verified_checkout->>'status' <> 'completed'
-     or p_verified_checkout->>'id' <> p_checkout_session_id
-     or p_verified_checkout->>'financialAccountId' <> p_financial_account_id
-     or (p_verified_checkout->>'amountMinor')::bigint <> p_amount_minor
-     or p_verified_checkout->>'currency' <> 'SLE'
-     or p_verified_checkout->>'userId' <> p_user_id::text then
+     or p_verified_checkout->>'status' is distinct from 'completed'
+     or p_verified_checkout->>'id' is distinct from p_checkout_session_id
+     or p_verified_checkout->>'financialAccountId' is distinct from p_financial_account_id
+     or (p_verified_checkout->>'amountMinor')::bigint is distinct from p_amount_minor
+     or p_verified_checkout->>'currency' is distinct from 'SLE'
+     or p_verified_checkout->>'userId' is distinct from p_user_id::text then
     raise exception 'INVALID: verified checkout receipt does not match';
   end if;
 
@@ -72,7 +74,8 @@ begin
   where id = p_wallet_id
   for update;
 
-  if not found or v_wallet.user_id <> p_user_id or v_wallet.currency <> 'SLE' then
+  if not found or v_wallet.user_id is distinct from p_user_id
+     or v_wallet.currency is distinct from 'SLE' then
     raise exception 'FORBIDDEN: wallet ownership or currency mismatch';
   end if;
 
@@ -80,7 +83,8 @@ begin
     raise exception 'CONFLICT: wallet is frozen; manual review is required';
   end if;
 
-  if coalesce(v_wallet.monime_account_id, v_wallet.metadata->>'monime_account_id') <> p_financial_account_id
+  if coalesce(v_wallet.monime_account_id, v_wallet.metadata->>'monime_account_id')
+       is distinct from p_financial_account_id
      or (v_wallet.monime_account_id is not null
          and v_wallet.metadata->>'monime_account_id' is not null
          and v_wallet.monime_account_id <> v_wallet.metadata->>'monime_account_id') then
@@ -105,8 +109,7 @@ begin
   v_amount := p_amount_minor::numeric / 100;
 
   update public.wallets
-  set balance=balance+v_amount,
-      updated_at=now()
+  set balance=balance+v_amount
   where id=v_wallet.id;
 
   insert into public.wallet_transactions(
