@@ -1,6 +1,10 @@
 -- A verified Monime checkout may credit only the exact wallet/account
 -- selected by the authenticated customer when MatMove created the session.
--- The event row is locked so duplicate deliveries cannot post twice.
+-- Both event IDs and checkout session IDs are idempotency boundaries.
+create unique index if not exists wallet_transactions_monime_checkout_unique
+on public.wallet_transactions(reference_code)
+where reference_code like 'MONIME-CHECKOUT:%';
+
 create or replace function public.matmove_credit_monime_checkout(
   p_event_id uuid,
   p_wallet_id uuid,
@@ -59,7 +63,7 @@ begin
     raise exception 'FORBIDDEN: webhook event is not eligible for wallet credit';
   end if;
 
-  v_reference := 'MONIME-WEBHOOK:' || v_event.event_id;
+  v_reference := 'MONIME-CHECKOUT:' || p_checkout_session_id;
 
   if v_event.processing_status = 'processed' then
     return jsonb_build_object('success',true,'duplicate',true,'event_id',v_event.id);
