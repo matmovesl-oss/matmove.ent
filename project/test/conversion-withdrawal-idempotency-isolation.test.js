@@ -64,22 +64,22 @@ async function makeDb(){
       v_effective_idempotency_key:=coalesce(nullif(trim(p_idempotency_key),''),'FX-'||gen_random_uuid()::text);
       perform pg_advisory_xact_lock(hashtextextended(v_effective_idempotency_key,0));
 
-      SELECT jsonb_build_object(
-        'success', true,
-        'duplicate', true,
-        'payment_transaction_id', pt.id,
-        'status', pt.status,
-        'amount', pt.amount,
-        'currency', pt.currency,
-        'idempotency_key', pt.idempotency_key,
-        'message',
-          'Currency conversion already processed'
-      )
-      INTO v_existing_payment
-      FROM public.payment_transactions pt
-      WHERE pt.idempotency_key =
-        v_effective_idempotency_key
-      LIMIT 1;
+  SELECT jsonb_build_object(
+    'success', true,
+    'duplicate', true,
+    'payment_transaction_id', pt.id,
+    'status', pt.status,
+    'amount', pt.amount,
+    'currency', pt.currency,
+    'idempotency_key', pt.idempotency_key,
+    'message',
+      'Currency conversion already processed'
+  )
+  INTO v_existing_payment
+  FROM public.payment_transactions pt
+  WHERE pt.idempotency_key =
+    v_effective_idempotency_key
+  LIMIT 1;
 
       IF v_existing_payment IS NOT NULL THEN
         RETURN v_existing_payment;
@@ -110,24 +110,24 @@ async function makeDb(){
       v_effective_idempotency_key:=coalesce(nullif(trim(p_idempotency_key),''),'WD-'||gen_random_uuid()::text);
       perform pg_advisory_xact_lock(hashtextextended(v_effective_idempotency_key,0));
 
-      SELECT jsonb_build_object(
-        'success', true,
-        'duplicate', true,
-        'payment_transaction_id', pt.id,
-        'withdrawal_id', wr.id,
-        'status', pt.status,
-        'amount', pt.amount,
-        'currency', pt.currency,
-        'idempotency_key', pt.idempotency_key,
-        'reference_code', wr.reference_code,
-        'message', 'Withdrawal request already exists'
-      )
-      INTO v_existing_payment
-      FROM public.payment_transactions pt
-      LEFT JOIN public.withdrawal_requests wr
-        ON wr.payment_transaction_id = pt.id
-      WHERE pt.idempotency_key = v_effective_idempotency_key
-      LIMIT 1;
+  SELECT jsonb_build_object(
+    'success', true,
+    'duplicate', true,
+    'payment_transaction_id', pt.id,
+    'withdrawal_id', wr.id,
+    'status', pt.status,
+    'amount', pt.amount,
+    'currency', pt.currency,
+    'idempotency_key', pt.idempotency_key,
+    'reference_code', wr.reference_code,
+    'message', 'Withdrawal request already exists'
+  )
+  INTO v_existing_payment
+  FROM public.payment_transactions pt
+  LEFT JOIN public.withdrawal_requests wr
+    ON wr.payment_transaction_id = pt.id
+  WHERE pt.idempotency_key = v_effective_idempotency_key
+  LIMIT 1;
 
       IF v_existing_payment IS NOT NULL THEN
         RETURN v_existing_payment;
