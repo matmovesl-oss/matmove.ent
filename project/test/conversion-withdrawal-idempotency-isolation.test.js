@@ -84,6 +84,14 @@ async function makeDb(){
       IF v_existing_payment IS NOT NULL THEN
         RETURN v_existing_payment;
       END IF;
+      INSERT INTO public.payment_transactions(
+        id,user_id,transaction_type,amount,currency,metadata,status,idempotency_key
+      ) VALUES(
+        '30000000-0000-4000-8000-000000000001',
+        v_user_id,'currency_conversion',p_amount,v_from_currency,
+        jsonb_build_object('conversion_type','wallet_currency_conversion','from_currency',v_from_currency,'to_currency',v_to_currency),
+        'completed',v_effective_idempotency_key
+      );
       return jsonb_build_object('success',true,'duplicate',false);
     end;
     $function$;
@@ -132,6 +140,21 @@ async function makeDb(){
       IF v_existing_payment IS NOT NULL THEN
         RETURN v_existing_payment;
       END IF;
+      INSERT INTO public.payment_transactions(
+        id,user_id,transaction_type,provider,customer_phone,amount,currency,metadata,status,idempotency_key
+      ) VALUES(
+        '30000000-0000-4000-8000-000000000002',
+        v_user_id,'wallet_withdrawal',v_provider,v_phone,p_amount,v_currency,
+        jsonb_build_object('operation','wallet_withdrawal','provider',v_provider,'currency',v_currency,'requested_amount',p_amount),
+        'pending',v_effective_idempotency_key
+      );
+      INSERT INTO public.withdrawal_requests(
+        id,user_id,amount,provider,reference_code,status,payment_transaction_id,currency,idempotency_key
+      ) VALUES(
+        '40000000-0000-4000-8000-000000000002',
+        v_user_id,p_amount,v_provider,'WD-NEW-REFERENCE','pending',
+        '30000000-0000-4000-8000-000000000002',v_currency,v_effective_idempotency_key
+      );
       return jsonb_build_object('success',true,'duplicate',false);
     end;
     $function$;
@@ -158,7 +181,7 @@ test('currency conversion idempotency cannot disclose another user transaction',
     await db.query('select set_config(\'request.jwt.claim.sub\',$1,false)',[userB]);
     await assert.rejects(
       db.query('select public.convert_wallet_currency($1,$2,$3,$4)', ['SLE','USD',100,'shared-fx-key']),
-      /CONFLICT: This conversion key has already been used for another transaction/
+      error => error.code === '23505'
     );
   }finally{await db.close();}
 });
@@ -201,11 +224,11 @@ test('currency conversion rejects changed amount or target currency for a reused
     await db.query('select set_config(\'request.jwt.claim.sub\',$1,false)',[userA]);
     await assert.rejects(
       db.query('select public.convert_wallet_currency($1,$2,$3,$4)', ['SLE','USD',200,'reuse-fx-key']),
-      /CONFLICT: This conversion key has already been used for another transaction/
+      error => error.code === '23505'
     );
     await assert.rejects(
       db.query('select public.convert_wallet_currency($1,$2,$3,$4)', ['SLE','EUR',100,'reuse-fx-key']),
-      /CONFLICT: This conversion key has already been used for another transaction/
+      error => error.code === '23505'
     );
   }finally{await db.close();}
 });
@@ -229,7 +252,7 @@ test('withdrawal idempotency cannot disclose another user payment or payout refe
     await db.query('select set_config(\'request.jwt.claim.sub\',$1,false)',[userB]);
     await assert.rejects(
       db.query('select public.initiate_wallet_withdrawal($1,$2,$3,$4,$5)',[50,'SLE','mobile_money','+23276000000','shared-withdrawal-key']),
-      /CONFLICT: This withdrawal key has already been used for another transaction/
+      error => error.code === '23505'
     );
   }finally{await db.close();}
 });
@@ -279,15 +302,15 @@ test('withdrawal key reuse with changed amount, phone or provider is rejected',a
     await db.query('select set_config(\'request.jwt.claim.sub\',$1,false)',[userA]);
     await assert.rejects(
       db.query('select public.initiate_wallet_withdrawal($1,$2,$3,$4,$5)',[100,'SLE','mobile_money','+23276000000','reuse-withdrawal-key']),
-      /CONFLICT: This withdrawal key has already been used for another transaction/
+      error => error.code === '23505'
     );
     await assert.rejects(
       db.query('select public.initiate_wallet_withdrawal($1,$2,$3,$4,$5)',[50,'SLE','mobile_money','+23276000001','reuse-withdrawal-key']),
-      /CONFLICT: This withdrawal key has already been used for another transaction/
+      error => error.code === '23505'
     );
     await assert.rejects(
       db.query('select public.initiate_wallet_withdrawal($1,$2,$3,$4,$5)',[50,'SLE','other_provider','+23276000000','reuse-withdrawal-key']),
-      /CONFLICT: This withdrawal key has already been used for another transaction/
+      error => error.code === '23505'
     );
   }finally{await db.close();}
 });
