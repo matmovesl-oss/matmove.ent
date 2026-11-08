@@ -279,7 +279,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
           rider_id: profile.id,
           service_type: serviceType,
           vehicle_type: vehicleType,
-          passengers_count: passengerCount,
+          passenger_count: passengerCount,
           pickup_location: pickup,
           destination_location: destination,
           fare_amount: finalAmount,
