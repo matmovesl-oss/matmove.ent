@@ -1,4 +1,3 @@
-
 {
   "routes": [
     {
@@ -19,6 +18,12 @@
     {
       "src": "/.*",
       "dest": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/create-monime-payout?action=monime_webhooks",
+      "schedule": "* * * * *"
     }
   ]
 }
