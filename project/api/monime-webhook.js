@@ -1,103 +1,65 @@
-import { createClient } from '@supabase/supabase-js';
+import {createClient} from '@supabase/supabase-js';
+import {
+  readMonimeRawBody,
+  verifyMonimeWebhookSignature,
+  parseMonimeWebhook
+} from '../server/monime-webhook-security.js';
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+export const config={api:{bodyParser:false}};
 
-  try {
-    const event = req.body;
-    if (!event || !event.type) return res.status(400).json({ error: 'Invalid event payload.' });
+function serviceClient(){
+  const url=process.env.SUPABASE_URL||process.env.VITE_SUPABASE_URL;
+  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if(!url||!key)throw new Error('Webhook service configuration is incomplete.');
+  return createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
+}
 
-    const supabase = createClient(
-      process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+export default async function handler(req,res){
+  res.setHeader('Cache-Control','no-store');
+  res.setHeader('X-Content-Type-Options','nosniff');
+  if(req.method!=='POST')return res.status(405).json({error:'Method Not Allowed'});
 
-    const eventData = event.data || {};
-    const ref = eventData.reference || eventData.id;
+  const secret=process.env.MONIME_WEBHOOK_SECRET;
+  if(!secret)return res.status(503).json({error:'Webhook service unavailable.'});
 
-    switch (event.type) {
-      case 'checkout_session.completed': {
-        // We injected MatMove User ID into the reference (e.g. MONIME_123e4567-e89b..._1699999)
-        const parts = (ref || '').split('_');
-        const userId = parts[1]; 
-        
-        const lineItemPrice = eventData.lineItems?.data?.[0]?.price?.value || 0;
-        const amountSLE = lineItemPrice > 0 ? lineItemPrice / 100 : Number(eventData.amount?.value || 0) / 100;
+  let rawBody,event;
+  try{
+    rawBody=await readMonimeRawBody(req);
+    if(!verifyMonimeWebhookSignature(rawBody,req.headers['monime-signature'],secret)){
+      return res.status(401).json({error:'Unauthorized.'});
+    }
+    event=parseMonimeWebhook(rawBody);
+    if(!event)return res.status(400).json({error:'Invalid event.'});
+  }catch(error){
+    const status=error?.status===413?413:400;
+    return res.status(status).json({error:'Invalid request.'});
+  }
 
-        if (userId && amountSLE > 0) {
-          // Look up the exact Supabase internal UUID for the wallet
-          const { data: walletData } = await supabase
-            .from('wallets')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('currency', 'SLE')
-            .single();
-
-          if (walletData) {
-            await supabase.rpc('process_gateway_payment', {
-              p_provider: 'monime_payin',
-              p_wallet_id: walletData.id, // Passes internal UUID to prevent 22P02 Error
-              p_amount: amountSLE,
-              p_currency: 'SLE',
-              p_reference: ref
-            });
-          }
-        }
-        break;
-      }
-
-      case 'payout.completed': {
-        if (ref) {
-          await supabase
-            .from('withdrawal_requests')
-            .update({ status: 'completed' })
-            .eq('reference', ref);
-        }
-        break;
-      }
-
-      case 'payout.failed': {
-        if (ref) {
-          const { data: request } = await supabase
-            .from('withdrawal_requests')
-            .select('*')
-            .eq('reference', ref)
-            .single();
-
-          if (request && request.status !== 'failed') {
-            await supabase
-              .from('withdrawal_requests')
-              .update({ status: 'failed' })
-              .eq('reference', ref);
-
-            const { data: walletData } = await supabase
-              .from('wallets')
-              .select('id')
-              .eq('user_id', request.user_id)
-              .eq('currency', 'SLE')
-              .single();
-
-            if (walletData) {
-              await supabase.rpc('process_gateway_payment', {
-                p_provider: 'monime_refund',
-                p_wallet_id: walletData.id,
-                p_amount: Number(request.amount),
-                p_currency: 'SLE',
-                p_reference: `refund_${ref}`
-              });
-            }
-          }
-        }
-        break;
-      }
-
-      default:
-        console.log(`Unhandled event type: ${event.type}`);
+  try{
+    const db=serviceClient();
+    const registration=await db.rpc('register_provider_webhook_event',{
+      p_provider:'monime_customer',
+      p_event_id:event.id,
+      p_event_type:event.type,
+      p_withdrawal_id:null,
+      p_payment_transaction_id:null,
+      p_provider_transaction_id:null,
+      p_idempotency_key:event.id,
+      p_payload:event
+    });
+    if(registration.error||!registration.data?.success){
+      throw new Error('Unable to persist verified webhook event.');
     }
 
-    return res.status(200).json({ received: true });
-  } catch (error) {
-    console.error('FATAL Webhook Error:', error);
-    return res.status(500).json({ error: error.message });
+    // The event is durably stored before acknowledging Monime.
+    // The Vercel Cron worker processes it asynchronously after this 2xx.
+    return res.status(200).json({
+      received:true,
+      duplicate:registration.data.duplicate===true,
+      queued:registration.data.processing_status!=='ignored'
+    });
+  }catch(error){
+    console.error('MatMove Monime webhook intake failed:',error?.message||'unknown error');
+    return res.status(503).json({error:'Webhook event could not be safely queued.'});
   }
 }
