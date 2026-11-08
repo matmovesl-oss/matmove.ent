@@ -120,3 +120,18 @@ test('Cancelled Travel reservation dismissal is saved per customer and reservati
   assert.match(portal,/matmove\.travel\.cancelled\.dismissed\.\$\{uid\}\.\$\{ownBookingResult\.data\.id\}/);
   assert.match(portal,/matmove\.travel\.cancelled\.dismissed\.\$\{uid\}\.\$\{existingBooking\.id\}/);
 });
+
+
+test('Rider booking creation uses the owned, idempotent trip RPC rather than direct booking-table inserts',async()=>{
+  const fs=await import('node:fs/promises');
+  const [rider,hook]=await Promise.all([
+    fs.readFile('src/pages/RiderDashboard.tsx','utf8'),
+    fs.readFile('src/lib/useTripRequest.ts','utf8')
+  ]);
+  assert.match(rider,/useTripRequest/);
+  assert.match(rider,/submitTripRequest\(details\)/);
+  assert.doesNotMatch(rider,/\.from\(['"]bookings['"]\)\s*\.insert\(/);
+  assert.match(hook,/matmove_create_customer_trip/);
+  assert.match(hook,/localStorage\.setItem/);
+  assert.match(hook,/prior request|Original request|original request/i);
+});
