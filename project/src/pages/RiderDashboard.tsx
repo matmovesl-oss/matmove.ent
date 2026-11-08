@@ -1,7 +1,8 @@
-import ActiveTripMap, { tripPinFields } from '@/components/ActiveTripMap';
+import ActiveTripMap from '@/components/ActiveTripMap';
 import { ProductGallery, catalogMoney, catalogCheckoutAllowed } from '@/components/ProductCatalog';
 import FareNegotiation from '@/components/FareNegotiation';
 import { useCustomerActiveRide } from '@/lib/useRideNegotiation';
+import { useTripRequest } from '@/lib/useTripRequest';
 import WalletCardsView from '@/components/WalletCards';
 import TransactionHistory from '@/components/TransactionHistory';
 import MerchantCheckout from '@/components/MerchantCheckout';
@@ -85,6 +86,20 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     retry: retryTrip,
     applySnapshot: applyFareSnapshot
   } = useCustomerActiveRide(profile?.id);
+  const {
+    retained: retainedTripRequest,
+    error: tripRequestError,
+    working: tripRequestWorking,
+    submit: submitTripRequest
+  } = useTripRequest(profile?.id || '');
+
+  useEffect(() => {
+    if (tripRequestError) {
+      setRideNotice(tripRequestError);
+    } else if (retainedTripRequest) {
+      setRideNotice('A previous trip request may already have reached MatMove. Select “Check original request” to safely recover that same request. Do not create a second request.');
+    }
+  }, [tripRequestError, retainedTripRequest?.id]);
 
   useEffect(() => {
     let timer: any;
@@ -248,51 +263,65 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   };
 
   const handleRequest = async () => {
-    if (tripLoading || tripError || activeBooking || isRequesting) return;
-    if (!pickupCoords || !destinationCoords) {
-      return alert('Please select pickup and destination using address search or map pins.');
-    }
+    const recoveringOriginal = Boolean(retainedTripRequest);
+    if (
+      tripLoading ||
+      (tripError && !recoveringOriginal) ||
+      activeBooking ||
+      isRequesting ||
+      tripRequestWorking ||
+      tripRequestError
+    ) return;
 
-    if (serviceType === 'scheduled' && !scheduledTime) {
-      return alert('Select time for scheduled request.');
-    }
+    let details: Record<string, unknown> | undefined;
+    if (!recoveringOriginal) {
+      if (!pickupCoords || !destinationCoords) {
+        return alert('Please select pickup and destination using address search or map pins.');
+      }
 
-    const finalAmount = Number(offerAmount);
-    const finalStatus = serviceType === 'scheduled' ? 'pending_admin' : 'pending';
-    if (!/^\d+(\.\d{1,2})?$/.test(offerAmount.trim()) || !Number.isFinite(finalAmount) || finalAmount <= 0 || finalAmount > 1000000) {
-      return alert('Enter and review a positive fare with at most two decimal places, up to SLE 1,000,000.');
-    }
-    const minFare = pricingRates?.[vehicleType]?.min || defaultPricing[vehicleType].min;
-    if (finalAmount < minFare) return alert(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minFare}`);
+      if (serviceType === 'scheduled' && !scheduledTime) {
+        return alert('Select time for scheduled request.');
+      }
 
-    if ((sleWallet?.balance || 0) < finalAmount) {
-      return alert(`Insufficient Balance. You need SLE ${finalAmount} to request this trip. Please Load your wallet.`);
+      const finalAmount = Number(offerAmount);
+      if (!/^\d+(\.\d{1,2})?$/.test(offerAmount.trim()) || !Number.isFinite(finalAmount) || finalAmount <= 0 || finalAmount > 1000000) {
+        return alert('Enter and review a positive fare with at most two decimal places, up to SLE 1,000,000.');
+      }
+      const minFare = pricingRates?.[vehicleType]?.min || defaultPricing[vehicleType].min;
+      if (finalAmount < minFare) return alert(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minFare}`);
+
+      if ((sleWallet?.balance || 0) < finalAmount) {
+        return alert(`Insufficient Balance. You need SLE ${finalAmount} to request this trip. Please Load your wallet.`);
+      }
+
+      details = {
+        client_version: 1,
+        service_type: serviceType,
+        vehicle_type: vehicleType,
+        pickup_location: pickup,
+        destination_location: destination,
+        fare_amount: finalAmount.toFixed(2),
+        scheduled_time: serviceType === 'scheduled' ? new Date(scheduledTime).toISOString() : null,
+        passenger_count: passengerCount,
+        passenger_name: null,
+        pickup_pin: { lat: pickupCoords[1], lng: pickupCoords[0] },
+        destination_pin: { lat: destinationCoords[1], lng: destinationCoords[0] }
+      };
     }
 
     setIsRequesting(true);
-
+    setRideNotice('');
     try {
-      const { data, error } = await supabase
-        .from('bookings')
-        .insert({
-          ...tripPinFields(pickupCoords, destinationCoords),
-          rider_id: profile.id,
-          service_type: serviceType,
-          vehicle_type: vehicleType,
-          passengers_count: passengerCount,
-          pickup_location: pickup,
-          destination_location: destination,
-          fare_amount: finalAmount,
-          scheduled_time: serviceType === 'scheduled' ? new Date(scheduledTime).toISOString() : null,
-          status: finalStatus
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      setActiveBooking(data);
+      // This server-side RPC derives rider_id and status from the verified
+      // session. The hook retains the exact request key/details so a lost
+      // response can be recovered without creating a second booking.
+      const booking = await submitTripRequest(details);
+      if (!booking?.id || booking.rider_id !== profile.id) {
+        throw new Error('The original trip receipt could not be verified.');
+      }
+      setActiveBooking(booking);
     } catch (err: any) {
-      alert('Request failed: ' + err.message);
+      setRideNotice(err.message || 'Request not confirmed. Use Check original request before trying again.');
     } finally {
       setIsRequesting(false);
     }
@@ -579,10 +608,10 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
                   <button
                     onClick={handleRequest}
-                    disabled={isRequesting}
-                    className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4"
+                    disabled={isRequesting || tripRequestWorking || Boolean(tripRequestError)}
+                    className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4 disabled:opacity-50"
                   >
-                    {isRequesting ? <Loader2 size={20} className="animate-spin mx-auto" /> : 'Confirm Request'}
+                    {isRequesting || tripRequestWorking ? <Loader2 size={20} className="animate-spin mx-auto" /> : retainedTripRequest ? 'Check original request' : 'Confirm Request'}
                   </button>
                 </>
               ) : (
