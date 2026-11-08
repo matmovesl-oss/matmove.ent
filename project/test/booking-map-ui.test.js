@@ -179,3 +179,10 @@ test('starting voice editing clears the previous destination and fare before any
  await h.click('Speak destination');assert.equal(h.last.destination,null);assert.equal(h.last.distanceKm,null);assert.equal(h.button('Preview route').props.disabled,true);
  await h.click('Stop microphone');assert.equal(h.last.destination,null);assert.equal(h.voices[0].aborted,true);
 },{voice:true}));
+
+
+test('Ride booking insert uses the live bookings schema passenger_count column', async()=>{
+ const source=await readFile('src/pages/RiderDashboard.tsx','utf8');
+ assert.match(source,/passenger_count:\s*passengerCount/);
+ assert.doesNotMatch(source,/passengers_count:\s*passengerCount/);
+});
