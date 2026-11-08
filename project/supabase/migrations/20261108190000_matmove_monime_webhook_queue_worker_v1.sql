@@ -35,8 +35,8 @@ begin
         )
       )
     order by e.received_at asc, e.id asc
-    for update skip locked
     limit greatest(1, least(coalesce(p_limit,3),3))
+    for update skip locked
   ),
   claimed as (
     update public.provider_webhook_events e
