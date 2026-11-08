@@ -52,10 +52,10 @@ begin
     raise exception 'NOT_FOUND: webhook event not found';
   end if;
 
-  if v_event.provider <> 'monime_customer'
-     or v_event.event_type <> 'checkout_session.completed'
-     or v_event.signature_verified is not true
-     or v_event.payload->'data'->>'id' <> p_checkout_session_id then
+  if v_event.provider is distinct from 'monime_customer'
+     or v_event.event_type is distinct from 'checkout_session.completed'
+     or v_event.signature_verified is distinct from true
+     or v_event.payload->'data'->>'id' is distinct from p_checkout_session_id then
     raise exception 'FORBIDDEN: webhook event is not eligible for wallet credit';
   end if;
 
@@ -65,7 +65,8 @@ begin
     return jsonb_build_object('success',true,'duplicate',true,'event_id',v_event.id);
   end if;
 
-  if v_event.processing_status not in ('received','failed','processing') then
+  if v_event.processing_status is null
+     or v_event.processing_status not in ('received','failed','processing') then
     raise exception 'CONFLICT: webhook event cannot be credited from its current state';
   end if;
 
