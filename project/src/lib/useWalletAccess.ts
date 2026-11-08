@@ -28,7 +28,7 @@ export function useWalletAccess(userId: string) {
           await Promise.all([
             supabase
               .from('profiles')
-              .select('*')
+              .select('id,role,kyc_status,is_wallet_frozen')
               .eq('id', userId)
               .single(),
 
