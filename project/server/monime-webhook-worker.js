@@ -134,7 +134,7 @@ async function processEvent(db,row){
 
 export async function reconcileMonimeWebhookEvents(req,res,{dbFactory=dbClient}={}){
   res.setHeader('Cache-Control','no-store');
-  if(req.method!=='GET')return res.status(405).json({error:'Method not allowed.'});
+  if(req.method!=='POST')return res.status(405).json({error:'Method not allowed.'});
   if(!isAuthorizedCronRequest(req))return res.status(401).json({error:'Unauthorized.'});
 
   try{
