@@ -62,7 +62,7 @@ export async function reconcileMatMovePayments(
   const work = await Promise.allSettled([
     invokeHandler(rides, authorization),
     invokeHandler(payouts, authorization),
-    monime({ limit: 10 })
+    monime({ limit: 3 })
   ]);
 
   const names = ['ridePayments', 'withdrawals', 'monimePurchaseEvents'];
