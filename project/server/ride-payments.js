@@ -24,7 +24,7 @@ export async function rpc(db, name, args) {
     });
 
     const known =
-      /^(FORBIDDEN|NOT_FOUND|INVALID_STATE|PAYMENT_PENDING|LEGACY_PAYMENT|INVALID_FARE|ACCOUNT_CHANGED):/;
+      /^(FORBIDDEN|NOT_FOUND|INVALID_STATE|PAYMENT_PENDING|LEGACY_PAYMENT|INVALID_FARE|ACCOUNT_CHANGED|CANCEL_FEE_NOT_CONFIGURED|CANCEL_ALREADY_PROCESSING):/;
 
     throw new HttpError(
       known.test(error.message) ? 409 : 503,
@@ -450,17 +450,19 @@ export async function rideAction(
       if (action === 'cancel') {
         const isDriver = profile.role === 'driver' && booking.driver_id === user.id;
         const isRider = booking.rider_id === user.id;
-        
+
         if (!isDriver && !isRider) {
-           throw new HttpError(403, 'Only the assigned driver or customer can cancel this trip.');
+          throw new HttpError(403, 'Only the assigned driver or customer can cancel this trip.');
         }
 
-        // Driver cancels -> full refund. Rider cancels post-acceptance -> 50-50 split.
+        // Do not silently turn an accepted rider cancellation into a full
+        // refund. The agreed fee amount is not configured yet, so no transfer
+        // is initiated until the 50/50 MatMove/driver rule can be applied.
         if (isRider && booking.status === 'accepted') {
-             // 50/50 split logic using MONIME_PLATFORM_FEE_ACCOUNT_ID
-             booking.cancel_reason = 'rider_cancelled_split';
-        } else if (isDriver) {
-             booking.cancel_reason = 'driver_cancelled';
+          throw new HttpError(
+            409,
+            'Rider cancellation after acceptance is temporarily unavailable because the agreed cancellation fee is not configured. No refund or transfer was initiated. Contact MatMove support.'
+          );
         }
       } else if (booking.rider_id !== user.id) {
          throw new HttpError(403, 'Only the customer who booked this trip can confirm it.');
