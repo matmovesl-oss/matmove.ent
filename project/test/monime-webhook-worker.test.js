@@ -182,10 +182,11 @@ test('worker rejects unsigned inbox content before querying Monime', async () =>
 
   try {
     const result = await processMonimeWebhookBatch({ db, limit: 10 });
-    assert.deepEqual(result, { checked: 1, processed: 0, retrying: 1, failed: 0 });
+    assert.deepEqual(result, { checked: 1, processed: 0, retrying: 0, failed: 1 });
     assert.equal(fetchCalls, 0);
     assert.equal(payment.fulfilled_at, null);
-    assert.equal(event.status, 'pending');
+    assert.equal(event.status, 'failed');
+    assert.equal(event.attempts, 1);
     assert.match(event.last_error, /not verified/i);
   } finally {
     globalThis.fetch = originalFetch;
@@ -243,11 +244,46 @@ test('worker rejects inbox event/object metadata that differs from the signed pa
 
   try {
     const result = await processMonimeWebhookBatch({ db, limit: 10 });
-    assert.deepEqual(result, { checked: 1, processed: 0, retrying: 1, failed: 0 });
+    assert.deepEqual(result, { checked: 1, processed: 0, retrying: 0, failed: 1 });
     assert.equal(fetchCalls, 0);
     assert.equal(payment.fulfilled_at, null);
-    assert.equal(event.status, 'pending');
+    assert.equal(event.status, 'failed');
+    assert.equal(event.attempts, 1);
     assert.match(event.last_error, /event and object identity check/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousApiKey === undefined) delete process.env.MONIME_API_KEY;
+    else process.env.MONIME_API_KEY = previousApiKey;
+    if (previousSpace === undefined) delete process.env.MONIME_SPACE_ID;
+    else process.env.MONIME_SPACE_ID = previousSpace;
+  }
+});
+
+
+test('unsupported checkout-session events are quarantined immediately and never fulfil a purchase', async () => {
+  const { event, payment, db } = fixture('completed', true);
+  event.event_type = 'checkout_session.completed';
+  event.object_type = 'checkout_session';
+  event.payload.event.name = 'checkout_session.completed';
+  event.payload.object.type = 'checkout_session';
+
+  const originalFetch = globalThis.fetch;
+  const previousApiKey = process.env.MONIME_API_KEY;
+  const previousSpace = process.env.MONIME_SPACE_ID;
+  process.env.MONIME_API_KEY = 'mon_test_matmove_worker_test';
+  process.env.MONIME_SPACE_ID = 'space-test';
+  let fetchCalls = 0;
+  globalThis.fetch = async () => { fetchCalls++; throw new Error('unsupported checkout event must not query transfer endpoint'); };
+
+  try {
+    const result = await processMonimeWebhookBatch({ db, limit: 10 });
+    assert.deepEqual(result, { checked: 1, processed: 0, retrying: 0, failed: 1 });
+    assert.equal(fetchCalls, 0);
+    assert.equal(payment.fulfilled_at, null);
+    assert.equal(payment.state, 'processing');
+    assert.equal(event.status, 'failed');
+    assert.equal(event.attempts, 1);
+    assert.match(event.last_error, /unsupported.*object type/i);
   } finally {
     globalThis.fetch = originalFetch;
     if (previousApiKey === undefined) delete process.env.MONIME_API_KEY;
