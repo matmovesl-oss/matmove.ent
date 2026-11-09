@@ -115,14 +115,26 @@ async function processPurchaseTransfer(db, event) {
 }
 
 export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = {}) {
-  const { data: pending, error } = await db
-    .from('matmove_monime_webhook_events')
-    .select('event_id,event_type,payload,attempts')
-    .eq('status', 'pending')
-    .order('received_at', { ascending: true })
-    .limit(Math.max(1, Math.min(25, limit)));
+  const staleCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const batchLimit = Math.max(1, Math.min(25, limit));
+  const [pendingResult, staleResult] = await Promise.all([
+    db.from('matmove_monime_webhook_events')
+      .select('event_id,event_type,payload,attempts,status,updated_at,signature_verified')
+      .eq('status', 'pending')
+      .order('received_at', { ascending: true })
+      .limit(batchLimit),
+    db.from('matmove_monime_webhook_events')
+      .select('event_id,event_type,payload,attempts,status,updated_at,signature_verified')
+      .eq('status', 'processing')
+      .lt('updated_at', staleCutoff)
+      .order('updated_at', { ascending: true })
+      .limit(batchLimit)
+  ]);
 
-  if (error) throw new Error('Could not read Monime webhook inbox.');
+  if (pendingResult.error || staleResult.error) throw new Error('Could not read Monime webhook inbox.');
+  const pending = [...(pendingResult.data || []), ...(staleResult.data || [])]
+    .sort((a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime())
+    .slice(0, batchLimit);
 
   let processed = 0;
   let retrying = 0;
@@ -130,17 +142,22 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = 
 
   for (const event of pending || []) {
     const now = new Date().toISOString();
-    const { data: claimed, error: claimError } = await db
+    let claimQuery = db
       .from('matmove_monime_webhook_events')
       .update({ status: 'processing', attempts: Number(event.attempts || 0) + 1, updated_at: now, last_error: null })
       .eq('event_id', event.event_id)
-      .eq('status', 'pending')
+      .eq('status', event.status);
+    if (event.status === 'processing') claimQuery = claimQuery.lt('updated_at', staleCutoff);
+    const { data: claimed, error: claimError } = await claimQuery
       .select('event_id')
       .maybeSingle();
 
     if (claimError || !claimed) continue;
 
     try {
+      if (event.signature_verified !== true) {
+        throw new Error('Webhook event was not verified at ingress; manual review required.');
+      }
       if (!event.payload || event.payload.event?.id !== event.event_id) {
         throw new Error('Stored webhook payload failed its event identity check.');
       }
