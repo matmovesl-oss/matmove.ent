@@ -84,6 +84,7 @@ test('unified payment reconciliation runs ride, withdrawal and verified Monime i
     });
     assert.equal(res.headers['Cache-Control'], 'no-store');
     assert.equal(calls.length, 3);
+    assert.equal(calls.find(x => x[0] === 'monime')[1], 3);
     assert.deepEqual(calls.filter(x => x[0] !== 'monime').map(x => x[1]), [
       `Bearer ${secret}`,
       `Bearer ${secret}`
