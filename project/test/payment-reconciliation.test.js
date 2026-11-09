@@ -112,7 +112,7 @@ test('unified reconciliation returns 503 if any money reconciliation worker is u
 
     assert.equal(res.statusCode, 503);
     assert.equal(res.body.success, false);
-    assert.deepEqual(res.body.ridePayments, { error: 'Ride reconciliation unavailable.' });
+    assert.deepEqual(res.body.ridePayments, { unavailable: true });
   } finally {
     env('CRON_SECRET', previous);
   }
