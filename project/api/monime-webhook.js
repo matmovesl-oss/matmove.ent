@@ -4,7 +4,8 @@ import { normalizeEnvelope, readRawBody, verifyMonimeSignature } from '../server
 import { processMonimeWebhookBatch } from '../server/monime-webhook-worker.js';
 
 export const config = {
-  api: { bodyParser: false }
+  api: { bodyParser: false },
+  maxDuration: 60
 };
 
 function hasValidCronAuthorization(req) {
@@ -22,7 +23,7 @@ async function runWorker(req, res) {
   }
 
   try {
-    const result = await processMonimeWebhookBatch({ limit: 10 });
+    const result = await processMonimeWebhookBatch({ limit: 3 });
     return res.status(result.failed > 0 ? 503 : 200).json(result);
   } catch (error) {
     console.error('Monime webhook worker failed', { message: error?.message });
