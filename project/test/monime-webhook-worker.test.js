@@ -9,6 +9,8 @@ function fixture(status = 'completed', signatureVerified = true, failEventFinali
   const event = {
     event_id: 'wke-worker-test',
     event_type: 'internal_transfer.completed',
+    object_id: 'itr-worker-test',
+    object_type: 'internal_transfer',
     payload: {
       event: { id: 'wke-worker-test', name: 'internal_transfer.completed' },
       object: { id: 'itr-worker-test', type: 'internal_transfer' },
@@ -224,4 +226,33 @@ test('worker counts the first queue claim as attempt one and increments only on 
     assert.equal(event.status, 'processed');
     assert.equal(payment.state, 'completed');
   });
+});
+
+
+test('worker rejects inbox event/object metadata that differs from the signed payload', async () => {
+  const { event, payment, db } = fixture('completed', true);
+  event.object_id = 'itr-different-object';
+
+  const originalFetch = globalThis.fetch;
+  const previousApiKey = process.env.MONIME_API_KEY;
+  const previousSpace = process.env.MONIME_SPACE_ID;
+  process.env.MONIME_API_KEY = 'mon_test_matmove_worker_test';
+  process.env.MONIME_SPACE_ID = 'space-test';
+  let fetchCalls = 0;
+  globalThis.fetch = async () => { fetchCalls++; throw new Error('must not call provider for mismatched inbox metadata'); };
+
+  try {
+    const result = await processMonimeWebhookBatch({ db, limit: 10 });
+    assert.deepEqual(result, { checked: 1, processed: 0, retrying: 1, failed: 0 });
+    assert.equal(fetchCalls, 0);
+    assert.equal(payment.fulfilled_at, null);
+    assert.equal(event.status, 'pending');
+    assert.match(event.last_error, /event and object identity check/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousApiKey === undefined) delete process.env.MONIME_API_KEY;
+    else process.env.MONIME_API_KEY = previousApiKey;
+    if (previousSpace === undefined) delete process.env.MONIME_SPACE_ID;
+    else process.env.MONIME_SPACE_ID = previousSpace;
+  }
 });
