@@ -87,7 +87,21 @@ async function getPaymentRow(db, requestKey, userId, details, sourceAccountId, d
   const byKey = await db.from('matmove_purchase_payments').select('*').eq('request_key', requestKey).maybeSingle();
   if (byKey.error) fail('MatMove purchase payment storage is not ready.');
 
-  if (byKey.data) return byKey.data;
+  if (byKey.data) {
+    const existing = byKey.data;
+    if (
+      existing.user_id !== userId ||
+      existing.purchase_type !== details.target ||
+      existing.booking_id !== details.bookingId ||
+      existing.event_id !== details.eventId ||
+      Number(existing.quantity) !== details.quantity ||
+      Number(existing.amount_minor) !== details.amountMinor ||
+      Number(existing.unit_amount_minor) !== details.unitAmountMinor ||
+      existing.source_account_id !== sourceAccountId ||
+      existing.destination_account_id !== destinationAccountId
+    ) fail('This payment request key is already tied to different purchase details.', 409);
+    return existing;
+  }
 
   const insert = await db.from('matmove_purchase_payments').insert({
     request_key: requestKey,
@@ -162,54 +176,95 @@ async function processPurchase(req, res) {
   }
 
   const transferResult = transfer?.result || transfer;
-  const providerStatus = String(transferResult?.status || 'completed').toLowerCase();
+  const providerStatus = String(transferResult?.status || '').toLowerCase();
+  const receiptMatches =
+    typeof transferResult?.id === 'string' &&
+    transferResult.id.length > 0 &&
+    transferResult.amount?.currency === 'SLE' &&
+    transferResult.amount?.value === Number(payment.amount_minor) &&
+    transferResult.sourceFinancialAccount?.id === payment.source_account_id &&
+    transferResult.destinationFinancialAccount?.id === payment.destination_account_id;
 
-  if (providerStatus === 'failed') {
+  if (!receiptMatches) {
     await db.from('matmove_purchase_payments').update({
-      state: 'failed',
-      provider_status: 'failed',
+      state: 'review_required',
+      provider_status: 'review_required',
+      failure_detail: 'Monime response did not match the recorded purchase. Manual reconciliation required.',
       updated_at: new Date().toISOString()
     }).eq('id', payment.id);
+    return res.status(202).json({ success: false, pending: true, error: 'Payment receipt requires verification. Do not pay again.', paymentId: payment.id });
+  }
+
+  if (providerStatus === 'failed') {
+    const { error } = await db.from('matmove_purchase_payments').update({
+      state: 'failed',
+      provider_status: 'failed',
+      provider_transfer_id: transferResult.id,
+      failure_detail: transferResult.failureDetail?.message || 'Monime reported that the transfer failed.',
+      updated_at: new Date().toISOString()
+    }).eq('id', payment.id);
+    if (error) fail('Payment status could not be safely recorded.');
     return res.status(400).json({ success: false, error: 'Payment transfer failed on gateway.' });
   }
 
-  // Generate unique Ticket Code
-  let generatedTicketCode = `TKT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
-  if (details.target === 'event') {
-    const { data: ticketRecord, error: tktErr } = await db.from('event_tickets').insert({
-      event_id: details.eventId,
-      user_id: user.id,
-      user_phone: details.userPhone || 'Customer',
-      ticket_code: generatedTicketCode,
-      tickets_count: details.quantity,
-      amount_paid: Number(payment.amount_minor) / 100,
-      status: 'confirmed',
-      payment_id: payment.id
-    }).select('*').single();
-
-    if (!tktErr && ticketRecord) {
-      generatedTicketCode = ticketRecord.ticket_code;
-    }
-  } else if (details.target === 'travel') {
-    await db.from('travel_bookings').update({
-      is_paid: true,
-      payment_id: payment.id,
-      status: 'approved'
-    }).eq('id', details.bookingId);
+  if (providerStatus === 'pending' || providerStatus === 'processing') {
+    const { error } = await db.from('matmove_purchase_payments').update({
+      state: 'processing',
+      provider_status: providerStatus,
+      provider_transfer_id: transferResult.id,
+      updated_at: new Date().toISOString()
+    }).eq('id', payment.id);
+    if (error) fail('Pending payment status could not be safely recorded.');
+    return res.status(202).json({ success: false, pending: true, paymentId: payment.id, status: providerStatus });
   }
 
-  await db.from('matmove_purchase_payments').update({
-    provider_transfer_id: transferResult.id || `tr-${Date.now()}`,
+  if (providerStatus !== 'completed') {
+    await db.from('matmove_purchase_payments').update({
+      state: 'review_required',
+      provider_status: providerStatus || 'unknown',
+      provider_transfer_id: transferResult.id,
+      failure_detail: 'Monime returned an unrecognized transfer status.',
+      updated_at: new Date().toISOString()
+    }).eq('id', payment.id);
+    return res.status(202).json({ success: false, pending: true, error: 'Payment status requires reconciliation. Do not pay again.', paymentId: payment.id });
+  }
+
+  const { error: recordedError } = await db.from('matmove_purchase_payments').update({
+    provider_transfer_id: transferResult.id,
     provider_status: 'completed',
     state: 'completed',
-    fulfilled_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   }).eq('id', payment.id);
+  if (recordedError) fail('Confirmed payment could not be recorded for fulfilment.');
+
+  // The database function is the sole ticket/booking fulfilment path.
+  const { data: fulfillment, error: fulfillmentError } = await db.rpc('matmove_fulfill_purchase_payment', {
+    p_payment_id: payment.id
+  });
+  if (fulfillmentError || fulfillment?.success !== true) {
+    console.error('MatMove purchase fulfilment requires retry', {
+      paymentId: payment.id,
+      code: fulfillmentError?.code
+    });
+    return res.status(503).json({ success: false, pending: true, paymentId: payment.id, error: 'Payment was confirmed, but fulfilment is pending. Do not pay again.' });
+  }
+
+  const { data: fulfilledPayment, error: readError } = await db
+    .from('matmove_purchase_payments')
+    .select('fulfilled_at')
+    .eq('id', payment.id)
+    .single();
+  if (readError || !fulfilledPayment?.fulfilled_at) {
+    return res.status(503).json({ success: false, pending: true, paymentId: payment.id, error: 'Payment fulfilment is awaiting confirmation. Do not pay again.' });
+  }
+
+  const { data: existingTicket } = details.target === 'event'
+    ? await db.from('event_tickets').select('ticket_code').eq('payment_id', payment.id).maybeSingle()
+    : { data: null };
 
   return res.status(200).json({
     success: true,
-    ticketCode: generatedTicketCode,
+    ticketCode: existingTicket?.ticket_code || transferResult.id,
     paymentId: payment.id,
     fulfilled: true,
     data: transferResult
