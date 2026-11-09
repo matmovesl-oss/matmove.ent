@@ -14,7 +14,7 @@ function fixture(status = 'completed', signatureVerified = true, failEventFinali
       object: { id: 'itr-worker-test', type: 'internal_transfer' },
       data: {}
     },
-    attempts: 0,
+    attempts: 1,
     status: 'pending',
     updated_at: new Date().toISOString(),
     received_at: new Date().toISOString(),
@@ -205,5 +205,23 @@ test('worker fails closed when the durable inbox state cannot be finalized', asy
     assert.equal(payment.state, 'completed');
     assert.ok(payment.fulfilled_at);
     assert.equal(event.status, 'processing');
+  });
+});
+
+
+test('worker counts the first queue claim as attempt one and increments only on retry', async t => {
+  const { event, payment, transfer, db } = fixture('processing', true);
+  await withProvider(t, transfer, async () => {
+    const first = await processMonimeWebhookBatch({ db, limit: 10 });
+    assert.deepEqual(first, { checked: 1, processed: 0, retrying: 1, failed: 0 });
+    assert.equal(event.attempts, 1);
+    assert.equal(event.status, 'pending');
+
+    transfer.status = 'completed';
+    const second = await processMonimeWebhookBatch({ db, limit: 10 });
+    assert.deepEqual(second, { checked: 1, processed: 1, retrying: 0, failed: 0 });
+    assert.equal(event.attempts, 2);
+    assert.equal(event.status, 'processed');
+    assert.equal(payment.state, 'completed');
   });
 });
