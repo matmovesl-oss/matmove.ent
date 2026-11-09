@@ -260,6 +260,36 @@ test('worker rejects inbox event/object metadata that differs from the signed pa
 });
 
 
+test('signed unrelated event type cannot enter purchase fulfilment even when it contains an internal-transfer object', async () => {
+  const { event, payment, db } = fixture('completed', true);
+  event.event_type = 'financial_account.credited';
+  event.payload.event.name = 'financial_account.credited';
+
+  const originalFetch = globalThis.fetch;
+  const previousApiKey = process.env.MONIME_API_KEY;
+  const previousSpace = process.env.MONIME_SPACE_ID;
+  process.env.MONIME_API_KEY = 'mon_test_matmove_worker_test';
+  process.env.MONIME_SPACE_ID = 'space-test';
+  let fetchCalls = 0;
+  globalThis.fetch = async () => { fetchCalls++; throw new Error('must not fetch unrelated event object'); };
+
+  try {
+    const result = await processMonimeWebhookBatch({ db, limit: 3 });
+    assert.deepEqual(result, { checked: 1, processed: 0, retrying: 0, failed: 1 });
+    assert.equal(fetchCalls, 0);
+    assert.equal(payment.fulfilled_at, null);
+    assert.equal(payment.state, 'processing');
+    assert.equal(event.status, 'failed');
+    assert.match(event.last_error, /unsupported Monime event type/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousApiKey === undefined) delete process.env.MONIME_API_KEY;
+    else process.env.MONIME_API_KEY = previousApiKey;
+    if (previousSpace === undefined) delete process.env.MONIME_SPACE_ID;
+    else process.env.MONIME_SPACE_ID = previousSpace;
+  }
+});
+
 test('unsupported checkout-session events are quarantined immediately and never fulfil a purchase', async () => {
   const { event, payment, db } = fixture('completed', true);
   event.event_type = 'checkout_session.completed';
