@@ -15,6 +15,16 @@ function validCronAuthorization(req) {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
+function validCounts(value, keys) {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    keys.every(key =>
+      Number.isSafeInteger(value[key]) && value[key] >= 0
+    )
+  );
+}
+
 async function invokeHandler(handler, authorization) {
   const response = {
     statusCode: 200,
@@ -73,13 +83,28 @@ export async function reconcileMatMovePayments(
 
     if (index < 2) {
       const response = item.value;
-      result[names[index]] = response.body ?? {};
-      if (response.statusCode < 200 || response.statusCode >= 300) {
+      const countKeys = ['checked', 'failed'];
+      if (
+        !response ||
+        !Number.isInteger(response.statusCode) ||
+        response.statusCode < 200 ||
+        response.statusCode >= 300 ||
+        !validCounts(response.body, countKeys)
+      ) {
         unavailable = true;
+        result[names[index]] = { unavailable: true };
+        continue;
       }
+      result[names[index]] = response.body;
     } else {
-      // Permanently quarantined events are durably recorded for manual review;
-      // that is a completed queue operation, not a worker transport failure.
+      const counts = ['checked', 'processed', 'retrying', 'failed'];
+      if (!validCounts(item.value, counts)) {
+        unavailable = true;
+        result[names[index]] = { unavailable: true };
+        continue;
+      }
+      // Failed/quarantined webhook events are durably retained for manual
+      // review. They are reported in the result, not hidden as successes.
       result[names[index]] = item.value;
     }
   }
