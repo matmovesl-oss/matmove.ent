@@ -5,7 +5,7 @@ import { processMonimeWebhookBatch } from '../server/monime-webhook-worker.js';
 const paymentId = '00000000-0000-4000-8000-000000000123';
 const secretValues = ['MONIME_API_KEY', 'MONIME_SPACE_ID'];
 
-function fixture(status = 'completed', signatureVerified = true) {
+function fixture(status = 'completed', signatureVerified = true, failEventFinalization = false) {
   const event = {
     event_id: 'wke-worker-test',
     event_type: 'internal_transfer.completed',
@@ -81,6 +81,14 @@ function fixture(status = 'completed', signatureVerified = true) {
     async execute(single = false) {
       const rows = this.rows();
       if (this.values) {
+        if (
+          failEventFinalization &&
+          this.table === 'matmove_monime_webhook_events' &&
+          this.values.status &&
+          this.values.status !== 'processing'
+        ) {
+          return { data: null, error: new Error('simulated inbox persistence failure') };
+        }
         for (const row of rows) Object.assign(row, this.values);
         return { data: single ? this.project(rows[0]) : null, error: null };
       }
@@ -184,4 +192,18 @@ test('worker rejects unsigned inbox content before querying Monime', async () =>
     if (previousSpace === undefined) delete process.env.MONIME_SPACE_ID;
     else process.env.MONIME_SPACE_ID = previousSpace;
   }
+});
+
+
+test('worker fails closed when the durable inbox state cannot be finalized', async t => {
+  const { event, payment, transfer, db } = fixture('completed', true, true);
+  await withProvider(t, transfer, async () => {
+    await assert.rejects(
+      processMonimeWebhookBatch({ db, limit: 10 }),
+      /persist the Monime event retry state/i
+    );
+    assert.equal(payment.state, 'completed');
+    assert.ok(payment.fulfilled_at);
+    assert.equal(event.status, 'processing');
+  });
 });
