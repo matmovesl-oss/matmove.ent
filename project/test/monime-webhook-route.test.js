@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import handler from '../api/monime-webhook.js';
+import handler, { config } from '../api/monime-webhook.js';
 
 function response() {
   return {
@@ -67,4 +67,10 @@ test('Monime route accepts only GET for worker and POST for signed webhook deliv
   await handler({ method: 'PUT', headers: {} }, res);
   assert.equal(res.statusCode, 405);
   assert.equal(res.headers.Allow, 'GET, POST');
+});
+
+
+test('Monime webhook worker has an explicit bounded serverless execution window', () => {
+  assert.equal(config.maxDuration, 60);
+  assert.equal(config.api.bodyParser, false);
 });
