@@ -313,7 +313,7 @@ test('unsupported checkout-session events are quarantined immediately and never 
     assert.equal(payment.state, 'processing');
     assert.equal(event.status, 'failed');
     assert.equal(event.attempts, 1);
-    assert.match(event.last_error, /unsupported.*object type/i);
+    assert.match(event.last_error, /unsupported Monime event type/i);
   } finally {
     globalThis.fetch = originalFetch;
     if (previousApiKey === undefined) delete process.env.MONIME_API_KEY;
