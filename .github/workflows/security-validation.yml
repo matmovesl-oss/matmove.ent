@@ -1,0 +1,33 @@
+name: MatMove security validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - security/monime-webhook-lockdown-20261109
+
+permissions:
+  contents: read
+
+concurrency:
+  group: matmove-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: project
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: project/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
