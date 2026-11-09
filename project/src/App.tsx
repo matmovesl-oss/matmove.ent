@@ -163,6 +163,15 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
   const [activeSection, setActiveSection] =
     useState<PortalSection>(()=>{try{const saved=sessionStorage.getItem(`matmove:portal-section:v1:${sectionOwner}`);return ['home','ride','wallet','trips','shop','inventory','account'].includes(saved||'')?saved as PortalSection:'home';}catch{return 'home';}});
   const [guideReplay,setGuideReplay]=useState(0);
+  const [sectionTransitioning,setSectionTransitioning]=useState(false);
+  const previousSectionRef=useRef(activeSection);
+  useEffect(()=>{
+    if(previousSectionRef.current===activeSection)return;
+    previousSectionRef.current=activeSection;
+    setSectionTransitioning(true);
+    const timeout=window.setTimeout(()=>setSectionTransitioning(false),260);
+    return ()=>window.clearTimeout(timeout);
+  },[activeSection]);
   useEffect(()=>{if(!sectionOwner||profile?.id!==sectionOwner)return;const sections=['home','ride','wallet','trips','account',...(profile.role==='rider'?['shop']:profile.role==='merchant'?['inventory']:[])];if(!sections.includes(activeSection)){setActiveSection('home');return;}try{sessionStorage.setItem(`matmove:portal-section:v1:${sectionOwner}`,activeSection);}catch{}},[sectionOwner,profile?.id,profile?.role,activeSection]);
 
   const [loggingOut, setLoggingOut] =
@@ -349,16 +358,18 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
       <>{guide}
       <div className="portal-shell min-h-screen bg-slate-50 pb-28">
         {accountHeader}
-        <AccountSection
-          profile={profile}
-          wallet={wallet}
-          loggingOut={loggingOut}
-          onLogout={handleLogout}
-          onLock={onPrivacyLock}
-          onBack={() =>
-            setActiveSection('home')
-          }
-        />
+        <div className={sectionTransitioning ? 'mm-section-enter' : undefined}>
+          <AccountSection
+            profile={profile}
+            wallet={wallet}
+            loggingOut={loggingOut}
+            onLogout={handleLogout}
+            onLock={onPrivacyLock}
+            onBack={() =>
+              setActiveSection('home')
+            }
+          />
+        </div>
 
         <PortalNavigation
           activeSection={activeSection}
@@ -375,30 +386,32 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     <div className="portal-shell relative min-h-screen bg-slate-50 pb-24 [&_.mm-home-heading>button]:hidden">
       {accountHeader}
       <div className="mx-auto max-w-6xl px-4"><KycStatusNotice profile={profile} onVerify={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal?resume=1'); }}/></div>
-      {activeSection === 'home' && <PortalHome key={`${profile.id}:${role}`} profile={profile} onNavigate={setActiveSection} />}
-      {activeSection !== 'home' && role === 'rider' && (
-        <RiderDashboard
-          profile={profile}
-          wallet={wallet}
-          activeSection={activeSection === 'ride' ? 'home' : activeSection}
-        />
-      )}
+      <div className={sectionTransitioning ? 'mm-section-enter' : undefined}>
+        {activeSection === 'home' && <PortalHome key={`${profile.id}:${role}`} profile={profile} onNavigate={setActiveSection} />}
+        {activeSection !== 'home' && role === 'rider' && (
+          <RiderDashboard
+            profile={profile}
+            wallet={wallet}
+            activeSection={activeSection === 'ride' ? 'home' : activeSection}
+          />
+        )}
 
-      {activeSection !== 'home' && role === 'driver' && (
-        <DriverDashboard
-          profile={profile}
-          wallet={wallet}
-          activeSection={activeSection === 'ride' ? 'home' : activeSection}
-        />
-      )}
+        {activeSection !== 'home' && role === 'driver' && (
+          <DriverDashboard
+            profile={profile}
+            wallet={wallet}
+            activeSection={activeSection === 'ride' ? 'home' : activeSection}
+          />
+        )}
 
-      {activeSection !== 'home' && role === 'merchant' && (
-        <MerchantDashboard
-          profile={profile}
-          wallet={wallet}
-          activeSection={activeSection === 'ride' ? 'home' : activeSection}
-        />
-      )}
+        {activeSection !== 'home' && role === 'merchant' && (
+          <MerchantDashboard
+            profile={profile}
+            wallet={wallet}
+            activeSection={activeSection === 'ride' ? 'home' : activeSection}
+          />
+        )}
+      </div>
 
       <PortalNavigation
         activeSection={activeSection}
