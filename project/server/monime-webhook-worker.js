@@ -122,7 +122,7 @@ async function processPurchaseTransfer(db, event) {
   return 'processed';
 }
 
-export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = {}) {
+export async function processMonimeWebhookBatch({ db = client(), limit = 3 } = {}) {
   // Validate Live/Test mode before claiming any durable inbox event.
   assertMonimeEnvironment();
   const staleCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
