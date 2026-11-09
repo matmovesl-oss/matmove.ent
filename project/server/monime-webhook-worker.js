@@ -119,7 +119,7 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = 
   const batchLimit = Math.max(1, Math.min(25, limit));
   const [pendingResult, staleResult] = await Promise.all([
     db.from('matmove_monime_webhook_events')
-      .select('event_id,event_type,payload,attempts,status,updated_at,signature_verified')
+      .select('event_id,event_type,payload,attempts,status,updated_at,signature_verified,last_error')
       .eq('status', 'pending')
       .order('received_at', { ascending: true })
       .limit(batchLimit),
@@ -142,9 +142,12 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = 
 
   for (const event of pending || []) {
     const now = new Date().toISOString();
+    const currentAttempts = Math.max(1, Number(event.attempts || 1));
+    const firstPendingAttempt = event.status === 'pending' && !event.last_error && currentAttempts === 1;
+    const nextAttempt = firstPendingAttempt ? currentAttempts : currentAttempts + 1;
     let claimQuery = db
       .from('matmove_monime_webhook_events')
-      .update({ status: 'processing', attempts: Number(event.attempts || 0) + 1, updated_at: now, last_error: null })
+      .update({ status: 'processing', attempts: nextAttempt, updated_at: now, last_error: null })
       .eq('event_id', event.event_id)
       .eq('status', event.status);
     if (event.status === 'processing') claimQuery = claimQuery.lt('updated_at', staleCutoff);
@@ -177,7 +180,7 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = 
         processed++;
       }
     } catch (error) {
-      const exhausted = Number(event.attempts || 0) + 1 >= MAX_ATTEMPTS;
+      const exhausted = nextAttempt >= MAX_ATTEMPTS;
       const nextStatus = exhausted ? 'failed' : 'pending';
       const { error: queueError } = await db.from('matmove_monime_webhook_events')
         .update({
