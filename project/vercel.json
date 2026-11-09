@@ -1,4 +1,3 @@
-
 {
   "routes": [
     {
@@ -8,6 +7,10 @@
     {
       "src": "/api/reconcile-ride-payments/?",
       "dest": "/api/accept-ride-escrow?action=reconcile"
+    },
+    {
+      "src": "/api/reconcile-all-payments/?",
+      "dest": "/api/get-live-wallet?action=payment_reconcile"
     },
     {
       "handle": "filesystem"
