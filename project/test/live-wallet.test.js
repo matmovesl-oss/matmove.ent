@@ -94,24 +94,45 @@ test('restored withdrawal handler is valid JavaScript and performs a Mobile Mone
   assert.ok(!source.includes('completeRidePayoutHandler'));
 });
 
-test('production cannot silently use a Monime test token for real-money payments', () => {
+test('Monime token mode is pinned to Vercel deployment environment and rejects unknown tokens', () => {
   const oldKey = process.env.MONIME_API_KEY;
   const oldMode = process.env.MONIME_ENVIRONMENT;
+  const oldVercel = process.env.VERCEL_ENV;
 
   try {
+    process.env.VERCEL_ENV = 'production';
     process.env.MONIME_API_KEY = 'mon_test_not-a-real-secret';
-    process.env.MONIME_ENVIRONMENT = 'live';
+    process.env.MONIME_ENVIRONMENT = 'test';
+    assert.throws(assertMonimeEnvironment, /conflicts with the Vercel deployment environment/i);
 
-    assert.throws(assertMonimeEnvironment, /does not match/);
+    process.env.MONIME_ENVIRONMENT = 'live';
+    assert.throws(assertMonimeEnvironment, /token mode does not match/i);
+
+    process.env.MONIME_API_KEY = 'mon_not-a-real-secret';
+    assert.doesNotThrow(assertMonimeEnvironment);
+
+    process.env.VERCEL_ENV = 'preview';
+    assert.doesNotThrow(assertMonimeEnvironment);
+
+    process.env.MONIME_ENVIRONMENT = 'live';
+    assert.throws(assertMonimeEnvironment, /conflicts with the Vercel deployment environment/i);
 
     process.env.MONIME_ENVIRONMENT = 'test';
+    process.env.MONIME_API_KEY = 'mon_live_not-a-real-secret';
+    assert.throws(assertMonimeEnvironment, /token mode does not match/i);
+
+    process.env.MONIME_API_KEY = 'mon_test_not-a-real-secret';
     assert.doesNotThrow(assertMonimeEnvironment);
+
+    process.env.MONIME_API_KEY = 'unknown-token-prefix';
+    assert.throws(assertMonimeEnvironment, /documented Live or Test token prefix/i);
   } finally {
     if (oldKey === undefined) delete process.env.MONIME_API_KEY;
     else process.env.MONIME_API_KEY = oldKey;
-
     if (oldMode === undefined) delete process.env.MONIME_ENVIRONMENT;
     else process.env.MONIME_ENVIRONMENT = oldMode;
+    if (oldVercel === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = oldVercel;
   }
 });
 
