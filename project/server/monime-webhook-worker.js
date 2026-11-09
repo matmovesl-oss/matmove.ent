@@ -3,6 +3,13 @@ import { createClient } from '@supabase/supabase-js';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ATTEMPTS = 12;
 
+class ManualReviewError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ManualReviewError';
+  }
+}
+
 function client() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -34,15 +41,15 @@ async function processPurchaseTransfer(db, event) {
   const payload = event.payload;
   const object = payload?.object;
   if (object?.type !== 'internal_transfer' || typeof object.id !== 'string') {
-    throw new Error('Unsupported Monime event object type; manual review required.');
+    throw new ManualReviewError('Unsupported Monime event object type; manual review required.');
   }
 
   const transfer = await getTransfer(object.id);
-  if (transfer.id !== object.id) throw new Error('Monime returned a different transfer identifier.');
+  if (transfer.id !== object.id) throw new ManualReviewError('Monime returned a different transfer identifier; manual review required.');
 
   const paymentId = transfer.metadata?.matmovePurchasePaymentId;
   if (!UUID.test(String(paymentId || ''))) {
-    throw new Error('Internal transfer has no valid MatMove purchase-payment reference.');
+    throw new ManualReviewError('Internal transfer has no valid MatMove purchase-payment reference; manual review required.');
   }
 
   const { data: payment, error: paymentError } = await db
@@ -53,7 +60,7 @@ async function processPurchaseTransfer(db, event) {
 
   if (paymentError || !payment) throw new Error('Referenced MatMove purchase payment was not found.');
   if (!['travel', 'event'].includes(payment.purchase_type)) {
-    throw new Error('Referenced record is not a travel or event purchase.');
+    throw new ManualReviewError('Referenced record is not a travel or event purchase; manual review required.');
   }
 
   const matches =
@@ -63,7 +70,7 @@ async function processPurchaseTransfer(db, event) {
     transfer.destinationFinancialAccount?.id === payment.destination_account_id &&
     (!payment.provider_transfer_id || payment.provider_transfer_id === transfer.id);
 
-  if (!matches) throw new Error('Monime transfer does not match the stored MatMove payment details.');
+  if (!matches) throw new ManualReviewError('Monime transfer does not match the stored MatMove payment details; manual review required.');
 
   const status = String(transfer.status || '').toLowerCase();
   if (status === 'pending' || status === 'processing') {
@@ -78,7 +85,7 @@ async function processPurchaseTransfer(db, event) {
   }
 
   if (status === 'failed') {
-    if (payment.fulfilled_at) throw new Error('Provider reports a failed transfer for an already fulfilled purchase; manual review required.');
+    if (payment.fulfilled_at) throw new ManualReviewError('Provider reports a failed transfer for an already fulfilled purchase; manual review required.');
     const { error } = await db.from('matmove_purchase_payments').update({
       state: 'failed',
       provider_status: 'failed',
@@ -90,7 +97,7 @@ async function processPurchaseTransfer(db, event) {
     return 'processed';
   }
 
-  if (status !== 'completed') throw new Error('Monime transfer status is not final; manual review required.');
+  if (status !== 'completed') throw new ManualReviewError('Monime transfer status is not final; manual review required.');
 
   const { error: updateError } = await db.from('matmove_purchase_payments').update({
     state: 'completed',
@@ -160,7 +167,7 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = 
 
     try {
       if (event.signature_verified !== true) {
-        throw new Error('Webhook event was not verified at ingress; manual review required.');
+        throw new ManualReviewError('Webhook event was not verified at ingress; manual review required.');
       }
       if (
         !event.payload ||
@@ -169,7 +176,7 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = 
         event.payload.object?.id !== event.object_id ||
         event.payload.object?.type !== event.object_type
       ) {
-        throw new Error('Stored webhook payload failed its event and object identity check.');
+        throw new ManualReviewError('Stored webhook payload failed its event and object identity check; manual review required.');
       }
       const result = await processPurchaseTransfer(db, event);
       if (result === 'pending') {
@@ -186,7 +193,8 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = 
         processed++;
       }
     } catch (error) {
-      const exhausted = nextAttempt >= MAX_ATTEMPTS;
+      const manualReview = error instanceof ManualReviewError;
+      const exhausted = manualReview || nextAttempt >= MAX_ATTEMPTS;
       const nextStatus = exhausted ? 'failed' : 'pending';
       const { error: queueError } = await db.from('matmove_monime_webhook_events')
         .update({
