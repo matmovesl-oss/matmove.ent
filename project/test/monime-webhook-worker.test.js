@@ -292,3 +292,34 @@ test('unsupported checkout-session events are quarantined immediately and never 
     else process.env.MONIME_SPACE_ID = previousSpace;
   }
 });
+
+
+test('customer webhook worker rejects a Test Monime token in Production before claiming inbox events', async () => {
+  const { event, db } = fixture('completed', true);
+  const previous = {
+    key: process.env.MONIME_API_KEY,
+    mode: process.env.MONIME_ENVIRONMENT,
+    vercel: process.env.VERCEL_ENV
+  };
+  process.env.MONIME_API_KEY = 'mon_test_not-a-real-secret';
+  process.env.MONIME_ENVIRONMENT = 'test';
+  process.env.VERCEL_ENV = 'production';
+
+  try {
+    await assert.rejects(
+      processMonimeWebhookBatch({ db, limit: 10 }),
+      /conflicts with the Vercel deployment environment/i
+    );
+    assert.equal(event.status, 'pending');
+    assert.equal(event.attempts, 1);
+  } finally {
+    for (const [key, value] of [
+      ['MONIME_API_KEY', previous.key],
+      ['MONIME_ENVIRONMENT', previous.mode],
+      ['VERCEL_ENV', previous.vercel]
+    ]) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
