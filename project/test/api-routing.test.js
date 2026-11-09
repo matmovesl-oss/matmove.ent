@@ -201,3 +201,12 @@ test('existing acceptance URL defaults to accept without an action query', async
   assert.equal(calls, 1);
   assert.equal(res.statusCode, 200);
 });
+
+test('unified payment reconciliation stays behind the existing wallet API function', async () => {
+  const source = await readFile(new URL('../api/get-live-wallet.js', import.meta.url), 'utf8');
+  assert.match(source, /reconcileMatMovePayments/);
+  assert.match(source, /action === 'payment_reconcile'/);
+  assert.match(source, /req\.method !== 'GET'/);
+  const apiFiles = await readdir(new URL('../api/', import.meta.url));
+  assert.equal(apiFiles.length, 12);
+});
