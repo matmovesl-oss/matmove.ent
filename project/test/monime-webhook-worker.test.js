@@ -160,7 +160,7 @@ test('worker keeps a pending provider transfer pending and does not fulfil it', 
   });
 });
 
-test('worker quarantines unsigned inbox content before querying Monime', async () => {
+test('worker rejects unsigned inbox content before querying Monime', async () => {
   const { event, payment, transfer, db } = fixture('completed', false);
   const originalFetch = globalThis.fetch;
   const previousApiKey = process.env.MONIME_API_KEY;
