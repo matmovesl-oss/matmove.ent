@@ -292,7 +292,9 @@ test('API permits the assigned driver to submit the cancellation RPC with the si
   };
   const res = response();
 
-  await assert.rejects(rideAction(req, res, 'cancel'));
+  const result = await rideAction(req, res, 'cancel');
+  assert.equal(result.status, 202);
+  assert.equal(result.body.success, false);
   assert.equal(db.calls[0].name, 'prepare_ride_payment');
   assert.equal(db.calls[0].args.p_actor_id, driver);
   assert.equal(db.calls[0].args.p_action, 'cancel');
