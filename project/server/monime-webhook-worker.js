@@ -119,12 +119,12 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = 
   const batchLimit = Math.max(1, Math.min(25, limit));
   const [pendingResult, staleResult] = await Promise.all([
     db.from('matmove_monime_webhook_events')
-      .select('event_id,event_type,payload,attempts,status,updated_at,signature_verified,last_error')
+      .select('event_id,event_type,object_id,object_type,payload,attempts,status,updated_at,signature_verified,last_error')
       .eq('status', 'pending')
       .order('received_at', { ascending: true })
       .limit(batchLimit),
     db.from('matmove_monime_webhook_events')
-      .select('event_id,event_type,payload,attempts,status,updated_at,signature_verified')
+      .select('event_id,event_type,object_id,object_type,payload,attempts,status,updated_at,signature_verified,last_error')
       .eq('status', 'processing')
       .lt('updated_at', staleCutoff)
       .order('updated_at', { ascending: true })
@@ -162,8 +162,14 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = 
       if (event.signature_verified !== true) {
         throw new Error('Webhook event was not verified at ingress; manual review required.');
       }
-      if (!event.payload || event.payload.event?.id !== event.event_id) {
-        throw new Error('Stored webhook payload failed its event identity check.');
+      if (
+        !event.payload ||
+        event.payload.event?.id !== event.event_id ||
+        event.payload.event?.name !== event.event_type ||
+        event.payload.object?.id !== event.object_id ||
+        event.payload.object?.type !== event.object_type
+      ) {
+        throw new Error('Stored webhook payload failed its event and object identity check.');
       }
       const result = await processPurchaseTransfer(db, event);
       if (result === 'pending') {
