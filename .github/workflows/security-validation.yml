@@ -28,6 +28,11 @@ jobs:
           cache: npm
           cache-dependency-path: project/package-lock.json
       - run: npm ci
-      - run: npm test
-      - run: npm run typecheck
-      - run: npm run build
+      - name: Run release regression tests
+        run: npm run test:release
+      - name: Run focused security tests
+        run: npm run test:security
+      - name: Type check
+        run: npm run typecheck
+      - name: Build production bundle
+        run: npm run build
