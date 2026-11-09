@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { assertMonimeEnvironment } from './wallet-security.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ATTEMPTS = 12;
@@ -122,6 +123,8 @@ async function processPurchaseTransfer(db, event) {
 }
 
 export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = {}) {
+  // Validate Live/Test mode before claiming any durable inbox event.
+  assertMonimeEnvironment();
   const staleCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const batchLimit = Math.max(1, Math.min(25, limit));
   const [pendingResult, staleResult] = await Promise.all([
