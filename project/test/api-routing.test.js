@@ -210,3 +210,19 @@ test('unified payment reconciliation stays behind the existing wallet API functi
   const apiFiles = await readdir(new URL('../api/', import.meta.url));
   assert.equal(apiFiles.length, 12);
 });
+
+
+test('unified payment reconciliation URL rewrites to the existing wallet API before filesystem fallback', async () => {
+  const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
+  const filesystemIndex = config.routes.findIndex(route => route.handle === 'filesystem');
+
+  for (const suffix of ['', '/']) {
+    const path = `/api/reconcile-all-payments${suffix}`;
+    const index = config.routes.findIndex(route => route.src && new RegExp(`^${route.src}`, 'i').test(path));
+    assert.ok(index >= 0 && index < filesystemIndex);
+    assert.equal(config.routes[index].dest, '/api/get-live-wallet?action=payment_reconcile');
+  }
+
+  const files = await readdir(new URL('../api/', import.meta.url));
+  assert.equal(files.length, 12);
+});
