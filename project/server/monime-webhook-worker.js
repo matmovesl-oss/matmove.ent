@@ -152,7 +152,8 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = 
       .select('event_id')
       .maybeSingle();
 
-    if (claimError || !claimed) continue;
+    if (claimError) throw new Error('Could not claim a Monime webhook event.');
+    if (!claimed) continue;
 
     try {
       if (event.signature_verified !== true) {
@@ -163,26 +164,29 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 10 } = 
       }
       const result = await processPurchaseTransfer(db, event);
       if (result === 'pending') {
-        await db.from('matmove_monime_webhook_events')
+        const { error: queueError } = await db.from('matmove_monime_webhook_events')
           .update({ status: 'pending', updated_at: new Date().toISOString(), last_error: 'Monime transfer is not final yet.' })
           .eq('event_id', event.event_id);
+        if (queueError) throw new Error('Could not return the pending Monime event to the queue.');
         retrying++;
       } else {
-        await db.from('matmove_monime_webhook_events')
+        const { error: queueError } = await db.from('matmove_monime_webhook_events')
           .update({ status: 'processed', processed_at: new Date().toISOString(), updated_at: new Date().toISOString(), last_error: null })
           .eq('event_id', event.event_id);
+        if (queueError) throw new Error('Could not mark the Monime event as processed.');
         processed++;
       }
     } catch (error) {
       const exhausted = Number(event.attempts || 0) + 1 >= MAX_ATTEMPTS;
       const nextStatus = exhausted ? 'failed' : 'pending';
-      await db.from('matmove_monime_webhook_events')
+      const { error: queueError } = await db.from('matmove_monime_webhook_events')
         .update({
           status: nextStatus,
           updated_at: new Date().toISOString(),
           last_error: String(error?.message || 'Webhook processing failed.').slice(0, 1000)
         })
         .eq('event_id', event.event_id);
+      if (queueError) throw new Error('Could not persist the Monime event retry state.');
       if (exhausted) failed++;
       else retrying++;
     }
