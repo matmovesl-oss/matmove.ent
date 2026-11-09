@@ -39,6 +39,13 @@ async function getTransfer(id) {
 }
 
 async function processPurchaseTransfer(db, event) {
+  // The purchase worker is deliberately restricted to the completed internal
+  // transfer event. A signed event of another kind must not enter fulfilment
+  // merely because its object happens to reference an internal transfer.
+  if (event.event_type !== 'internal_transfer.completed') {
+    throw new ManualReviewError('Unsupported Monime event type for purchase fulfilment; manual review required.');
+  }
+
   const payload = event.payload;
   const object = payload?.object;
   if (object?.type !== 'internal_transfer' || typeof object.id !== 'string') {
