@@ -80,7 +80,7 @@ async function receiveWebhook(req, res) {
         payload: normalized.payload,
         signature_verified: true,
         status: 'pending',
-        attempts: 0,
+        attempts: 1,
         received_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }, {
