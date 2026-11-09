@@ -142,3 +142,54 @@ test('durably quarantined Monime events are reported for review without treating
     env('CRON_SECRET', previous);
   }
 });
+
+
+test('unified reconciliation fails closed when a money worker returns no structured result', async () => {
+  const previous = process.env.CRON_SECRET;
+  const secret = 'matmove-reconcile-test-secret-with-at-least-32-characters';
+  process.env.CRON_SECRET = secret;
+
+  try {
+    const res = response();
+    await reconcileMatMovePayments(
+      { headers: { authorization: `Bearer ${secret}` } },
+      res,
+      {
+        rides: async () => undefined,
+        payouts: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
+        monime: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 })
+      }
+    );
+
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.body.success, false);
+    assert.deepEqual(res.body.ridePayments, { unavailable: true });
+  } finally {
+    env('CRON_SECRET', previous);
+  }
+});
+
+test('unified reconciliation fails closed when the Monime worker returns malformed counters', async () => {
+  const previous = process.env.CRON_SECRET;
+  const secret = 'matmove-reconcile-test-secret-with-at-least-32-characters';
+  process.env.CRON_SECRET = secret;
+
+  try {
+    const res = response();
+    await reconcileMatMovePayments(
+      { headers: { authorization: `Bearer ${secret}` } },
+      res,
+      {
+        rides: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
+        payouts: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
+        monime: async () => ({ checked: 'none', processed: 0, retrying: 0, failed: 0 })
+      }
+    );
+
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.body.success, false);
+    assert.deepEqual(res.body.monimePurchaseEvents, { unavailable: true });
+  } finally {
+    env('CRON_SECRET', previous);
+  }
+});
