@@ -5,6 +5,7 @@ export const config = {maxDuration:60};
 import { protectedWallet, dbClient } from '../server/wallet-security.js';
 import { liveWallet } from '../server/live-wallet.js';
 import { activityAnalyticsAction } from '../server/activity-analytics.js';
+import { reconcileMatMovePayments } from '../server/payment-reconciliation.js';
 import { spinAction, reconcileSpins } from '../server/spin-payments.js';
 import { arcadeAction, publicArcadeConfig, reconcileArcades } from '../server/arcade-payments.js';
 
@@ -25,6 +26,10 @@ export default async function handler(req, res) {
   if (action === undefined && req.body?.action === 'referral_status') return referralStatus(req, res);
   if (action === 'spin_reconcile') return reconcileSpins(req, res);
   if (action === 'arcade_reconcile') return reconcileArcades(req, res);
+  if (action === 'payment_reconcile') {
+    if (req.method !== 'GET') return res.status(405).json({error:'Method not allowed.'});
+    return reconcileMatMovePayments(req, res);
+  }
   if (action === 'arcade_public') {
     if (req.method !== 'GET') return res.status(405).json({error:'Method not allowed.'});
     try { return res.status(200).json(await publicArcadeConfig(dbClient())); }
