@@ -63,6 +63,11 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
   const recovered=await rpc('recover',null,'654321');
   assert.equal(recovered.code,'saved');assert.equal(recovered.ok,true);assert.equal(recovered.digits,6);
   assert.equal((await rpc('verify','654321')).ok,true);
+  await assert.rejects(rpc('recover',null,'12345'),/6 and 10 digits/i);
+  await assert.rejects(rpc('recover',null,'12345678901'),/6 and 10 digits/i);
+  const tenDigitReset=await rpc('recover',null,'1234567890');
+  assert.equal(tenDigitReset.code,'saved');assert.equal(tenDigitReset.digits,10);
+  assert.equal((await rpc('verify','1234567890')).ok,true);
   await pg.exec('reset role');
   assert.equal((await pg.query('select balance from wallets where user_id=$1',[uid])).rows[0].balance,'42.50');
   assert.equal((await pg.query('select kyc_status from profiles where id=$1',[uid])).rows[0].kyc_status,'approved');
