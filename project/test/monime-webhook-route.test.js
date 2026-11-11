@@ -74,3 +74,11 @@ test('Monime webhook worker has an explicit bounded serverless execution window'
   assert.equal(config.maxDuration, 60);
   assert.equal(config.api.bodyParser, false);
 });
+
+test('webhook route logs fixed diagnostic codes rather than raw backend exceptions', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../api/monime-webhook.js', import.meta.url), 'utf8');
+  assert.match(source, /failure:\\s*'worker_unavailable'/);
+  assert.match(source, /failure:\\s*'inbox_unavailable'/);
+  assert.doesNotMatch(source, /console\\.error\\([^\\n]*error\\?\\.message/);
+});
