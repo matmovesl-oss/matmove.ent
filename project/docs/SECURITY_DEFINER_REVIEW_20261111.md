@@ -52,6 +52,10 @@ The helper `matmove_admin_can(text)` binds authorization to `auth.uid()` and an 
 - `matmove_guard_wallet_freeze()` blocks unauthorized wallet-freeze changes; `matmove_staff_protect_wallet()` blocks direct wallet changes by authenticated staff.
 - `matmove_staff_removal_guard()` preserves revocation records and prevents a removed staff record from retaining active/owner permissions or being silently restored.
 
+### Passcode release alignment
+
+The read-only production function still accepts exactly six digits for new passcodes. The Customer security branch's coordinated migration `20261111120000_matmove_passcode_email_recovery.sql` updates the table constraint and RPC to accept 6–10 digits, while retaining the four-digit legacy verification/upgrade path and the one-time Auth recovery-session binding. The Customer UI validates the same 6–10 digit range. These are aligned on the branch, but the migration is not installed in production. Do not publish the matching Customer code to production before the database migration is applied in the approved release window; otherwise the client will advertise passcodes the live RPC currently rejects.
+
 ## Assessment and follow-up
 
 No confirmed anonymous access or cross-user authorization bypass was identified in most of the inspected functions. Two items need corrective follow-up before launch: the Spin Admin snapshot returns broader data than its `games.settings` gate implies, and wallet-to-wallet transfer idempotency can be omitted. The raw Advisor count must not be read as 77 proven vulnerabilities; each callable definer function needs its own authorization and data-scope assessment.
