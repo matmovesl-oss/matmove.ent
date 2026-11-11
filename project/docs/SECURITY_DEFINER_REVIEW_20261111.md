@@ -71,3 +71,20 @@ Before release, keep these follow-ups open:
 7. Preserve the existing Auth gates: enroll active staff in MFA before enforcing AAL2, and enable leaked-password protection before production release.
 
 **Change boundary:** this note records read-only observations only. It does not authorize or apply a production migration, alter permissions, enable MFA, change Auth settings, or perform financial operations.
+
+### Additional idempotency findings — 11 November 2026
+
+A follow-up read-only inspection confirmed that the same optional-key pattern exists in two additional money RPCs:
+
+- `initiate_wallet_withdrawal(numeric,text,text,text,text)` defaults `p_idempotency_key` to NULL and substitutes a newly generated `WD-...` key when it is missing or blank. The RPC creates a pending payment and withdrawal request and increases `wallets.reserved_balance`. A client retry that omits the key can therefore create another withdrawal request and reserve the amount again.
+- `convert_wallet_currency(text,text,numeric,text,text)` defaults `p_idempotency_key` to NULL and substitutes a newly generated `FX-...` key. A retry without a stable caller key can therefore create another conversion and ledger posting.
+
+Together with the previously documented `transfer_wallet_funds` behavior, the three RPCs should require a bounded, caller-supplied, stable idempotency key. Keep the current amount/currency/recipient-or-destination matching and unique-key conflict behavior; a reused key with changed parameters must fail as a conflict rather than return an unrelated prior result.
+
+The repository review did not find the FlutterFlow RPC call sites. The private `matmove` GitHub repository and `MatMove-Operations-System` repository currently contain empty Git repositories, and the customer web repository has no matching RPC caller. The server wallet helper validates UUID request keys for its own protected API actions, but this does not prove that the external FlutterFlow app passes the same key to these database RPCs.
+
+**Do not change the three live function contracts yet.** First inspect the FlutterFlow actions/custom functions or export for the exact RPC arguments, confirm a stable key is generated once per user action and reused across retries, then add a coordinated client + SQL migration with duplicate/concurrency tests. Until then, treat retries without a stable key as a release blocker for direct client invocation.
+
+### Public travel availability RPC review
+
+The Advisor's one anonymous-callable SECURITY DEFINER finding is `matmove_get_travel_availability()`. Its current definition returns only the public bus settings (total seats and public SLE/USD prices) plus an aggregate count of held seats. It does not return booking IDs, passenger names, phone numbers, rider IDs, or booking-level details. `travel_settings` has an explicit public-read policy; `travel_bookings` has RLS and no anonymous table grant. The function's purpose appears to be a public, aggregate availability response, so do not revoke anonymous EXECUTE until the mobile/web call path is checked and a safe replacement is ready. Keep its output strictly aggregate and non-identifying.
