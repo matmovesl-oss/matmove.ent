@@ -11,7 +11,8 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  await pg.exec(`create role anon;create role authenticated;create role service_role;create schema auth;
  create function auth.uid() returns uuid language sql stable as $select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$;
  create function auth.jwt() returns jsonb language sql stable as $select coalesce(nullif(current_setting('request.jwt.claims',true),'')::jsonb,'{}'::jsonb)$;
- create table auth.users(id uuid primary key);insert into auth.users values('${uid}'),('${other}'),('${staff}');
+ create table auth.users(id uuid primary key,recovery_sent_at timestamptz);insert into auth.users(id) values('${uid}'),('${other}'),('${staff}');
+ create table auth.sessions(id uuid primary key,user_id uuid not null,created_at timestamptz not null,not_after timestamptz);
  create table profiles(id uuid primary key references auth.users(id),role text,passcode text,kyc_status text,full_name text);
  insert into profiles values('${uid}','rider','0123','approved','Verified Customer'),('${other}','merchant',null,'pending','Merchant'),('${staff}','driver',null,'approved','Staff');
  create table user_roles(profile_id uuid,role text);insert into user_roles select id,role from profiles;
@@ -55,14 +56,28 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  await session(uid);assert.equal((await rpc('status')).ok,false);assert.equal((await rpc('status')).userId,uid);
  });
 
- await t.test('passcode recovery requires a recent verified email-recovery JWT and changes no password or wallet data',async()=>{
+ await t.test('passcode recovery requires a fresh one-time verified Auth session and changes no password or wallet data',async()=>{
   await session(uid);
-  await assert.rejects(rpc('recover',null,'654321'),/recent verified email recovery/i);
-  const claims={amr:[{method:'recovery',timestamp:Math.floor(Date.now()/1000)}]};
-  await pg.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify(claims)]);
+  await assert.rejects(rpc('recover',null,'654321'),/fresh, verified email-recovery session/i);
+
+  const firstSession='44444444-4444-4444-8444-444444444444';
+  await pg.exec('reset role');
+  await pg.query('update auth.users set recovery_sent_at=now() where id=$1',[uid]);
+  await pg.query('insert into auth.sessions(id,user_id,created_at,not_after) values($1,$2,now(),null)',[firstSession,uid]);
+  await session(uid);
+  await pg.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({session_id:firstSession})]);
+
   const recovered=await rpc('recover',null,'654321');
   assert.equal(recovered.code,'saved');assert.equal(recovered.ok,true);assert.equal(recovered.digits,6);
   assert.equal((await rpc('verify','654321')).ok,true);
+  await assert.rejects(rpc('recover',null,'123456'),/already reset the passcode/i);
+
+  const secondSession='55555555-5555-4555-8555-555555555555';
+  await pg.exec('reset role');
+  await pg.query('update auth.users set recovery_sent_at=now() where id=$1',[uid]);
+  await pg.query('insert into auth.sessions(id,user_id,created_at,not_after) values($1,$2,now(),null)',[secondSession,uid]);
+  await session(uid);
+  await pg.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({session_id:secondSession})]);
   await assert.rejects(rpc('recover',null,'12345'),/6 and 10 digits/i);
   await assert.rejects(rpc('recover',null,'12345678901'),/6 and 10 digits/i);
   const tenDigitReset=await rpc('recover',null,'1234567890');
@@ -103,6 +118,10 @@ test('passcode recovery accepts 6 through 10 digits and rejects shorter or longe
  const screen=await readFile('src/pages/UpdatePassword.tsx','utf8');
  assert.match(migration,/digits between 6 and 10/);
  assert.match(migration,/\^\[0-9\]\{6,10\}\$/);
+ assert.match(migration,/recovery_session_id = session_id/);
+ assert.match(migration,/auth\.sessions/);
+ assert.match(migration,/recovery_sent_at/);
+ assert.doesNotMatch(migration,/auth\.jwt\(\)->'amr'/);
  assert.match(component,/\^\\d\{6,10\}\$/);
  assert.match(screen,/pattern="\[0-9\]\{6,10\}"/);
  assert.match(screen,/maxLength=\{10\}/);
