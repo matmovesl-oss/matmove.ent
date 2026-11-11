@@ -1461,7 +1461,12 @@ export default function App() {
 
       <Route
         path="/reset-password"
-        element={<UpdatePassword />}
+        element={<UpdatePassword mode="password" />}
+      />
+
+      <Route
+        path="/reset-passcode"
+        element={<UpdatePassword mode="passcode" />}
       />
 
       <Route
