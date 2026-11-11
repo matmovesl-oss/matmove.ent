@@ -14,7 +14,7 @@ $requirements$;
 create table if not exists public.matmove_customer_passcodes(
  user_id uuid primary key references auth.users(id) on delete cascade,
  pin_hash text,
- digits smallint not null default 6 check(digits in (4,6)),
+ digits smallint not null default 6 check(digits=4 or digits between 6 and 10),
  failures integer not null default 0 check(failures between 0 and 5),
  blocked_until timestamptz,
  updated_at timestamptz not null default now()
@@ -70,8 +70,8 @@ begin
  if exists(select 1 from public.matmove_staff_access where id=uid and is_active=true and removed_at is null) then raise exception 'ACCESS: Customer account required.';end if;
  if p_action is null or p_action not in ('status','create','verify','change','recover') then raise exception 'INVALID: Unsupported passcode action.';end if;
  if p_action='status' and (p_pin is not null or p_new_pin is not null) then raise exception 'INVALID: Status does not accept a passcode.';end if;
- if p_action in ('create','change','recover') and (p_new_pin is null or p_new_pin !~ '^[0-9]{6}$') then raise exception 'INVALID: Choose exactly six digits.';end if;
- if p_action='create' and p_pin is not null then raise exception 'INVALID: New setup does not accept an old passcode.';end if;
+ if p_action in ('create','change','recover') and (p_new_pin is null or p_new_pin !~ '^[0-9]{6,10}$') then raise exception 'INVALID: Choose between 6 and 10 digits.';end if;
+ if p_action in ('create','recover') and p_pin is not null then raise exception 'INVALID: This action does not accept an old passcode.';end if;
  if p_action='verify' and p_new_pin is not null then raise exception 'INVALID: Verification does not change the passcode.';end if;
  perform pg_advisory_xact_lock(hashtextextended('matmove-passcode:'||uid::text,0));
  insert into public.matmove_customer_passcodes(user_id) values(uid) on conflict(user_id) do nothing;
@@ -80,10 +80,8 @@ begin
   result_code:='cooldown';wait_seconds:=greatest(1,ceil(extract(epoch from(r.blocked_until-clock_timestamp())))::integer);
  elsif p_action='create' then
   if r.pin_hash is not null then result_code:='already_configured';
-  else update public.matmove_customer_passcodes set pin_hash=public.matmove_pin_crypt(p_new_pin),digits=6,failures=0,blocked_until=null,updated_at=clock_timestamp() where user_id=uid returning * into r;ok:=true;result_code:='saved';end if;
+  else update public.matmove_customer_passcodes set pin_hash=public.matmove_pin_crypt(p_new_pin),digits=char_length(p_new_pin),failures=0,blocked_until=null,updated_at=clock_timestamp() where user_id=uid returning * into r;ok:=true;result_code:='saved';end if;
  elsif p_action='recover' then
-  -- Only a fresh Supabase email-recovery JWT may reset the passcode.
-  -- A normal authenticated session cannot invoke this privileged reset path.
   recovery_claims:=auth.jwt()->'amr';
   recovery_timestamp:=case when coalesce(recovery_claims->0->>'timestamp','') ~ '^[0-9]+$' then (recovery_claims->0->>'timestamp')::numeric else null end;
   if coalesce(recovery_claims->0->>'method','')<>'recovery' or recovery_timestamp is null or
@@ -91,20 +89,22 @@ begin
      recovery_timestamp > extract(epoch from clock_timestamp())+60 then
    raise exception 'AUTH: A recent verified email recovery is required to reset the passcode.';
   end if;
-  update public.matmove_customer_passcodes set pin_hash=public.matmove_pin_crypt(p_new_pin),digits=6,failures=0,blocked_until=null,updated_at=clock_timestamp() where user_id=uid returning * into r;
+  update public.matmove_customer_passcodes set pin_hash=public.matmove_pin_crypt(p_new_pin),digits=char_length(p_new_pin),failures=0,blocked_until=null,updated_at=clock_timestamp() where user_id=uid returning * into r;
   ok:=true;result_code:='saved';
- if r.pin_hash is null then result_code:='setup_required';
-  elsif p_pin is null or length(p_pin)>6 or p_pin !~ '^[0-9]{4,6}$' then
+ elsif p_action in ('verify','change') then
+  if p_action='change' and (p_new_pin is null or p_new_pin !~ '^[0-9]{6,10}$') then raise exception 'INVALID: Choose between 6 and 10 digits.';end if;
+  if r.pin_hash is null then result_code:='setup_required';
+  elsif p_pin is null or p_pin !~ '^[0-9]{4,10}$' or char_length(p_pin)<>r.digits then
    raise exception 'INVALID: Enter your current passcode.';
-  elsif length(p_pin)=r.digits and public.matmove_pin_crypt(p_pin,r.pin_hash)=r.pin_hash then
+  elsif public.matmove_pin_crypt(p_pin,r.pin_hash)=r.pin_hash then
    update public.matmove_customer_passcodes set failures=0,blocked_until=null where user_id=uid returning * into r;
    if p_action='change' then
-    update public.matmove_customer_passcodes set pin_hash=public.matmove_pin_crypt(p_new_pin),digits=6,updated_at=clock_timestamp() where user_id=uid returning * into r;
+    update public.matmove_customer_passcodes set pin_hash=public.matmove_pin_crypt(p_new_pin),digits=char_length(p_new_pin),updated_at=clock_timestamp() where user_id=uid returning * into r;
+    ok:=true;result_code:='saved';
+   else
+    ok:=true;result_code:=case when r.digits=4 then 'upgrade_required' else 'verified' end;
    end if;
-   ok:=true;result_code:=case when r.digits=4 then 'upgrade_required' when p_action='change' then 'saved' else 'verified' end;
   else
-   -- Return, never raise after this write: a raised exception would roll back
-   -- the failed-attempt counter and let repeated guesses bypass the cooldown.
    update public.matmove_customer_passcodes set failures=case when blocked_until is not null then 1 else least(failures+1,5) end,
     blocked_until=case when blocked_until is null and failures>=4 then clock_timestamp()+interval '5 minutes' else null end where user_id=uid returning * into r;
    result_code:=case when r.blocked_until is not null then 'cooldown' else 'incorrect' end;
