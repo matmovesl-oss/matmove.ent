@@ -99,13 +99,13 @@ test('existing six-digit PIN unlocks only after one server-verified receipt with
  assert.doesNotMatch(h.text,/PRIVATE DASHBOARD/);h.input('Current 6-digit passcode','012345');await h.settle();const form=nodes(h.tree).find(n=>n.type==='form');form.props.onSubmit({preventDefault(){}});form.props.onSubmit({preventDefault(){}});await h.settle();
  assert.match(h.text,/PRIVATE DASHBOARD/);const writes=h.calls.filter(c=>c.args.p_action==='verify');assert.equal(writes.length,1);assert.equal(writes[0].headers.Authorization,'Bearer captured-token');assert.equal(writes[0].args.p_pin,'012345');assert.equal(h.intervals,0);
 }));
-test('setup requires matching six digits, preserves leading zeros, and never stores the PIN in browser storage',()=>page(async h=>{
- h.input('New six-digit passcode','012345');h.input('Confirm six-digit passcode','012346');await h.settle();await h.submit();assert.equal(h.calls.length,1);assert.match(h.text,/same six-digit/);
- h.input('Confirm six-digit passcode','012345');await h.settle();await h.submit();assert.equal(h.calls.at(-1).args.p_new_pin,'012345');assert.equal(h.calls.at(-1).args.p_pin,null);assert.match(h.text,/PRIVATE DASHBOARD/);
+test('setup requires matching 6–10 digit passcodes, preserves leading zeros, and never stores the PIN in browser storage',()=>page(async h=>{
+ h.input('New passcode (6–10 digits)','012345');h.input('Confirm passcode','012346');await h.settle();await h.submit();assert.equal(h.calls.length,1);assert.match(h.text,/same 6–10 digit/);
+ h.input('Confirm passcode','012345');await h.settle();await h.submit();assert.equal(h.calls.at(-1).args.p_new_pin,'012345');assert.equal(h.calls.at(-1).args.p_pin,null);assert.match(h.text,/PRIVATE DASHBOARD/);
 },{configured:false,respond:call=>({data:receipt(call.args.p_action==='status'?{configured:false}:{configured:true,ok:true,code:'saved'})})}));
-test('a verified legacy four-digit PIN cannot unlock until an explicit six-digit upgrade is confirmed',()=>page(async h=>{
- h.input('Current 4-digit passcode','0123');await h.settle();await h.submit();assert.match(h.text,/Upgrade to six digits/);assert.doesNotMatch(h.text,/PRIVATE DASHBOARD/);
- h.input('New six-digit passcode','000123');h.input('Confirm six-digit passcode','000123');await h.settle();await h.submit();assert.equal(h.calls.at(-1).args.p_action,'change');assert.equal(h.calls.at(-1).args.p_pin,'0123');assert.match(h.text,/PRIVATE DASHBOARD/);
+test('a verified legacy four-digit PIN cannot unlock until an explicit 6–10 digit upgrade is confirmed',()=>page(async h=>{
+ h.input('Current 4-digit passcode','0123');await h.settle();await h.submit();assert.match(h.text,/Upgrade to 6–10 digits/);assert.doesNotMatch(h.text,/PRIVATE DASHBOARD/);
+ h.input('New passcode (6–10 digits)','000123');h.input('Confirm passcode','000123');await h.settle();await h.submit();assert.equal(h.calls.at(-1).args.p_action,'change');assert.equal(h.calls.at(-1).args.p_pin,'0123');assert.match(h.text,/PRIVATE DASHBOARD/);
 },{digits:4,respond:call=>({data:receipt(call.args.p_action==='status'?{digits:4}:call.args.p_action==='verify'?{digits:4,ok:true,code:'upgrade_required'}:{digits:6,ok:true,code:'saved'})})}));
 test('wrong guesses and cooldown receipts stay locked and cannot claim a local successful PIN match',()=>page(async h=>{
  h.input('Current 6-digit passcode','999999');await h.settle();await h.submit();assert.match(h.text,/Try again in 300 seconds/);assert.doesNotMatch(h.text,/PRIVATE DASHBOARD/);
