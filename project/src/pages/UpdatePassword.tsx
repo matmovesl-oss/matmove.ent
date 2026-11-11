@@ -75,7 +75,7 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
       if (password.length < 8) return setError('Password must be at least 8 characters long.');
       if (password !== confirmPassword) return setError('Passwords do not match.');
     } else {
-      if (!/^\d{6}$/.test(newPin)) return setError('Choose a passcode between 6 and 10 digits.');
+      if (!/^\d{6,10}$/.test(newPin)) return setError('Choose a passcode between 6 and 10 digits.');
       if (newPin !== confirmPin) return setError('The passcodes do not match.');
     }
 
