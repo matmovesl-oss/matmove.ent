@@ -45,6 +45,7 @@ import {
 } from '@/pages/AuthPages';
 import {
   ForgotPasswordPage,
+  ForgotPasscodePage,
 } from '@/pages/PasswordPages';
 import {
   UpdatePassword,
@@ -1457,6 +1458,10 @@ export default function App() {
       <Route
         path="/forgot-password"
         element={<ForgotPasswordPage />}
+      />
+      <Route
+        path="/forgot-passcode"
+        element={<ForgotPasscodePage />}
       />
 
       <Route
