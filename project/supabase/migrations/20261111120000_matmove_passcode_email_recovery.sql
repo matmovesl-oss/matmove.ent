@@ -10,7 +10,7 @@ begin
  if exists(select 1 from public.matmove_staff_access where id=uid and is_active=true and removed_at is null) then raise exception 'ACCESS: Customer account required.';end if;
  if p_action is null or p_action not in ('status','create','verify','change','recover') then raise exception 'INVALID: Unsupported passcode action.';end if;
  if p_action='status' and (p_pin is not null or p_new_pin is not null) then raise exception 'INVALID: Status does not accept a passcode.';end if;
- if p_action in ('create','change','recover') and (p_new_pin is null or p_new_pin !~ '^[0-9]{6}
+ if p_action in ('create','change','recover') and (p_new_pin is null or p_new_pin !~ '^[0-9]{6}$') then raise exception 'INVALID: Choose exactly six digits.';end if;
  if p_action='create' and p_pin is not null then raise exception 'INVALID: New setup does not accept an old passcode.';end if;
  if p_action='verify' and p_new_pin is not null then raise exception 'INVALID: Verification does not change the passcode.';end if;
  perform pg_advisory_xact_lock(hashtextextended('matmove-passcode:'||uid::text,0));
@@ -25,8 +25,15 @@ begin
   -- Only a fresh Supabase email-recovery JWT may reset the passcode.
   -- A normal authenticated session cannot invoke this privileged reset path.
   recovery_claims:=auth.jwt()->'amr';
-  recovery_timestamp:=case when coalesce(recovery_claims->0->>'timestamp','') ~ '^[0-9]+
-  if r.pin_hash is null then result_code:='setup_required';
+  recovery_timestamp:=case when coalesce(recovery_claims->0->>'timestamp','') ~ '^[0-9]+$' then (recovery_claims->0->>'timestamp')::numeric else null end;
+  if coalesce(recovery_claims->0->>'method','')<>'recovery' or recovery_timestamp is null or
+     recovery_timestamp < extract(epoch from clock_timestamp())-900 or
+     recovery_timestamp > extract(epoch from clock_timestamp())+60 then
+   raise exception 'AUTH: A recent verified email recovery is required to reset the passcode.';
+  end if;
+  update public.matmove_customer_passcodes set pin_hash=public.matmove_pin_crypt(p_new_pin),digits=6,failures=0,blocked_until=null,updated_at=clock_timestamp() where user_id=uid returning * into r;
+  ok:=true;result_code:='saved';
+ if r.pin_hash is null then result_code:='setup_required';
   elsif p_pin is null or length(p_pin)>6 or p_pin !~ '^[0-9]{4,6}$' then
    raise exception 'INVALID: Enter your current passcode.';
   elsif length(p_pin)=r.digits and public.matmove_pin_crypt(p_pin,r.pin_hash)=r.pin_hash then
