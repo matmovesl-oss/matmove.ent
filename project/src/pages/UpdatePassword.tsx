@@ -93,7 +93,7 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
         if (!result.ok || result.digits < 6 || result.digits > 10 || result.code !== 'saved') {
           throw new Error(result.code === 'cooldown'
             ? 'Passcode recovery is temporarily locked. Request a fresh recovery email after the cooldown.'
-            : 'The six-digit passcode reset was not confirmed. Request a fresh recovery email and try again.');
+            : 'The passcode reset was not confirmed. Request a fresh recovery email and try again.');
         }
       }
 
@@ -169,7 +169,7 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Confirm passcode</label>
-                <input type="password" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\\D/g, '').slice(0, 6))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="Re-enter your passcode" />
+                <input type="password" inputMode="numeric" pattern="[0-9]{6,10}" minLength={6} maxLength={10} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\\D/g, '').slice(0, 6))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="Re-enter your passcode" />
               </div>
             </>
           )}
