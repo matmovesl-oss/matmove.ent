@@ -28,6 +28,11 @@ create table if not exists public.matmove_customer_passcodes (
 );
 alter table public.matmove_customer_passcodes
   add column if not exists recovery_session_id uuid;
+alter table public.matmove_customer_passcodes
+  drop constraint if exists matmove_customer_passcodes_digits_check;
+alter table public.matmove_customer_passcodes
+  add constraint matmove_customer_passcodes_digits_check
+  check (digits = 4 or digits between 6 and 10);
 alter table public.matmove_customer_passcodes enable row level security;
 revoke all on public.matmove_customer_passcodes from public, anon, authenticated, service_role;
 
