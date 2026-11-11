@@ -192,10 +192,24 @@ export async function monime(path, options = {}) {
       ) ||
       'The wallet provider could not complete this request.';
 
-    console.error(
-      `Monime API Error (${response.status} on /v1/${path}):`,
-      body
-    );
+    const resourceName = String(path).split(/[/?]/, 1)[0];
+    const safeResource = /^[A-Za-z0-9-]{1,48}$/.test(resourceName)
+      ? resourceName
+      : 'unknown';
+    const safeProviderField = value =>
+      typeof value === 'string' && /^[A-Za-z0-9:_-]{1,80}$/.test(value)
+        ? value
+        : null;
+
+    // Provider error bodies may contain payer, account or transaction data.
+    // Log only stable diagnostics, never the response body or dynamic path ID.
+    console.error('Monime API request failed', {
+      status: response.status,
+      resource: safeResource,
+      requestId: safeProviderField(response.headers?.get?.('Monime-Request-Id')),
+      providerCode: safeProviderField(body?.error?.code),
+      providerReason: safeProviderField(body?.error?.reason)
+    });
 
     throw new HttpError(
       response.status >= 400 &&
