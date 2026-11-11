@@ -75,7 +75,7 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
       if (password.length < 8) return setError('Password must be at least 8 characters long.');
       if (password !== confirmPassword) return setError('Passwords do not match.');
     } else {
-      if (!/^\\d{6}$/.test(newPin)) return setError('Choose a passcode between 6 and 10 digits.');
+      if (!/^\d{6}$/.test(newPin)) return setError('Choose a passcode between 6 and 10 digits.');
       if (newPin !== confirmPin) return setError('The passcodes do not match.');
     }
 
@@ -165,11 +165,11 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
             <>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">New passcode (6–10 digits)</label>
-                <input type="password" inputMode="numeric" pattern="[0-9]{6,10}" minLength={6} maxLength={10} value={newPin} onChange={e => setNewPin(e.target.value.replace(/\\D/g, '').slice(0, 10))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="6 to 10 digits" />
+                <input type="password" inputMode="numeric" pattern="[0-9]{6,10}" minLength={6} maxLength={10} value={newPin} onChange={e => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 10))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="6 to 10 digits" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Confirm passcode</label>
-                <input type="password" inputMode="numeric" pattern="[0-9]{6,10}" minLength={6} maxLength={10} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\\D/g, '').slice(0, 10))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="Re-enter your passcode" />
+                <input type="password" inputMode="numeric" pattern="[0-9]{6,10}" minLength={6} maxLength={10} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 10))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="Re-enter your passcode" />
               </div>
             </>
           )}
