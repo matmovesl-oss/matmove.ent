@@ -158,13 +158,15 @@ export function AuthCallbackPage() {
     const params = new URLSearchParams(window.location.search);
     const fragment = new URLSearchParams(window.location.hash.slice(1));
     const providerError = params.get('error_description') || fragment.get('error_description');
-    const recovery = params.get('type') === 'recovery' || params.get('next') === '/reset-password';
+    const requestedNext = params.get('next');
+    const recoveryNext = requestedNext === '/reset-passcode' ? '/reset-passcode' : '/reset-password';
+    const recovery = params.get('type') === 'recovery' || requestedNext === '/reset-password' || requestedNext === '/reset-passcode';
     if (providerError) { setError(providerError); return; }
     // Supabase exchanges the one-time PKCE code before the session read completes.
     void refreshSession().then(current => {
       if (!mounted) return;
       if (!current) throw new Error('Sign-in was not confirmed. Please return to sign in.');
-      navigate(recovery ? '/reset-password?type=recovery' : customerPath(current), { replace: true });
+      navigate(recovery ? `${recoveryNext}?type=recovery` : customerPath(current), { replace: true });
     }).catch(error => { if (mounted) setError(error.message); });
     return () => { mounted = false; };
   }, [refreshSession, navigate]);
