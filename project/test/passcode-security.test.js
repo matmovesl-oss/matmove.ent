@@ -80,10 +80,14 @@ test('credential recovery screens are separate and each updates only its selecte
  assert.ok(callback.includes("requestedNext === '/reset-passcode'"));
  assert.match(lock,/next=%2Freset-passcode/);
  assert.match(lock,/Your account password will not change/);
- const passwordBranch=screen.slice(screen.indexOf("if (mode === 'password') {"),screen.indexOf("} else {",screen.indexOf("if (mode === 'password') {")));
- assert.match(passwordBranch,/supabase\.auth\.updateUser\(\{ password \}\)/);
+ const operationStart=screen.indexOf("if (mode === 'password') {\\n        const { error: updateError }");
+ const operationElse=screen.indexOf("} else {",operationStart);
+ const operationEnd=screen.indexOf("localStorage.removeItem",operationElse);
+ const passwordBranch=screen.slice(operationStart,operationElse);
+ const passcodeBranch=screen.slice(operationElse,operationEnd);
+ assert.ok(operationStart>=0 && operationElse>operationStart && operationEnd>operationElse);
+ assert.match(passwordBranch,/supabase\\.auth\\.updateUser\\(\\{ password \\}\\)/);
  assert.doesNotMatch(passwordBranch,/customerPasscode|newPin/);
- const passcodeBranch=screen.slice(screen.indexOf("} else {",screen.indexOf("if (mode === 'password') {")),screen.indexOf("localStorage.removeItem"));
- assert.match(passcodeBranch,/customerPasscode\(userId, 'recover'/);
+ assert.match(passcodeBranch,/customerPasscode\\(userId, 'recover', null, newPin\\)/);
  assert.doesNotMatch(passcodeBranch,/updateUser|password/);
 });
