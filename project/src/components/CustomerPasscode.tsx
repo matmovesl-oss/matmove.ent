@@ -70,7 +70,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
   if(mutex.current||!resetEmail.trim())return;
   mutex.current=true;setBusy(true);setError('');setResetSent(false);
   try{
-   const {error}=await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(),{redirectTo:customerAuthRedirect('/auth/callback?type=recovery&next=%2Freset-password')});
+   const {error}=await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(),{redirectTo:customerAuthRedirect('/auth/callback?type=recovery&next=%2Freset-passcode')});
    if(error)throw error;
    setResetSent(true);
   }catch(e){setError(e instanceof Error?e.message:'Could not send the recovery email. Try again.');}
@@ -121,7 +121,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
              {forgotMode ? (
                 <>
                   <h1 className="mt-2 text-xl font-bold">Reset Passcode</h1>
-                  <p className="mt-1 text-xs text-slate-500">We will email you a secure MatMove recovery link. It opens this app so you can set a new password and six-digit passcode.</p>
+                  <p className="mt-1 text-xs text-slate-500">We will email you a secure link so you can change only your six-digit passcode.</p>
                 </>
               ) : (
                 <>
@@ -137,7 +137,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
                  Account email address
                  <input type="email" required autoComplete="email" value={resetEmail} onChange={e=>setResetEmail(e.target.value)} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" />
                </label>
-               {resetSent&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">Recovery email requested. Open the link in your inbox to return to MatMove and choose a new password and six-digit passcode.</p>}
+               {resetSent&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">Recovery email requested. Open the link in your inbox to set a new six-digit passcode. Your account password will not change.</p>}
                <button type="submit" disabled={busy||!resetEmail.trim()} className="flex h-11 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:opacity-50">
                  {busy?'Sending recovery link…':'Email me a recovery link'}
                </button>
