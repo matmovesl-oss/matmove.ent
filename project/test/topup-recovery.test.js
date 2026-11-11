@@ -156,3 +156,38 @@ test('lost POST response keeps the same logical key and never automatically retr
    if(value===undefined)delete process.env[key];else process.env[key]=value;
  }
 });
+
+test('Payment ownership graph proves the exact Payment Code lineage when provider reference is absent', async () => {
+ const c={...code,status:'completed'};
+ const payment={
+  id:'pay-owned-by-code',
+  status:'completed',
+  financialAccountId:c.financialAccountId,
+  amount:c.amount,
+  fees:[{amount:{currency:'SLE',value:5}}],
+  ownershipGraph:{owner:{
+   id:'pay-owned-by-code',
+   type:'payment',
+   owner:{
+    id:c.id,
+    type:'payment_code'
+   }
+  }}
+ };
+ const result=await topupSettlement(c,async()=>[payment]);
+ assert.deepEqual(result,{paymentId:'pay-owned-by-code',feeMinor:5,creditMinor:495});
+
+ const unrelated={...payment,ownershipGraph:{owner:{
+  id:'pay-owned-by-code',
+  type:'payment',
+  owner:{id:'code-other',type:'payment_code'}
+ }}};
+ assert.equal(await topupSettlement(c,async()=>[unrelated]),null);
+
+ const unrelatedType={...payment,ownershipGraph:{owner:{
+  id:'pay-owned-by-code',
+  type:'payment',
+  owner:{id:c.id,type:'checkout_session'}
+ }}};
+ assert.equal(await topupSettlement(c,async()=>[unrelatedType]),null);
+});
