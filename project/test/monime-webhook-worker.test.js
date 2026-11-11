@@ -107,7 +107,7 @@ function fixture(status = 'completed', signatureVerified = true, failEventFinali
       assert.equal(name, 'matmove_fulfill_purchase_payment');
       assert.equal(args.p_payment_id, paymentId);
       payment.fulfilled_at = new Date().toISOString();
-      return { data: { success: true }, error: null };
+      return { data: { fulfilled: true }, error: null };
     }
   };
 
