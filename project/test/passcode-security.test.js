@@ -55,3 +55,21 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  });
  }finally{await pg.close();}
 });
+
+test('credential recovery screens are separate and each updates only its selected credential',async()=>{
+ const app=await readFile('src/App.tsx','utf8');
+ const callback=await readFile('src/pages/AuthPages.tsx','utf8');
+ const screen=await readFile('src/pages/UpdatePassword.tsx','utf8');
+ const lock=await readFile('src/components/CustomerPasscode.tsx','utf8');
+ assert.match(app,/path="\\/reset-password"[\\s\\S]*?mode="password"/);
+ assert.match(app,/path="\\/reset-passcode"[\\s\\S]*?mode="passcode"/);
+ assert.match(callback,/requestedNext === '\\/reset-passcode'/);
+ assert.match(lock,/next=%2Freset-passcode/);
+ assert.match(lock,/Your account password will not change/);
+ const passwordBranch=screen.slice(screen.indexOf("if (mode === 'password') {"),screen.indexOf("} else {",screen.indexOf("if (mode === 'password') {")));
+ assert.match(passwordBranch,/supabase\.auth\.updateUser\(\{ password \}\)/);
+ assert.doesNotMatch(passwordBranch,/customerPasscode|newPin/);
+ const passcodeBranch=screen.slice(screen.indexOf("} else {",screen.indexOf("if (mode === 'password') {")),screen.indexOf("localStorage.removeItem"));
+ assert.match(passcodeBranch,/customerPasscode\(userId, 'recover'/);
+ assert.doesNotMatch(passcodeBranch,/updateUser|password/);
+});
