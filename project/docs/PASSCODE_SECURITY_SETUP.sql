@@ -76,7 +76,7 @@ begin
  perform pg_advisory_xact_lock(hashtextextended('matmove-passcode:'||uid::text,0));
  insert into public.matmove_customer_passcodes(user_id) values(uid) on conflict(user_id) do nothing;
  select * into r from public.matmove_customer_passcodes where user_id=uid for update;
- if r.blocked_until>clock_timestamp() then
+ if r.blocked_until>clock_timestamp() and p_action<>'recover' then
   result_code:='cooldown';wait_seconds:=greatest(1,ceil(extract(epoch from(r.blocked_until-clock_timestamp())))::integer);
  elsif p_action='create' then
   if r.pin_hash is not null then result_code:='already_configured';
