@@ -9,7 +9,8 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  const pg=new PGlite({extensions:{pgcrypto},postgresqlconf:['shared_buffers=16MB','max_connections=10','work_mem=1MB']});
  try{
  await pg.exec(`create role anon;create role authenticated;create role service_role;create schema auth;
- create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+ create function auth.uid() returns uuid language sql stable as $select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$;
+ create function auth.jwt() returns jsonb language sql stable as $select coalesce(nullif(current_setting('request.jwt.claims',true),'')::jsonb,'{}'::jsonb)$;
  create table auth.users(id uuid primary key);insert into auth.users values('${uid}'),('${other}'),('${staff}');
  create table profiles(id uuid primary key references auth.users(id),role text,passcode text,kyc_status text,full_name text);
  insert into profiles values('${uid}','rider','0123','approved','Verified Customer'),('${other}','merchant',null,'pending','Merchant'),('${staff}','driver',null,'approved','Staff');
@@ -52,6 +53,19 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  await t.test('reruns preserve hashes and attempt counters; status never claims an unlock',async()=>{
  await session(uid);await rpc('verify','999999');await pg.exec('reset role');const before=(await pg.query('select * from matmove_customer_passcodes where user_id=$1',[uid])).rows[0];await pg.exec(sql);assert.deepEqual((await pg.query('select * from matmove_customer_passcodes where user_id=$1',[uid])).rows[0],before);
  await session(uid);assert.equal((await rpc('status')).ok,false);assert.equal((await rpc('status')).userId,uid);
+ });
+
+ await t.test('passcode recovery requires a recent verified email-recovery JWT and changes no password or wallet data',async()=>{
+  await session(uid);
+  await assert.rejects(rpc('recover',null,'654321'),/recent verified email recovery/i);
+  const claims={amr:[{method:'recovery',timestamp:Math.floor(Date.now()/1000)}]};
+  await pg.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify(claims)]);
+  const recovered=await rpc('recover',null,'654321');
+  assert.equal(recovered.code,'saved');assert.equal(recovered.ok,true);assert.equal(recovered.digits,6);
+  assert.equal((await rpc('verify','654321')).ok,true);
+  await pg.exec('reset role');
+  assert.equal((await pg.query('select balance from wallets where user_id=$1',[uid])).rows[0].balance,'42.50');
+  assert.equal((await pg.query('select kyc_status from profiles where id=$1',[uid])).rows[0].kyc_status,'approved');
  });
  }finally{await pg.close();}
 });
