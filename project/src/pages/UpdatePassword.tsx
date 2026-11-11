@@ -109,7 +109,7 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
     }
   };
 
-  const credentialLabel = mode === 'password' ? 'Password' : 'Six-digit passcode';
+  const credentialLabel = mode === 'password' ? 'Password' : 'MatMove passcode';
   const title = success ? (mode === 'password' ? 'Password Updated' : 'Passcode Updated')
     : (mode === 'password' ? 'Reset Your Password' : 'Reset Your Passcode');
   const description = mode === 'password'
