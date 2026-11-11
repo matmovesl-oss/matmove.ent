@@ -80,5 +80,5 @@ test('webhook route logs fixed diagnostic codes rather than raw backend exceptio
   const source = await readFile(new URL('../api/monime-webhook.js', import.meta.url), 'utf8');
   assert.match(source, /failure:\s*'worker_unavailable'/);
   assert.match(source, /failure:\s*'inbox_unavailable'/);
-  assert.doesNotMatch(source, /console\.error\\([^\n]*error\?\\.message/);
+  assert.equal(source.includes('error?.message'), false);
 });
