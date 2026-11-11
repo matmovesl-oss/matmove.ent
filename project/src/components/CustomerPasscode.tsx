@@ -10,7 +10,7 @@ const codes=['status','cooldown','already_configured','saved','setup_required','
 export async function customerPasscode(userId:string,action:'status'|'create'|'verify'|'change'|'recover',pin:string|null=null,newPin:string|null=null):Promise<Receipt>{
  if(!userId||!['status','create','verify','change','recover'].includes(action))throw Error('Invalid passcode request.');
  if(['create','change','recover'].includes(action)&&!/^\d{6,10}$/.test(newPin||''))throw Error('Choose between 6 and 10 digits.');
- if(['verify','change'].includes(action)&&!/^([0-9]{4}|[0-9]{6})$/.test(pin||''))throw Error('Enter your current passcode.');
+ if(['verify','change'].includes(action)&&!/^(?:[0-9]{4}|[0-9]{6,10})$/.test(pin||''))throw Error('Enter your current passcode.');
  const session=await supabase.auth.getSession();
  if(session.error||session.data.session?.user.id!==userId||!session.data.session.access_token)throw Error('Your sign-in changed. Sign in again.');
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
