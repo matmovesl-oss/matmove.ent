@@ -70,6 +70,10 @@ test('actual net settlement matches the code owner, account, amount and referenc
  assert.equal(await topupSettlement(c,async()=>[receipt,{...receipt,id:'pay-second'}]),null);
  assert.equal(await topupSettlement(c,async()=>[{...receipt,fees:undefined}]),null);
  assert.equal(await topupSettlement(c,async()=>[{...receipt,fees:[{amount:{currency:'USD',value:5}}]}]),null);
+ const conflictingLineage={...receipt,ownershipGraph:{owner:{id:'pay-match',type:'payment',owner:{id:'another-code',type:'payment_code'}}}};
+ assert.equal(await topupSettlement(c,async()=>[conflictingLineage]),null);
+ const exactLineage={...receipt,ownershipGraph:{owner:{id:'pay-match',type:'payment',owner:{id:c.id,type:'payment_code'}}}};
+ assert.deepEqual(await topupSettlement(c,async()=>[exactLineage]),{paymentId:'pay-match',feeMinor:5,creditMinor:495});
 });
 test('1% gross-up covers the exported receiving-side deduction for SLE2 and SLE5',()=>{
  const env=configured({rateBps:100,fixedMinor:0,minimumMinor:0,taxBps:0,rounding:'nearest'});
