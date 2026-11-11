@@ -41,23 +41,17 @@ export function LoginPage() {
           </label>
           
           <label className="field">
-            {/* Added Forgot Password Link Here */}
-            <div className="flex justify-between items-center w-full">
-              <span>Password</span>
-              <button 
-                type="button" 
-                onClick={() => navigate('/forgot-password')} 
-                className="text-sm font-semibold text-[#184f9a] hover:underline"
-              >
-                Forgot password?
-              </button>
-            </div>
+            <span>Password</span>
             <div className="input-field">
               <Lock size={17} />
               <input type={showPass ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
               <button type="button" className="input-toggle absolute right-4 top-3.5 text-slate-400" onClick={() => setShowPass(!showPass)}>
                 {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
               </button>
+            </div>
+            <div className="mt-2 flex justify-between gap-4 text-sm">
+              <button type="button" onClick={() => navigate('/forgot-password')} className="font-semibold text-[#184f9a] hover:underline">Forgot password?</button>
+              <button type="button" onClick={() => navigate('/forgot-passcode')} className="font-semibold text-[#184f9a] hover:underline">Forgot passcode?</button>
             </div>
           </label>
           
