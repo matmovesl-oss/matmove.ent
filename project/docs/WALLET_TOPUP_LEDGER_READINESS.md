@@ -21,6 +21,7 @@ Read-only production queries identified **11** pending SLE Monime `wallet_topup`
 - All 11 have a user ID, wallet ID, provider reference, idempotency key, and a stored provider response.
 - All 11 have `checkout_session_id` and `checkout_reference` metadata.
 - For all 11, `payment_transactions.provider_reference` exactly equals `metadata.checkout_session_id`. The rows therefore belong to the legacy Checkout Session flow, not the current Payment Code flow.
+- All 11 pass local consistency checks: the wallet exists; the payment user matches the wallet owner; currency and amount match the stored metadata; the stored user and wallet IDs match the payment row; the idempotency key matches its metadata; and the provider reference matches the Checkout Session ID.
 - All 11 local payment rows remain `pending`.
 - None of the 11 has a linked `wallet_transactions` row or `ledger_transactions` row.
 
