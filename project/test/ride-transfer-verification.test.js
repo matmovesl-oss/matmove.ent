@@ -23,7 +23,10 @@ function makeDb(leg = {}) {
         return { data: current, error: null };
       }
       if (name === 'record_ride_transfer') {
-        return { data: { recorded: true }, error: null };
+        current.status = args.p_status;
+        current.provider_id = args.p_provider_id || current.provider_id;
+        current.can_create = false;
+        return { data: current, error: null };
       }
       throw new Error(`Unexpected RPC ${name}`);
     }
@@ -152,7 +155,7 @@ test('an uncertain provider POST is marked review-required and is never blindly 
     throw new Error('Should not create another transfer');
   });
   assert.equal(posts, 1);
-  assert.equal(later, calls.at(-1).args);
+  assert.equal(later.status, 'review_required');
 });
 
 test('terminal transfer legs are read-only and make no provider request', async () => {
@@ -163,7 +166,7 @@ test('terminal transfer legs are read-only and make no provider request', async 
       providerCalls++;
       throw new Error('Terminal transfer must not call Monime');
     });
-    assert.equal(result.status, 'pending');
+      assert.equal(result.status, status);
     assert.equal(providerCalls, 0);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].name, 'claim_ride_transfer');
