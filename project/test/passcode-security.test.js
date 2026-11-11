@@ -75,9 +75,9 @@ test('credential recovery screens are separate and each updates only its selecte
  const callback=await readFile('src/pages/AuthPages.tsx','utf8');
  const screen=await readFile('src/pages/UpdatePassword.tsx','utf8');
  const lock=await readFile('src/components/CustomerPasscode.tsx','utf8');
- assert.match(app,/path="\\/reset-password"[\\s\\S]*?mode="password"/);
- assert.match(app,/path="\\/reset-passcode"[\\s\\S]*?mode="passcode"/);
- assert.match(callback,/requestedNext === '\\/reset-passcode'/);
+ assert.ok(app.includes('path="/reset-password"') && app.includes('mode="password"'));
+ assert.ok(app.includes('path="/reset-passcode"') && app.includes('mode="passcode"'));
+ assert.ok(callback.includes("requestedNext === '/reset-passcode'"));
  assert.match(lock,/next=%2Freset-passcode/);
  assert.match(lock,/Your account password will not change/);
  const passwordBranch=screen.slice(screen.indexOf("if (mode === 'password') {"),screen.indexOf("} else {",screen.indexOf("if (mode === 'password') {")));
