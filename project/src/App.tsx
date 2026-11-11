@@ -767,7 +767,7 @@ function AccountSection({
     try{
       const receipt=await customerPasscode(profile.id,'verify',deletePin);
       setDeletePin('');
-      if(!receipt.ok||receipt.digits!==6||receipt.code!=='verified')throw Error(receipt.code==='cooldown'?'Try again in '+receipt.retryAfterSeconds+' seconds.':'Incorrect passcode.');
+      if(!receipt.ok||receipt.digits<6||receipt.digits>10||receipt.code!=='verified')throw Error(receipt.code==='cooldown'?'Try again in '+receipt.retryAfterSeconds+' seconds.':'Incorrect passcode.');
       const result=await supabase.rpc('matmove_customer_request_account_deletion',{p_reason:'Customer requested account deletion from Account Settings.'});
       if(result.error)throw result.error;
       if(result.data?.success!==true||typeof result.data.status!=='string')throw Error('MatMove did not confirm the deletion request. Check its status before retrying.');
