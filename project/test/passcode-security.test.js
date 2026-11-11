@@ -91,3 +91,15 @@ test('credential recovery screens are separate and each updates only its selecte
  assert.match(passcodeBranch,/customerPasscode\\(userId, 'recover', null, newPin\\)/);
  assert.doesNotMatch(passcodeBranch,/updateUser|password/);
 });
+
+test('passcode recovery accepts 6 through 10 digits and rejects shorter or longer values',async()=>{
+ const migration=await readFile('supabase/migrations/20261111120000_matmove_passcode_email_recovery.sql','utf8');
+ const component=await readFile('src/components/CustomerPasscode.tsx','utf8');
+ const screen=await readFile('src/pages/UpdatePassword.tsx','utf8');
+ assert.match(migration,/digits between 6 and 10/);
+ assert.match(migration,/\^\[0-9\]\{6,10\}\$/);
+ assert.match(component,/\^\\d\{6,10\}\$/);
+ assert.match(screen,/pattern="\[0-9\]\{6,10\}"/);
+ assert.match(screen,/maxLength=\{10\}/);
+ assert.match(screen,/slice\(0, 10\)/);
+});
