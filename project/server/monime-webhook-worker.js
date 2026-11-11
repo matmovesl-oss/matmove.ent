@@ -118,7 +118,7 @@ async function processPurchaseTransfer(db, event) {
   const { data: result, error: fulfilError } = await db.rpc('matmove_fulfill_purchase_payment', {
     p_payment_id: payment.id
   });
-  if (fulfilError || result?.success !== true) throw new Error('Protected purchase fulfilment did not confirm success.');
+  if (fulfilError || result?.fulfilled !== true) throw new Error('Protected purchase fulfilment did not confirm success.');
 
   const { data: confirmed, error: confirmError } = await db
     .from('matmove_purchase_payments')
