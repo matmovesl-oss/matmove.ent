@@ -75,8 +75,8 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
       if (password.length < 8) return setError('Password must be at least 8 characters long.');
       if (password !== confirmPassword) return setError('Passwords do not match.');
     } else {
-      if (!/^\\d{6}$/.test(newPin)) return setError('Choose a new six-digit passcode.');
-      if (newPin !== confirmPin) return setError('The six-digit passcodes do not match.');
+      if (!/^\\d{6}$/.test(newPin)) return setError('Choose a passcode between 6 and 10 digits.');
+      if (newPin !== confirmPin) return setError('The passcodes do not match.');
     }
 
     setLoading(true);
@@ -90,7 +90,7 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
         if (updateError) throw updateError;
       } else {
         const result = await customerPasscode(userId, 'recover', null, newPin);
-        if (!result.ok || result.digits !== 6 || result.code !== 'saved') {
+        if (!result.ok || result.digits < 6 || result.digits > 10 || result.code !== 'saved') {
           throw new Error(result.code === 'cooldown'
             ? 'Passcode recovery is temporarily locked. Request a fresh recovery email after the cooldown.'
             : 'The six-digit passcode reset was not confirmed. Request a fresh recovery email and try again.');
@@ -113,8 +113,8 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
   const title = success ? (mode === 'password' ? 'Password Updated' : 'Passcode Updated')
     : (mode === 'password' ? 'Reset Your Password' : 'Reset Your Passcode');
   const description = mode === 'password'
-    ? 'Choose a new account password. Your six-digit MatMove passcode will remain unchanged.'
-    : 'Choose a new six-digit MatMove passcode. Your account password will remain unchanged.';
+    ? 'Choose a new account password. Your MatMove passcode will remain unchanged.'
+    : 'Choose a new MatMove passcode between 6 and 10 digits. Your account password will remain unchanged.';
 
   if (success) {
     return (
@@ -164,17 +164,17 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
           ) : (
             <>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">New six-digit passcode</label>
-                <input type="password" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={newPin} onChange={e => setNewPin(e.target.value.replace(/\\D/g, '').slice(0, 6))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="Six digits" />
+                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">New passcode (6–10 digits)</label>
+                <input type="password" inputMode="numeric" pattern="[0-9]{6,10}" minLength={6} maxLength={10} value={newPin} onChange={e => setNewPin(e.target.value.replace(/\\D/g, '').slice(0, 6))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="6 to 10 digits" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Confirm six-digit passcode</label>
-                <input type="password" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\\D/g, '').slice(0, 6))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="Re-enter six digits" />
+                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Confirm passcode</label>
+                <input type="password" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\\D/g, '').slice(0, 6))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="Re-enter your passcode" />
               </div>
             </>
           )}
           <button type="submit" disabled={loading || checkingRecovery || !recoveryReady} className="w-full bg-blue-600 text-white p-3.5 rounded-xl font-bold mt-2 hover:bg-blue-700 transition flex justify-center disabled:opacity-50">
-            {loading ? <Loader2 className="animate-spin" size={20} /> : (mode === 'password' ? 'Save new password' : 'Save new six-digit passcode')}
+            {loading ? <Loader2 className="animate-spin" size={20} /> : (mode === 'password' ? 'Save new password' : 'Save new passcode')}
           </button>
         </form>
       </div>
