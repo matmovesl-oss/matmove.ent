@@ -1,6 +1,15 @@
 {
   "routes": [
     {
+      "src": "/api/(.*)",
+      "headers": {
+        "Cache-Control": "no-store",
+        "Pragma": "no-cache",
+        "Vary": "Authorization"
+      },
+      "continue": true
+    },
+    {
       "src": "/(.*)",
       "headers": {
         "X-Content-Type-Options": "nosniff",
