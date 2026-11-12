@@ -31,7 +31,10 @@ test('customer cash and guest USSD previews make no live payment calls', async (
   assert.ok(guest.includes('Guest checkout'));
   assert.ok(guest.includes('Orange Money'));
   assert.ok(guest.includes('Afrimoney'));
-  assert.ok(guest.toLowerCase().includes('no matmove account'));
+  assert.ok(guest.includes('read-only'));
+  assert.ok(guest.includes('detected network'));
+  assert.ok(!guest.includes('input value={phone}'));
+  assert.ok(guest.toLowerCase().includes('without creating a matmove account'));
   assert.ok(!guest.includes('supabase.rpc') && !guest.includes('walletFetch') && !guest.includes('fetch('));
 });
 
