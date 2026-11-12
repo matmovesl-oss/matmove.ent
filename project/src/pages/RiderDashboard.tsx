@@ -1,4 +1,5 @@
 import ActiveTripMap from '@/components/ActiveTripMap';
+import CashPaymentPreview from '@/components/CashPaymentPreview';
 import { ProductGallery, catalogMoney, catalogCheckoutAllowed } from '@/components/ProductCatalog';
 import FareNegotiation from '@/components/FareNegotiation';
 import { useCustomerActiveRide } from '@/lib/useRideNegotiation';
@@ -589,6 +590,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                         </div>
                       )}
                     </div>
+
+                    <CashPaymentPreview fare={offerAmount || '0'} />
 
                     {serviceType === 'scheduled' && (
                       <div className="flex items-center gap-2 border p-3 rounded-xl">
