@@ -4,10 +4,11 @@ type Saved={id:string;details:Record<string,unknown>};
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export function useTripRequest(userId:string){
  const key=`matmove:booking-create:v1:${userId}`;
- const [retained,setRetained]=useState<Saved|null>(null),[error,setError]=useState(''),[working,setWorking]=useState(false);
+ const [retained,setRetained]=useState<Saved|null>(null),[error,setError]=useState(''),[working,setWorking]=useState(false),[ready,setReady]=useState(false);
  const current=useRef(userId),mounted=useRef(false),mutex=useRef(false),epoch=useRef(0),active=useRef<AbortController|null>(null);current.current=userId;
- useEffect(()=>{mounted.current=true;epoch.current++;mutex.current=false;setRetained(null);setError('');setWorking(false);try{const raw=localStorage.getItem(key);if(raw){const body=JSON.parse(raw);if(!uuid.test(body?.id)||!body.details||body.details.client_version!==1)throw Error();setRetained(body);}}catch{setError('This browser cannot confirm the previous trip request. Restore browser storage before requesting another.');}return()=>{mounted.current=false;epoch.current++;active.current?.abort();};},[userId,key]);
+ useEffect(()=>{mounted.current=true;epoch.current++;mutex.current=false;setRetained(null);setError('');setWorking(false);setReady(false);try{const raw=localStorage.getItem(key);if(raw){const body=JSON.parse(raw);if(!uuid.test(body?.id)||!body.details||body.details.client_version!==1)throw Error();setRetained(body);}}catch{setError('This browser cannot confirm the previous trip request. Restore browser storage before requesting another.');}finally{setReady(true);}return()=>{mounted.current=false;epoch.current++;active.current?.abort();};},[userId,key]);
  async function submit(details?:Record<string,unknown>){
+  if(!ready)throw Error('Checking your previous trip request. Please wait.');
   if(mutex.current||error)throw Error(error||'A trip request is already being checked.');
   mutex.current=true;setWorking(true);const id=userId,n=++epoch.current;const live=()=>mounted.current&&current.current===id&&epoch.current===n;
   try{
@@ -23,5 +24,5 @@ export function useTripRequest(userId:string){
    localStorage.removeItem(key);setRetained(null);return row;
   }finally{if(live()){mutex.current=false;setWorking(false);}}
  }
- return{retained,error,working,submit};
+ return{retained,error,working,ready,submit};
 }
