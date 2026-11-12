@@ -720,7 +720,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                         </div>
                       )}
 
-                      {activeBooking.status === 'accepted' && (
+                      {activeBooking.status === 'accepted' && activeBooking.payment_method !== 'cash' && (
                         <div className={`p-3 rounded-2xl border text-xs mb-3 space-y-1 ${elapsedSeconds <= 300 ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
                           <div className="flex items-center gap-1.5 font-bold">
                             <Clock size={15} />
