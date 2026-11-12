@@ -24,7 +24,7 @@ export async function rpc(db, name, args) {
     });
 
     const known =
-      /^(FORBIDDEN|NOT_FOUND|INVALID_STATE|PAYMENT_PENDING|LEGACY_PAYMENT|INVALID_FARE|ACCOUNT_CHANGED|CANCEL_FEE_NOT_CONFIGURED|CANCEL_ALREADY_PROCESSING):/;
+      /^(FORBIDDEN|NOT_FOUND|INVALID_STATE|PAYMENT_PENDING|LEGACY_PAYMENT|INVALID_FARE|ACCOUNT_CHANGED|CASH_PAYMENT_REVIEW|CANCEL_FEE_NOT_CONFIGURED|CANCEL_ALREADY_PROCESSING|INVALID):/;
 
     throw new HttpError(
       known.test(error.message) ? 409 : 503,
@@ -307,6 +307,220 @@ export async function reconcileRide(
   return readPayment(db, bookingId);
 }
 
+async function readCashPayment(db, bookingId) {
+  const [paymentResult, transferResult] = await Promise.all([
+    db.from('ride_cash_fee_payments').select('*').eq('booking_id',bookingId).maybeSingle(),
+    db.from('ride_cash_fee_transfers').select('*').eq('booking_id',bookingId)
+  ]);
+  if(paymentResult.error || transferResult.error) {
+    throw new HttpError(503,'Cash payment status is temporarily unavailable. Apply the cash ride migration first.');
+  }
+  return { payment: paymentResult.data || null, transfers: transferResult.data || [] };
+}
+
+function cashPaymentSnapshot(payment, transfers=[]) {
+  if(!payment) return null;
+  const fee=transfers.find(row=>row.kind==='fee');
+  const refund=transfers.find(row=>row.kind==='refund');
+  const settled=payment.state==='paid' && fee?.status==='completed' && !!fee?.provider_id;
+  return {
+    state:payment.state,
+    fare:Number(payment.fare_minor)/100,
+    cashDueToDriver:Number(payment.cash_due_minor)/100,
+    platformFee:Number(payment.fee_minor)/100,
+    feeStatus:fee?.status || 'not_started',
+    refundStatus:refund?.status || null,
+    feeTransferId:fee?.provider_id || null,
+    refundTransferId:refund?.provider_id || null,
+    settled,
+    needsReview:payment.state==='review_required' || fee?.status==='review_required' || refund?.status==='review_required'
+  };
+}
+
+async function platformFeeAccount(provider) {
+  const id=process.env.MONIME_PLATFORM_FEE_ACCOUNT_ID;
+  if(!accountId.test(id || '')) {
+    throw new HttpError(503,'Configure the MatMove SLE platform fee financial account before accepting cash rides.');
+  }
+  const account=await provider(`financial-accounts/${encodeURIComponent(id)}?withBalance=true`);
+  if(account?.id!==id || account?.currency!=='SLE') {
+    throw new HttpError(409,'MatMove platform fee account must be a verified SLE financial account.');
+  }
+  return account;
+}
+
+export async function runCashFeeLeg(db,bookingId,kind,provider=monime) {
+  const leg=await rpc(db,'matmove_claim_cash_ride_transfer',{p_booking_id:bookingId,p_kind:kind});
+  if(!leg || ['completed','failed','review_required'].includes(leg.status)) return leg;
+  if(!leg.can_create && !leg.provider_id) return leg;
+
+  let transfer;
+  try {
+    transfer=leg.provider_id
+      ? await provider(`internal-transfers/${encodeURIComponent(leg.provider_id)}`)
+      : await provider('internal-transfers',{
+          method:'POST',
+          headers:{'Idempotency-Key':leg.request_key},
+          body:JSON.stringify({
+            amount:{currency:'SLE',value:Number(leg.amount_minor)},
+            sourceFinancialAccount:{id:leg.source_account},
+            destinationFinancialAccount:{id:leg.destination_account},
+            description:`MatMove cash ride ${kind} for booking ${bookingId}`,
+            metadata:{bookingId,leg:kind,paymentMethod:'cash',requestKey:leg.request_key}
+          })
+        });
+  } catch {
+    if(leg.can_create) {
+      await rpc(db,'matmove_record_cash_ride_transfer',{
+        p_booking_id:bookingId,p_kind:kind,p_provider_id:null,
+        p_status:'review_required',
+        p_error:'Provider response uncertain. Reconcile with Monime before any retry.'
+      });
+    }
+    throw new HttpError(503,'Cash fee transfer outcome is uncertain. MatMove has stopped automatic retries and marked it for reconciliation.');
+  }
+
+  const matches=typeof transfer?.id==='string' && transfer.id.length>0
+    && (!leg.provider_id || transfer.id===leg.provider_id)
+    && transfer.amount?.currency==='SLE'
+    && transfer.amount?.value===Number(leg.amount_minor)
+    && transfer.sourceFinancialAccount?.id===leg.source_account
+    && transfer.destinationFinancialAccount?.id===leg.destination_account
+    && ['pending','processing','completed','failed'].includes(transfer.status);
+
+  if(!matches) {
+    await rpc(db,'matmove_record_cash_ride_transfer',{
+      p_booking_id:bookingId,p_kind:kind,p_provider_id:leg.provider_id || null,
+      p_status:'review_required',
+      p_error:'Monime transfer response did not match the stored cash payment amount, currency or accounts.'
+    });
+    throw new HttpError(502,'Cash fee transfer needs support review. No second debit will be attempted.');
+  }
+
+  return rpc(db,'matmove_record_cash_ride_transfer',{
+    p_booking_id:bookingId,p_kind:kind,p_provider_id:transfer.id,
+    p_status:transfer.status,p_error:transfer.failureDetail?.message || null
+  });
+}
+
+export async function fundCashRideFee(req,res,booking,provider=monime,verifyAccount=verifiedAccount) {
+  const {db,user}=req.matmove;
+  if(booking.payment_method!=='cash' || booking.rider_id!==user.id) {
+    throw new HttpError(403,'Only the customer who created this cash booking can pay its MatMove fee.');
+  }
+  if(booking.service_type!=='ride' || booking.scheduled_time || !['pending','pending_admin'].includes(booking.status)) {
+    throw new HttpError(409,'This booking is not eligible for cash payment.');
+  }
+
+  const [payer,feeAccount]=await Promise.all([
+    customerAccount(db,user.id,['rider'],verifyAccount),
+    platformFeeAccount(provider)
+  ]);
+  if(payer.id===feeAccount.id) throw new HttpError(409,'Customer and MatMove fee accounts must be separate.');
+
+  const prepared=await rpc(db,'matmove_prepare_cash_ride_fee',{
+    p_booking_id:booking.id,
+    p_rider_id:user.id,
+    p_payer_account:payer.id,
+    p_fee_account:feeAccount.id
+  });
+
+  const existing=await readCashPayment(db,booking.id);
+  const existingSnapshot=cashPaymentSnapshot(existing.payment,existing.transfers);
+  if(existingSnapshot?.settled) {
+    return res.status(200).json({success:true,pending:false,booking,cashPayment:existingSnapshot,message:'MatMove cash fee is confirmed.'});
+  }
+  if(existingSnapshot?.needsReview) {
+    throw new HttpError(409,'Cash fee transfer requires MatMove support reconciliation. Do not retry the debit.');
+  }
+
+  const available=payer.balance?.available;
+  const feeMinor=Number(prepared.fee_minor);
+  if(available?.currency!=='SLE' || !Number.isSafeInteger(available.value) || available.value<feeMinor) {
+    throw new HttpError(409,`Insufficient available SLE wallet balance. You need SLE ${(feeMinor/100).toFixed(2)} for the MatMove cash fee.`);
+  }
+
+  const leg=await runCashFeeLeg(db,booking.id,'fee',provider);
+  const fresh=await readCashPayment(db,booking.id);
+  const snapshot=cashPaymentSnapshot(fresh.payment,fresh.transfers);
+  const settled=snapshot?.settled===true;
+  if(leg?.status==='failed') {
+    throw new HttpError(409,'Monime confirmed that the MatMove fee debit failed. Cancel this request before creating another.');
+  }
+  return res.status(settled?200:202).json({
+    success:settled,pending:!settled,booking,cashPayment:snapshot,
+    message:settled
+      ? 'MatMove fee debit is verified. The driver can now see and accept this cash ride.'
+      : 'MatMove fee debit is still processing. Drivers cannot see this request until the fee is confirmed.'
+  });
+}
+
+async function cashRideAction(req,res,booking,action,provider=monime) {
+  const {db,user,profile}=req.matmove;
+  if(action==='cash-fund') return fundCashRideFee(req,res,booking,provider);
+
+  if(action==='status') {
+    if(booking.rider_id!==user.id && booking.driver_id!==user.id) {
+      throw new HttpError(403,"This is another customer's booking.");
+    }
+    const cash=await readCashPayment(db,booking.id);
+    const snapshot=cashPaymentSnapshot(cash.payment,cash.transfers);
+    return res.status(200).json({
+      booking,cashPayment:snapshot,
+      success:snapshot?.settled===true && booking.status==='completed',
+      pending:snapshot?.paymentState==='funding'
+    });
+  }
+
+  if(!['accept','start','complete','cancel'].includes(action)) {
+    throw new HttpError(400,'Choose a valid cash ride action.');
+  }
+
+  const result=await rpc(db,'matmove_prepare_cash_ride_action',{
+    p_booking_id:booking.id,p_actor_id:user.id,p_action:action
+  });
+
+  if(action==='cancel' && result?.refundRequired===true) {
+    const refund=await runCashFeeLeg(db,booking.id,'refund',provider);
+    const updated=await readBooking(db,booking.id);
+    const fresh=await readCashPayment(db,booking.id);
+    const snapshot=cashPaymentSnapshot(fresh.payment,fresh.transfers);
+    const done=updated.status==='cancelled' && snapshot?.state==='refunded';
+    if(snapshot?.needsReview) throw new HttpError(409,'Cash fee refund requires support reconciliation. Do not retry it.');
+    return res.status(done?200:202).json({
+      success:done,pending:!done,booking:updated,cashPayment:snapshot,
+      message:done?'The cash trip was cancelled and the MatMove fee refund is verified.':'The MatMove fee refund is processing. The booking will cancel after the refund is verified.'
+    });
+  }
+
+  const updated=await readBooking(db,booking.id);
+  const fresh=await readCashPayment(db,booking.id);
+  const snapshot=cashPaymentSnapshot(fresh.payment,fresh.transfers);
+
+  if(snapshot?.needsReview) {
+    throw new HttpError(409,'Cash payment requires support reconciliation. Do not retry the transfer.');
+  }
+
+  const expected={
+    accept:['accepted','in_progress','completed'],
+    start:['in_progress'],
+    complete:['completed'],
+    cancel:['cancelled']
+  }[action] || [];
+
+  const done=expected.includes(updated.status)
+    && (action==='cancel' || snapshot?.settled===true);
+
+  return res.status(done?200:202).json({
+    success:done,pending:!done,booking:updated,cashPayment:snapshot,
+    message:done
+      ? action==='complete'
+        ? 'Trip completed. The MatMove fee is verified; the driver receives the full fare in cash.'
+        : 'Cash ride action confirmed.'
+      : 'Cash ride action is still processing. Check the same booking again.'
+  });
+}
+
 export async function rideAction(
   req,
   res,
@@ -328,6 +542,10 @@ export async function rideAction(
 
   const booking = await readBooking(db, bookingId);
   const payment = await readPayment(db, bookingId);
+
+  if (booking.payment_method === 'cash') {
+    return cashRideAction(req,res,booking,action,provider);
+  }
 
   if (action === 'status') {
     if (
