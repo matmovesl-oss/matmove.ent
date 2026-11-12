@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { reconcileRidePayments } from './ride-api.js';
 import { reconcileWithdrawals } from './payout-payments.js';
 import { processMonimeWebhookBatch } from './monime-webhook-worker.js';
+import { reconcilePurchasePayments } from './travel-event-payments.js';
 
 function validCronAuthorization(req) {
   const secret = process.env.CRON_SECRET;
@@ -62,10 +63,11 @@ export async function reconcileMatMovePayments(
   const work = await Promise.allSettled([
     invokeHandler(rides, authorization),
     invokeHandler(payouts, authorization),
-    monime({ limit: 3 })
+    monime({ limit: 3 }),
+    purchases({ limit: 5 })
   ]);
 
-  const names = ['ridePayments', 'withdrawals', 'monimePurchaseEvents'];
+  const names = ['ridePayments', 'withdrawals', 'monimePurchaseEvents', 'purchasePayments'];
   const result = {};
   let unavailable = false;
 
