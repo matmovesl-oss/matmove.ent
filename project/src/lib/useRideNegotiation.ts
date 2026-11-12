@@ -77,10 +77,10 @@ export function useCustomerActiveRide(userId: string) {
       try {
         const { data: rows, error } = await supabase.from('bookings')
           .select('*, driver:driver_id(full_name, phone)')
-          .eq('rider_id', userId).in('status', ['pending', 'pending_admin', 'accepted', 'in_progress'])
+          .eq('rider_id', userId).in('status', ['pending', 'pending_admin', 'cash_reserve_pending', 'cash_review_required', 'accepted', 'in_progress'])
           .order('created_at', { ascending: false }).limit(101);
         if (error) throw error;
-        if(!Array.isArray(rows)||rows.length>100||rows.some(row=>typeof row?.id!=='string'||row.rider_id!==userId||!['pending','pending_admin','accepted','in_progress'].includes(row.status))||new Set(rows.map(row=>row.id)).size!==rows.length)throw new Error('Active requests could not be verified.');
+        if(!Array.isArray(rows)||rows.length>100||rows.some(row=>typeof row?.id!=='string'||row.rider_id!==userId||!['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(row.status))||new Set(rows.map(row=>row.id)).size!==rows.length)throw new Error('Active requests could not be verified.');
         const owned=rows.filter(row=>!terminal.current[`${userId}:${row.id}`]);
         const data=owned.find(row=>row.id===selection.current)||owned[0]||null;
         if (!disposed && identity.current === userId && version === mutation.current) {
@@ -107,7 +107,7 @@ export function useCustomerActiveRide(userId: string) {
   const retry = useCallback(() => setRetryCount(value => value + 1), []);
   const current = state.userId === userId ? state : { userId, booking: null, loading: true, error: '' };
   const selectBooking=(id:string)=>{const row=bookings.find(item=>item.id===id&&item.rider_id===userId);if(!row||identity.current!==userId)return;selection.current=id;mutation.current++;setCreating(false);setState({userId,booking:row,loading:false,error:''});};
-  const canCreate=current.userId===userId&&!current.loading&&!current.error&&!bookings.some(row=>row.rider_id===userId&&['pending','pending_admin'].includes(row.status));
+  const canCreate=current.userId===userId&&!current.loading&&!current.error&&!bookings.some(row=>row.rider_id===userId&&['pending','pending_admin','cash_reserve_pending','cash_review_required'].includes(row.status));
   const startNewBooking=()=>{if(!canCreate)return;mutation.current++;setCreating(true);};
   return { ...current, booking:creating?null:current.booking, bookings:bookings.filter(row=>row.rider_id===userId),creating,canCreate,selectBooking,startNewBooking,setBooking,applySnapshot,retry };
 }
