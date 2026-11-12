@@ -35,3 +35,15 @@ test('cash worker treats provider POST response as an ID only, not settlement ev
   assert.match(postBranch, /await recordLeg\(db, bookingId, kind, \{ id: created\.id \}, 'pending'\)/);
   assert.doesNotMatch(postBranch, /recordLeg\(db, bookingId, kind, created, created\.status/);
 });
+
+
+test('cash availability is advertised only after both configured SLE platform accounts are read from Monime', async () => {
+  const code = await readFile(source, 'utf8');
+  const config = code.slice(code.indexOf("if (action === 'cash_config')"), code.indexOf("const bookingId = req.body?.bookingId"));
+  assert.match(config, /readSettings\(db\)/);
+  assert.match(config, /financial-accounts\/\$\{encodeURIComponent\(settings\.fee_hold_account_id\)\}/);
+  assert.match(config, /financial-accounts\/\$\{encodeURIComponent\(settings\.fee_revenue_account_id\)\}/);
+  assert.match(config, /providerAccountBalance\(holdAccount, settings\.fee_hold_account_id\)/);
+  assert.match(config, /providerAccountBalance\(revenueAccount, settings\.fee_revenue_account_id\)/);
+  assert.match(config, /enabled: true/);
+});
