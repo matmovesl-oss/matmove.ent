@@ -57,6 +57,7 @@ create table if not exists public.matmove_cash_ride_payments (
       (driver_cash_confirmed_at is null and driver_cash_confirmed_by is null)
       or (driver_cash_confirmed_at is not null
           and driver_cash_confirmed_by is not null
+          and driver_id is not null
           and driver_cash_confirmed_by = driver_id)
     ),
   constraint matmove_cash_ride_payment_rider_confirmation_pair
@@ -73,6 +74,7 @@ create table if not exists public.matmove_cash_ride_payments (
        and manual_resolution_note is null)
       or (manual_resolution_at is not null
           and manual_resolution_by is not null
+          and manual_resolution_note is not null
           and length(btrim(manual_resolution_note)) between 3 and 1000)
     ),
   constraint matmove_cash_ride_payment_settlement_evidence
@@ -99,7 +101,8 @@ create table if not exists public.matmove_cash_ride_legs (
     check (length(btrim(destination_account_ref)) between 1 and 200),
   request_key text not null unique
     check (length(btrim(request_key)) between 16 and 200),
-  provider_transfer_id text unique,
+  provider_transfer_id text unique
+    check (provider_transfer_id is null or length(btrim(provider_transfer_id)) between 1 and 200),
   status text not null default 'ready'
     check (status in ('ready', 'pending', 'processing', 'completed', 'failed', 'review_required')),
   attempted_at timestamptz,
