@@ -1,0 +1,62 @@
+{
+  "name": "MatMove Sierra Leone — Guest Payment (DRAFT)",
+  "description": "Draft structure only. Confirm the final Monime schema, flow code, provider IDs and Exchange encryption configuration with Monime before import or publishing.",
+  "version": "draft-1",
+  "settings": {
+    "mode": "test",
+    "exchange_url": "https://YOUR-MATMOVE-TEST-HOST/api/ussd/exchange",
+    "rsa_key": "CONFIGURE_MATCHING_RSA_2048_PUBLIC_KEY_IN_MONIME",
+    "published_code": "PENDING_MONIME_TEST_FLOW_CREATION"
+  },
+  "pages": [
+    {
+      "id": "welcome",
+      "title": "MatMove",
+      "message": "Welcome to MatMove.\n1. Pay a Ride\n2. Pay Food / Merchant\n3. Pay Package\n4. Pay Rental",
+      "input": { "type": "menu", "min": 1, "max": 4, "variable": "service_choice" },
+      "next": "reference"
+    },
+    {
+      "id": "reference",
+      "title": "Payment reference",
+      "message": "Enter the MatMove booking or order reference sent to you.",
+      "input": { "type": "text", "min_length": 4, "max_length": 32, "variable": "order_reference" },
+      "exchange": {
+        "action": "validate_guest_reference",
+        "endpoint": "https://YOUR-MATMOVE-TEST-HOST/api/ussd/exchange",
+        "timeout_seconds": 10
+      },
+      "next": "collect"
+    },
+    {
+      "id": "collect",
+      "title": "Confirm payment",
+      "message": "Pay SLE {{amount}} for {{service_label}}?\n1. Continue\n2. Cancel",
+      "input": { "type": "menu", "min": 1, "max": 2, "variable": "payment_choice" },
+      "on_confirm": {
+        "action": "collect_payment",
+        "payment_target_ref": "{{payment_code_id}}",
+        "amount": { "currency": "SLE", "value": "{{amount_minor}}" },
+        "reference": "{{matmove_payment_reference}}",
+        "metadata": {
+          "source": "matmove_ussd_guest",
+          "booking_or_order_reference": "{{order_reference}}",
+          "service": "{{service_choice}}"
+        }
+      },
+      "next": "result"
+    },
+    {
+      "id": "result",
+      "title": "Payment request",
+      "message": "Your payment request was submitted. MatMove will confirm when the mobile-money provider verifies it. Do not pay again while it is pending.",
+      "terminal": true
+    }
+  ],
+  "security_notes": [
+    "Never ask for or store the Orange Money/Afrimoney PIN in MatMove.",
+    "The Exchange endpoint must validate the order, use a stable idempotency key and return within Monime's required timeout.",
+    "Only the verified Monime Payment object and durable signed webhook can mark the order paid.",
+    "This draft is not guaranteed to be directly importable until Monime confirms the live Flow JSON schema and template field names."
+  ]
+}
