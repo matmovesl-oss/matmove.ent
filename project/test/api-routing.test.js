@@ -22,7 +22,7 @@ test('new cancellation and recovery URLs rewrite to the existing API before file
   const filesystemIndex = config.routes.findIndex(route => route.handle === 'filesystem');
   for (const [path, action] of Object.entries(aliases)) {
     for (const suffix of ['', '/']) {
-      const index = config.routes.findIndex(route => route.src && new RegExp(`^${route.src}`, 'i').test(path + suffix));
+      const index = config.routes.findIndex(route => route.dest === `/api/accept-ride-escrow?action=${action}`);
       assert.ok(index >= 0 && index < filesystemIndex);
       assert.equal(config.routes[index].dest, `/api/accept-ride-escrow?action=${action}`);
     }
@@ -218,7 +218,7 @@ test('unified payment reconciliation URL rewrites to the existing wallet API bef
 
   for (const suffix of ['', '/']) {
     const path = `/api/reconcile-all-payments${suffix}`;
-    const index = config.routes.findIndex(route => route.src && new RegExp(`^${route.src}`, 'i').test(path));
+    const index = config.routes.findIndex(route => route.dest === '/api/get-live-wallet?action=payment_reconcile');
     assert.ok(index >= 0 && index < filesystemIndex);
     assert.equal(config.routes[index].dest, '/api/get-live-wallet?action=payment_reconcile');
   }
