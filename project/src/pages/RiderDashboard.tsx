@@ -72,6 +72,9 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [serviceType, setServiceType] = useState<'ride' | 'delivery' | 'scheduled'>('ride');
   const [vehicleType, setVehicleType] = useState<'keke' | 'bike' | 'car' | 'van'>('car');
   const [offerAmount, setOfferAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'digital' | 'cash'>('digital');
+  const [cashEnabled, setCashEnabled] = useState(false);
+  const [cashConfigLoading, setCashConfigLoading] = useState(true);
   const [tripDistanceKm, setTripDistanceKm] = useState<number | null>(null);
   const [scheduledTime, setScheduledTime] = useState('');
   const [isRequesting, setIsRequesting] = useState(false);
@@ -123,6 +126,33 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const { frozen: isFrozen, approved: isApproved } = useWalletAccess(profile?.id);
   const canLoad = !isFrozen && profile?.role === 'rider';
   const canSend = canLoad && isApproved;
+
+  useEffect(() => {
+    let live = true;
+    setCashConfigLoading(true);
+    setCashEnabled(false);
+    if (!profile?.id) {
+      setCashConfigLoading(false);
+      return () => { live = false; };
+    }
+    void (async () => {
+      try {
+        const { response, data, finish } = await walletFetch('/api/accept-ride-escrow?action=cash_config', {});
+        if (!response.ok) throw new Error('Cash configuration unavailable.');
+        finish();
+        if (live) setCashEnabled(data?.enabled === true);
+      } catch {
+        if (live) setCashEnabled(false);
+      } finally {
+        if (live) setCashConfigLoading(false);
+      }
+    })();
+    return () => { live = false; };
+  }, [profile?.id]);
+
+  useEffect(() => {
+    if (serviceType !== 'ride') setPaymentMethod('digital');
+  }, [serviceType]);
 
   useEffect(() => {
     if (tripDistanceKm === null) return;
@@ -283,8 +313,15 @@ function RiderMain({ profile, wallet, activeSection }: any) {
         return;
       }
 
-      if ((sleWallet?.balance || 0) < finalAmount) {
-        setRideNotice(`Insufficient balance. You need SLE ${finalAmount} to request this trip. Please load your wallet.`);
+      const fareMinor = Math.round(finalAmount * 100);
+      const driverCashMinor = Math.round(fareMinor * 0.85);
+      const requiredWalletAmount = paymentMethod === 'cash'
+        ? (fareMinor - driverCashMinor) / 100
+        : finalAmount;
+      if ((sleWallet?.balance || 0) < requiredWalletAmount) {
+        setRideNotice(paymentMethod === 'cash'
+          ? `Insufficient SLE wallet balance. You need SLE ${requiredWalletAmount.toFixed(2)} to secure MatMove's 15% cash-ride fee.`
+          : `Insufficient balance. You need SLE ${finalAmount} to request this trip. Please load your wallet.`);
         return;
       }
     }
@@ -295,6 +332,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     try {
       const details = retainedDetails ? undefined : {
         client_version: 1,
+        payment_method: paymentMethod,
         service_type: serviceType,
         vehicle_type: vehicleType,
         pickup_location: pickup,
@@ -309,6 +347,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
       const booking = await tripRequest.submit(details);
       setActiveBooking(booking);
+      if ((retainedDetails?.payment_method ?? paymentMethod) === 'cash') void fetchLiveBalance();
       setViewMode('active');
       setRideNotice('');
     } catch (err: any) {
@@ -363,6 +402,20 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     setRideNotice('');
     try {
       const result = await updateRide('complete', activeBooking.id);
+      if (activeBooking.payment_method === 'cash') {
+        const payment = result.payment;
+        if (payment?.status === 'settled' && result.success === true && result.pending === false) {
+          setRideNotice('Both cash confirmations are verified and MatMove has captured its reserved fee. Cash collection is settled.');
+          setActiveBooking(null);
+        } else {
+          setRideNotice(payment?.driverCashConfirmed && payment?.riderCashConfirmed
+            ? 'Both cash confirmations are recorded. MatMove fee capture is still being verified; do not repeat the cash handover.'
+            : 'Your cash-handover confirmation is recorded. The assigned driver must also confirm receipt before MatMove captures its fee.');
+          setActiveBooking({ ...activeBooking, ...(result.booking || {}) });
+        }
+        await fetchLiveBalance();
+        return;
+      }
       if (!result.pending && result.payment?.settled !== true) throw new Error('Driver credit is not confirmed.');
       const driverLeg = result.payment?.transfers?.find((leg: any) => leg.kind === 'driver');
       setRideNotice(`Driver credited SLE ${Number(result.payment.driverEarnings).toFixed(2)}. Receipt: ${driverLeg?.transferId || 'Settled'}.`);
