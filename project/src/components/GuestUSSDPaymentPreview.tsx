@@ -52,7 +52,7 @@ export default function GuestUSSDPaymentPreview() {
               <input value={reference} onChange={e => setReference(e.target.value.toUpperCase())} placeholder="e.g. MM-8A3K29" maxLength={32} className="mt-1 w-full rounded-xl border p-3 font-mono" />
             </label>
             <label className="mt-3 block text-sm font-semibold">Mobile-money number
-              <input value={phone} onChange={e => setPhone(e.target.value)} inputMode="tel" maxLength={12} placeholder="+232XXXXXXXX" className="mt-1 w-full rounded-xl border p-3" />
+              <input value={phone} onChange={e => setPhone(e.target.value)} inputMode="tel" maxLength={13} placeholder="+232XXXXXXXX" className="mt-1 w-full rounded-xl border p-3" />
             </label>
             <label className="mt-3 block text-sm font-semibold">Network
               <select value={provider} onChange={e => setProvider(e.target.value as Provider)} className="mt-1 w-full rounded-xl border bg-white p-3">
