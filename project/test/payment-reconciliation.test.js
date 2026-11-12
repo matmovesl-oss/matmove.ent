@@ -94,7 +94,7 @@ test('unified payment reconciliation runs ride, withdrawal and verified Monime i
     assert.equal(calls.length, 4);
     assert.equal(calls.find(x => x[0] === 'monime')[1], 3);
     assert.equal(calls.find(x => x[0] === 'purchases')[1], 5);
-    assert.deepEqual(calls.filter(x => x[0] !== 'monime').map(x => x[1]), [
+    assert.deepEqual(calls.filter(x => x[0] === 'rides' || x[0] === 'payouts').map(x => x[1]), [
       `Bearer ${secret}`,
       `Bearer ${secret}`
     ]);
@@ -117,7 +117,6 @@ test('unified reconciliation returns 503 if any money reconciliation worker is u
         rides: async (_req, response) => response.status(503).json({ error: 'Ride reconciliation unavailable.' }),
         payouts: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
         monime: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 }),
-        purchases: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 }),
         purchases: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 })
       }
     );
@@ -170,7 +169,8 @@ test('unified reconciliation fails closed when a money worker returns no structu
       {
         rides: async () => undefined,
         payouts: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        monime: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 })
+        monime: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 }),
+        purchases: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 })
       }
     );
 
