@@ -449,7 +449,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                       </span>
                       <div>
                         <span className="text-2xl font-bold text-slate-900 block text-right">{Number.isFinite(Number(r.fare_amount))&&Number(r.fare_amount)>0?`SLE ${Number(r.fare_amount).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`:'Fare awaiting confirmation'}</span>
-                        {Number.isFinite(Number(r.fare_amount))&&Number(r.fare_amount)>0&&<span className="text-[10px] font-bold text-emerald-600 block text-right bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mt-1">Estimated take-home: SLE {(r.fare_amount * 0.85).toFixed(2)}</span>}
+                        {Number.isFinite(Number(r.fare_amount))&&Number(r.fare_amount)>0&&<span className="text-[10px] font-bold text-emerald-600 block text-right bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mt-1">{r.payment_method === 'cash' ? 'Physical cash due: ' : 'Estimated take-home: '}SLE {(r.fare_amount * 0.85).toFixed(2)}</span>}
                       </div>
                     </div>
 
