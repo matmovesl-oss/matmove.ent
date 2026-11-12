@@ -1,5 +1,4 @@
 import CustomerPasscode, {customerPasscode} from '@/components/CustomerPasscode';
-import GuestUSSDPaymentPreview from '@/components/GuestUSSDPaymentPreview';
 import {catalogMoney, catalogCheckoutAllowed} from '@/components/ProductCatalog';
 import InviteEarn from '@/components/InviteEarn';
 import MatMoveHelp, {customerHelpSection} from '@/components/MatMoveHelp';
@@ -1440,7 +1439,6 @@ function OnboardingGuard({ children, needsRole = true }: { children: React.React
 export default function App() {
   return (
     <Routes>
-      <Route path="/guest-payment-preview" element={<GuestUSSDPaymentPreview />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route
         path="/"
