@@ -345,6 +345,20 @@ async function finishCashLeg(db, bookingId, kind, actorId, provider) {
   return snapshot;
 }
 
+
+export async function reconcileCashRide(db, bookingId, provider = monime) {
+  const legs = await readLegs(db, bookingId);
+  const activeLegs = legs.filter(leg =>
+    ['pending','processing'].includes(leg.status)
+  );
+
+  for (const leg of activeLegs) {
+    await runCashLeg(db, bookingId, leg.leg_kind, provider);
+  }
+
+  return cashStatus(db, bookingId);
+}
+
 export async function cashRideAction(
   req,
   res,
