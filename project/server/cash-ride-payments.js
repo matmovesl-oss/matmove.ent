@@ -239,9 +239,12 @@ async function runCashLeg(db, bookingId, kind, provider = monime) {
   if (!claim.canCreate && !claim.canLookup) return leg;
 
   let transfer;
+  let expectedLeg = leg;
+
   if (claim.canCreate) {
+    let created;
     try {
-      transfer = await provider('internal-transfers', {
+      created = await provider('internal-transfers', {
         method: 'POST',
         headers: { 'Idempotency-Key': leg.request_key },
         body: JSON.stringify({
@@ -261,25 +264,60 @@ async function runCashLeg(db, bookingId, kind, provider = monime) {
       await recordLeg(db, bookingId, kind, null, 'review_required', 'uncertain_post');
       return { status: 'review_required', error_code: 'uncertain_post' };
     }
+
+    if (typeof created?.id !== 'string' || !created.id) {
+      await recordLeg(db, bookingId, kind, null, 'review_required', 'provider_id_missing');
+      return { status: 'review_required', error_code: 'provider_id_missing' };
+    }
+
+    // Persist the provider ID before attempting the read-after-write check.
+    // If GET is temporarily unavailable, subsequent requests can only GET this ID;
+    // they can never create a second transfer POST.
+    await recordLeg(db, bookingId, kind, { id: created.id }, 'pending');
+    expectedLeg = { ...leg, provider_transfer_id: created.id };
+
+    try {
+      transfer = await provider(`internal-transfers/${encodeURIComponent(created.id)}`);
+    } catch (error) {
+      if (error?.status === 404) {
+        await recordLeg(db, bookingId, kind, { id: created.id }, 'review_required', 'provider_transfer_missing');
+        return { status: 'review_required', error_code: 'provider_transfer_missing' };
+      }
+      return { ...expectedLeg, status: 'pending' };
+    }
   } else {
     try {
       transfer = await provider(`internal-transfers/${encodeURIComponent(leg.provider_transfer_id)}`);
     } catch (error) {
       // A failed GET does not authorize a second POST. Keep a known transfer pending.
       if (error?.status === 404) {
-        await recordLeg(db, bookingId, kind, null, 'review_required', 'provider_transfer_missing');
+        await recordLeg(db, bookingId, kind, { id: leg.provider_transfer_id }, 'review_required', 'provider_transfer_missing');
         return { status: 'review_required', error_code: 'provider_transfer_missing' };
       }
       return leg;
     }
   }
 
-  if (!transferMatches(transfer, leg)) {
-    await recordLeg(db, bookingId, kind, transfer?.id ? { id: transfer.id } : null, 'review_required', 'provider_receipt_mismatch');
+  if (!transferMatches(transfer, expectedLeg)) {
+    await recordLeg(
+      db,
+      bookingId,
+      kind,
+      { id: expectedLeg.provider_transfer_id || transfer?.id || null },
+      'review_required',
+      'provider_receipt_mismatch'
+    );
     return { status: 'review_required', error_code: 'provider_receipt_mismatch' };
   }
 
-  return recordLeg(db, bookingId, kind, transfer, transfer.status, transfer.status === 'failed' ? 'provider_failed' : null);
+  return recordLeg(
+    db,
+    bookingId,
+    kind,
+    transfer,
+    transfer.status,
+    transfer.status === 'failed' ? 'provider_failed' : null
+  );
 }
 
 async function prepareLeg(db, bookingId, kind, actorId) {
