@@ -126,6 +126,42 @@ async function getPaymentRow(db, requestKey, userId, details, sourceAccountId, d
   return insert.data;
 }
 
+export async function requestPurchaseTransfer(payment, details, user, provider = monime) {
+  if (typeof payment.provider_transfer_id === 'string' && payment.provider_transfer_id.length > 0) {
+    // A recorded provider ID is authoritative: reconcile it with GET.
+    // Never create another transfer for a payment that already has a provider ID.
+    return provider(`internal-transfers/${encodeURIComponent(payment.provider_transfer_id)}`);
+  }
+
+  return provider('internal-transfers', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': payment.request_key },
+    body: JSON.stringify({
+      amount: { currency: 'SLE', value: Number(payment.amount_minor) },
+      sourceFinancialAccount: { id: payment.source_account_id },
+      destinationFinancialAccount: { id: payment.destination_account_id },
+      description: details.description,
+      metadata: {
+        matmovePurchasePaymentId: payment.id,
+        matmoveUserId: user.id,
+        matmovePurchaseType: details.target,
+        matmoveBookingId: details.bookingId,
+        matmoveEventId: details.eventId,
+      },
+    }),
+  });
+}
+
+export function matchesPurchaseTransfer(payment, transfer) {
+  return typeof transfer?.id === 'string' &&
+    transfer.id.length > 0 &&
+    (!payment.provider_transfer_id || transfer.id === payment.provider_transfer_id) &&
+    transfer.amount?.currency === 'SLE' &&
+    transfer.amount?.value === Number(payment.amount_minor) &&
+    transfer.sourceFinancialAccount?.id === payment.source_account_id &&
+    transfer.destinationFinancialAccount?.id === payment.destination_account_id;
+}
+
 async function processPurchase(req, res) {
   const { db, user, accountId, idempotencyKey, account } = req.matmove;
   const details = await getPurchaseDetails(db, user.id, req.body || {});
@@ -147,43 +183,37 @@ async function processPurchase(req, res) {
     });
   }
 
+  if (payment.state === 'failed') {
+    return res.status(400).json({ success: false, error: 'This payment was recorded as failed. Contact support before trying again.', paymentId: payment.id });
+  }
+
+  if (payment.state === 'review_required' && !payment.provider_transfer_id) {
+    return res.status(202).json({ success: false, pending: true, status: 'review_required', paymentId: payment.id, error: 'The original provider outcome is uncertain. Do not pay again; support must reconcile it.' });
+  }
+
   let transfer;
   try {
-    transfer = await monime('internal-transfers', {
-      method: 'POST',
-      headers: { 'Idempotency-Key': payment.request_key },
-      body: JSON.stringify({
-        amount: { currency: 'SLE', value: Number(payment.amount_minor) },
-        sourceFinancialAccount: { id: payment.source_account_id },
-        destinationFinancialAccount: { id: payment.destination_account_id },
-        description: details.description,
-        metadata: {
-          matmovePurchasePaymentId: payment.id,
-          matmoveUserId: user.id,
-          matmovePurchaseType: details.target,
-          matmoveBookingId: details.bookingId,
-          matmoveEventId: details.eventId,
-        },
-      }),
-    });
+    transfer = await requestPurchaseTransfer(payment, details, user, monime);
   } catch (err) {
+    if (payment.provider_transfer_id) {
+      // A GET failure cannot prove that the already-created transfer failed.
+      // Preserve the provider ID and processing state; never POST a replacement.
+      console.error('MatMove purchase transfer lookup failed', { paymentId: payment.id });
+      return res.status(202).json({ success: false, pending: true, status: 'processing', paymentId: payment.id, error: 'The existing provider transfer could not be checked. Do not pay again.' });
+    }
+
     await db.from('matmove_purchase_payments').update({
-      state: 'failed',
-      failure_detail: err.message,
+      state: 'review_required',
+      provider_status: 'review_required',
+      failure_detail: 'Provider response uncertain. Reconcile the original request before retrying.',
       updated_at: new Date().toISOString()
     }).eq('id', payment.id);
-    return res.status(400).json({ success: false, error: err.message || 'Monime gateway rejected the transfer.' });
+    return res.status(202).json({ success: false, pending: true, status: 'review_required', paymentId: payment.id, error: 'The payment outcome is uncertain. Do not pay again.' });
   }
 
   const transferResult = transfer?.result || transfer;
   const providerStatus = String(transferResult?.status || '').toLowerCase();
-  const receiptMatches =
-    typeof transferResult?.id === 'string' &&
-    transferResult.id.length > 0 &&
-    transferResult.amount?.currency === 'SLE' &&
-    transferResult.amount?.value === Number(payment.amount_minor) &&
-    transferResult.sourceFinancialAccount?.id === payment.source_account_id &&
-    transferResult.destinationFinancialAccount?.id === payment.destination_account_id;
+  const receiptMatches = matchesPurchaseTransfer(payment, transferResult);
 
   if (!receiptMatches) {
     await db.from('matmove_purchase_payments').update({
