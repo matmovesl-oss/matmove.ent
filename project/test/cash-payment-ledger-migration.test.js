@@ -25,7 +25,7 @@ test('cash split is constrained to 85 percent driver cash plus the MatMove fee r
 
 test('cash transfer legs are idempotent and require exact verified provider receipts', async () => {
   const sql = await readFile(migration, 'utf8');
-  assert.match(sql, /unique \(request_key\)/i);
+  assert.match(sql, /request_key text not null unique/i);
   assert.match(sql, /matmove_cash_ride_leg_one_kind_per_booking/i);
   assert.match(sql, /cash reserve, capture and refund legs must equal the locked MatMove fee/i);
   assert.match(sql, /reserve source must be the rider's currently linked SLE Monime account/i);
