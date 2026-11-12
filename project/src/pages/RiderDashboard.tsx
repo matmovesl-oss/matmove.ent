@@ -644,6 +644,39 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                     </div>
 
 
+
+                    {serviceType === 'ride' && (
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <label className="block text-xs font-bold text-slate-700">
+                          Payment method
+                          <select
+                            value={paymentMethod}
+                            disabled={cashConfigLoading || !cashEnabled}
+                            onChange={e => setPaymentMethod(e.target.value as 'digital' | 'cash')}
+                            className="mt-2 w-full rounded-lg border p-3 text-sm font-semibold disabled:bg-slate-100"
+                          >
+                            <option value="digital">Digital wallet — full fare escrow</option>
+                            <option value="cash" disabled={!cashEnabled}>Physical cash + 15% SLE wallet fee</option>
+                          </select>
+                        </label>
+                        {cashConfigLoading ? (
+                          <p className="mt-2 text-xs text-slate-500">Checking cash collection availability…</p>
+                        ) : !cashEnabled ? (
+                          <p className="mt-2 text-xs text-amber-800">Physical cash rides are currently unavailable. MatMove must first configure and verify its restricted Monime cash-fee holding account.</p>
+                        ) : null}
+                        {paymentMethod === 'cash' && Number(offerAmount) > 0 && (() => {
+                          const fareMinor = Math.round(Number(offerAmount) * 100);
+                          const driverCashMinor = Math.round(fareMinor * 0.85);
+                          const feeMinor = fareMinor - driverCashMinor;
+                          return (
+                            <p className="mt-2 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-950">
+                              Driver receives {'SLE ' + (driverCashMinor / 100).toFixed(2)} in physical cash. MatMove reserves {'SLE ' + (feeMinor / 100).toFixed(2)} from your SLE wallet. Your total fare remains {'SLE ' + (fareMinor / 100).toFixed(2)}.
+                            </p>
+                          );
+                        })()}
+                      </div>
+                    )}
+
                     {serviceType === 'scheduled' && (
                       <div className="flex items-center gap-2 border p-3 rounded-xl">
                         <CalendarClock size={16} className="text-emerald-600" />
@@ -674,7 +707,9 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                         {activeBooking.status === 'in_progress' ? 'Trip in Progress!' : 'Driver is on the way!'}
                       </h4>
                       <p className="text-xs text-slate-500 mt-1">
-                        Fare (SLE {Number(activeBooking.fare_amount || 0).toLocaleString()}) held securely in Escrow.
+                        {activeBooking.payment_method === 'cash'
+                          ? 'Cash ride: driver receives SLE ' + (Math.round(Math.round(Number(activeBooking.fare_amount || 0) * 100) * 0.85) / 100).toFixed(2) + ' physically; MatMove\'s 15% fee is reserved digitally.'
+                          : 'Fare (SLE ' + Number(activeBooking.fare_amount || 0).toLocaleString() + ') held securely in Escrow.'}
                       </p>
 
                       {activeBooking.driver && (
@@ -698,7 +733,11 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                         </div>
                       )}
 
-                      {activeBooking.status === 'accepted' && (
+                      {activeBooking.status === 'accepted' && activeBooking.payment_method === 'cash' && (
+                        <p className="mb-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Accepted cash rides cannot be cancelled by the rider through the app under the current policy. Contact MatMove support for review.</p>
+                      )}
+
+                      {activeBooking.status === 'accepted' && activeBooking.payment_method !== 'cash' && (
                         <button onClick={cancelTrip} disabled={isRequesting} className="mb-2 text-rose-600 font-bold border border-rose-200 bg-rose-50 p-2.5 rounded-xl w-full text-xs">
                           Cancel Trip & Release Hold
                         </button>
@@ -710,7 +749,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                           disabled={isRequesting}
                           className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl text-xs hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2"
                         >
-                          {isRequesting ? <Loader2 size={18} className="animate-spin" /> : 'Confirm Arrival & Release Driver Payment'}
+                          {isRequesting ? <Loader2 size={18} className="animate-spin" /> : activeBooking.payment_method === 'cash' ? 'Confirm Cash Handed to Driver' : 'Confirm Arrival & Release Driver Payment'}
                         </button>
                       )}
                     </>
@@ -718,14 +757,14 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                     <>
                       <Loader2 size={36} className="animate-spin text-orange-600 mx-auto mb-3" />
                       <h4 className="font-bold text-base text-slate-900">
-                        {activeBooking.status === 'pending_admin' ? 'Request sent to Dispatch...' : 'Searching for Drivers...'}
+                        {activeBooking.status === 'cash_reserve_pending' ? 'Securing MatMove cash fee…' : activeBooking.status === 'cash_review_required' ? 'Cash payment requires support review' : activeBooking.status === 'pending_admin' ? 'Request sent to Dispatch...' : 'Searching for Drivers...'}
                       </h4>
-                      <p className="text-xs text-slate-500 mt-1">Please wait while nearby drivers review your request.</p>
+                      <p className="text-xs text-slate-500 mt-1">{activeBooking.status === 'cash_reserve_pending' ? 'Your request stays hidden from drivers until the 15% fee reserve is verified.' : activeBooking.status === 'cash_review_required' ? 'This request has not been released to drivers. Do not submit another payment.' : 'Please wait while nearby drivers review your request.'}</p>
                       <button onClick={cancelTrip} className="text-rose-600 text-xs font-bold hover:underline mt-3">Cancel Request</button>
                     </>
                   ) : null}
 
-                  {activeBooking && ['pending', 'pending_admin'].includes(activeBooking.status) && ['ride', 'delivery'].includes(activeBooking.service_type) && (
+                  {activeBooking && activeBooking.payment_method !== 'cash' && ['pending', 'pending_admin'].includes(activeBooking.status) && ['ride', 'delivery'].includes(activeBooking.service_type) && (
                     <div className="mt-3 text-left">
                       <FareNegotiation key={`${profile?.id}:${activeBooking.id}`} userId={profile?.id} bookingId={activeBooking.id} role="rider" onFareChange={applyFareSnapshot} />
                     </div>
