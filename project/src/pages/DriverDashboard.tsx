@@ -296,6 +296,34 @@ function DriverMain({ profile, wallet, activeSection }: any) {
     } finally { tripMutex.current = false; if (mounted.current) setAcceptingId(null); }
   };
 
+  const handleConfirmCashReceived = async (booking: any) => {
+    if (!canTransact || tripMutex.current || booking.payment_method !== 'cash') return;
+    tripMutex.current = true;
+    const userId = profile.id;
+    setAcceptingId(booking.id);
+    setRideNotice('');
+    try {
+      const result = await updateRide('cash_confirm', booking.id);
+      if (!mounted.current || currentDriver.current !== userId) return;
+      radarMutation.current++;
+      if (result.payment?.status === 'settled' && result.success === true && result.pending === false) {
+        setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
+        setRideNotice('Your cash receipt and the rider handover are both confirmed. MatMove fee capture is verified and the cash ride is settled.');
+      } else {
+        setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
+        setRideNotice(result.pending
+          ? 'Your cash receipt is recorded. MatMove fee capture is still being verified; do not repeat the cash collection.'
+          : 'Your confirmation that you received the physical cash is recorded. The rider must also confirm the handover.');
+      }
+      await fetchLiveBalance();
+    } catch (err: any) {
+      if (mounted.current && currentDriver.current === userId) setRideNotice(err.message || 'Cash receipt confirmation could not be verified.');
+    } finally {
+      tripMutex.current = false;
+      if (mounted.current) setAcceptingId(null);
+    }
+  };
+
   const handleCancelRide = async (booking: any) => {
     if (!canTransact || tripMutex.current) return;
     tripMutex.current = true;
@@ -305,8 +333,15 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       const result = await updateRide('cancel', booking.id);
       if (!mounted.current || currentDriver.current !== userId) return;
       radarMutation.current++;
-      setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
-      setRideNotice('Trip cancelled successfully. A full refund has been issued to the customer.');
+      if (result.pending) {
+        setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
+        setRideNotice('The cash fee refund is still being verified. The booking remains under review; do not request another transfer.');
+      } else {
+        setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
+        setRideNotice(booking.payment_method === 'cash'
+          ? 'Cash ride cancelled and the reserved MatMove fee refund is verified.'
+          : 'Trip cancelled successfully. The verified refund has been issued to the customer.');
+      }
     } catch (err: any) { if (mounted.current) setRideNotice(err.message); }
     finally { tripMutex.current = false; if (mounted.current) setAcceptingId(null); }
   };
@@ -436,8 +471,8 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                           {acceptingId === r.id ? <span className="flex items-center justify-center gap-2"><Loader2 size={18} className="animate-spin"/> Checking request…</span> : Number.isFinite(Number(r.fare_amount))&&Number(r.fare_amount)>0?`Accept SLE ${Number(r.fare_amount).toFixed(2)}`:'Awaiting fare confirmation'}
                         </button>
                         {fareBlockReason(r) && <p role="status" className="text-xs text-amber-900">{fareBlockReason(r)}</p>}
-                        {!r.driver_id && ['ride', 'delivery'].includes(r.service_type) && <button type="button" disabled={!!acceptingId || !canTransact || !Number.isFinite(Number(r.fare_amount)) || Number(r.fare_amount)<=0} onClick={() => setNegotiatingId(previous => previous === r.id ? null : r.id)} className="min-h-11 w-full rounded-xl border px-3 py-2 text-sm font-bold disabled:opacity-50">{negotiatingId === r.id ? 'Hide fare offers' : 'Negotiate fare'}</button>}
-                        {!r.driver_id && negotiatingId === r.id && <FareNegotiation key={`${profile.id}:${r.id}`} userId={profile.id} bookingId={r.id} role="driver" onFareChange={applyDriverFare} />}
+                        {!r.driver_id && r.payment_method !== 'cash' && ['ride', 'delivery'].includes(r.service_type) && <button type="button" disabled={!!acceptingId || !canTransact || !Number.isFinite(Number(r.fare_amount)) || Number(r.fare_amount)<=0} onClick={() => setNegotiatingId(previous => previous === r.id ? null : r.id)} className="min-h-11 w-full rounded-xl border px-3 py-2 text-sm font-bold disabled:opacity-50">{negotiatingId === r.id ? 'Hide fare offers' : 'Negotiate fare'}</button>}
+                        {!r.driver_id && r.payment_method !== 'cash' && negotiatingId === r.id && <FareNegotiation key={`${profile.id}:${r.id}`} userId={profile.id} bookingId={r.id} role="driver" onFareChange={applyDriverFare} />}
                       </>
                     )}
 
@@ -453,9 +488,20 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                     )}
 
                     {r.status === 'in_progress' && r.driver_id === profile.id && (
-                      <div className="w-full bg-amber-100 text-amber-800 font-bold py-3.5 rounded-xl text-center text-sm border border-amber-200 flex items-center justify-center gap-2 shadow-inner">
-                        <Loader2 size={16} className="animate-spin" /> Waiting for Rider to Pay…
-                      </div>
+                      r.payment_method === 'cash' ? (
+                        <div className="space-y-2">
+                          <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">
+                            Collect the agreed physical cash from the rider. Confirm only after you have actually received it.
+                          </div>
+                          <button type="button" onClick={() => void handleConfirmCashReceived(r)} disabled={acceptingId === r.id || !canTransact} className="w-full rounded-xl bg-emerald-700 py-3.5 font-bold text-white disabled:opacity-50">
+                            {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Confirm Cash Received'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-full bg-amber-100 text-amber-800 font-bold py-3.5 rounded-xl text-center text-sm border border-amber-200 flex items-center justify-center gap-2 shadow-inner">
+                          <Loader2 size={16} className="animate-spin" /> Waiting for Rider to Pay…
+                        </div>
+                      )
                     )}
                   </div>
                 ))}
