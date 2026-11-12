@@ -474,9 +474,15 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                 <button onClick={() => setViewMode('new')} className={`font-bold ${viewMode === 'new' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Create New</button>
               </div>
 
-              {tripError && (
+              {(tripError || tripRequest.error || rideNotice) && (
                 <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">
-                  {tripRequest.error || rideNotice || tripError} {tripError && <button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry trip</button>}
+                  {tripRequest.error || rideNotice || tripError}
+                  {tripError && <button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry trip</button>}
+                </p>
+              )}
+              {tripRequest.retained && (
+                <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  A previous trip request is awaiting confirmation. Check that original request before creating another.
                 </p>
               )}
 
