@@ -134,3 +134,16 @@ The Customer Draft branch has progressed beyond the original schema-only foundat
 The latest production read-only audit still shows 4 active staff and 0 verified TOTP factors. The Admin AAL2 migration remains unapplied until 4/4 staff enroll and the release window is approved.
 
 **Cash Production state: disabled.** The new application path is protected by default-off settings and the booking state machine, but no production cash collection or money movement has been enabled.
+
+
+### Rider and Driver cash journey wiring — Draft branch update
+
+- Rider booking now checks the server's cash configuration before enabling the physical-cash payment choice. The option remains disabled unless the configured holding and revenue accounts can both be read from the matching Monime environment as SLE accounts.
+- The rider's digital wallet sufficiency check for cash uses only the 15% fee reserve, not the entire fare. The booking payload records `payment_method: "cash"` and uses the same idempotent booking reference to recover a lost reserve response.
+- The rider sees the physical driver-cash amount and MatMove fee separately. Cash bookings do not display digital fare negotiation or claim that the entire fare is in escrow.
+- The rider's in-progress action records the rider's cash-handover confirmation. It does not claim driver payment or settlement while the driver's confirmation or fee capture is outstanding.
+- The assigned driver has a separate **Confirm Cash Received** action. It is actor-bound to the assigned driver; only the actual physical cash receipt should be confirmed.
+- The Admin Financials report now includes the cash enablement state and provider environment (without exposing account IDs). It is read-only and displays that collection is disabled when settings say so.
+- Rider and Driver UI tests were added to the Customer security suite; Admin API tests cover permission, missing-schema and disabled-state reporting.
+
+These are branch changes only. Production settings are not configured, cash remains disabled, and neither app has been deployed from this Draft PR.
