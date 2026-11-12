@@ -9,7 +9,7 @@ import {
   rideAction,
   reconcileRide
 } from './ride-payments.js';
-import { cashRideAction } from './cash-ride-payments.js';
+import { cashRideAction, reconcileCashRide } from './cash-ride-payments.js';
 
 const actions = Object.fromEntries(
   ['accept', 'start', 'complete', 'cancel', 'status']
@@ -41,6 +41,7 @@ export async function reconcileRidePayments(req, res) {
 
   if (
     !secret ||
+    secret.length < 32 ||
     received.length !== expected.length ||
     !timingSafeEqual(received, expected)
   ) {
@@ -87,13 +88,44 @@ export async function reconcileRidePayments(req, res) {
       if (update.error) throw update.error;
     }
 
+    // Cash-leg recovery shares this authenticated scheduler endpoint and
+    // the existing API route count. Missing cash migrations are expected
+    // before rollout; any other cash queue error fails the worker closed.
+    const cashQueue = await db
+      .from('matmove_cash_ride_legs')
+      .select('booking_id')
+      .in('status', ['pending','processing'])
+      .order('updated_at')
+      .limit(5);
+
+    const missingCashSchema = cashQueue.error && (
+      cashQueue.error.code === '42P01' ||
+      cashQueue.error.code === 'PGRST204' ||
+      cashQueue.error.code === 'PGRST205'
+    );
+    if (cashQueue.error && !missingCashSchema) throw cashQueue.error;
+
+    const cashBookingIds = missingCashSchema
+      ? []
+      : [...new Set((cashQueue.data || []).map(row => row.booking_id))];
+
+    const cashResults = await Promise.allSettled(
+      cashBookingIds.map(bookingId => reconcileCashRide(db, bookingId))
+    );
+
     const failed = results.filter(
       result => result.status === 'rejected'
     ).length;
+    const cashFailed = cashResults.filter(
+      result => result.status === 'rejected'
+    ).length;
 
-    return res.status(failed ? 503 : 200).json({
+    return res.status(failed || cashFailed ? 503 : 200).json({
       checked: data.length,
-      failed
+      failed,
+      cashChecked: cashBookingIds.length,
+      cashFailed,
+      cashAvailable: !missingCashSchema
     });
   } catch {
     return res.status(503).json({
