@@ -91,3 +91,24 @@ test('cash reserve claim revalidates the current rider SLE wallet link and freez
   assert.match(claim, /status='review_required'/i);
   assert.match(claim, /canCreate',false,'canLookup',false/i);
 });
+
+
+test('database independently rejects completed cash receipts that mismatch the immutable provider leg', async () => {
+  const sql = await readFile(migration, 'utf8');
+  const record = sql.slice(
+    sql.indexOf('create or replace function public.matmove_cash_ride_record_leg'),
+    sql.indexOf('create or replace function public.matmove_cash_ride_assign_driver')
+  );
+
+  const guard = record.indexOf("if p_provider_status = 'completed' and (");
+  const write = record.indexOf('update public.matmove_cash_ride_legs');
+  assert.ok(guard >= 0 && write > guard, 'receipt validation must run before a completion update');
+
+  assert.match(record, /nullif\(btrim\(p_provider_transfer_id\), ''\) is null/i);
+  assert.match(record, /p_verified_amount_minor is distinct from l\.amount_minor/i);
+  assert.match(record, /p_verified_currency is distinct from l\.currency/i);
+  assert.match(record, /p_verified_source_account is distinct from l\.source_account_ref/i);
+  assert.match(record, /p_verified_destination_account is distinct from l\.destination_account_ref/i);
+  assert.match(record, /p_verified_reference is distinct from l\.request_key/i);
+  assert.match(record, /CASH_RECEIPT_MISMATCH/i);
+});
