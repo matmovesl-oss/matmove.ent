@@ -140,3 +140,24 @@ test('a payment without a stored provider transfer ID is skipped rather than cha
   assert.deepEqual(calls, []);
   assert.equal(state.rpcCalls.length, 0);
 });
+
+test('confirmed provider payment is not reported fulfilled when the database fulfilment RPC fails', async () => {
+  const state = fakeDb(payment, { rpcError: new Error('Database temporarily unavailable') });
+  const provider = async () => receipt();
+
+  const result = await reconcilePurchasePayments({ db: state.db, provider });
+
+  assert.deepEqual(result, { checked: 1, processed: 0, retrying: 1, failed: 0 });
+  assert.equal(state.updates[0].state, 'completed');
+  assert.equal(state.rpcCalls.length, 1);
+});
+
+test('confirmed provider payment is retried until fulfilled_at is visible', async () => {
+  const state = fakeDb(payment, { fulfilledAt: null });
+  const provider = async () => receipt();
+
+  const result = await reconcilePurchasePayments({ db: state.db, provider });
+
+  assert.deepEqual(result, { checked: 1, processed: 0, retrying: 1, failed: 0 });
+  assert.equal(state.rpcCalls.length, 1);
+});
