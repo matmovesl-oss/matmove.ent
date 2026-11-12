@@ -174,3 +174,18 @@ test('malformed stored provider ID is quarantined without a provider request', a
   assert.deepEqual(calls, []);
   assert.equal(state.rpcCalls.length, 0);
 });
+
+test('pending local purchase with a stored provider ID is reconciled using GET only', async () => {
+  const state = fakeDb({ ...payment, state: 'pending' });
+  const calls = [];
+  const provider = async (...args) => {
+    calls.push(args);
+    return receipt({ status: 'pending' });
+  };
+
+  const result = await reconcilePurchasePayments({ db: state.db, provider });
+
+  assert.deepEqual(calls, [['internal-transfers/transfer-existing-1']]);
+  assert.deepEqual(result, { checked: 1, processed: 0, retrying: 1, failed: 0 });
+  assert.equal(state.updates[0].state, 'processing');
+});
