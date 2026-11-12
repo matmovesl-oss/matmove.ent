@@ -107,3 +107,30 @@ Important limitations remain explicit:
 The current cash split remains the agreed rule: SLE 100.00 = SLE 85.00 physical cash to the assigned driver + SLE 15.00 MatMove fee secured digitally. Accepted-rider cancellation remains manual-review only until the cancellation fee and 50/50 distribution are explicitly approved.
 
 **Release state: cash collection is still disabled in Production.** Complete the API/state machine, Monime Test verification, Admin permission-scoped reconciliation, booking-dispatch integration and end-to-end test matrix before any Production rollout.
+
+
+## 12 November 2026 — booking integration and current-object verification checkpoint
+
+The Customer Draft branch has progressed beyond the original schema-only foundation:
+
+- Added `matmove_cash_ride_settings`, disabled by default, with separate restricted fee-hold and fee-revenue account references and a Test/Live environment binding.
+- Extended customer trip creation to accept an optional `payment_method: "cash"` only for rider Ride bookings. Cash bookings begin in `cash_reserve_pending` and are not exposed as ordinary dispatchable `pending` bookings.
+- Added booking guards that block driver assignment until the 15% fee reserve is verified; block trip start without the verified reserve and assigned driver; block completion until the fee capture is verified; and block cancellation until a required refund is verified.
+- Added server-side actions for reserve, accept, start, rider/driver cash confirmation, cancellation, and cash status. They are wired through the existing ride API route; no additional Vercel API route was added.
+- The cash transfer worker now stores the Monime transfer ID immediately after POST and independently GETs the current transfer object before recording completion. If GET is unavailable, later attempts only GET the stored ID; no second POST is authorized.
+- Added an Admin Financials Cash Collection Manager using the existing Admin transaction API route. It is a permission-scoped, AAL2-protected, read-only view of actual ledger rows and reserve/capture/refund states. It returns a clear unavailable response when the cash schema is absent. The old seeded preview remains unmounted.
+
+### Still blocked from Production
+
+- The two cash migrations are Draft PR files and are not installed in Production. Production has no cash ledger tables or cash state RPCs.
+- Production has **zero** named cash/restricted-holding ledger accounts. Monime must confirm/provision the restricted holding account and fee revenue destination; no general Treasury account may be substituted.
+- The settings row defaults to disabled. No account IDs or provider environment have been configured for cash.
+- No Monime Test transfer has been executed to verify the actual Test Space account IDs, source/destination lineage, pending-to-completed transitions, duplicate webhook behavior or refund.
+- No scheduled cash-leg recovery job is configured. Pending transfers can be rechecked through the authenticated ride action, but automated background reconciliation must be added and tested before production activation.
+- Accepted-rider cancellation after driver acceptance remains blocked/manual review; the cancellation fee and 50/50 allocation are not approved/configured.
+- The Admin Cash Collection Manager is read-only. Admin resolution, exception workflow, audit export and cash settlement approvals remain to be built and reviewed.
+- The Customer and Admin Vercel checks must pass on their exact final heads. Customer builds have previously hit the Hobby build quota.
+
+The latest production read-only audit still shows 4 active staff and 0 verified TOTP factors. The Admin AAL2 migration remains unapplied until 4/4 staff enroll and the release window is approved.
+
+**Cash Production state: disabled.** The new application path is protected by default-off settings and the booking state machine, but no production cash collection or money movement has been enabled.
