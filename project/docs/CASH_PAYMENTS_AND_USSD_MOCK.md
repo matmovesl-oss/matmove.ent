@@ -126,7 +126,7 @@ The Customer Draft branch has progressed beyond the original schema-only foundat
 - Production has **zero** named cash/restricted-holding ledger accounts. Monime must confirm/provision the restricted holding account and fee revenue destination; no general Treasury account may be substituted.
 - The settings row defaults to disabled. No account IDs or provider environment have been configured for cash.
 - No Monime Test transfer has been executed to verify the actual Test Space account IDs, source/destination lineage, pending-to-completed transitions, duplicate webhook behavior or refund.
-- No scheduled cash-leg recovery job is configured. Pending transfers can be rechecked through the authenticated ride action, but automated background reconciliation must be added and tested before production activation.
+- Added cash-leg recovery to the existing CRON-protected ride reconciliation endpoint. It only revisits pending/processing cash legs with their stored provider IDs and never issues a second transfer POST. However, the scheduler secret (minimum 32 characters) and recurring schedule are not configured, and no Monime Test recovery run has been verified. Configure the scheduler only after Monime Test verification and the approved hosting plan support the required cadence.
 - Accepted-rider cancellation after driver acceptance remains blocked/manual review; the cancellation fee and 50/50 allocation are not approved/configured.
 - The Admin Cash Collection Manager is read-only. Admin resolution, exception workflow, audit export and cash settlement approvals remain to be built and reviewed.
 - The Customer and Admin Vercel checks must pass on their exact final heads. Customer builds have previously hit the Hobby build quota.
@@ -147,3 +147,10 @@ The latest production read-only audit still shows 4 active staff and 0 verified 
 - Rider and Driver UI tests were added to the Customer security suite; Admin API tests cover permission, missing-schema and disabled-state reporting.
 
 These are branch changes only. Production settings are not configured, cash remains disabled, and neither app has been deployed from this Draft PR.
+
+
+### Cash recovery worker — Draft branch update
+
+The existing ride reconciliation endpoint now includes cash-leg recovery without creating a thirteenth API route. It reads only pending/processing cash legs, calls the existing current-object GET path for the stored Monime transfer ID, and leaves uncertain cases in manual review. The same endpoint rejects absent or shorter-than-32-character scheduler secrets. It does not initiate a new cash transfer POST during reconciliation.
+
+This is code support, not an active scheduled worker. The Production scheduler secret and schedule are not configured; no provider Test recovery run has been completed. Production cash remains disabled.
