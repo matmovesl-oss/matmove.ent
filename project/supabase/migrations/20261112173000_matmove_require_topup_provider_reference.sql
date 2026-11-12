@@ -24,6 +24,9 @@ begin
 end;
 $function$;
 
+revoke all on function public.matmove_require_topup_provider_reference()
+  from public, anon, authenticated;
+
 drop trigger if exists matmove_require_topup_provider_reference
   on public.payment_transactions;
 
