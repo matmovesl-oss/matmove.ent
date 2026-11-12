@@ -27,6 +27,10 @@ test('cash transfer legs are idempotent and require exact verified provider rece
   const sql = await readFile(migration, 'utf8');
   assert.match(sql, /unique \(request_key\)/i);
   assert.match(sql, /matmove_cash_ride_leg_one_kind_per_booking/i);
+  assert.match(sql, /cash reserve, capture and refund legs must equal the locked MatMove fee/i);
+  assert.match(sql, /reserve source must be the rider's currently linked SLE Monime account/i);
+  assert.match(sql, /capture must debit the exact restricted account that received the reserve/i);
+  assert.match(sql, /refund must reverse the original verified reserve accounts/i);
   assert.match(sql, /verified_amount_minor = amount_minor/i);
   assert.match(sql, /verified_currency = currency/i);
   assert.match(sql, /verified_source_account_ref = source_account_ref/i);
@@ -39,6 +43,8 @@ test('cash confirmations are actor-bound and settlement requires both parties or
   const sql = await readFile(migration, 'utf8');
   assert.match(sql, /driver_cash_confirmed_by = driver_id/i);
   assert.match(sql, /rider_cash_confirmed_by = rider_id/i);
+  assert.match(sql, /lower\(coalesce\(v_service_type, ''\)\) <> 'ride'/i);
+  assert.match(sql, /round\(v_fare_amount \* 100\)::bigint is distinct from new\.fare_minor/i);
   assert.match(sql, /status <> 'settled'[\s\S]*?driver_cash_confirmed_at is not null and rider_cash_confirmed_at is not null/i);
   assert.match(sql, /manual_resolution_at is not null/i);
 });
