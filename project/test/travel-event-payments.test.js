@@ -81,3 +81,31 @@ test('purchase receipt matching requires the exact existing provider ID, amount,
   assert.equal(matchesPurchaseTransfer(payment, receipt({ sourceFinancialAccount: { id: 'fac-other' } })), false);
   assert.equal(matchesPurchaseTransfer(payment, receipt({ destinationFinancialAccount: { id: 'fac-other' } })), false);
 });
+
+test('a failed GET for an existing provider transfer is propagated without a replacement POST', async () => {
+  const calls = [];
+  const provider = async (...args) => {
+    calls.push(args);
+    throw new Error('Provider temporarily unavailable');
+  };
+
+  await assert.rejects(
+    () => requestPurchaseTransfer(payment, details, user, provider),
+    /Provider temporarily unavailable/
+  );
+  assert.deepEqual(calls, [['internal-transfers/transfer-existing-1']]);
+});
+
+test('a malformed non-null provider transfer ID fails closed without creating a transfer', async () => {
+  const calls = [];
+  const provider = async (...args) => {
+    calls.push(args);
+    return receipt();
+  };
+
+  await assert.rejects(
+    () => requestPurchaseTransfer({ ...payment, provider_transfer_id: 'bad/id' }, details, user, provider),
+    /stored provider transfer ID is invalid/i
+  );
+  assert.deepEqual(calls, []);
+});
