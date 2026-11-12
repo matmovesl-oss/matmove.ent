@@ -5,6 +5,7 @@ import {
   verifiedAccount,
   monime
 } from './wallet-security.js';
+import { cashRideAction } from './cash-ride-payments.js';
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -327,6 +328,9 @@ export async function rideAction(
   }
 
   const booking = await readBooking(db, bookingId);
+  if (booking.payment_method === 'cash') {
+    return cashRideAction(req, res, action, { provider });
+  }
   const payment = await readPayment(db, bookingId);
 
   if (action === 'status') {
