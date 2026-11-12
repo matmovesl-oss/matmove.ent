@@ -173,6 +173,6 @@ export async function reconcileArcadeBatch(db,provider=monime) {
 export async function reconcileArcades(req,res) {
   if(req.method!=='GET')return res.status(405).json({error:'Method not allowed.'});
   const secret=process.env.CRON_SECRET,actual=Buffer.from(String(req.headers.authorization||'')),expected=Buffer.from(`Bearer ${secret||''}`);
-  if(!secret||actual.length!==expected.length||!timingSafeEqual(actual,expected))return res.status(401).json({error:'Unauthorized.'});
+  if(typeof secret!=='string'||secret.length<32||secret.length>256||actual.length!==expected.length||!timingSafeEqual(actual,expected))return res.status(401).json({error:'Unauthorized.'});
   try{const result=await reconcileArcadeBatch(dbClient());return res.status(result.failed?503:200).json(result);}catch{return res.status(503).json({error:'Game reconciliation unavailable.'});}
 }
