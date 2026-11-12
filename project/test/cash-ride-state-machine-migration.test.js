@@ -11,6 +11,7 @@ test('cash booking is a separate payment method and starts outside driver discov
   const sql = await readFile(migration, 'utf8');
   assert.match(sql, /add column if not exists payment_method text not null default 'digital'/i);
   assert.match(sql, /'cash_reserve_pending'/i);
+  assert.match(sql, /'cash_review_required'/i);
   assert.match(sql, /new\.status is distinct from 'cash_reserve_pending'/i);
   assert.match(sql, /status='pending'.*where id=p_booking_id and status='cash_reserve_pending'/is);
 });
@@ -46,6 +47,7 @@ test('cash legs cannot create a second provider POST after an uncertain attempt'
   assert.match(sql, /status='processing',attempted_at=clock_timestamp\(\)/i);
   assert.match(sql, /interval '2 minutes'/i);
   assert.match(sql, /reasonCode','uncertain_post'/i);
+  assert.match(sql, /set status='cash_review_required'/i);
 });
 
 test('cash settlement needs dual confirmations and booking status follows verified capture/refund', async () => {
