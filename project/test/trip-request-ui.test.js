@@ -23,7 +23,7 @@ test('blocked browser storage fails before any trip RPC',()=>fixture(async h=>{a
 test('RiderDashboard creates trips only through the idempotent ownership RPC and waits for recovery state',async()=>{
  const source=await readFile(new URL('../src/pages/RiderDashboard.tsx',import.meta.url),'utf8');
  assert.match(source,/useTripRequest/);
- assert.match(source,/tripRequest\\.submit\\(details\\)/);
- assert.match(source,/disabled=\\{isRequesting \\|\\| !tripRequest\\.ready/);
- assert.doesNotMatch(source,/\\.from\\(['"]bookings['"]\\)\\s*\\.insert/);
+ assert.match(source,/tripRequest\.submit\(details\)/);
+ assert.match(source,/disabled=\{isRequesting \|\| !tripRequest\.ready/);
+ assert.doesNotMatch(source,/\.from\(['"]bookings['"]\)\s*\.insert/);
 });
