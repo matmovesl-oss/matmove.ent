@@ -58,6 +58,16 @@ Guest payers do not need a MatMove login. They receive a unique booking/order re
 - **Merchants:** get an order-specific reference/USSD collection path, then their merchant settlement is recorded through the existing merchant settlement ledger. A payment receipt is not itself a merchant payout.
 - **Drivers:** keep verified MatMove driver accounts for accepting trips and receiving earnings. USSD can provide future balance/earnings inquiry and guarded cash-out initiation, but never pay a driver merely because someone knows a phone number or booking reference. Payout requires authenticated driver identity, step-up verification, limits, idempotency and the existing verified payout ledger.
 
+### Monime flow format and test gates
+
+The draft JSON follows Monime Flow Definition version 1.0: pages have typed components; the reference prompt calls on_done.action exchange; the server validates the reference and navigates to a collect_payment template with data.amount, data.payment_target_ref and data.payment_reference. The Exchange API request and response are encrypted. Monime requires a matching RSA-2048 keypair for a flow that calls the server, and the Exchange endpoint must respond with HTTP 200 within 10 seconds. The JSON contains a placeholder host and is not publishable until the Exchange endpoint exists and the response data contract is tested.
+
+Monime assigns a 7-digit flow code when the flow is created. A memorable short code is a separate request to Monime support; do not print a made-up USSD code in customer marketing.
+
+### Driver and merchant USSD services
+
+A separate menu can provide registered drivers with trip status and earnings summaries, and registered merchants with paid-order alerts and order status. Identify the caller using the Monime subscriber identity plus a verified MatMove account link; use a one-time challenge to bind or recover access. Keep sensitive balances masked and expose only the minimum data needed. A driver payout/cash-out must still use the authenticated payout backend, step-up verification, limits and the verified idempotent payout ledger. Never pay out to a phone number supplied in a USSD answer. A guest customer needs no MatMove account to pay an order reference, but merchants and drivers remain registered MatMove counterparties for fulfilment and settlement.
+
 ### Monime enablement / test gates
 
 - Confirm the MatMove Space has the USSD Flow feature enabled and obtain the actual production/test flow code.
