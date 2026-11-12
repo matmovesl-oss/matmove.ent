@@ -19,7 +19,7 @@ export default function CashPaymentPreview({ fare }: { fare: string | number }) 
   const [stage, setStage] = useState<Stage>('idle');
   const [message, setMessage] = useState('');
 
-  const balanceMinor = /^\\d{1,7}(?:\\.\\d{1,2})?$/.test(demoBalance)
+  const balanceMinor = /^\d{1,7}(?:\.\d{1,2})?$/.test(demoBalance)
     ? Math.round(Number(demoBalance) * 100)
     : -1;
   const canReserve = !!split && balanceMinor >= split.matmoveFeeMinor;
