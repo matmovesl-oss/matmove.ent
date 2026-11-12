@@ -9,18 +9,22 @@ import {
   rideAction,
   reconcileRide
 } from './ride-payments.js';
+import { cashRideAction } from './cash-ride-payments.js';
 
 const actions = Object.fromEntries(
   ['accept', 'start', 'complete', 'cancel', 'status']
     .map(action => [
       action,
-
-      protectedWallet(
-        'read',
-        (req, res) => rideAction(req, res, action)
-      )
+      protectedWallet('read', (req, res) => rideAction(req, res, action))
     ])
 );
+
+for (const action of ['cash_reserve', 'cash_confirm', 'cash_config']) {
+  actions[action] = protectedWallet(
+    'read',
+    (req, res) => cashRideAction(req, res, action)
+  );
+}
 
 // Scheduled recovery requires CRON_SECRET.
 // A customer's Supabase token cannot authorize this job.
@@ -119,6 +123,9 @@ export function createRidePaymentsHandler({
         'complete',
         'cancel',
         'status',
+        'cash_reserve',
+        'cash_confirm',
+        'cash_config',
         'reconcile'
       ].includes(action)
     ) {
