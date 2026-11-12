@@ -4,7 +4,7 @@ type Provider = 'Orange Money' | 'Afrimoney';
 type Stage = 'idle' | 'awaiting' | 'paid';
 
 const referencePattern = /^[A-Za-z0-9-]{4,32}$/;
-const phonePattern = /^\\+232\\d{8,9}$/;
+const phonePattern = /^\+232\d{8,9}$/;
 
 /**
  * Public guest-payment prototype. Local-only: never sends a payment request.
@@ -29,7 +29,7 @@ export default function GuestUSSDPaymentPreview() {
       setError('Enter a valid Sierra Leone mobile number beginning with +232.');
       return;
     }
-    if (!/^\\d{1,7}(?:\\.\\d{1,2})?$/.test(amount) || Number(amount) <= 0 || Number(amount) > 1000000) {
+    if (!/^\d{1,7}(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0 || Number(amount) > 1000000) {
       setError('Enter a valid SLE payment amount.');
       return;
     }
