@@ -75,3 +75,19 @@ test('cash state RPCs are service-role only and do not reuse digital escrow tabl
   }
   assert.doesNotMatch(sql, /insert into public\.(ride_payments|ride_payment_transfers)/i);
 });
+
+
+test('cash reserve claim revalidates the current rider SLE wallet link and freeze state before the one-time POST', async () => {
+  const sql = await readFile(migration, 'utf8');
+  const claim = sql.slice(
+    sql.indexOf('create or replace function public.matmove_cash_ride_claim_leg'),
+    sql.indexOf('create or replace function public.matmove_cash_ride_record_leg')
+  );
+  assert.match(claim, /public\.wallets w[\s\S]*public\.profiles rider/i);
+  assert.match(claim, /coalesce\(w\.monime_account_id,w\.metadata->>'monime_account_id'\)=l\.source_account_ref/i);
+  assert.match(claim, /not coalesce\(w\.is_frozen,false\)/i);
+  assert.match(claim, /not coalesce\(rider\.is_wallet_frozen,false\)/i);
+  assert.match(claim, /source_account_changed/i);
+  assert.match(claim, /status='review_required'/i);
+  assert.match(claim, /canCreate',false,'canLookup',false/i);
+});
