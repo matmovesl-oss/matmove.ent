@@ -176,7 +176,7 @@ export async function reconcilePurchasePayments({
   const query = await db
     .from('matmove_purchase_payments')
     .select('*')
-    .in('state', ['processing', 'completed'])
+    .in('state', ['pending', 'processing', 'completed'])
     .not('provider_transfer_id', 'is', null)
     .order('updated_at', { ascending: true })
     .limit(batchSize);
@@ -188,7 +188,7 @@ export async function reconcilePurchasePayments({
   const rows = (query.data || []).filter(payment =>
     typeof payment.provider_transfer_id === 'string' &&
     payment.provider_transfer_id.length > 0 &&
-    (payment.state === 'processing' || (payment.state === 'completed' && !payment.fulfilled_at))
+    (['pending', 'processing'].includes(payment.state) || (payment.state === 'completed' && !payment.fulfilled_at))
   );
 
   const result = { checked: 0, processed: 0, retrying: 0, failed: 0 };
