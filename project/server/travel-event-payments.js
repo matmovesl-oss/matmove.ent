@@ -3,6 +3,7 @@ import {
   monime,
   protectedWallet,
   toMinorUnits,
+  dbClient,
 } from './wallet-security.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -164,6 +165,152 @@ export function matchesPurchaseTransfer(payment, transfer) {
     transfer.amount?.value === Number(payment.amount_minor) &&
     transfer.sourceFinancialAccount?.id === payment.source_account_id &&
     transfer.destinationFinancialAccount?.id === payment.destination_account_id;
+}
+
+export async function reconcilePurchasePayments({
+  db = dbClient(),
+  provider = monime,
+  limit = 5,
+} = {}) {
+  const batchSize = Math.min(Math.max(Number(limit) || 5, 1), 20);
+  const query = await db
+    .from('matmove_purchase_payments')
+    .select('*')
+    .in('state', ['processing', 'completed'])
+    .not('provider_transfer_id', 'is', null)
+    .order('updated_at', { ascending: true })
+    .limit(batchSize);
+
+  if (query.error) {
+    throw new Error('Purchase payment reconciliation query failed.');
+  }
+
+  const rows = (query.data || []).filter(payment =>
+    typeof payment.provider_transfer_id === 'string' &&
+    payment.provider_transfer_id.length > 0 &&
+    (payment.state === 'processing' || (payment.state === 'completed' && !payment.fulfilled_at))
+  );
+
+  const result = { checked: 0, processed: 0, retrying: 0, failed: 0 };
+
+  for (const payment of rows) {
+    result.checked += 1;
+
+    try {
+      // This worker is GET-only. It never creates or retries a provider transfer.
+      const raw = await provider(
+        `internal-transfers/${encodeURIComponent(payment.provider_transfer_id)}`
+      );
+      const transfer = raw?.result || raw;
+
+      if (!matchesPurchaseTransfer(payment, transfer)) {
+        const update = await db
+          .from('matmove_purchase_payments')
+          .update({
+            state: 'review_required',
+            provider_status: 'review_required',
+            failure_detail: 'Provider transfer did not match the stored purchase. Manual review required.',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', payment.id);
+        if (update.error) result.retrying += 1;
+        else result.failed += 1;
+        continue;
+      }
+
+      const status = String(transfer.status || '').toLowerCase();
+
+      if (status === 'pending' || status === 'processing') {
+        const update = await db
+          .from('matmove_purchase_payments')
+          .update({
+            state: 'processing',
+            provider_status: status,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', payment.id);
+        result.retrying += 1;
+        if (update.error) {
+          console.error('MatMove purchase status update failed', { paymentId: payment.id });
+        }
+        continue;
+      }
+
+      if (status === 'failed') {
+        const update = await db
+          .from('matmove_purchase_payments')
+          .update({
+            state: 'failed',
+            provider_status: 'failed',
+            failure_detail: 'Monime confirmed that the existing purchase transfer failed.',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', payment.id);
+        if (update.error) result.retrying += 1;
+        else result.failed += 1;
+        continue;
+      }
+
+      if (status !== 'completed') {
+        const update = await db
+          .from('matmove_purchase_payments')
+          .update({
+            state: 'review_required',
+            provider_status: status || 'unknown',
+            failure_detail: 'Monime returned an unrecognized transfer status. Manual review required.',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', payment.id);
+        if (update.error) result.retrying += 1;
+        else result.failed += 1;
+        continue;
+      }
+
+      const recorded = await db
+        .from('matmove_purchase_payments')
+        .update({
+          state: 'completed',
+          provider_status: 'completed',
+          failure_detail: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', payment.id);
+
+      if (recorded.error) {
+        result.retrying += 1;
+        continue;
+      }
+
+      const fulfillment = await db.rpc('matmove_fulfill_purchase_payment', {
+        p_payment_id: payment.id,
+      });
+
+      if (fulfillment.error || fulfillment.data?.success !== true) {
+        result.retrying += 1;
+        continue;
+      }
+
+      const confirmation = await db
+        .from('matmove_purchase_payments')
+        .select('fulfilled_at')
+        .eq('id', payment.id)
+        .single();
+
+      if (confirmation.error || !confirmation.data?.fulfilled_at) {
+        result.retrying += 1;
+        continue;
+      }
+
+      result.processed += 1;
+    } catch {
+      // A provider GET failure is not evidence that the transfer failed.
+      // Keep the row pending for a later read-only reconciliation attempt.
+      console.error('MatMove purchase reconciliation failed', { paymentId: payment.id });
+      result.retrying += 1;
+    }
+  }
+
+  return result;
 }
 
 async function processPurchase(req, res) {
