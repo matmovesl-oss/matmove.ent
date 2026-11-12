@@ -22,6 +22,7 @@ alter table public.bookings
     'pending',
     'pending_admin',
     'cash_reserve_pending',
+    'cash_review_required',
     'accepted',
     'in_progress',
     'completed',
@@ -33,6 +34,8 @@ create table if not exists public.matmove_cash_ride_settings (
   enabled boolean not null default false,
   fee_hold_account_id text,
   fee_revenue_account_id text,
+  provider_environment text not null default 'live'
+    check (provider_environment in ('test','live')),
   updated_at timestamptz not null default clock_timestamp(),
   constraint matmove_cash_ride_settings_account_shape
     check (
@@ -124,6 +127,10 @@ begin
   if new.status in ('pending','pending_admin','accepted')
      and (v_cash_status <> 'fee_reserved' or v_reserve_status <> 'completed') then
     raise exception 'CASH_FEE_NOT_RESERVED: A cash ride cannot be dispatched or accepted before the fee reserve is verified.';
+  end if;
+
+  if new.status = 'cash_review_required' and v_cash_status <> 'review_required' then
+    raise exception 'CASH_REVIEW_STATE_INVALID: Booking review status requires a quarantined cash ledger.';
   end if;
 
   if new.status = 'in_progress'
@@ -509,6 +516,7 @@ begin
 
   elsif p_leg_kind='capture' then
     if p_actor_id is null
+       or p_actor_id not in (p.rider_id,p.driver_id)
        or b.status <> 'in_progress'
        or p.status <> 'capture_pending'
        or not (
@@ -531,7 +539,11 @@ begin
   else
     if p_actor_id is null
        or p.status <> 'refund_pending'
-       or b.status not in ('cash_reserve_pending','pending','accepted') then
+       or b.status not in ('cash_reserve_pending','pending','accepted')
+       or not (
+         (p_actor_id=p.rider_id and b.status in ('cash_reserve_pending','pending'))
+         or (p_actor_id=p.driver_id and b.status='accepted' and b.started_at is null)
+       ) then
       raise exception 'INVALID_STATE: Cash fee refund is not eligible.';
     end if;
 
@@ -635,6 +647,10 @@ begin
     set status='review_required',updated_at=clock_timestamp()
     where booking_id=p_booking_id;
 
+    update public.bookings
+    set status='cash_review_required',updated_at=clock_timestamp()
+    where id=p_booking_id and status in ('cash_reserve_pending','pending','pending_admin','accepted');
+
     insert into public.matmove_cash_ride_audit_events(
       booking_id,event_type,actor_type,details
     ) values(
@@ -716,6 +732,10 @@ begin
   where id=l.id returning * into l;
 
   if p_provider_status='completed' then
+    if p_verified_reference is distinct from l.request_key then
+      raise exception 'CASH_RECEIPT_REFERENCE_MISMATCH: Provider receipt request reference does not match the original idempotency reference.';
+    end if;
+
     next_state := case p_leg_kind
       when 'reserve' then 'fee_reserved'
       when 'capture' then 'settled'
@@ -754,6 +774,10 @@ begin
     update public.matmove_cash_ride_payments
     set status='review_required',updated_at=clock_timestamp()
     where booking_id=p_booking_id;
+
+    update public.bookings
+    set status='cash_review_required',updated_at=clock_timestamp()
+    where id=p_booking_id and status in ('cash_reserve_pending','pending','pending_admin','accepted');
 
     insert into public.matmove_cash_ride_audit_events(
       booking_id,event_type,actor_type,details
@@ -1013,6 +1037,26 @@ begin
     return jsonb_build_object('cancelled',true,'refundRequired',false);
   end if;
 
+  if p.status='reserve_pending' and exists (
+    select 1 from public.matmove_cash_ride_legs l
+    where l.booking_id=p_booking_id and l.leg_kind='reserve'
+      and l.status='ready' and l.attempted_at is null
+  ) then
+    update public.matmove_cash_ride_legs
+    set status='failed',error_code='cancelled_before_attempt',updated_at=clock_timestamp()
+    where booking_id=p_booking_id and leg_kind='reserve'
+      and status='ready' and attempted_at is null;
+    update public.matmove_cash_ride_payments
+    set status='cancelled',updated_at=clock_timestamp()
+    where booking_id=p_booking_id;
+    update public.bookings set status='cancelled',updated_at=clock_timestamp()
+    where id=p_booking_id;
+    insert into public.matmove_cash_ride_audit_events(
+      booking_id,event_type,actor_type,actor_profile_id
+    ) values(p_booking_id,'payment_cancelled',p_actor_type,p_actor_id);
+    return jsonb_build_object('cancelled',true,'refundRequired',false);
+  end if;
+
   if p.status='fee_reserved' then
     update public.matmove_cash_ride_payments
     set status='refund_pending',updated_at=clock_timestamp()
@@ -1027,6 +1071,10 @@ begin
   update public.matmove_cash_ride_payments
   set status='review_required',updated_at=clock_timestamp()
   where booking_id=p_booking_id;
+
+  update public.bookings
+  set status='cash_review_required',updated_at=clock_timestamp()
+  where id=p_booking_id and status in ('cash_reserve_pending','pending','pending_admin','accepted');
 
   insert into public.matmove_cash_ride_audit_events(
     booking_id,event_type,actor_type,actor_profile_id,details
