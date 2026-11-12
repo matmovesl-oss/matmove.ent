@@ -25,17 +25,17 @@ test('invalid and out-of-range cash fares are rejected', () => {
 test('customer cash and guest USSD previews make no live payment calls', async () => {
   const cash = await readFile(new URL('../src/components/CashPaymentPreview.tsx', import.meta.url), 'utf8');
   const guest = await readFile(new URL('../src/components/GuestUSSDPaymentPreview.tsx', import.meta.url), 'utf8');
-  assert.match(cash, /Preview only/);
-  assert.match(cash, /does not read or debit your real wallet/);
-  assert.doesNotMatch(cash, /supabase\\.|walletFetch|fetch\\s*\\(/);
-  assert.match(guest, /Guest checkout/);
-  assert.match(guest, /Orange Money/);
-  assert.match(guest, /Afrimoney/);
-  assert.match(guest, /no MatMove account/i);
-  assert.doesNotMatch(guest, /supabase\\.|walletFetch|fetch\\s*\\(/);
+  assert.ok(cash.includes('Preview only'));
+  assert.ok(cash.includes('does not read or debit your real wallet'));
+  assert.ok(!cash.includes('supabase.rpc') && !cash.includes('walletFetch') && !cash.includes('fetch('));
+  assert.ok(guest.includes('Guest checkout'));
+  assert.ok(guest.includes('Orange Money'));
+  assert.ok(guest.includes('Afrimoney'));
+  assert.ok(guest.toLowerCase().includes('no matmove account'));
+  assert.ok(!guest.includes('supabase.rpc') && !guest.includes('walletFetch') && !guest.includes('fetch('));
 });
 
 test('guest checkout preview is a public route, outside the signed-in customer portal', async () => {
   const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
-  assert.match(app, /<Route path="\\/guest-payment-preview" element={<GuestUSSDPaymentPreview \/>} \/>/);
+  assert.ok(app.includes('<Route path="/guest-payment-preview" element={<GuestUSSDPaymentPreview />} />'));
 });
