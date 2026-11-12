@@ -51,4 +51,8 @@ test('Monime USSD flow draft uses v1 components, exchange validation and collect
   assert.ok(flow.pages.some(page => page.id === 'order_reference' && page.on_done?.action === 'exchange'));
   assert.ok(flow.pages.some(page => page.component?.template_name === 'collect_payment'));
   assert.ok(flow.pages.find(page => page.component?.template_name === 'collect_payment')?.component?.template_data?.payment_target_ref);
+  const paymentPage = flow.pages.find(page => page.component?.template_name === 'collect_payment');
+  assert.ok(paymentPage.component.label.includes('pay {{amount}}'));
+  assert.ok(!paymentPage.component.label.includes('SLE {{amount}}'));
+  assert.equal(paymentPage.component.template_data.amount, '$(data.amount)');
 });
