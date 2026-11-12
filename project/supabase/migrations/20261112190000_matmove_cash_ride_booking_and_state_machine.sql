@@ -734,6 +734,7 @@ set search_path to 'pg_catalog','public'
 as $function$
 declare
   l public.matmove_cash_ride_legs%rowtype;
+  source_link_valid boolean;
 begin
   select * into l from public.matmove_cash_ride_legs
   where booking_id=p_booking_id and leg_kind=p_leg_kind
@@ -744,6 +745,49 @@ begin
   end if;
 
   if l.status='ready' and l.attempted_at is null then
+    if p_leg_kind='reserve' then
+      select exists (
+        select 1
+        from public.wallets w
+        join public.profiles rider on rider.id=w.user_id
+        where w.user_id=(select rider_id from public.matmove_cash_ride_payments where booking_id=p_booking_id)
+          and w.currency='SLE'
+          and coalesce(w.monime_account_id,w.metadata->>'monime_account_id')=l.source_account_ref
+          and not coalesce(w.is_frozen,false)
+          and rider.role='rider'
+          and not coalesce(rider.is_wallet_frozen,false)
+          and not exists (
+            select 1 from public.wallets other
+            where other.id<>w.id
+              and (other.monime_account_id=l.source_account_ref
+                or other.metadata->>'monime_account_id'=l.source_account_ref)
+          )
+      ) into source_link_valid;
+
+      if not coalesce(source_link_valid,false) then
+        update public.matmove_cash_ride_legs
+        set status='review_required',error_code='source_account_changed',updated_at=clock_timestamp()
+        where id=l.id returning * into l;
+
+        update public.matmove_cash_ride_payments
+        set status='review_required',updated_at=clock_timestamp()
+        where booking_id=p_booking_id;
+
+        update public.bookings
+        set status='cash_review_required',updated_at=clock_timestamp()
+        where id=p_booking_id and status='cash_reserve_pending';
+
+        insert into public.matmove_cash_ride_audit_events(
+          booking_id,event_type,actor_type,details
+        ) values(
+          p_booking_id,'manual_review_opened','system',
+          jsonb_build_object('legKind',p_leg_kind,'reasonCode','source_account_changed')
+        );
+
+        return jsonb_build_object('leg',to_jsonb(l),'canCreate',false,'canLookup',false);
+      end if;
+    end if;
+
     update public.matmove_cash_ride_legs
     set status='processing',attempted_at=clock_timestamp(),updated_at=clock_timestamp()
     where id=l.id returning * into l;
