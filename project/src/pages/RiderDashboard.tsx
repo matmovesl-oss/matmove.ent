@@ -1,4 +1,4 @@
-import ActiveTripMap, { tripPinFields } from '@/components/ActiveTripMap';
+import ActiveTripMap from '@/components/ActiveTripMap';
 import { ProductGallery, catalogMoney, catalogCheckoutAllowed } from '@/components/ProductCatalog';
 import FareNegotiation from '@/components/FareNegotiation';
 import { useCustomerActiveRide } from '@/lib/useRideNegotiation';
@@ -13,6 +13,7 @@ import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
 import { updateRide } from '@/services/rideService';
+import { useTripRequest } from '@/lib/useTripRequest';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -85,6 +86,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     retry: retryTrip,
     applySnapshot: applyFareSnapshot
   } = useCustomerActiveRide(profile?.id);
+  const tripRequest = useTripRequest(profile?.id || '');
 
   useEffect(() => {
     let timer: any;
@@ -249,50 +251,68 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
   const handleRequest = async () => {
     if (tripLoading || tripError || activeBooking || isRequesting) return;
-    if (!pickupCoords || !destinationCoords) {
-      return alert('Please select pickup and destination using address search or map pins.');
+    if (tripRequest.error) {
+      setRideNotice(tripRequest.error);
+      return;
     }
 
-    if (serviceType === 'scheduled' && !scheduledTime) {
-      return alert('Select time for scheduled request.');
+    // If a previous request lost its response, recover that exact request.
+    // Never build a new payload or create another booking until it is resolved.
+    const retainedDetails = tripRequest.retained?.details as Record<string, unknown> | undefined;
+    const finalAmount = Number(retainedDetails?.fare_amount ?? offerAmount);
+
+    if (!retainedDetails && (!pickupCoords || !destinationCoords)) {
+      setRideNotice('Please select pickup and destination using address search or map pins.');
+      return;
     }
 
-    const finalAmount = Number(offerAmount);
-    const finalStatus = serviceType === 'scheduled' ? 'pending_admin' : 'pending';
-    if (!/^\d+(\.\d{1,2})?$/.test(offerAmount.trim()) || !Number.isFinite(finalAmount) || finalAmount <= 0 || finalAmount > 1000000) {
-      return alert('Enter and review a positive fare with at most two decimal places, up to SLE 1,000,000.');
+    if (!retainedDetails && serviceType === 'scheduled' && !scheduledTime) {
+      setRideNotice('Select a time for your scheduled request.');
+      return;
     }
-    const minFare = pricingRates?.[vehicleType]?.min || defaultPricing[vehicleType].min;
-    if (finalAmount < minFare) return alert(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minFare}`);
 
-    if ((sleWallet?.balance || 0) < finalAmount) {
-      return alert(`Insufficient Balance. You need SLE ${finalAmount} to request this trip. Please Load your wallet.`);
+    if (!retainedDetails && (!/^\\d+(\\.\\d{1,2})?$/.test(offerAmount.trim()) || !Number.isFinite(finalAmount) || finalAmount <= 0 || finalAmount > 1000000)) {
+      setRideNotice('Enter and review a positive fare with at most two decimal places, up to SLE 1,000,000.');
+      return;
+    }
+
+    if (!retainedDetails) {
+      const minFare = pricingRates?.[vehicleType]?.min || defaultPricing[vehicleType].min;
+      if (finalAmount < minFare) {
+        setRideNotice(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minFare}.`);
+        return;
+      }
+
+      if ((sleWallet?.balance || 0) < finalAmount) {
+        setRideNotice(`Insufficient balance. You need SLE ${finalAmount} to request this trip. Please load your wallet.`);
+        return;
+      }
     }
 
     setIsRequesting(true);
+    setRideNotice('');
 
     try {
-      const { data, error } = await supabase
-        .from('bookings')
-        .insert({
-          ...tripPinFields(pickupCoords, destinationCoords),
-          rider_id: profile.id,
-          service_type: serviceType,
-          vehicle_type: vehicleType,
-          passengers_count: passengerCount,
-          pickup_location: pickup,
-          destination_location: destination,
-          fare_amount: finalAmount,
-          scheduled_time: serviceType === 'scheduled' ? new Date(scheduledTime).toISOString() : null,
-          status: finalStatus
-        })
-        .select()
-        .single();
+      const details = retainedDetails ? undefined : {
+        client_version: 1,
+        service_type: serviceType,
+        vehicle_type: vehicleType,
+        pickup_location: pickup,
+        destination_location: destination,
+        fare_amount: finalAmount.toFixed(2),
+        scheduled_time: serviceType === 'scheduled' ? new Date(scheduledTime).toISOString() : null,
+        passenger_count: passengerCount,
+        passenger_name: null,
+        pickup_pin: { lat: pickupCoords![1], lng: pickupCoords![0] },
+        destination_pin: { lat: destinationCoords![1], lng: destinationCoords![0] }
+      };
 
-      if (error) throw error;
-      setActiveBooking(data);
+      const booking = await tripRequest.submit(details);
+      setActiveBooking(booking);
+      setViewMode('active');
+      setRideNotice('');
     } catch (err: any) {
-      alert('Request failed: ' + err.message);
+      setRideNotice(err?.message || 'Trip request could not be confirmed. Check the original request before trying again.');
     } finally {
       setIsRequesting(false);
     }
@@ -456,7 +476,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
               {tripError && (
                 <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">
-                  {tripError} <button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry trip</button>
+                  {tripRequest.error || rideNotice || tripError} {tripError && <button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry trip</button>}
                 </p>
               )}
 
@@ -582,7 +602,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                     disabled={isRequesting}
                     className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4"
                   >
-                    {isRequesting ? <Loader2 size={20} className="animate-spin mx-auto" /> : 'Confirm Request'}
+                    {isRequesting || tripRequest.working ? <Loader2 size={20} className="animate-spin mx-auto" /> : tripRequest.retained ? 'Check Original Request' : 'Confirm Request'}
                   </button>
                 </>
               ) : (
