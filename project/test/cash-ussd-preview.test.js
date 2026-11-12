@@ -28,7 +28,7 @@ test('customer cash and guest USSD previews make no live payment calls', async (
   assert.ok(cash.includes('Preview only'));
   assert.ok(cash.includes('does not read or debit your real wallet'));
   assert.ok(!cash.includes('supabase.rpc') && !cash.includes('walletFetch') && !cash.includes('fetch('));
-  assert.ok(guest.includes('Guest checkout'));
+  assert.ok(guest.includes('Guest USSD'));
   assert.ok(guest.includes('Orange Money'));
   assert.ok(guest.includes('Afrimoney'));
   assert.ok(guest.includes('read-only'));
