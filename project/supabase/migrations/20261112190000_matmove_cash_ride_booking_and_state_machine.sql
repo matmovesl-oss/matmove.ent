@@ -880,6 +880,21 @@ begin
     raise exception 'CASH_PROVIDER_ID_CONFLICT: Provider transfer ID cannot be replaced.';
   end if;
 
+  -- The database independently verifies the authoritative provider receipt.
+  -- Do not let a future internal caller mark a leg complete using a receipt
+  -- whose amount, currency, accounts, reference or transfer ID differs from
+  -- the immutable leg snapshot, even if the current Node caller pre-validates it.
+  if p_provider_status = 'completed' and (
+    nullif(btrim(p_provider_transfer_id), '') is null
+    or p_verified_amount_minor is distinct from l.amount_minor
+    or p_verified_currency is distinct from l.currency
+    or p_verified_source_account is distinct from l.source_account_ref
+    or p_verified_destination_account is distinct from l.destination_account_ref
+    or p_verified_reference is distinct from l.request_key
+  ) then
+    raise exception 'CASH_RECEIPT_MISMATCH: Provider receipt does not match the exact stored cash leg.';
+  end if;
+
   update public.matmove_cash_ride_legs
   set provider_transfer_id=coalesce(provider_transfer_id,p_provider_transfer_id),
       status=p_provider_status,
