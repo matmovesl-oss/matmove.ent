@@ -196,6 +196,21 @@ export async function reconcilePurchasePayments({
   for (const payment of rows) {
     result.checked += 1;
 
+    if (!/^[A-Za-z0-9_-]{1,100}$/.test(payment.provider_transfer_id)) {
+      const update = await db
+        .from('matmove_purchase_payments')
+        .update({
+          state: 'review_required',
+          provider_status: 'review_required',
+          failure_detail: 'Stored provider transfer ID is invalid. Manual review required.',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', payment.id);
+      if (update.error) result.retrying += 1;
+      else result.failed += 1;
+      continue;
+    }
+
     try {
       // This worker is GET-only. It never creates or retries a provider transfer.
       const raw = await provider(
