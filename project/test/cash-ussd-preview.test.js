@@ -39,3 +39,13 @@ test('guest checkout preview is a public route, outside the signed-in customer p
   const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
   assert.ok(app.includes('<Route path="/guest-payment-preview" element={<GuestUSSDPaymentPreview />} />'));
 });
+
+test('Monime USSD flow draft uses v1 components, exchange validation and collect_payment template', async () => {
+  const raw = await readFile(new URL('../docs/MONIME_USSD_FLOW_DRAFT.json', import.meta.url), 'utf8');
+  const flow = JSON.parse(raw);
+  assert.equal(flow.version, '1.0');
+  assert.ok(Array.isArray(flow.pages));
+  assert.ok(flow.pages.some(page => page.id === 'order_reference' && page.on_done?.action === 'exchange'));
+  assert.ok(flow.pages.some(page => page.component?.template_name === 'collect_payment'));
+  assert.ok(flow.pages.find(page => page.component?.template_name === 'collect_payment')?.component?.template_data?.payment_target_ref);
+});
