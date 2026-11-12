@@ -15,7 +15,7 @@ async function reserveCashRide(bookingId:string,accessToken:string,signal:AbortS
  const type=response.headers.get('content-type')||'';
  if(!type.includes('application/json'))throw Error('Cash fee reservation service is unavailable. Check the same booking again; do not create another request.');
  const data=await response.json().catch(()=>null);
- if(!response.ok||!data?.success||![200,202].includes(response.status)||data.pending!== (response.status===202)){
+ if(!response.ok||![200,202].includes(response.status)||data?.pending!== (response.status===202)||(!data?.success&&!(response.status===202&&data?.pending===true))){
   throw Error(data?.error||data?.message||'The MatMove cash fee reservation is not confirmed. Check this same booking again; do not create another request.');
  }
  return data;
