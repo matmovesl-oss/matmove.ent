@@ -16,7 +16,7 @@ create table if not exists public.matmove_cash_ride_payments (
   driver_cash_minor bigint not null
     check (driver_cash_minor > 0),
   matmove_fee_minor bigint not null
-    check (matmove_fee_minor >= 0),
+    check (matmove_fee_minor > 0),
   currency text not null default 'SLE'
     check (currency = 'SLE'),
   status text not null default 'reserve_ready'
@@ -179,14 +179,58 @@ create table if not exists public.matmove_cash_ride_audit_events (
 create index if not exists matmove_cash_ride_audit_booking_created_idx
   on public.matmove_cash_ride_audit_events(booking_id, created_at desc);
 
+create or replace function public.matmove_cash_ride_payment_insert_guard()
+returns trigger
+language plpgsql
+set search_path to 'pg_catalog', 'public'
+as $function$
+declare
+  v_rider_id uuid;
+  v_driver_id uuid;
+  v_fare_amount numeric;
+  v_service_type text;
+begin
+  select b.rider_id, b.driver_id, b.fare_amount, b.service_type
+    into v_rider_id, v_driver_id, v_fare_amount, v_service_type
+  from public.bookings b
+  where b.id = new.booking_id
+  for key share;
+
+  if not found then
+    raise exception 'CASH_BOOKING_NOT_FOUND: Cash payment must reference an existing booking.';
+  end if;
+
+  if lower(coalesce(v_service_type, '')) <> 'ride'
+     or v_rider_id is distinct from new.rider_id
+     or round(v_fare_amount * 100)::bigint is distinct from new.fare_minor
+     or v_driver_id is distinct from new.driver_id then
+    raise exception 'CASH_BOOKING_SNAPSHOT_MISMATCH: Cash payment must match the current ride booking, rider, driver and locked fare.';
+  end if;
+
+  return new;
+end;
+$function$;
+
 create or replace function public.matmove_cash_ride_payment_guard()
 returns trigger
 language plpgsql
 set search_path to 'pg_catalog', 'public'
 as $function$
+declare
+  v_booking_driver_id uuid;
 begin
   if tg_op = 'DELETE' then
     raise exception 'CASH_LEDGER_IMMUTABLE: Cash ride payment records cannot be deleted.';
+  end if;
+
+  if old.driver_id is null and new.driver_id is not null then
+    select b.driver_id into v_booking_driver_id
+    from public.bookings b
+    where b.id = old.booking_id
+    for key share;
+    if not found or v_booking_driver_id is distinct from new.driver_id then
+      raise exception 'CASH_DRIVER_ASSIGNMENT_MISMATCH: Cash ride driver must match the booking assignment.';
+    end if;
   end if;
 
   if new.booking_id is distinct from old.booking_id
@@ -224,6 +268,73 @@ begin
 
   new.updated_at := clock_timestamp();
   new.version := old.version + 1;
+  return new;
+end;
+$function$;
+
+create or replace function public.matmove_cash_ride_leg_insert_guard()
+returns trigger
+language plpgsql
+set search_path to 'pg_catalog', 'public'
+as $function$
+declare
+  v_payment public.matmove_cash_ride_payments%rowtype;
+  v_wallet_account text;
+  v_reserve public.matmove_cash_ride_legs%rowtype;
+begin
+  select * into v_payment
+  from public.matmove_cash_ride_payments p
+  where p.booking_id = new.booking_id
+  for update;
+
+  if not found or v_payment.matmove_fee_minor <= 0
+     or new.amount_minor is distinct from v_payment.matmove_fee_minor then
+    raise exception 'CASH_LEG_AMOUNT_MISMATCH: Cash reserve, capture and refund legs must equal the locked MatMove fee.';
+  end if;
+
+  if new.leg_kind = 'reserve' then
+    select w.monime_account_id into v_wallet_account
+    from public.wallets w
+    where w.user_id = v_payment.rider_id
+      and w.currency = 'SLE'
+    for key share;
+
+    if not found
+       or nullif(btrim(v_wallet_account), '') is null
+       or new.source_account_ref is distinct from v_wallet_account then
+      raise exception 'CASH_RESERVE_SOURCE_MISMATCH: Reserve source must be the rider's currently linked SLE Monime account.';
+    end if;
+  else
+    select * into v_reserve
+    from public.matmove_cash_ride_legs l
+    where l.booking_id = new.booking_id
+      and l.leg_kind = 'reserve'
+    for key share;
+
+    if not found or v_reserve.status <> 'completed' then
+      raise exception 'CASH_RESERVE_NOT_VERIFIED: Capture or refund requires an independently verified reserve leg.';
+    end if;
+
+    if new.leg_kind = 'capture' then
+      if not (
+        (v_payment.driver_cash_confirmed_at is not null
+         and v_payment.rider_cash_confirmed_at is not null)
+        or v_payment.manual_resolution_at is not null
+      ) then
+        raise exception 'CASH_COLLECTION_NOT_CONFIRMED: Capture requires both cash attestations or an audited Admin resolution.';
+      end if;
+
+      if new.source_account_ref is distinct from v_reserve.destination_account_ref then
+        raise exception 'CASH_CAPTURE_SOURCE_MISMATCH: Capture must debit the exact restricted account that received the reserve.';
+      end if;
+    elsif new.leg_kind = 'refund' then
+      if new.source_account_ref is distinct from v_reserve.destination_account_ref
+         or new.destination_account_ref is distinct from v_reserve.source_account_ref then
+        raise exception 'CASH_REFUND_ACCOUNT_MISMATCH: Refund must reverse the original verified reserve accounts.';
+      end if;
+    end if;
+  end if;
+
   return new;
 end;
 $function$;
@@ -280,6 +391,18 @@ begin
 end;
 $function$;
 
+drop trigger if exists matmove_cash_ride_payment_insert_guard
+  on public.matmove_cash_ride_payments;
+create trigger matmove_cash_ride_payment_insert_guard
+before insert on public.matmove_cash_ride_payments
+for each row execute function public.matmove_cash_ride_payment_insert_guard();
+
+drop trigger if exists matmove_cash_ride_leg_insert_guard
+  on public.matmove_cash_ride_legs;
+create trigger matmove_cash_ride_leg_insert_guard
+before insert on public.matmove_cash_ride_legs
+for each row execute function public.matmove_cash_ride_leg_insert_guard();
+
 drop trigger if exists matmove_cash_ride_payment_guard
   on public.matmove_cash_ride_payments;
 create trigger matmove_cash_ride_payment_guard
@@ -313,6 +436,10 @@ grant select, insert, update on table public.matmove_cash_ride_payments to servi
 grant select, insert, update on table public.matmove_cash_ride_legs to service_role;
 grant select, insert on table public.matmove_cash_ride_audit_events to service_role;
 
+revoke all on function public.matmove_cash_ride_payment_insert_guard()
+  from public, anon, authenticated, service_role;
+revoke all on function public.matmove_cash_ride_leg_insert_guard()
+  from public, anon, authenticated, service_role;
 revoke all on function public.matmove_cash_ride_payment_guard()
   from public, anon, authenticated, service_role;
 revoke all on function public.matmove_cash_ride_leg_guard()
@@ -327,6 +454,10 @@ comment on table public.matmove_cash_ride_legs is
 comment on table public.matmove_cash_ride_audit_events is
   'Append-only audit trail for physical-cash ride payment lifecycle events; details must contain sanitized metadata only.';
 
+comment on function public.matmove_cash_ride_payment_insert_guard() is
+  'Requires the cash payment fare and party snapshot to match the existing ride booking.';
+comment on function public.matmove_cash_ride_leg_insert_guard() is
+  'Checks the exact cash fee, rider SLE source account, verified reserve lineage and dual collection confirmation before a leg is recorded.';
 comment on function public.matmove_cash_ride_payment_guard() is
   'Protects immutable fare and party fields, one-time driver assignment, one-time attestations and manual resolution.';
 comment on function public.matmove_cash_ride_leg_guard() is
