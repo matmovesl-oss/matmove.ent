@@ -271,7 +271,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
       return;
     }
 
-    if (!retainedDetails && (!/^\\d+(\\.\\d{1,2})?$/.test(offerAmount.trim()) || !Number.isFinite(finalAmount) || finalAmount <= 0 || finalAmount > 1000000)) {
+    if (!retainedDetails && (!/^\d+(\.\d{1,2})?$/.test(offerAmount.trim()) || !Number.isFinite(finalAmount) || finalAmount <= 0 || finalAmount > 1000000)) {
       setRideNotice('Enter and review a positive fare with at most two decimal places, up to SLE 1,000,000.');
       return;
     }
@@ -599,7 +599,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
                   <button
                     onClick={handleRequest}
-                    disabled={isRequesting}
+                    disabled={isRequesting || !tripRequest.ready || !!tripRequest.error}
                     className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4"
                   >
                     {isRequesting || tripRequest.working ? <Loader2 size={20} className="animate-spin mx-auto" /> : tripRequest.retained ? 'Check Original Request' : 'Confirm Request'}
