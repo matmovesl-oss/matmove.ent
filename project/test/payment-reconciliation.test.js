@@ -24,7 +24,8 @@ test('unified payment reconciliation rejects missing, weak and incorrect cron cr
   const workers = {
     rides: async () => { calls++; },
     payouts: async () => { calls++; },
-    monime: async () => { calls++; }
+    monime: async () => { calls++; },
+    purchases: async () => { calls++; }
   };
 
   try {
@@ -67,12 +68,16 @@ test('unified payment reconciliation runs ride, withdrawal and verified Monime i
       calls.push(['monime', limit]);
       return { checked: 4, processed: 3, retrying: 1, failed: 0 };
     };
+    const purchases = async ({ limit }) => {
+      calls.push(['purchases', limit]);
+      return { checked: 1, processed: 1, retrying: 0, failed: 0 };
+    };
 
     const res = response();
     await reconcileMatMovePayments(
       { headers: { authorization: `Bearer ${secret}` } },
       res,
-      { rides, payouts, monime }
+      { rides, payouts, monime, purchases }
     );
 
     assert.equal(res.statusCode, 200);
@@ -82,9 +87,13 @@ test('unified payment reconciliation runs ride, withdrawal and verified Monime i
     assert.deepEqual(res.body.monimePurchaseEvents, {
       checked: 4, processed: 3, retrying: 1, failed: 0
     });
+    assert.deepEqual(res.body.purchasePayments, {
+      checked: 1, processed: 1, retrying: 0, failed: 0
+    });
     assert.equal(res.headers['Cache-Control'], 'no-store');
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 4);
     assert.equal(calls.find(x => x[0] === 'monime')[1], 3);
+    assert.equal(calls.find(x => x[0] === 'purchases')[1], 5);
     assert.deepEqual(calls.filter(x => x[0] !== 'monime').map(x => x[1]), [
       `Bearer ${secret}`,
       `Bearer ${secret}`
@@ -107,7 +116,9 @@ test('unified reconciliation returns 503 if any money reconciliation worker is u
       {
         rides: async (_req, response) => response.status(503).json({ error: 'Ride reconciliation unavailable.' }),
         payouts: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        monime: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 })
+        monime: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 }),
+        purchases: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 }),
+        purchases: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 })
       }
     );
 
@@ -132,7 +143,8 @@ test('durably quarantined Monime events are reported for review without treating
       {
         rides: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
         payouts: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        monime: async () => ({ checked: 2, processed: 0, retrying: 0, failed: 2 })
+        monime: async () => ({ checked: 2, processed: 0, retrying: 0, failed: 2 }),
+        purchases: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 })
       }
     );
 
@@ -183,7 +195,8 @@ test('unified reconciliation fails closed when the Monime worker returns malform
       {
         rides: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
         payouts: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        monime: async () => ({ checked: 'none', processed: 0, retrying: 0, failed: 0 })
+        monime: async () => ({ checked: 'none', processed: 0, retrying: 0, failed: 0 }),
+        purchases: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 })
       }
     );
 
