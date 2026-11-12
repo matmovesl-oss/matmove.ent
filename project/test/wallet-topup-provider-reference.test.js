@@ -26,8 +26,9 @@ test('reference guard is limited to wallet top-up transaction types', async () =
   assert.match(sql, /lower\(trim\(coalesce\(new\.transaction_type, ''\)\)\) in \('wallet_topup', 'topup'\)/i);
 });
 
-test('trigger function uses a fixed search path and does not grant browser execution', async () => {
+test('trigger function uses a fixed search path and denies direct browser execution', async () => {
   const sql = await readFile(migration, 'utf8');
   assert.match(sql, /set search_path to 'pg_catalog', 'public'/i);
+  assert.match(sql, /revoke all on function public\.matmove_require_topup_provider_reference\(\)[\s\S]*?from public, anon, authenticated/i);
   assert.match(sql, /create trigger matmove_require_topup_provider_reference/i);
 });
