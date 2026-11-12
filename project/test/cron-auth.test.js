@@ -8,6 +8,8 @@ function response() {
   return {
     statusCode: 200,
     body: null,
+    headers: {},
+    setHeader(key, value) { this.headers[key] = value; },
     status(code) { this.statusCode = code; return this; },
     json(body) { this.body = body; return this; }
   };
