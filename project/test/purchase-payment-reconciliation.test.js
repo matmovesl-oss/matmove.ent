@@ -161,3 +161,16 @@ test('confirmed provider payment is retried until fulfilled_at is visible', asyn
   assert.deepEqual(result, { checked: 1, processed: 0, retrying: 1, failed: 0 });
   assert.equal(state.rpcCalls.length, 1);
 });
+
+test('malformed stored provider ID is quarantined without a provider request', async () => {
+  const state = fakeDb({ ...payment, provider_transfer_id: 'bad/id' });
+  const calls = [];
+  const provider = async (...args) => { calls.push(args); return receipt(); };
+
+  const result = await reconcilePurchasePayments({ db: state.db, provider });
+
+  assert.deepEqual(result, { checked: 1, processed: 0, retrying: 0, failed: 1 });
+  assert.equal(state.updates[0].state, 'review_required');
+  assert.deepEqual(calls, []);
+  assert.equal(state.rpcCalls.length, 0);
+});
