@@ -208,6 +208,25 @@ async function recordLeg(db, bookingId, kind, transfer, status, errorCode = null
 }
 
 async function runCashLeg(db, bookingId, kind, provider = monime) {
+  const { data: storedLeg, error: readError } = await db
+    .from('matmove_cash_ride_legs')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .eq('leg_kind', kind)
+    .maybeSingle();
+
+  if (readError || !storedLeg) {
+    throw new HttpError(503, 'Cash transfer leg could not be loaded.');
+  }
+
+  if (['completed','failed','review_required'].includes(storedLeg.status)) return storedLeg;
+
+  // Do all read-only account and balance checks before claiming the one-time POST.
+  // Once claimed, no other request can obtain permission to create a provider debit.
+  if (storedLeg.status === 'ready' && storedLeg.attempted_at === null) {
+    await preflightAccounts(provider, storedLeg, Number(storedLeg.amount_minor));
+  }
+
   const claim = await cashRpc(db, 'matmove_cash_ride_claim_leg', {
     p_booking_id: bookingId,
     p_leg_kind: kind
@@ -216,21 +235,10 @@ async function runCashLeg(db, bookingId, kind, provider = monime) {
 
   if (!leg) throw new HttpError(503, 'Cash transfer claim could not be confirmed.');
   if (['completed','failed','review_required'].includes(leg.status)) return leg;
-
   if (!claim.canCreate && !claim.canLookup) return leg;
 
   let transfer;
   if (claim.canCreate) {
-    // Account and balance verification occurs before the one-time POST claim.
-    await preflightAccounts(provider, leg, Number(leg.amount_minor));
-
-    // A second request cannot create another POST: only the first call receives canCreate=true.
-    const verifiedClaim = await cashRpc(db, 'matmove_cash_ride_claim_leg', {
-      p_booking_id: bookingId,
-      p_leg_kind: kind
-    });
-    if (!verifiedClaim?.canCreate) return verifiedClaim?.leg || leg;
-
     try {
       transfer = await provider('internal-transfers', {
         method: 'POST',
@@ -326,6 +334,32 @@ export async function cashRideAction(
     const snapshot = await cashStatus(db, bookingId);
     return res.status(200).json({
       success: true, pending: false, booking, payment: snapshot
+    });
+  }
+
+  if (action === 'cash_reserve') {
+    if (profile.role !== 'rider' || !isRider) {
+      throw new HttpError(403, 'Only the booking rider can reserve the cash-ride MatMove fee.');
+    }
+    assertAllowed(profile, wallets, 'purchase');
+    const sleWallets = wallets.filter(wallet => wallet.currency === 'SLE');
+    if (sleWallets.length !== 1 || sleWallets[0].is_frozen || profile.is_wallet_frozen) {
+      throw new HttpError(409, 'A unique unfrozen SLE wallet is required before reserving the cash-ride fee.');
+    }
+    // Verify that the provider account still belongs to this rider before
+    // the database records a one-time reserve leg.
+    await verifiedAccount(db, sleWallets[0]);
+    const snapshot = await finishCashLeg(db, bookingId, 'reserve', user.id, provider);
+    const updatedBooking = await readBooking(db, bookingId);
+    const reserved = snapshot?.status === 'fee_reserved';
+    return res.status(reserved ? 200 : 202).json({
+      success: reserved,
+      pending: !reserved,
+      booking: updatedBooking,
+      payment: snapshot,
+      message: reserved
+        ? 'The 15 percent MatMove fee reserve is verified. The ride is now visible to eligible drivers.'
+        : 'The MatMove fee reserve is being verified. The booking remains hidden from drivers until confirmation.'
     });
   }
 
