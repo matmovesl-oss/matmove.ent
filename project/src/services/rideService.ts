@@ -23,6 +23,19 @@ export async function updateRide(action: RideAction, bookingId: string) {
   throw new Error('Unable to read trip status.');
 }
 
+export async function fundCashRideFee(bookingId: string) {
+  // A 202 response means the same fee transfer is pending or under provider
+  // confirmation. Do not turn it into another request or release the booking.
+  const { response, data, finish } = await walletFetch('/api/accept-ride-escrow?action=cash-fund', { bookingId });
+  if (!response.ok) throw new Error(data.error || 'Unable to verify the MatMove cash fee.');
+  if (response.status === 200 && data.success === true && data.pending === false && data.cashPayment?.settled === true) {
+    finish();
+    return data;
+  }
+  if (response.status === 202 && data.pending === true) return data;
+  throw new Error('The MatMove cash fee has not been verified. Do not create another booking or payment.');
+}
+
 export async function readRidePayment(bookingId: string) {
   const { response, data, finish } = await walletFetch('/api/accept-ride-escrow?action=status', { bookingId });
   if (!response.ok) throw new Error(data.error || 'Unable to read ride payment details.');
