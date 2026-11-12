@@ -96,6 +96,10 @@ begin
     raise exception 'PAYMENT_METHOD_IMMUTABLE: A booking payment method cannot be changed after creation.';
   end if;
 
+  if old.payment_method = 'cash' and new.fare_amount is distinct from old.fare_amount then
+    raise exception 'CASH_FARE_IMMUTABLE: The quoted cash fare cannot change after the MatMove fee snapshot is created.';
+  end if;
+
   if new.payment_method <> 'cash' then
     return new;
   end if;
@@ -430,7 +434,8 @@ grant execute on function public.matmove_create_customer_trip(uuid,jsonb)
 create or replace function public.matmove_cash_ride_prepare_leg(
   p_booking_id uuid,
   p_leg_kind text,
-  p_actor_id uuid
+  p_actor_id uuid,
+  p_environment text
 )
 returns jsonb
 language plpgsql
@@ -467,7 +472,8 @@ begin
   where singleton=true for share;
   if not found or not cfg.enabled
      or cfg.fee_hold_account_id is null
-     or cfg.fee_revenue_account_id is null then
+     or cfg.fee_revenue_account_id is null
+     or p_environment is distinct from cfg.provider_environment then
     raise exception 'CASH_NOT_CONFIGURED: Restricted fee-holding account is not configured.';
   end if;
 
@@ -478,9 +484,10 @@ begin
       raise exception 'FORBIDDEN: Only the rider can reserve the cash-ride MatMove fee.';
     end if;
 
-    if exists (
+    if not exists (
       select 1 from public.profiles
-      where id=p.rider_id and coalesce(is_wallet_frozen,false)
+      where id=p.rider_id and role='rider'
+        and not coalesce(is_wallet_frozen,false)
     ) or exists (
       select 1 from public.wallets
       where user_id=p.rider_id and currency='SLE' and coalesce(is_frozen,false)
@@ -1089,7 +1096,7 @@ $function$;
 
 -- Every cash state RPC is internal to the server. Browser clients cannot
 -- call it directly or mutate any cash row.
-revoke all on function public.matmove_cash_ride_prepare_leg(uuid,text,uuid)
+revoke all on function public.matmove_cash_ride_prepare_leg(uuid,text,uuid,text)
   from public,anon,authenticated;
 revoke all on function public.matmove_cash_ride_claim_leg(uuid,text)
   from public,anon,authenticated;
@@ -1104,7 +1111,7 @@ revoke all on function public.matmove_cash_ride_confirm_collection(uuid,uuid,tex
 revoke all on function public.matmove_cash_ride_cancel(uuid,uuid,text)
   from public,anon,authenticated;
 
-grant execute on function public.matmove_cash_ride_prepare_leg(uuid,text,uuid) to service_role;
+grant execute on function public.matmove_cash_ride_prepare_leg(uuid,text,uuid,text) to service_role;
 grant execute on function public.matmove_cash_ride_claim_leg(uuid,text) to service_role;
 grant execute on function public.matmove_cash_ride_record_leg(uuid,text,text,text,bigint,text,text,text,text,text) to service_role;
 grant execute on function public.matmove_cash_ride_assign_driver(uuid,uuid) to service_role;
