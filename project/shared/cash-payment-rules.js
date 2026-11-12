@@ -1,5 +1,5 @@
 const MAX_FARE_MINOR = 100_000_000; // SLE 1,000,000.00
-const MONEY = /^\\d{1,7}(?:\\.\\d{1,2})?$/;
+const MONEY = /^\d{1,7}(?:\.\d{1,2})?$/;
 
 export function moneyToMinor(value) {
   if (typeof value !== 'string' && typeof value !== 'number') {
