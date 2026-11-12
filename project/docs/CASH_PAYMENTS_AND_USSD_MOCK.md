@@ -82,3 +82,9 @@ A separate menu can provide registered drivers with trip status and earnings sum
 - Customer Rider page: local cash-fee reservation/completion/refund simulation.
 - Public `/guest-payment-preview` page: no-account guest checkout, Orange Money/Afrimoney selection and a simulated verified event.
 - Admin Financials page: sample cash collection/fee status and guest USSD payment rows. All rows are demo data and must not be mistaken for live transactions.
+
+### Monime collect_payment prompt requirements
+
+The USSD flow draft uses Monime's built-in `collect_payment` template, which accepts a Payment Code or UVAN in `payment_target_ref`, and a fixed amount supplied from validated server data. The PIN prompt uses Monime's documented `{{amount}}` placeholder, without adding a currency prefix before it; the customer enters the mobile-money PIN on the operator prompt. On successful collection, the page value is the transaction ID. The guest payer does not need a MatMove account. Monime documents the template for Orange Money and Afrimoney.
+
+The Exchange endpoint must decrypt Monime's encrypted request, validate the guest reference and exact open amount, create a short-lived one-time Payment Code, and return an encrypted `navigate` reply within Monime's 10-second window. The actual response schema must be implemented from Monime's Exchange response documentation before this draft is imported or published. This JSON is a **design draft**, not an import-ready/publishable flow until the endpoint, response contract, RSA key, Test Space IDs and webhook verification are in place. Never infer that the USSD template's success screen alone settles or fulfils the MatMove order; reconcile the signed webhook and current Payment object first.
