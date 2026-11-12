@@ -7,10 +7,22 @@
         "type": "menu",
         "label": "MatMove. Choose a payment type:",
         "items": [
-          { "label": "Ride", "value": "ride" },
-          { "label": "Food / merchant order", "value": "food" },
-          { "label": "Package delivery", "value": "package" },
-          { "label": "Rental", "value": "rental" }
+          {
+            "label": "Ride",
+            "value": "ride"
+          },
+          {
+            "label": "Food / merchant order",
+            "value": "food"
+          },
+          {
+            "label": "Package delivery",
+            "value": "package"
+          },
+          {
+            "label": "Rental",
+            "value": "rental"
+          }
         ]
       }
     },
@@ -38,7 +50,7 @@
       "component": {
         "type": "template",
         "template_name": "collect_payment",
-        "label": "Enter your $(session.network_provider_name) PIN to pay MatMove SLE $(data.amount).",
+        "label": "Enter your $(session.network_provider_name) PIN to pay {{amount}} for MatMove order $(data.payment_reference).",
         "template_data": {
           "amount": "$(data.amount)",
           "payment_target_ref": "$(data.payment_target_ref)",
