@@ -38,9 +38,12 @@ test('customer cash and guest USSD previews make no live payment calls', async (
   assert.ok(!guest.includes('supabase.rpc') && !guest.includes('walletFetch') && !guest.includes('fetch('));
 });
 
-test('guest checkout preview is a public route, outside the signed-in customer portal', async () => {
+test('cash and guest USSD prototypes are excluded from live customer screens', async () => {
   const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
-  assert.ok(app.includes('<Route path="/guest-payment-preview" element={<GuestUSSDPaymentPreview />} />'));
+  const rider = await readFile(new URL('../src/pages/RiderDashboard.tsx', import.meta.url), 'utf8');
+  assert.ok(!app.includes('GuestUSSDPaymentPreview'));
+  assert.ok(!app.includes('/guest-payment-preview'));
+  assert.ok(!rider.includes('CashPaymentPreview'));
 });
 
 test('Monime USSD flow draft uses v1 components, exchange validation and collect_payment template', async () => {
