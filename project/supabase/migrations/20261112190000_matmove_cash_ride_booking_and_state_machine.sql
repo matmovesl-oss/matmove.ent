@@ -431,6 +431,90 @@ grant execute on function public.matmove_create_customer_trip(uuid,jsonb)
 
 -- Service-role-only RPCs are the only way to advance cash reserve/settlement
 -- state. They do not call Monime; the server worker does that after a claim.
+create or replace function public.matmove_cash_ride_leg_insert_guard()
+returns trigger
+language plpgsql
+set search_path to 'pg_catalog', 'public'
+as $function$
+declare
+  v_payment public.matmove_cash_ride_payments%rowtype;
+  v_wallet_account text;
+  v_reserve public.matmove_cash_ride_legs%rowtype;
+  v_settings public.matmove_cash_ride_settings%rowtype;
+begin
+  select * into v_payment
+  from public.matmove_cash_ride_payments p
+  where p.booking_id = new.booking_id
+  for update;
+
+  if not found or v_payment.matmove_fee_minor <= 0
+     or new.amount_minor is distinct from v_payment.matmove_fee_minor then
+    raise exception 'CASH_LEG_AMOUNT_MISMATCH: Cash reserve, capture and refund legs must equal the locked MatMove fee.';
+  end if;
+
+  select * into v_settings
+  from public.matmove_cash_ride_settings
+  where singleton = true
+  for key share;
+
+  if not found or not v_settings.enabled
+     or v_settings.fee_hold_account_id is null
+     or v_settings.fee_revenue_account_id is null then
+    raise exception 'CASH_NOT_CONFIGURED: Restricted fee-holding account is not configured.';
+  end if;
+
+  if new.leg_kind = 'reserve' then
+    select coalesce(w.monime_account_id,w.metadata->>'monime_account_id')
+      into v_wallet_account
+    from public.wallets w
+    where w.user_id = v_payment.rider_id
+      and w.currency = 'SLE'
+    for key share;
+
+    if not found
+       or nullif(btrim(v_wallet_account), '') is null
+       or new.source_account_ref is distinct from v_wallet_account
+       or new.destination_account_ref is distinct from v_settings.fee_hold_account_id then
+      raise exception 'CASH_RESERVE_ACCOUNT_MISMATCH: Reserve must debit the rider SLE account and credit the configured restricted cash-fee holding account.';
+    end if;
+  else
+    select * into v_reserve
+    from public.matmove_cash_ride_legs l
+    where l.booking_id = new.booking_id
+      and l.leg_kind = 'reserve'
+    for key share;
+
+    if not found or v_reserve.status <> 'completed' then
+      raise exception 'CASH_RESERVE_NOT_VERIFIED: Capture or refund requires an independently verified reserve leg.';
+    end if;
+
+    if new.leg_kind = 'capture' then
+      if not (
+        (v_payment.driver_cash_confirmed_at is not null
+         and v_payment.rider_cash_confirmed_at is not null)
+        or v_payment.manual_resolution_at is not null
+      ) then
+        raise exception 'CASH_COLLECTION_NOT_CONFIRMED: Capture requires both cash attestations or an audited Admin resolution.';
+      end if;
+
+      if new.source_account_ref is distinct from v_settings.fee_hold_account_id
+         or new.destination_account_ref is distinct from v_settings.fee_revenue_account_id
+         or new.source_account_ref is distinct from v_reserve.destination_account_ref then
+        raise exception 'CASH_CAPTURE_ACCOUNT_MISMATCH: Capture must move the fee from the exact restricted holding account to the configured MatMove fee account.';
+      end if;
+    elsif new.leg_kind = 'refund' then
+      if new.source_account_ref is distinct from v_settings.fee_hold_account_id
+         or new.source_account_ref is distinct from v_reserve.destination_account_ref
+         or new.destination_account_ref is distinct from v_reserve.source_account_ref then
+        raise exception 'CASH_REFUND_ACCOUNT_MISMATCH: Refund must reverse the original verified reserve from the restricted holding account.';
+      end if;
+    end if;
+  end if;
+
+  return new;
+end;
+$function$;
+
 create or replace function public.matmove_cash_ride_prepare_leg(
   p_booking_id uuid,
   p_leg_kind text,
@@ -475,6 +559,33 @@ begin
      or cfg.fee_revenue_account_id is null
      or p_environment is distinct from cfg.provider_environment then
     raise exception 'CASH_NOT_CONFIGURED: Restricted fee-holding account is not configured.';
+  end if;
+
+
+  if p_leg_kind = 'reserve' and p.status = 'fee_reserved' then
+    select * into existing
+    from public.matmove_cash_ride_legs
+    where booking_id=p_booking_id and leg_kind='reserve'
+    for key share;
+    if found and existing.status='completed' then
+      return to_jsonb(existing);
+    end if;
+  elsif p_leg_kind = 'capture' and p.status = 'settled' then
+    select * into existing
+    from public.matmove_cash_ride_legs
+    where booking_id=p_booking_id and leg_kind='capture'
+    for key share;
+    if found and existing.status='completed' then
+      return to_jsonb(existing);
+    end if;
+  elsif p_leg_kind = 'refund' and p.status = 'refunded' then
+    select * into existing
+    from public.matmove_cash_ride_legs
+    where booking_id=p_booking_id and leg_kind='refund'
+    for key share;
+    if found and existing.status='completed' then
+      return to_jsonb(existing);
+    end if;
   end if;
 
   if p_leg_kind='reserve' then
@@ -940,7 +1051,21 @@ begin
   end if;
 
   select * into p from public.matmove_cash_ride_payments where booking_id=p_booking_id for update;
-  if not found or b.status <> 'in_progress' or p.status not in ('collection_pending','capture_pending') then
+  if not found then raise exception 'CASH_LEDGER_MISSING: Cash payment record not found.'; end if;
+
+  if p.status='settled'
+     and p.driver_cash_confirmed_at is not null
+     and p.rider_cash_confirmed_at is not null then
+    return jsonb_build_object(
+      'paymentStatus','settled',
+      'driverConfirmed',true,
+      'riderConfirmed',true,
+      'captureReady',false,
+      'settled',true
+    );
+  end if;
+
+  if b.status <> 'in_progress' or p.status not in ('collection_pending','capture_pending') then
     raise exception 'INVALID_STATE: Cash collection confirmation is not available.';
   end if;
 
