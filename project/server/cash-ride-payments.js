@@ -3,7 +3,8 @@ import {
   assertAllowed,
   verifiedAccount,
   monime,
-  monimeEnvironment
+  monimeEnvironment,
+  assertMonimeEnvironment
 } from './wallet-security.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -285,7 +286,8 @@ async function prepareLeg(db, bookingId, kind, actorId) {
   return cashRpc(db, 'matmove_cash_ride_prepare_leg', {
     p_booking_id: bookingId,
     p_leg_kind: kind,
-    p_actor_id: actorId
+    p_actor_id: actorId,
+    p_environment: monimeEnvironment()
   });
 }
 
@@ -312,8 +314,29 @@ export async function cashRideAction(
   { provider = monime } = {}
 ) {
   const { db, user, profile, wallets } = req.matmove;
-  const bookingId = req.body?.bookingId;
 
+  if (action === 'cash_config') {
+    try {
+      assertMonimeEnvironment();
+      const { data, error } = await db
+        .from('matmove_cash_ride_settings')
+        .select('enabled,fee_hold_account_id,fee_revenue_account_id,provider_environment')
+        .eq('singleton', true)
+        .maybeSingle();
+      const enabled = !error
+        && data?.enabled === true
+        && data.provider_environment === monimeEnvironment()
+        && validAccountId(data.fee_hold_account_id)
+        && validAccountId(data.fee_revenue_account_id)
+        && data.fee_hold_account_id !== data.fee_revenue_account_id;
+      return res.status(200).json({ success: true, pending: false, enabled });
+    } catch {
+      // Fail closed in Preview or when the new Production config is not installed.
+      return res.status(200).json({ success: true, pending: false, enabled: false });
+    }
+  }
+
+  const bookingId = req.body?.bookingId;
   if (!uuid.test(String(bookingId || ''))) {
     throw new HttpError(400, 'A valid booking ID is required.');
   }
