@@ -127,7 +127,11 @@ async function getPaymentRow(db, requestKey, userId, details, sourceAccountId, d
 }
 
 export async function requestPurchaseTransfer(payment, details, user, provider = monime) {
-  if (typeof payment.provider_transfer_id === 'string' && payment.provider_transfer_id.length > 0) {
+  if (payment.provider_transfer_id !== null && payment.provider_transfer_id !== undefined) {
+    if (typeof payment.provider_transfer_id !== 'string' ||
+        !/^[A-Za-z0-9_-]{1,100}$/.test(payment.provider_transfer_id)) {
+      throw new HttpError(409, 'The stored provider transfer ID is invalid. Contact support before retrying.');
+    }
     // A recorded provider ID is authoritative: reconcile it with GET.
     // Never create another transfer for a payment that already has a provider ID.
     return provider(`internal-transfers/${encodeURIComponent(payment.provider_transfer_id)}`);
