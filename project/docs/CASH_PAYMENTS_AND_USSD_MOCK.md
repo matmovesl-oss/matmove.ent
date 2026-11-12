@@ -18,10 +18,12 @@ No real wallet balance is read or debited by the preview. The current live booki
 
 Do **not** reuse `ride_payments` or `ride_payment_transfers`; those tables are the existing full-fare digital escrow. Implement dedicated, immutable cash-payment records and separate provider-transfer legs.
 
-Suggested design (final names may be adjusted after schema reconciliation):
+Draft schema foundation added in `20261112180000_matmove_cash_ride_ledger_foundation.sql` (Customer PR only; not applied to Production):
 
-- `matmove_cash_ride_payments`: one row per booking; immutable rider/driver IDs, quoted fare minor, driver cash minor, MatMove fee minor, currency SLE, reserved/settled/refunded state, fee-hold account, fee revenue account, provider reference, version and timestamps.
-- `matmove_cash_ride_legs`: idempotent reserve / capture / refund operations; unique (booking, leg kind), stable request key, amount, source and destination, provider transfer ID, attempted timestamp, verified receipt and terminal status. No direct browser grants; RLS enabled.
+- `matmove_cash_ride_payments`: one immutable fare snapshot per booking, with the rider, one-time driver assignment, SLE fare in cents, 85% physical driver cash, 15% MatMove fee, dual confirmation fields, review-resolution fields and a version counter. Database checks conserve the fare and enforce the 85/15 split.
+- `matmove_cash_ride_legs`: one idempotent reserve, capture or refund leg per booking/kind, with fixed amount, source/destination account references, stable request key, unique provider transfer ID and exact verified receipt fields. A leg cannot be marked completed without exact SLE amount, source, destination, provider reference and verification timestamp.
+- `matmove_cash_ride_audit_events`: append-only cash lifecycle audit trail. Store sanitized event metadata only; never raw Monime payloads or credentials.
+- All three tables have RLS enabled and no browser-role grants. Only `service_role` can access them. Immutable guards prevent deletion/rewriting of cash records, transfer identity and verified receipts.
 - A private service-role-only state machine. User-facing routes validate the Supabase session and profile role, KYC approval, account ownership, wallet/profile freeze flags, driver eligibility, current assignment, fare and idempotency key before calling the protected RPCs.
 - A server-side cash fee reserve at booking creation: transfer only the 15% MatMove fee from the rider’s SLE Monime financial account into a **dedicated restricted cash-fee holding account**. Do not make the trip dispatchable or accept-able until Monime confirms the exact amount, SLE currency, source, destination, MatMove reference and completed status. Pending, failed, mismatched or uncertain receipts fail closed; never create a second POST after an uncertain attempt.
 - At verified trip completion, require the assigned driver’s cash-collection attestation and customer confirmation (or an audited Admin resolution) before moving the reserved fee from the restricted holding account into the MatMove fee account. Record both attestations and immutable audit events. Do not count the SLE 85 cash as a digital wallet credit.
@@ -77,14 +79,31 @@ A separate menu can provide registered drivers with trip status and earnings sum
 - Configure distinct Test and Live API keys and webhook secrets. Test signed callbacks, duplicate delivery, out-of-order delivery, retries, failed payments, expired references and reconciliation using Test credentials.
 - Publish the flow only after the Exchange endpoint and webhook verification are deployed and reviewed. Start with Test, not Live.
 
-## Included mock screens
+## Isolated prototype source
 
-- Customer Rider page: local cash-fee reservation/completion/refund simulation.
-- Public `/guest-payment-preview` page: no-account guest checkout, Orange Money/Afrimoney selection and a simulated verified event.
-- Admin Financials page: sample cash collection/fee status and guest USSD payment rows. All rows are demo data and must not be mistaken for live transactions.
+- Cash and guest-USSD prototype components remain as local-only source/test fixtures. They are not mounted in the live Rider App and there is no live guest-preview route.
+- The seeded Admin cash/guest-USSD sample panel is not mounted in the live Financials page.
+- Demo rows are not payment records, driver cash receipts, MatMove fee collections or reconciliation evidence.
 
 ### Monime collect_payment prompt requirements
 
 The USSD flow draft uses Monime's built-in `collect_payment` template, which accepts a Payment Code or UVAN in `payment_target_ref`, and a fixed amount supplied from validated server data. The PIN prompt uses Monime's documented `{{amount}}` placeholder, without adding a currency prefix before it; the customer enters the mobile-money PIN on the operator prompt. On successful collection, the page value is the transaction ID. The guest payer does not need a MatMove account. Monime documents the template for Orange Money and Afrimoney.
 
 The Exchange endpoint must decrypt Monime's encrypted request, validate the guest reference and exact open amount, create a short-lived one-time Payment Code, and return an encrypted `navigate` reply within Monime's 10-second window. The actual response schema must be implemented from Monime's Exchange response documentation before this draft is imported or published. This JSON is a **design draft**, not an import-ready/publishable flow until the endpoint, response contract, RSA key, Test Space IDs and webhook verification are in place. Never infer that the USSD template's success screen alone settles or fulfils the MatMove order; reconcile the signed webhook and current Payment object first.
+
+
+## 12 November 2026 — cash ledger foundation checkpoint
+
+The Customer Draft PR now contains the first dedicated schema foundation for physical-cash rides. This is a code-branch milestone only: the migration has **not** been applied to Production.
+
+Important limitations remain explicit:
+- The migration adds private tables and immutable/audit safeguards only. It does not add reserve/capture/refund APIs, provider workers, booking-dispatch gating, customer confirmation screens, an Admin cash-collection endpoint or a live reconciliation dashboard.
+- No production cash records are created and no customer wallet, driver wallet, booking, payment, ledger or Monime account is changed by this migration.
+- Production does not currently have a dedicated restricted cash-fee holding account configured. A general MatMove Treasury or Platform Fee account must not be substituted. Before any reserve request, Monime must confirm and provision the correct restricted holding account and its Test/Live identifiers.
+- Each cash reserve must debit only the authenticated rider's verified SLE Monime financial account and credit that restricted holding account. Capture must move the exact reserved amount from the hold account to the approved fee account only after driver attestation and rider confirmation (or an audited Admin resolution). Refunds must reverse the exact verified reserve leg.
+- A pending or uncertain provider POST must be quarantined and reconciled against the same request/reference; it must never trigger a second transfer POST.
+- Physical SLE driver cash is never entered as a digital wallet credit or as a driver payout.
+
+The current cash split remains the agreed rule: SLE 100.00 = SLE 85.00 physical cash to the assigned driver + SLE 15.00 MatMove fee secured digitally. Accepted-rider cancellation remains manual-review only until the cancellation fee and 50/50 distribution are explicitly approved.
+
+**Release state: cash collection is still disabled in Production.** Complete the API/state machine, Monime Test verification, Admin permission-scoped reconciliation, booking-dispatch integration and end-to-end test matrix before any Production rollout.
