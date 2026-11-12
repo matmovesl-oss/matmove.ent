@@ -11,7 +11,7 @@ import {
 } from './ride-payments.js';
 
 const actions = Object.fromEntries(
-  ['accept', 'start', 'complete', 'cancel', 'status']
+  ['accept', 'start', 'complete', 'cancel', 'status', 'cash-fund']
     .map(action => [
       action,
 
@@ -119,6 +119,7 @@ export function createRidePaymentsHandler({
         'complete',
         'cancel',
         'status',
+        'cash-fund',
         'reconcile'
       ].includes(action)
     ) {
