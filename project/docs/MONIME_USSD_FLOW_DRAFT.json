@@ -38,7 +38,7 @@
       "component": {
         "type": "template",
         "template_name": "collect_payment",
-        "label": "Enter your $(session.networkProviderName) PIN to pay MatMove SLE $(data.amount).",
+        "label": "Enter your $(session.network_provider_name) PIN to pay MatMove SLE $(data.amount).",
         "template_data": {
           "amount": "$(data.amount)",
           "payment_target_ref": "$(data.payment_target_ref)",
