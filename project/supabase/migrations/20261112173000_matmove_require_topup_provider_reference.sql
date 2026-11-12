@@ -13,8 +13,11 @@ begin
   if lower(trim(coalesce(new.transaction_type, ''))) in ('wallet_topup', 'topup')
      and new.status = 'completed'
      and old.status is distinct from 'completed'
-     and nullif(trim(coalesce(new.provider_reference, '')), '') is null then
-    raise exception 'TOPUP_PROVIDER_REFERENCE_REQUIRED: A provider transaction reference is required before wallet top-up settlement.';
+     and (
+       nullif(trim(coalesce(new.provider_reference, '')), '') is null
+       or new.provider_reference is not distinct from old.provider_reference
+     ) then
+    raise exception 'TOPUP_PROVIDER_REFERENCE_REQUIRED: A new provider transaction reference, different from the original checkout reference, is required before wallet top-up settlement.';
   end if;
 
   return new;
@@ -31,7 +34,7 @@ for each row
 execute function public.matmove_require_topup_provider_reference();
 
 comment on function public.matmove_require_topup_provider_reference() is
-  'Blocks wallet top-up completion without a non-empty provider transaction reference.';
+  'Blocks wallet top-up completion unless a new non-empty provider transaction reference replaces the original checkout reference.';
 
 notify pgrst, 'reload schema';
 commit;
