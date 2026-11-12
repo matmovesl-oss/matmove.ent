@@ -50,7 +50,8 @@ export async function reconcileMatMovePayments(
   {
     rides = reconcileRidePayments,
     payouts = reconcileWithdrawals,
-    monime = processMonimeWebhookBatch
+    monime = processMonimeWebhookBatch,
+    purchases = reconcilePurchasePayments
   } = {}
 ) {
   res.setHeader?.('Cache-Control', 'no-store');
