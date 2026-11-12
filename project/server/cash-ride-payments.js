@@ -356,20 +356,17 @@ export async function cashRideAction(
   if (action === 'cash_config') {
     try {
       assertMonimeEnvironment();
-      const { data, error } = await db
-        .from('matmove_cash_ride_settings')
-        .select('enabled,fee_hold_account_id,fee_revenue_account_id,provider_environment')
-        .eq('singleton', true)
-        .maybeSingle();
-      const enabled = !error
-        && data?.enabled === true
-        && data.provider_environment === monimeEnvironment()
-        && validAccountId(data.fee_hold_account_id)
-        && validAccountId(data.fee_revenue_account_id)
-        && data.fee_hold_account_id !== data.fee_revenue_account_id;
-      return res.status(200).json({ success: true, pending: false, enabled });
+      const settings = await readSettings(db);
+      const [holdAccount, revenueAccount] = await Promise.all([
+        provider(`financial-accounts/${encodeURIComponent(settings.fee_hold_account_id)}?withBalance=true`),
+        provider(`financial-accounts/${encodeURIComponent(settings.fee_revenue_account_id)}?withBalance=true`)
+      ]);
+      providerAccountBalance(holdAccount, settings.fee_hold_account_id);
+      providerAccountBalance(revenueAccount, settings.fee_revenue_account_id);
+      return res.status(200).json({ success: true, pending: false, enabled: true });
     } catch {
-      // Fail closed in Preview or when the new Production config is not installed.
+      // Do not advertise cash until both configured SLE platform accounts
+      // can be read from the matching Monime Test/Live environment.
       return res.status(200).json({ success: true, pending: false, enabled: false });
     }
   }
