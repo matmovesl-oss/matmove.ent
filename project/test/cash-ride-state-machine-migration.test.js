@@ -21,7 +21,7 @@ test('cash booking creation is disabled until a restricted holding and fee accou
   assert.match(sql, /enabled boolean not null default false/i);
   assert.match(sql, /CASH_NOT_CONFIGURED/i);
   assert.match(sql, /fee_hold_account_id <> fee_revenue_account_id/i);
-  assert.match(sql, /service = 'ride' or role_name <> 'rider'/i);
+  assert.match(sql, /service <> 'ride' or role_name <> 'rider'/i);
 });
 
 test('cash bookings cannot be assigned, started, completed or cancelled outside verified ledger states', async () => {
@@ -55,7 +55,7 @@ test('cash settlement needs dual confirmations and booking status follows verifi
   assert.match(sql, /p\.driver_cash_confirmed_at is not null and p\.rider_cash_confirmed_at is not null/i);
   assert.match(sql, /status='settled'/i);
   assert.match(sql, /status='completed',updated_at=clock_timestamp\(\)[\s\S]*where id=p_booking_id and status='in_progress'/i);
-  assert.match(sql, /status='refunded'/i);
+  assert.match(sql, /when 'refund' then 'refunded'/i);
   assert.match(sql, /status='cancelled',updated_at=clock_timestamp\(\)[\s\S]*where id=p_booking_id and status in \('cash_reserve_pending','pending','accepted'\)/i);
 });
 
