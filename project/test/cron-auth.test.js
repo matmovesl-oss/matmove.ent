@@ -60,4 +60,19 @@ test('referral reconciliation rejects absent, weak and overlong cron secrets bef
   }
 
   assert.equal(workerCalls, 0);
+
+  const strongSecret = 'matmove-scheduler-secret-with-at-least-32-characters';
+  const validApi = createReferralApi({
+    env: { CRON_SECRET: strongSecret },
+    database: () => ({}),
+    reconcile: async () => ({ checked: 2, failed: 0 })
+  });
+  const validResponse = response();
+  await validApi.reconcile({
+    method: 'GET',
+    query: { action: 'referral_reconcile' },
+    headers: { authorization: `Bearer ${strongSecret}` }
+  }, validResponse);
+  assert.equal(validResponse.statusCode, 200);
+  assert.equal(validResponse.body.checked, 2);
 });
