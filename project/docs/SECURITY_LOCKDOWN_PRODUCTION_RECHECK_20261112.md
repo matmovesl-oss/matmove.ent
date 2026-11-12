@@ -44,3 +44,19 @@ The Admin AAL2 staff migration is not installed. Prior read-only staff inventory
 6. Resolve Vercel commercial hosting/build quota and Supabase leaked-password protection plan requirements before commercial Production approval.
 
 **Release status:** not Production-ready. Keep both PRs Draft. No Production action is authorized by this note.
+
+
+### 12 November 2026 — exact-head preview correction
+
+After the preceding note was committed, the Customer PR advanced to commit `99a0b3a0d271798c3733790bf3bd169c702f789c`. Vercel now reports an exact-head Customer Preview deployment as **READY**:
+
+- Deployment: `dpl_VehRWuacezJygmrRHWUisj7i3dtx`
+- Preview: https://matmove-20hvoh27d-matmovesl-5262s-projects.vercel.app
+- Git branch: `security/monime-webhook-lockdown-20261109`
+- Exact deployed commit: `99a0b3a0d271798c3733790bf3bd169c702f789c`
+
+This supersedes the preceding sentence about the Customer exact-head Vercel check being blocked. It does not change Production: the deployment target is a Preview, not Production. Customer CI is green on this commit; Security Validation was still running at the time of this addendum.
+
+Admin PR #10 remains at `456d17cd8e3888687ae61713aba9a49ee5e4e874`; its CI is green, while its Vercel status remains failed due to the Hobby daily build-rate limit.
+
+No Production deployment, migration, Auth setting, grant, financial record or Monime operation was changed.
