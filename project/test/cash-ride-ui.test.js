@@ -47,7 +47,7 @@ test('driver cash cancellation does not report a refund before provider verifica
 test('cash trip submission uses the same booking ID for fee reservation recovery', async () => {
   const hook = await readFile(tripHookFile, 'utf8');
   const service = await readFile(rideServiceFile, 'utf8');
-  assert.match(hook, /body\.details\.payment_method === 'cash'/);
+  assert.match(hook, /payment_method\\s*===\\s*'cash'/);
   assert.match(hook, /reserveCashRide\(body\.id/);
   assert.match(service, /cash_confirm: '\/api\/accept-ride-escrow\?action=cash_confirm'/);
 });
