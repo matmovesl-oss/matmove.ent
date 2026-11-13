@@ -395,7 +395,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
       {(rideNotice || walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice && <p>{rideNotice}</p>}{walletNotice && <p>{walletNotice}</p>}</div>}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
+      <header className={`bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm ${activeSection === 'wallet' ? 'hidden' : ''}`}>
         <div className="flex items-center gap-4">
           <button type="button" aria-label={isOnline ? 'Go offline' : 'Go online'} aria-pressed={isOnline} onClick={toggleOnline} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}>
             <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${isOnline ? 'translate-x-7' : 'translate-x-1'}`} />
@@ -420,8 +420,8 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       {walletSetupPanel}
 
       {activeSection === 'home' && (
-        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 p-3 lg:flex-row">
-          <div className="w-full lg:w-[340px] lg:shrink-0 bg-white border-r border-slate-200 flex flex-col p-4 space-y-4">
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-0 p-0">
+          <div className="order-2 relative z-20 -mt-5 max-h-[58dvh] w-full overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl flex flex-col space-y-4">
             <p className="text-xs text-slate-500">Your balance and wallet actions are in Home and Wallet.</p>
             <h3 className="font-bold text-xl text-slate-900 pt-2">Dispatch Radar</h3>
 
@@ -509,7 +509,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
             )}
           </div>
 
-          {activeTrackedTrip?<div className="min-w-0 flex-1"><ActiveTripMap key={activeTrackedTrip.id} userId={profile.id} bookingId={activeTrackedTrip.id} driver/></div>:          <div style={{height:"clamp(280px, 48dvh, 480px)"}} className="min-w-0 flex-1 rounded-2xl overflow-hidden relative min-h-[280px] w-full border border-slate-200 bg-slate-100 shadow-inner z-0">
+          {activeTrackedTrip?<div className="order-1 min-w-0 flex-1"><ActiveTripMap key={activeTrackedTrip.id} userId={profile.id} bookingId={activeTrackedTrip.id} driver/></div>:          <div style={{height:"clamp(340px, 58dvh, 620px)"}} className="order-1 min-w-0 flex-1 rounded-2xl overflow-hidden relative min-h-[280px] w-full border border-slate-200 bg-slate-100 shadow-inner z-0">
             <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
             {mapError ? <p role="alert" className="absolute left-3 right-3 top-3 z-10 rounded-xl bg-red-50 p-3 text-sm text-red-800">{mapError}<button type="button" className="min-h-10 px-2 font-bold underline" onClick={() => setMapRetry(n => n+1)}>Retry map</button></p> : !mapReady && <div role="status" aria-label="Loading radar map" className="absolute left-3 right-3 top-3 z-10 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-sm"><div className="mb-3 flex items-center gap-3"><SkeletonBlock className="h-9 w-9 shrink-0" rounded="rounded-full"/><div className="min-w-0 flex-1 space-y-2"><SkeletonBlock className="h-3 w-2/5" rounded="rounded-md"/><SkeletonBlock className="h-3 w-4/5" rounded="rounded-md"/></div></div><SkeletonBlock className="h-20 w-full" rounded="rounded-lg"/></div>}
           </div>}
