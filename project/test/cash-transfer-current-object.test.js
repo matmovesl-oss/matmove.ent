@@ -45,7 +45,8 @@ test('cash availability is advertised only after both configured SLE platform ac
   assert.match(config, /financial-accounts\/\$\{encodeURIComponent\(settings\.fee_revenue_account_id\)\}/);
   assert.match(config, /providerAccountBalance\(holdAccount, settings\.fee_hold_account_id\)/);
   assert.match(config, /providerAccountBalance\(revenueAccount, settings\.fee_revenue_account_id\)/);
-  assert.match(config, /enabled: settings\.enabled === true/);\n  assert.match(config, /accountsVerified: true/);
+  assert.match(config, /enabled: settings\.enabled === true/);
+  assert.match(config, /accountsVerified: true/);
 });
 
 
