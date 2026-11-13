@@ -504,7 +504,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen">
-      <header className={`bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm ${activeSection === 'wallet' ? 'hidden' : ''}`}>
+      <header className={`bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm ${activeSection === 'wallet' || activeSection === 'home' ? 'hidden' : ''}`}>
         <div>
           <h1 className="text-xl font-bold text-slate-900">
             Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋
