@@ -23,7 +23,7 @@ test('compact home routes ride intent, wallet and saved places without mounting 
   assert.ok(home.includes("onNavigate('ride')"));
   assert.ok(home.includes('Manage places'));
   assert.ok(home.includes("onNavigate('account')"));
-  assert.ok(home.includes("onNavigate('services')"));
+  assert.equal(home.includes('Explore MatMove'), false);
   assert.ok(app.includes('<CustomerHome'));
   assert.ok(app.includes('activeSection === \'services\' && <PortalHome'));
 });
