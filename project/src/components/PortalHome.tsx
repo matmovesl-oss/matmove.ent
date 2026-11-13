@@ -278,7 +278,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
   if (selectedGame) return <ArcadeGames key={`${uid}:${selectedGame}`} userId={uid} initialGame={selectedGame} onBack={() => setSelectedGame(null)} />;
   
   return (
-    <main className="mm-home overflow-hidden mx-auto max-w-[100vw]">
+    <main className="mm-portal-morph mm-home overflow-hidden mx-auto max-w-[100vw]">
       <header className="mm-home-heading">
         <div className="mm-brand"><img src="/logo.jpg" alt="MatMove" width="40" height="40"/><span>Wi dey move<span className="mm-muted">Your everyday, connected.</span></span></div>
         <button className="mm-icon-button" type="button" aria-label="Open your account" onClick={() => onNavigate('account')}><ShieldCheck size={22}/></button>
