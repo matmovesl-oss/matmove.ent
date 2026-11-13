@@ -74,3 +74,22 @@ test('portal entry animates without delaying the authenticated session bootstrap
   assert.ok(app.includes('useState(!initialProfile)'));
   assert.ok(css.includes('@keyframes mm-portal-morph-in'));
 });
+
+test('all customer roles have a clear back path from services and role dashboards', async () => {
+  const app = await readFile('src/App.tsx', 'utf8');
+  const services = await readFile('src/components/PortalHome.tsx', 'utf8');
+  assert.ok(app.includes('Back to Services'));
+  assert.ok(app.includes('Back to Home'));
+  assert.ok(app.includes("setActiveSection(activeSection === 'ride' ? 'home' : 'services')"));
+  assert.ok(services.includes('aria-label="Back to Home"'));
+  assert.ok(services.includes("onNavigate('home')"));
+});
+
+test('home map car motion can be paused, resumed and its selected route shared', async () => {
+  const map = await readFile('src/components/CustomerHomeMap.tsx', 'utf8');
+  assert.ok(map.includes('pauseAnimations()'));
+  assert.ok(map.includes('unpauseAnimations()'));
+  assert.ok(map.includes('Share route'));
+  assert.ok(map.includes('navigator.share'));
+  assert.ok(map.includes('setActiveRoute'));
+});
