@@ -1,9 +1,10 @@
-import React from 'react';
+import {useId} from 'react';
 
 export type MatMoveVehicleKind = 'keke' | 'bike' | 'car' | 'van';
 
 type VehicleStickerProps = { kind: MatMoveVehicleKind; size?: number; className?: string };
 export function VehicleSticker({kind,size=88,className=''}:VehicleStickerProps){
+  const uid=useId().replace(/:/g,'');
   return <span aria-hidden="true" className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[22px] bg-gradient-to-br from-white via-[#f5fbf7] to-[#e5f1ff] shadow-[inset_0_1px_0_rgba(255,255,255,.95),0_5px_16px_rgba(15,35,55,.08)] ${className}`} style={{width:size,height:size*.72}}>
     <svg viewBox="0 0 160 116" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
