@@ -2,15 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-test('password recovery appears only on sign-in and passcode recovery only on the passcode lock', async () => {
-  const auth = await readFile('src/pages/AuthPages.tsx', 'utf8');
-  const lock = await readFile('src/components/CustomerPasscode.tsx', 'utf8');
+test('the only visible recovery link is Forgot password on the customer passcode screen', async () => {
+  const [auth, app, lock] = await Promise.all([
+    readFile('src/pages/AuthPages.tsx', 'utf8'),
+    readFile('src/App.tsx', 'utf8'),
+    readFile('src/components/CustomerPasscode.tsx', 'utf8')
+  ]);
   const login = auth.slice(auth.indexOf('export function LoginPage'), auth.indexOf('export function SignupPage'));
+  const signup = auth.slice(auth.indexOf('export function SignupPage'), auth.indexOf('function GoogleButton'));
 
-  assert.ok(login.includes('Forgot password?'));
+  assert.ok(!login.includes('Forgot password?'));
   assert.ok(!login.includes('Forgot passcode?'));
-  assert.ok(login.includes("navigate('/forgot-password')"));
-  assert.ok(!login.includes("navigate('/forgot-passcode')"));
-  assert.ok(lock.includes('Forgot passcode?'));
-  assert.ok(lock.includes('next=%2Freset-passcode'));
+  assert.ok(!signup.includes('Forgot password?'));
+  assert.ok(!signup.includes('Forgot passcode?'));
+  assert.ok(lock.includes('Forgot password?'));
+  assert.ok(!lock.includes('Forgot passcode?'));
+  assert.ok(lock.includes('requestAccountPasswordReset(resetEmail)'));
+  assert.ok(!app.includes('path="/forgot-password"'));
+  assert.ok(!app.includes('path="/forgot-passcode"'));
+  assert.ok(app.includes('path="/reset-password"'));
 });
