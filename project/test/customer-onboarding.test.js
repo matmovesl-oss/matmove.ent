@@ -29,6 +29,7 @@ async function fixture(){
  create function ensure_matmove_wallets(p_id uuid) returns void language plpgsql security definer as $$begin insert into wallets(user_id,currency) select p_id,c from unnest(array['SLE','USD']) c where not exists(select 1 from wallets w where w.user_id=p_id and w.currency=c);end;$$;
  insert into auth.users(id,email) values('${rider}','rider@example.com'),('${driver}','driver@example.com'),('${merchant}','merchant@example.com'),('${admin}','admin@example.com'),('${adminWithoutProfile}','invited-admin@example.com');
  insert into profiles(id,email) select id,email from auth.users;
+ delete from profiles where id='${adminWithoutProfile}';
  insert into user_roles(profile_id,role) values('${rider}','rider'),('${admin}','admin');
  update profiles set role='admin' where id='${admin}';
 
@@ -73,7 +74,7 @@ test('actual schema supports account setup without KYC, preserves Auth email, sy
 
 test('role selection cannot create admin access, switch an assigned role, or convert an administrative profile',()=>withDb(async f=>{
  await f.session(rider);await assert.rejects(()=>f.rpc('matmove_save_customer_account',['admin','+23276000001']),/Choose rider/);await assert.rejects(()=>f.rpc('matmove_save_customer_account',['driver','+23276000001']),/already assigned/);
- await f.session(admin);await assert.rejects(()=>f.rpc('matmove_save_customer_account',['rider','+23276000004']),/Administrative/);
+ await f.session(admin);await assert.rejects(()=>f.rpc('matmove_save_customer_account',['rider','+23276000004']),/active Admin account cannot create a Customer account/);
  await f.pg.exec(`set role anon`);await assert.rejects(()=>f.rpc('matmove_save_customer_account',['rider','+23276000001']),/permission denied/);
 }));
 
