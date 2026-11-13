@@ -135,12 +135,41 @@ export function SignupPage() {
 function GoogleButton({ disabled, referral }: { disabled: boolean;referral?:string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  return <div className="mb-5"><button type="button" disabled={disabled || busy}
-    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 font-bold disabled:opacity-50"
-    onClick={() => { try{if(referral!==undefined)prepareReferralSignup(normalizeReferralCode(referral),'google');}catch(e:any){setError(e.message);return;} setBusy(true); setError(''); void signInWithGoogle().catch(error => {
-      setError(error.message || 'Google sign-in is unavailable. Try email sign-in.'); setBusy(false);
-    }); }}>{busy ? 'Opening Google…' : 'Continue with Google'}</button>
-    {error && <p role="alert" className="mt-2 text-red-700">{error}</p>}</div>;
+  const startGoogleAuth = () => {
+    if (disabled || busy) return;
+    try {
+      if (referral !== undefined) prepareReferralSignup(normalizeReferralCode(referral), 'google');
+    } catch (err: any) {
+      setError(err?.message || 'The referral code could not be applied.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    void signInWithGoogle().catch((err: any) => {
+      setError(err?.message || 'Google sign-in is unavailable. Try email sign-in.');
+      setBusy(false);
+    });
+  };
+  return (
+    <div className="mb-5">
+      <button
+        type="button"
+        disabled={disabled || busy}
+        aria-label="Continue with Google"
+        onClick={startGoogleAuth}
+        className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#184f9a] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <svg aria-hidden="true" viewBox="0 0 48 48" className="h-5 w-5 shrink-0" focusable="false">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z" transform="translate(0 5)"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.76 7.18l7.73 6C44.42 37.97 46.98 31.84 46.98 24.55Z"/>
+          <path fill="#FBBC05" d="M10.53 28.59a14.4 14.4 0 0 1 0-9.18l-7.98-6.19a24 24 0 0 0 0 21.56l7.98-6.19Z" transform="translate(0 5)"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.8l-7.73-6c-2.14 1.45-4.88 2.3-8.17 2.3-6.26 0-11.57-4.22-13.46-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z" transform="translate(0 -5)"/>
+        </svg>
+        <span>{busy ? 'Opening Google…' : 'Continue with Google'}</span>
+      </button>
+      {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+    </div>
+  );
 }
 
 export function AuthCallbackPage() {
