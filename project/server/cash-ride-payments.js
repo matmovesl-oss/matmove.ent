@@ -11,7 +11,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const accountId = /^fac-[A-Za-z0-9_-]+$/;
 
 const safeErrors = {
-  CASH_NOT_CONFIGURED: [503, 'Cash collection is not enabled. The restricted Monime holding account has not been configured.'],
+  CASH_NOT_CONFIGURED: [503, 'Cash collection is not enabled or the Monime cash-fee account settings do not match.'],
   CASH_FEE_NOT_RESERVED: [409, 'The MatMove cash fee reserve is not verified. This ride cannot be accepted.'],
   CASH_COLLECTION_NOT_CONFIRMED: [409, 'Both rider and driver must confirm the physical cash handover before MatMove captures its fee.'],
   CASH_CAPTURE_NOT_VERIFIED: [409, 'The MatMove fee capture has not been verified. This ride is not complete.'],
@@ -141,7 +141,7 @@ async function readSettings(db) {
       data.fee_revenue_account_id !== platformFeeAccountId) {
     throw new HttpError(
       503,
-      'Cash collection is disabled until the restricted holding account is configured and the fee revenue account matches MONIME_PLATFORM_FEE_ACCOUNT_ID.',
+      'Cash collection is disabled until the cash-fee account is configured and the fee revenue account matches MONIME_PLATFORM_FEE_ACCOUNT_ID.',
       'CASH_NOT_CONFIGURED'
     );
   }
@@ -401,8 +401,8 @@ export async function cashRideAction(
       }
       return res.status(200).json({ success: true, pending: false, enabled: true });
     } catch {
-      // Do not advertise cash until both configured SLE platform accounts
-      // can be read from the matching Monime Test/Live environment.
+      // Do not advertise cash until each configured SLE account role can be
+      // read from the matching Monime Test/Live environment.
       return res.status(200).json({ success: true, pending: false, enabled: false });
     }
   }
