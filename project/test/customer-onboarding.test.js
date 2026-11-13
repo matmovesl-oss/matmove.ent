@@ -178,7 +178,7 @@ test('legacy role trigger accepts secured onboarding with a real browser role an
 }));
 
 test('customer account setup ignores blank and malformed legacy phone values while preserving valid duplicate protection',()=>withDb(async f=>{
- const migration=await readFile(new URL('../supabase/migrations/20261113190000_matmove_customer_phone_duplicate_check_safe_v1.sql',import.meta.url),'utf8');
+ const migration=await readFile(new URL('../supabase/migrations/20261113182731_matmove_customer_phone_duplicate_check_safe_v1.sql',import.meta.url),'utf8');
  await f.pg.exec(migration);
  const legacyA='66666666-6666-4666-8666-666666666666',legacyB='77777777-7777-4777-8777-777777777777',validOwner='88888888-8888-4888-8888-888888888888';
  await f.pg.query("insert into auth.users(id,email) values($1,'legacy-a@example.com'),($2,'legacy-b@example.com'),($3,'valid-owner@example.com')",[legacyA,legacyB,validOwner]);
