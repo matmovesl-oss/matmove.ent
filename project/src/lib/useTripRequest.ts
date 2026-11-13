@@ -6,7 +6,7 @@ const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const validBookingStatuses=['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress','completed','cancelled'];
 
 async function reserveCashRide(bookingId:string,accessToken:string,signal:AbortSignal){
- const response=await fetch('/api/accept-ride-escrow?action=cash_reserve',{
+ const response=await fetch('/api/start-ride?action=cash_reserve',{
   method:'POST',
   headers:{'Content-Type':'application/json',Authorization:`Bearer ${accessToken}`},
   body:JSON.stringify({bookingId}),
