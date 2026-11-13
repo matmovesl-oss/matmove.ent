@@ -28,7 +28,7 @@ test('cash reconciliation only retries existing pending/processing transfer IDs'
 });
 
 test('cash recovery shares the existing ride API route and does not add an API entry', async () => {
-  const api = await readFile(new URL('../api/start-ride.ts', import.meta.url), 'utf8');
+  const api = await readFile(new URL('../api/accept-ride-escrow.ts', import.meta.url), 'utf8');
   const routes = await readFile(new URL('../vercel.json', import.meta.url), 'utf8');
   assert.match(api, /server\/ride-api\.js/);
   assert.match(routes, /reconcile-ride-payments/);
