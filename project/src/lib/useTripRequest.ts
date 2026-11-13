@@ -36,8 +36,14 @@ export function useTripRequest(userId:string){
    const body=retained||{id:crypto.randomUUID(),details:details!};if(!body.details)throw Error('Review the request first.');
    if(!retained){localStorage.setItem(key,JSON.stringify(body));setRetained(body);}
    const controller=new AbortController();active.current=controller;const timer=setTimeout(()=>controller.abort(),20000);
+   // Production currently accepts the original 11-field digital trip payload.
+   // Keep the optional payment_method marker only for cash bookings, which the
+   // cash state-machine migration will accept once the separate accounts exist.
+   const rpcDetails=body.details.payment_method==='cash'
+    ? body.details
+    : Object.fromEntries(Object.entries(body.details).filter(([key])=>key!=='payment_method'));
    let result;
-   try{result=await supabase.rpc('matmove_create_customer_trip',{p_request:body.id,p_details:body.details}).setHeader('Authorization',`Bearer ${before.data.session.access_token}`).abortSignal(controller.signal);}
+   try{result=await supabase.rpc('matmove_create_customer_trip',{p_request:body.id,p_details:rpcDetails}).setHeader('Authorization',`Bearer ${before.data.session.access_token}`).abortSignal(controller.signal);}
    finally{clearTimeout(timer);}
    if(result.error)throw Error('Request not confirmed. Use Check Original Request to recover the same request; do not send a duplicate.');
    const row=result.data;
