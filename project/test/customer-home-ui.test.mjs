@@ -29,7 +29,8 @@ test('homepage feed replaces the decorative route demo with admin-published movi
  assert.match(feed,/Happening in Sierra Leone/);
  assert.match(feed,/animateMotion/);
  assert.match(feed,/postgres_changes/);
- assert.match(feed,/starts_at\.lte/);\n assert.match(feed,/expires_at\.gt/);
+ assert.match(feed,/starts_at\.lte/);
+ assert.match(feed,/expires_at\.gt/);
  assert.match(feed,/matmove_submit_homepage_post_enquiry/);
  assert.match(ride,/bookingSheetExpanded/);
  assert.match(ride,/onPointerDown/);
