@@ -39,7 +39,7 @@ export default function CustomerHome({profile,onNavigate}:Props){
     <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-emerald-100"><Sparkles size={13}/> MATMOVE · SIERRA LEONE</span>
     <h2 className="mt-5 text-3xl font-black leading-[1.08] sm:text-4xl">{driver?'Ready to get moving and earn?':merchant?'Your business, moving forward.':'Your city. Your journey. One tap away.'}</h2>
     <p className="mt-3 max-w-md text-sm leading-6 text-slate-300">{driver?'Go online when you are ready and connect with nearby customers.':merchant?'Manage your shop, serve customers and follow your business activity.':'Rides, food, parcels and rentals — the everyday services you need in one place.'}</p>
-    <button type="button" onClick={()=>onNavigate(driver?'ride':'services')} className="mt-6 inline-flex min-h-12 items-center gap-3 rounded-2xl bg-white px-5 py-3 font-bold text-slate-950 transition hover:bg-emerald-50">{driver?'Open driver radar':merchant?'Explore business tools':'Explore services'} <ArrowRight size={18}/></button>
+    <button type="button" onClick={()=>onNavigate(driver?'ride':'services')} className="mt-6 inline-flex min-h-12 items-center gap-3 rounded-2xl bg-white px-5 py-3 font-bold text-slate-950 transition hover:bg-emerald-50">{driver?'Open driver radar':merchant?'Explore business tools':'Where to?'} <ArrowRight size={18}/></button>
    </div>
    <div aria-hidden="true" className="absolute bottom-7 right-8 hidden items-center justify-center rounded-3xl border border-white/15 bg-white/10 p-5 text-emerald-100 sm:flex"><Car size={46} strokeWidth={1.4}/></div>
   </section>
