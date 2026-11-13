@@ -44,7 +44,7 @@ test('ride booking uses the full map-first location picker for rider and merchan
   const merchant = await readFile('src/pages/MerchantDashboard.tsx', 'utf8');
   const driver = await readFile('src/pages/DriverDashboard.tsx', 'utf8');
   assert.ok(picker.includes("layout === 'map-first'"));
-  assert.ok(picker.includes("clamp(340px, 58dvh, 620px)"));
+  assert.ok(picker.includes("clamp(300px, 50dvh, 560px)"));
   assert.ok(rider.includes('layout="map-first"'));
   assert.ok(merchant.includes('layout="map-first"'));
   assert.ok(rider.includes('max-h-[58dvh]'));
