@@ -660,7 +660,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                         {cashConfigLoading ? (
                           <p className="mt-2 text-xs text-slate-500">Checking cash collection availability…</p>
                         ) : !cashEnabled ? (
-                          <p className="mt-2 text-xs text-amber-800">Physical cash rides are currently unavailable. MatMove must first configure and verify its restricted Monime cash-fee holding account.</p>
+                          <p className="mt-2 text-xs text-amber-800">Physical cash rides are not enabled yet. The separate escrow and platform-fee accounts are configured; final production verification is still required.</p>
                         ) : null}
                         {paymentMethod === 'cash' && Number(offerAmount) > 0 && (() => {
                           const fareMinor = Math.round(Number(offerAmount) * 100);
@@ -668,7 +668,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                           const feeMinor = fareMinor - driverCashMinor;
                           return (
                             <p className="mt-2 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-950">
-                              Driver receives {'SLE ' + (driverCashMinor / 100).toFixed(2)} in physical cash. MatMove reserves {'SLE ' + (feeMinor / 100).toFixed(2)} from your SLE wallet. Your total fare remains {'SLE ' + (fareMinor / 100).toFixed(2)}.
+                              Driver receives {'SLE ' + (driverCashMinor / 100).toFixed(2)} in physical cash. MatMove secures {'SLE ' + (feeMinor / 100).toFixed(2)} from your SLE wallet into escrow, then releases it to the platform fee account after both rider and driver confirm the handover. Your total fare remains {'SLE ' + (fareMinor / 100).toFixed(2)}.
                             </p>
                           );
                         })()}
