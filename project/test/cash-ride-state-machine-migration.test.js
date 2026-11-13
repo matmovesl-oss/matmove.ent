@@ -112,3 +112,15 @@ test('database independently rejects completed cash receipts that mismatch the i
   assert.match(record, /p_verified_reference is distinct from l\.request_key/i);
   assert.match(record, /CASH_RECEIPT_MISMATCH/i);
 });
+
+test('cash fee capture destination must match the deployed MONIME_PLATFORM_FEE_ACCOUNT_ID', async () => {
+  const source = await readFile(new URL('../server/cash-ride-payments.js', import.meta.url), 'utf8');
+  const settings = source.slice(
+    source.indexOf('async function readSettings'),
+    source.indexOf('function providerAccountBalance')
+  );
+  assert.match(settings, /process\.env\.MONIME_PLATFORM_FEE_ACCOUNT_ID/);
+  assert.match(settings, /data\.fee_revenue_account_id !== platformFeeAccountId/);
+  assert.match(settings, /data\.fee_hold_account_id === platformFeeAccountId/);
+  assert.match(settings, /restricted holding account is configured/i);
+});
