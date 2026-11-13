@@ -105,15 +105,15 @@ test('credential recovery screens are separate and each updates only its selecte
  assert.match(lock,/Your account password will not change/);
  assert.ok(lock.includes('requestPasscodeReset(resetEmail)'));
  assert.doesNotMatch(lock,/requestAccountPasswordReset/);
- const operationStart=screen.indexOf("if (mode === 'password') {\\n        const { error: updateError }");
+ const operationStart=screen.indexOf("if (mode === 'password') {\n        const { error: updateError }");
  const operationElse=screen.indexOf("} else {",operationStart);
  const operationEnd=screen.indexOf("localStorage.removeItem",operationElse);
  const passwordBranch=screen.slice(operationStart,operationElse);
  const passcodeBranch=screen.slice(operationElse,operationEnd);
  assert.ok(operationStart>=0 && operationElse>operationStart && operationEnd>operationElse);
- assert.match(passwordBranch,/supabase\\.auth\\.updateUser\\(\\{ password \\}\\)/);
+ assert.match(passwordBranch,/supabase\.auth\.updateUser\(\{ password \}\)/);
  assert.doesNotMatch(passwordBranch,/customerPasscode|newPin/);
- assert.match(passcodeBranch,/customerPasscode\\(userId, 'recover', null, newPin\\)/);
+ assert.match(passcodeBranch,/customerPasscode\(userId, 'recover', null, newPin\)/);
  assert.doesNotMatch(passcodeBranch,/updateUser|password/);
 });
 
