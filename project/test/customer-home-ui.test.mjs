@@ -54,7 +54,8 @@ test('ride booking uses a full-screen map and draggable Uber-style location shee
  assert.match(ride,/bookingReady=\{Boolean\(pickupCoords && destinationCoords\)\}/);
  assert.match(ride,/onRouteEditingChange=\{setRouteEditing\}/);
  assert.match(ride,/fixed inset-x-0 bottom/);
- assert.match(ride,/min-h-\[148px\]/);\n assert.match(ride,/max-h-\[min\(66dvh,700px\)\]/);
+ assert.match(ride,/min-h-\[148px\]/);
+  assert.match(ride,/max-h-\[min\(66dvh,700px\)\]/);
  assert.match(app,/onBack=\{\(\) => setActiveSection\('home'\)\}/);
 });
 
