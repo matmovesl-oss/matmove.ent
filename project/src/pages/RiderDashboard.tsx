@@ -81,6 +81,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [isRequesting, setIsRequesting] = useState(false);
   const [passengerCount, setPassengerCount] = useState(1);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [bookingSheetExpanded, setBookingSheetExpanded] = useState(true);
+  const sheetPointerStart = useRef<number | null>(null);
 
   const {
     booking: activeBooking,
