@@ -120,7 +120,7 @@ test('cash fee capture destination must match the deployed MONIME_PLATFORM_FEE_A
   );
   assert.match(settings, /process\.env\.MONIME_PLATFORM_FEE_ACCOUNT_ID/);
   assert.match(settings, /data\.fee_revenue_account_id !== platformFeeAccountId/);
-  assert.match(settings, /data\.fee_hold_account_id === platformFeeAccountId/);
+  assert.doesNotMatch(settings, /data\.fee_hold_account_id === platformFeeAccountId/);
   assert.match(settings, /restricted holding account is configured/i);
 });
 
@@ -134,14 +134,14 @@ test('shared escrow and fee account uses an audited internal ledger release, nev
   const server = await readFile(new URL('../server/cash-ride-payments.js', import.meta.url), 'utf8');
   assert.match(sql, /drop constraint if exists matmove_cash_ride_settings_accounts_distinct/i);
   assert.match(sql, /fee_hold_account_id = fee_revenue_account_id/i);
-  assert.match(sql, /settlement_mode in \\('provider_transfer','internal_ledger'\\)/i);
-  assert.match(sql, /create or replace function public\\.matmove_cash_ride_settle_shared_capture/i);
+  assert.match(sql, /settlement_mode in \('provider_transfer','internal_ledger'\)/i);
+  assert.match(sql, /create or replace function public\.matmove_cash_ride_settle_shared_capture/i);
   assert.match(sql, /both cash parties must confirm/i);
-  assert.match(sql, /set status = 'completed',[\\s\\S]*settlement_mode = 'internal_ledger'/i);
-  assert.match(sql, /revoke all on function public\\.matmove_cash_ride_settle_shared_capture/i);
-  assert.match(server, /data\\.fee_revenue_account_id !== platformFeeAccountId/);
+  assert.match(sql, /set status = 'completed',[\s\S]*settlement_mode = 'internal_ledger'/i);
+  assert.match(sql, /revoke all on function public\.matmove_cash_ride_settle_shared_capture/i);
+  assert.match(server, /data\.fee_revenue_account_id !== platformFeeAccountId/);
   assert.doesNotMatch(server.slice(server.indexOf('async function readSettings'), server.indexOf('function providerAccountBalance')),
     /fee_hold_account_id === platformFeeAccountId/);
-  assert.match(server, /kind === 'capture' && storedLeg\\.source_account_ref === storedLeg\\.destination_account_ref/);
+  assert.match(server, /kind === 'capture' && storedLeg\.source_account_ref === storedLeg\.destination_account_ref/);
   assert.match(server, /matmove_cash_ride_settle_shared_capture/);
 });
