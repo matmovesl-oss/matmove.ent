@@ -37,3 +37,46 @@ test('homepage feed replaces the decorative route demo with admin-published movi
  assert.match(ride,/onPointerUp/);
  assert.match(map,/keyboardShortcuts: false/);
 });
+
+
+test('ride booking uses a full-screen map and draggable Uber-style location sheet',async()=>{
+ const [picker,ride,app]=await Promise.all([
+  read('../src/components/RideLocationPicker.tsx'),
+  read('../src/pages/RiderDashboard.tsx'),
+  read('../src/App.tsx')
+ ]);
+ assert.match(picker,/fixed inset-0 z-10/);
+ assert.match(picker,/Plan your ride/);
+ assert.match(picker,/onPointerMove/);
+ assert.match(picker,/onPointerUp/);
+ assert.match(picker,/Back to MatMove home/);
+ assert.match(picker,/Change locations/);
+ assert.match(ride,/bookingReady=\{Boolean\(pickupCoords && destinationCoords\)\}/);
+ assert.match(ride,/onRouteEditingChange=\{setRouteEditing\}/);
+ assert.match(ride,/fixed inset-x-0 bottom/);
+ assert.match(ride,/max-h-\[148px\]/);
+ assert.match(app,/onBack=\{\(\) => setActiveSection\('home'\)\}/);
+});
+
+test('ride vehicle selector and map pins use branded visual markers instead of plain text or default pins',async()=>{
+ const [ride,picker]=await Promise.all([
+  read('../src/pages/RiderDashboard.tsx'),
+  read('../src/components/RideLocationPicker.tsx')
+ ]);
+ assert.match(ride,/CarFront, Bike, Truck/);
+ assert.match(ride,/Choose \$\{label\}/);
+ assert.match(ride,/bg-gradient-to-br from-emerald-600 to-teal-500/);
+ assert.match(picker,/markerSvg/);
+ assert.match(picker,/data:image\/svg\+xml/);
+ assert.match(picker,/draggable: true/);
+});
+
+test('homepage post storage upload allowlist grants only the named admin permission',async()=>{
+ const sql=await read('../supabase/migrations/20261113160500_matmove_homepage_post_storage_upload_allowlist_v1.sql');
+ assert.match(sql,/as restrictive/i);
+ assert.match(sql,/bucket_id = 'matmove-homepage-posts'/);
+ assert.match(sql,/public\.matmove_admin_can\('notifications'\)/);
+ assert.match(sql,/bucket_id = 'kyc-documents'/);
+ assert.match(sql,/bucket_id = 'product_images'/);
+ assert.doesNotMatch(sql,/to public/i);
+});

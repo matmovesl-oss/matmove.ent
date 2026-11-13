@@ -417,6 +417,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
             profile={profile}
             wallet={wallet}
             activeSection={activeSection === 'ride' ? 'home' : activeSection}
+            onBack={() => setActiveSection('home')}
           />
         )}
 

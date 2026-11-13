@@ -18,7 +18,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {
-  Car, Package, MapPin, ShoppingBag, Loader2,
+  Car, CarFront, Bike, Truck, Package, MapPin, ShoppingBag, Loader2,
   CalendarClock, Plus, Minus, ArrowRight, Wallet,
   RefreshCw, X, Smartphone, ArrowDownLeft,
   ArrowUpRight, Users, ShoppingCart, Activity,
@@ -39,7 +39,7 @@ export function RiderDashboard(props: any) {
   return <RiderMain key={props.profile?.id || 'rider-main'} {...props} />;
 }
 
-function RiderMain({ profile, wallet, activeSection }: any) {
+function RiderMain({ profile, wallet, activeSection, onBack }: any) {
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [rideNotice, setRideNotice] = useState('');
   const [walletNotice, setWalletNotice] = useState('');
@@ -82,6 +82,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [passengerCount, setPassengerCount] = useState(1);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [bookingSheetExpanded, setBookingSheetExpanded] = useState(true);
+  const [routeEditing, setRouteEditing] = useState(true);
+  const [bookingSheetDragDelta, setBookingSheetDragDelta] = useState(0);
   const sheetPointerStart = useRef<number | null>(null);
   const sheetDragged = useRef(false);
 
@@ -502,7 +504,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen">
-      <header className={`bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm ${activeSection === 'wallet' ? 'hidden' : ''}`}>
+      <header className={`bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm ${activeSection === 'wallet' || activeSection === 'home' ? 'hidden' : ''}`}>
         <div>
           <h1 className="text-xl font-bold text-slate-900">
             Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋
@@ -527,9 +529,9 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
       <div className="mx-auto max-w-7xl space-y-4 px-0 pb-8 sm:px-4">
         {(activeSection === 'home' || activeSection === 'ride' || !activeSection) && (
-          <div className="relative flex min-w-0 flex-col gap-0 overflow-visible">
-            <div className={`order-2 relative z-20 -mt-6 ${bookingSheetExpanded ? 'max-h-[min(68dvh,760px)]' : 'max-h-[min(30dvh,320px)]'} overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.16)] space-y-4 sm:px-6`}>
-              <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded} onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;event.currentTarget.setPointerCapture(event.pointerId);}} onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start;if(Math.abs(delta)>24){sheetDragged.current=true;if(delta<0)setBookingSheetExpanded(true);else setBookingSheetExpanded(false);}sheetPointerStart.current=null;}} onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}} className="mx-auto flex h-6 w-16 touch-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button><div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><p className="mt-1 text-sm text-slate-500">Choose a service, set your route and review your fare.</p></div>
+          <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
+            {(activeBooking || (pickupCoords && destinationCoords && !routeEditing)) && <div className={`fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl ${bookingSheetExpanded ? 'max-h-[min(66dvh,700px)]' : 'max-h-[148px]'} overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6`} style={{height:bookingSheetExpanded?'min(66dvh,700px)':'148px',transform:bookingSheetDragDelta ? 'translateY(' + bookingSheetDragDelta + 'px)' : undefined, transition:sheetPointerStart.current===null ? 'transform 220ms cubic-bezier(.2,.8,.2,1)' : 'none'}}>
+              <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded} onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={event=>{if(sheetPointerStart.current!==null)setBookingSheetDragDelta(event.clientY-sheetPointerStart.current);}} onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start;if(Math.abs(delta)>28){sheetDragged.current=true;if(delta<0)setBookingSheetExpanded(true);else setBookingSheetExpanded(false);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);}} onPointerCancel={()=>{sheetPointerStart.current=null;setBookingSheetDragDelta(0);}} onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}} className="mx-auto flex h-6 w-16 touch-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button><div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><p className="mt-1 text-sm text-slate-500">Choose a service, set your route and review your fare.</p></div>
               <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
                 <button onClick={() => setViewMode('active')} className={`font-bold ${viewMode === 'active' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Active Request</button>
                 <button onClick={() => setViewMode('new')} className={`font-bold ${viewMode === 'new' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Create New</button>
@@ -602,15 +604,28 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
                   <div className="space-y-3">
                     <div><div className="mb-2 flex items-center justify-between"><span className="text-xs font-extrabold text-slate-800">Choose your vehicle</span><span className="text-[10px] font-semibold text-slate-400">Tap to select</span></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      {(['keke', 'bike', 'car', 'van'] as const).map(v => (
-                        <button
-                          key={v}
-                          onClick={() => setVehicleType(v)}
-                          aria-pressed={vehicleType === v} className={`min-h-12 rounded-xl border px-3 py-2 text-xs font-extrabold uppercase tracking-wide transition ${vehicleType === v ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm ring-1 ring-emerald-200' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50'}`} 
-                        >
-                          {v}
-                        </button>
-                      ))}
+                      {(['keke', 'bike', 'car', 'van'] as const).map(v => {
+                        const VehicleIcon = v === 'bike' ? Bike : v === 'van' ? Truck : CarFront;
+                        const label = v === 'bike' ? 'Motorbike' : v === 'keke' ? 'Keke' : v === 'car' ? 'Car' : 'Van';
+                        const selected = vehicleType === v;
+                        return (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setVehicleType(v)}
+                            aria-label={`Choose ${label}`}
+                            aria-pressed={selected}
+                            className={`group relative flex min-h-[76px] items-center gap-3 overflow-hidden rounded-2xl border p-3 text-left transition duration-200 ${selected ? 'border-emerald-400 bg-gradient-to-br from-emerald-50 to-white text-emerald-900 shadow-[0_8px_24px_rgba(5,150,105,.12)] ring-1 ring-emerald-200' : 'border-slate-200 bg-white text-slate-600 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md'}`}
+                          >
+                            <span aria-hidden="true" className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] shadow-inner transition ${selected ? 'bg-gradient-to-br from-emerald-600 to-teal-500 text-white' : 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600'}`}>
+                              <span className="absolute inset-1 rounded-[14px] border border-white/40"/>
+                              <VehicleIcon size={24} strokeWidth={2.1}/>
+                              {selected && <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-white ring-2 ring-emerald-500"/>}
+                            </span>
+                            <span className="min-w-0"><span className="block text-xs font-black">{label}</span><span className="mt-0.5 block text-[10px] text-slate-400">{v==='keke'?'3 seats':v==='bike'?'Quick solo ride':v==='car'?'Comfort ride':'Extra space'}</span></span>
+                          </button>
+                        );
+                      })}
                     </div></div>
 
                     <p className="text-xs leading-5 text-slate-500">Choose pickup and destination on the map above. MatMove will preview your route and estimate the fare.</p>
@@ -777,7 +792,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                   )}
                 </div>
               )}
-            </div>
+            </div>}
 
             <div className="order-1 min-w-0">
               {activeBooking && ['accepted', 'in_progress'].includes(activeBooking.status) ? (
@@ -787,7 +802,14 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                   layout="map-first"
                   key={profile?.id || 'location-picker'}
                   userId={profile?.id}
+                  onBack={onBack}
+                  bookingReady={Boolean(pickupCoords && destinationCoords)}
+                  bookingSheetExpanded={bookingSheetExpanded}
+                  onRouteEditingChange={setRouteEditing}
                   onChange={(selection: TripLocations) => {
+                    const ready = Boolean(selection.pickup && selection.destination);
+                    setRouteEditing(!ready);
+                    if (ready) { setBookingSheetExpanded(true); setViewMode('new'); }
                     setPickup(selection.pickup?.address || '');
                     setDestination(selection.destination?.address || '');
                     setPickupCoords(selection.pickup?.coords || null);
