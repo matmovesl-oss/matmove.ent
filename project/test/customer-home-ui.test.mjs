@@ -107,3 +107,38 @@ test('saved Home and Work addresses render as bordered updateable cards',async()
  assert.match(picker,/border border-slate-200 bg-white px-2\.5 py-2/);
  assert.match(picker,/Update/);
 });
+
+
+test('ride location panel follows the finger continuously and the map remains full-screen behind it',async()=>{
+ const picker=await read('../src/components/RideLocationPicker.tsx');
+ assert.match(picker,/height:'100dvh',minHeight:'100dvh'/);
+ assert.match(picker,/const \[locationSheetDragging,setLocationSheetDragging\]=useState\(false\)/);
+ assert.match(picker,/calc\(\$\{locationDragStartHeight\.current\}px - \$\{locationDragDelta\}px\)/);
+ assert.match(picker,/height 380ms cubic-bezier\(\.22,1,\.36,1\)/);
+ assert.match(picker,/setLocationDragDelta\(Math\.max\(base-maxHeight,Math\.min\(base-180,delta\)\)\)/);
+ assert.doesNotMatch(picker,/transform:locationDragDelta/);
+});
+test('ride booking sheet height tracks the drag handle and snaps smoothly on release',async()=>{
+ const page=await read('../src/pages/RiderDashboard.tsx');
+ assert.match(page,/const \[bookingSheetDragging,setBookingSheetDragging\]=useState\(false\)/);
+ assert.match(page,/calc\(\$\{sheetDragStartHeight\.current\}px - \$\{bookingSheetDragDelta\}px\)/);
+ assert.match(page,/height 380ms cubic-bezier\(\.22,1,\.36,1\)/);
+ assert.match(page,/setBookingSheetExpanded\(nextHeight>=maxHeight\*\.55\)/);
+ assert.doesNotMatch(page,/transform:bookingSheetDragDelta/);
+});
+test('driver home offers driver work only; vehicle rental remains a customer booking service',async()=>{
+ const home=await read('../src/components/CustomerHome.tsx');
+ const driver=home.slice(home.indexOf('const driverServices=['),home.indexOf('const merchantServices=['));
+ const customer=home.slice(home.indexOf('const customerServices=['),home.indexOf('const driverServices=['));
+ assert.doesNotMatch(driver,/Vehicle rental|rental/i);
+ assert.match(customer,/label:'Rental'/);
+ assert.match(home,/driver\?driverServices/);
+});
+test('login and customer role onboarding use branded MatMove vehicle illustrations',async()=>{
+ const shell=await read('../src/components/AuthShell.tsx');
+ const onboarding=await read('../src/pages/OnboardingPages.tsx');
+ assert.match(shell,/src="\/matmove-car\.svg"/);
+ assert.match(shell,/src="\/matmove-bike\.svg"/);
+ assert.match(onboarding,/illustration: '\/matmove-car\.svg'/);
+ assert.match(onboarding,/illustration: '\/matmove-bike\.svg'/);
+});
