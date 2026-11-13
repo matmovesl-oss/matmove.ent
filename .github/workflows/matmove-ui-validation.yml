@@ -40,3 +40,4 @@ jobs:
         run: npm run typecheck
       - name: Build production bundle
         run: npm run build
+# Validation rerun after latest UI adjustments.
