@@ -24,7 +24,7 @@ async function bundle(file,{controlled=false,extra=''}={}){
  }catch(e){await rm(dir,{recursive:true,force:true});throw e;}
 }
 function place(address,lng=-13.23,lat=8.48){return {formatted_address:address,place_id:address,geometry:{location:{lng:()=>lng,lat:()=>lat}}};}
-async function withPicker(fn,{places=[],rpcError=null,voice=false}={}){
+async function withPicker(fn,{places=[],rpcError=null,voice=false,layout='default',sheetContent=null}={}){
  const original={window:globalThis.window,document:globalThis.document,google:globalThis.google,navigator:Object.getOwnPropertyDescriptor(globalThis,'navigator')};
  let i=0,dirty=true,tree,timer=0,unmounted=false;
  const slots=[],effects=[],geocodes=[],routes=[],emitted=[],rpcs=[],gps=[],predictions=[],voices=[],savedTimers=new Map();
@@ -53,7 +53,7 @@ async function withPicker(fn,{places=[],rpcError=null,voice=false}={}){
  let currentUser=uid;
  globalThis.__bookingDb={auth:{getSession:async()=>({data:{session:{user:{id:currentUser}}}})},rpc:async(name,args)=>{rpcs.push({name,args});if(name==='matmove_home_preferences')return{data:{user_id:uid,places},error:rpcError};return{data:{kind:args.p_kind,address:args.p_address,latitude:args.p_latitude,longitude:args.p_longitude,version:2},error:null};}};
  const built=await bundle('src/components/RideLocationPicker.tsx',{controlled:true});
- function render(){i=0;dirty=false;tree=built.module.RideLocationPicker({userId:uid,onChange:v=>emitted.push(JSON.parse(JSON.stringify(v)))});for(const n of nodes(tree))if(n.type==='div'&&n.ref&&typeof n.ref==='object')n.ref.current={};while(effects.length)effects.shift()();}
+ function render(){i=0;dirty=false;tree=built.module.RideLocationPicker({userId:uid,onChange:v=>emitted.push(JSON.parse(JSON.stringify(v))),layout,sheetContent});for(const n of nodes(tree))if(n.type==='div'&&n.ref&&typeof n.ref==='object')n.ref.current={};while(effects.length)effects.shift()();}
  async function settle(){for(let x=0;x<10;x++){if(dirty&&!unmounted)render();await new Promise(resolve=>setImmediate(resolve));if(x>3&&!dirty)break;}if(dirty&&!unmounted)render();}
  function button(label){const matches=nodes(tree).filter(n=>n.type==='button'&&text(n)===label);assert.ok(matches.length,`Button missing: ${label}\n${text(tree)}`);return matches[0];}
  const h={get tree(){return tree;},get text(){return text(tree);},get last(){return emitted.at(-1);},geocodes,routes,gps,rpcs,predictions,voices,button,settle,setUser:id=>currentUser=id,
@@ -179,3 +179,21 @@ test('starting voice editing clears the previous destination and fare before any
  await h.click('Speak destination');assert.equal(h.last.destination,null);assert.equal(h.last.distanceKm,null);assert.equal(h.button('Preview route').props.disabled,true);
  await h.click('Stop microphone');assert.equal(h.last.destination,null);assert.equal(h.voices[0].aborted,true);
 },{voice:true}));
+
+
+test('map-first ride booking keeps map visible behind one expandable pickup, destination, fare and payment sheet',()=>withPicker(async h=>{
+ assert.match(h.text,/Plan your trip/);
+ assert.match(h.text,/Pickup address/);
+ assert.match(h.text,/Destination address/);
+ assert.match(h.text,/Fare and payment controls/);
+ const map=nodes(h.tree).find(n=>n.type==='div'&&n.props['aria-label']==='Choose pickup and destination on the map');
+ assert.ok(map);
+ assert.match(map.props.className,/absolute inset-0/);
+ const toggle=nodes(h.tree).find(n=>n.type==='button'&&n.props['aria-controls']==='matmove-ride-booking-sheet-content');
+ assert.ok(toggle);
+ assert.equal(toggle.props['aria-expanded'],true);
+ toggle.props.onClick();await h.settle();
+ const collapsed=nodes(h.tree).find(n=>n.type==='button'&&n.props['aria-controls']==='matmove-ride-booking-sheet-content');
+ assert.equal(collapsed.props['aria-expanded'],false);
+ assert.doesNotMatch(h.text,/Fare and payment controls/);
+}, {layout:'map-first',sheetContent:React.createElement('div',null,'Fare and payment controls')}));
