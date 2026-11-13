@@ -804,6 +804,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                   userId={profile?.id}
                   onBack={onBack}
                   bookingReady={Boolean(pickupCoords && destinationCoords)}
+                  bookingSheetExpanded={bookingSheetExpanded}
                   onRouteEditingChange={setRouteEditing}
                   onChange={(selection: TripLocations) => {
                     const ready = Boolean(selection.pickup && selection.destination);
