@@ -492,35 +492,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     />
   );
 
-  return (
-    <div className="flex-1 bg-slate-50 min-h-screen">
-      <header className={`bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm ${activeSection === 'wallet' ? 'hidden' : ''}`}>
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">
-            Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋
-          </h1>
-        </div>
-
-        <div className="flex gap-2">
-          <button onClick={() => setIsLoadModalOpen(true)} disabled={!canLoad || !hasSleAccount || isSettingUpWallet} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Load</button>
-          <button onClick={() => setIsPayoutModalOpen(true)} disabled={!canSend || !hasSleAccount} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Payout</button>
-          <button onClick={() => setIsTransferModalOpen(true)} disabled={!canSend || !hasSleAccount} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Transfer</button>
-        </div>
-      </header>
-
-      {(rideNotice || walletNotice) && (
-        <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
-          {rideNotice && <p>{rideNotice}</p>}
-          {walletNotice && <p>{walletNotice}</p>}
-        </div>
-      )}
-
-      {walletSetupPanel}
-
-      <div className="p-4 max-w-6xl mx-auto space-y-4">
-        {(activeSection === 'home' || activeSection === 'ride' || !activeSection) && (
-          <div className="relative flex min-w-0 flex-col gap-0">
-            <div className="order-2 relative z-20 -mt-5 max-h-[58dvh] overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl space-y-3">
+  const bookingPanelContent = (
+    <div className="space-y-3">
               <p className="text-xs text-slate-500">Book your ride, keke, bike, or delivery below.</p>
               <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
                 <button onClick={() => setViewMode('active')} className={`font-bold ${viewMode === 'active' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Active Request</button>
@@ -771,38 +744,70 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                   )}
                 </div>
               )}
-            </div>
+    </div>
+  );
+  return (
+    <div className="flex-1 bg-slate-50 min-h-screen">
+      <header className={`bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm ${activeSection === 'wallet' ? 'hidden' : ''}`}>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">
+            Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋
+          </h1>
+        </div>
 
-            <div className="order-1 min-w-0">
-              {activeBooking && ['accepted', 'in_progress'].includes(activeBooking.status) ? (
+        <div className="flex gap-2">
+          <button onClick={() => setIsLoadModalOpen(true)} disabled={!canLoad || !hasSleAccount || isSettingUpWallet} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Load</button>
+          <button onClick={() => setIsPayoutModalOpen(true)} disabled={!canSend || !hasSleAccount} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Payout</button>
+          <button onClick={() => setIsTransferModalOpen(true)} disabled={!canSend || !hasSleAccount} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Transfer</button>
+        </div>
+      </header>
+
+      {(rideNotice || walletNotice) && (
+        <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
+          {rideNotice && <p>{rideNotice}</p>}
+          {walletNotice && <p>{walletNotice}</p>}
+        </div>
+      )}
+
+      {walletSetupPanel}
+
+      <div className={activeSection === 'wallet' ? 'p-4 max-w-6xl mx-auto space-y-4' : 'w-full max-w-6xl mx-auto'}>
+        {(activeSection === 'home' || activeSection === 'ride' || !activeSection) && (
+                    <div className="relative min-w-0">
+            {activeBooking && ['accepted', 'in_progress'].includes(activeBooking.status) ? (
+              <div className="relative min-w-0 space-y-3">
+                <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                  {bookingPanelContent}
+                </div>
                 <ActiveTripMap key={activeBooking.id} userId={profile?.id} bookingId={activeBooking.id} />
-              ) : (
-                <RideLocationPicker
-                  layout="map-first"
-                  key={profile?.id || 'location-picker'}
-                  userId={profile?.id}
-                  onChange={(selection: TripLocations) => {
-                    setPickup(selection.pickup?.address || '');
-                    setDestination(selection.destination?.address || '');
-                    setPickupCoords(selection.pickup?.coords || null);
-                    setDestinationCoords(selection.destination?.coords || null);
-                    setTripDistanceKm(selection.distanceKm);
+              </div>
+            ) : (
+              <RideLocationPicker
+                layout="map-first"
+                key={profile?.id || 'location-picker'}
+                userId={profile?.id}
+                sheetContent={bookingPanelContent}
+                onChange={(selection: TripLocations) => {
+                  setPickup(selection.pickup?.address || '');
+                  setDestination(selection.destination?.address || '');
+                  setPickupCoords(selection.pickup?.coords || null);
+                  setDestinationCoords(selection.destination?.coords || null);
+                  setTripDistanceKm(selection.distanceKm);
 
-                    if (selection.distanceKm !== null) {
-                      const rate = pricingRates?.[vehicleType] || defaultPricing[vehicleType] || { min: 15, perKm: 3 };
-                      setOfferAmount(
-                        Math.max(
-                          rate.min,
-                          Math.ceil((rate.min + selection.distanceKm * rate.perKm) / 5) * 5
-                        ).toString()
-                      );
-                    } else {
-                      setOfferAmount('');
-                    }
-                  }}
-                />
-              )}
-            </div>
+                  if (selection.distanceKm !== null) {
+                    const rate = pricingRates?.[vehicleType] || defaultPricing[vehicleType] || { min: 15, perKm: 3 };
+                    setOfferAmount(
+                      Math.max(
+                        rate.min,
+                        Math.ceil((rate.min + selection.distanceKm * rate.perKm) / 5) * 5
+                      ).toString()
+                    );
+                  } else {
+                    setOfferAmount('');
+                  }
+                }}
+              />
+            )}
           </div>
         )}
 
