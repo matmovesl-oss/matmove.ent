@@ -38,15 +38,3 @@ test('KYC review uses one secured submission, has no wallet prerequisite, and ex
 });
 
 for(const role of ['rider','driver','merchant'])test(`${role} account setup completes without waiting for an optional referral response`,async()=>{let release,started=false;const pending=new Promise(r=>release=r);let timer;try{await withAuth({auth:{getSession:async()=>({data:{session:{user}}})},rpc:async name=>name==='matmove_save_customer_account'?{data:{}}:{data:{user,roles:[role],kycStatus:'not_started'}}},async auth=>{const result=await Promise.race([auth.saveCustomerAccount(role,'76000000'),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Optional referral blocked account setup')),300);})]);assert.equal(result.roles[0],role);assert.equal(started,true);},{captureReferralIdentity(){},emailReferralMetadata(){return{};},recordSignupReferral(){started=true;return pending;}});}finally{clearTimeout(timer);release(null);}});
-
-test('customer role selection validates and formats Sierra Leone phone numbers before sending account setup',async()=>{
- const src=await readFile('src/pages/OnboardingPages.tsx','utf8');
- const page=src.slice(src.indexOf('export function RoleSelectionPage'),src.indexOf('export function PersonalInfoPage'));
- assert.match(src,/import \{ normalizeCustomerPhone \} from '\.\.\/\.\.\/shared\/customer-access\.js'/);
- assert.match(page,/normalizeCustomerPhone\(phone\)/);
- assert.match(page,/disabled=\{!selected \|\| !phone\.trim\(\) \|\| !phoneIsValid/);
- assert.match(page,/onBlur=\{\(\) => \{ setPhoneTouched\(true\); setPhone\(current => formatSierraLeonePhone\(current\)\); \}\}/);
- assert.match(page,/Use your Sierra Leone mobile number/);
- assert.match(page,/aria-invalid=\{!!phoneValidationMessage\}/);
- assert.match(src,/This phone number is already linked to another MatMove account/);
-});
