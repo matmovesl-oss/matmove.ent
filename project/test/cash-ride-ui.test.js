@@ -53,6 +53,6 @@ test('cash trip submission uses the same booking ID for fee reservation recovery
   assert.match(hook, /payment_method\s*===\s*'cash'/);
   assert.match(hook, /reserveCashRide\(body\.id/);
   assert.match(hook, /accept-ride-escrow\?action=cash_reserve/);
-  assert.match(service, /cash_confirm: '\/api\/start-ride\?action=cash_confirm'/);
-  assert.match(service, /cash_reserve: '\/api\/start-ride\?action=cash_reserve'/);
+  assert.match(service, /cash_confirm: '\/api\/accept-ride-escrow\?action=cash_confirm'/);
+  assert.match(service, /cash_reserve: '\/api\/accept-ride-escrow\?action=cash_reserve'/);
 });
