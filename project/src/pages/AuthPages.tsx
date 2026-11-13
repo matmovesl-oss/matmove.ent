@@ -49,9 +49,6 @@ export function LoginPage() {
                 {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
               </button>
             </div>
-            <div className="mt-2 flex justify-start gap-4 text-sm">
-              <button type="button" onClick={() => navigate('/forgot-password')} className="font-semibold text-[#184f9a] hover:underline">Forgot password?</button>
-            </div>
           </label>
           
           {error && <div className="p-3 bg-red-50 text-red-600 text-sm font-medium rounded-lg border border-red-100">{error}</div>}
