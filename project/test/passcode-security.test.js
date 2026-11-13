@@ -29,10 +29,10 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  const row=(await pg.query('select * from matmove_customer_passcodes where user_id=$1',[uid])).rows[0];assert.match(row.pin_hash,/^\$2a\$10\$/);assert.equal(row.digits,4);assert.equal((await pg.query('select passcode from profiles where id=$1',[uid])).rows[0].passcode,null);
  await session(uid);const status=await rpc('status');assert.equal(status.digits,4);assert.equal(status.configured,true);assert.equal(status.ok,false);assert.ok(!JSON.stringify(status).includes('012345'));assert.ok(!('pin_hash' in status));
  });
- await t.test('existing six-digit verification and change preserve identity and balance',async()=>{
- assert.equal((await rpc('verify','0123')).code,'upgrade_required');await assert.rejects(rpc('change','0123','1234'),/6 and 9 digits/);
- const saved=await rpc('change','0123','012345');assert.equal(saved.code,'saved');assert.equal(saved.digits,6);assert.equal(saved.ok,true);
- assert.equal((await rpc('verify','012345')).code,'verified');assert.equal((await rpc('verify','0123')).ok,false);
+  await t.test('legacy four-digit verification upgrades to six digits and preserves identity and balance',async()=>{
+  await session(uid);assert.equal((await rpc('verify','0123')).code,'upgrade_required');await assert.rejects(rpc('change','0123','1234'),/6 and 9 digits/);
+  const saved=await rpc('change','0123','112233');assert.equal(saved.code,'saved');assert.equal(saved.digits,6);assert.equal(saved.ok,true);
+  assert.equal((await rpc('verify','112233')).code,'verified');assert.equal((await rpc('verify','0123')).ok,false);
  await pg.exec('reset role');assert.equal((await pg.query('select kyc_status from profiles where id=$1',[uid])).rows[0].kyc_status,'approved');assert.equal((await pg.query('select balance from wallets where user_id=$1',[uid])).rows[0].balance,'42.50');
  });
  await t.test('five wrong guesses persist a cooldown across status, create and verify calls',async()=>{
