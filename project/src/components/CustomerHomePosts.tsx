@@ -34,7 +34,8 @@ export default function CustomerHomePosts({userId}:{userId:string}){
   try{
    const session=await supabase.auth.getSession();
    if(session.error||session.data.session?.user.id!==userId)throw new Error('Sign in again to view MatMove updates.');
-   const result=await supabase.from('matmove_homepage_posts').select('id,title,summary,body,image_path,starts_at,expires_at,display_order,created_at').eq('status','published').is('deleted_at',null).order('display_order',{ascending:true}).order('created_at',{ascending:false}).limit(3);
+   const now=new Date().toISOString();
+   const result=await supabase.from('matmove_homepage_posts').select('id,title,summary,body,image_path,starts_at,expires_at,display_order,created_at').eq('status','published').is('deleted_at',null).or(`starts_at.is.null,starts_at.lte.${now}`).or(`expires_at.is.null,expires_at.gt.${now}`).order('display_order',{ascending:true}).order('created_at',{ascending:false}).limit(3);
    if(result.error)throw result.error;
    const after=await supabase.auth.getSession();
    if(after.error||after.data.session?.user.id!==userId)throw new Error('Your sign-in changed. Refresh the page.');
