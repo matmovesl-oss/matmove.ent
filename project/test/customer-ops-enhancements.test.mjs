@@ -83,7 +83,7 @@ test('Customer account closure creates a reviewed request rather than deleting f
 });
 
 
-test('password recovery is offered only on the passcode screen and changes only the account password',async()=>{
+test('passcode recovery is offered only on the passcode screen and changes only the passcode',async()=>{
   const fs=await import('node:fs/promises');
   const [auth,app,lock,service,recovery]=await Promise.all([
     fs.readFile('src/pages/AuthPages.tsx','utf8'),
@@ -98,16 +98,16 @@ test('password recovery is offered only on the passcode screen and changes only 
   assert.equal(login.includes('Forgot passcode?'),false);
   assert.equal(signup.includes('Forgot password?'),false);
   assert.equal(signup.includes('Forgot passcode?'),false);
-  assert.equal(lock.includes('Forgot password?'),true);
-  assert.equal(lock.includes('Forgot passcode?'),false);
-  assert.equal(lock.includes('requestAccountPasswordReset(resetEmail)'),true);
-  assert.equal(lock.includes('Your MatMove passcode will remain unchanged'),true);
+  assert.equal(lock.includes('Forgot password?'),false);
+  assert.equal(lock.includes('Forgot passcode?'),true);
+  assert.equal(lock.includes('requestPasscodeReset(resetEmail)'),true);
+  assert.equal(lock.includes('Your account password will not change'),true);
   assert.equal(app.includes('path="/forgot-password"'),false);
   assert.equal(app.includes('path="/forgot-passcode"'),false);
   assert.equal(app.includes('path="/reset-password"'),true);
-  assert.equal(service.includes("customerAuthRedirect('/auth/callback?type=recovery&next=%2Freset-password')"),true);
-  assert.equal(recovery.includes("supabase.auth.updateUser({ password })"),true);
-  assert.equal(recovery.includes("mode === 'password'"),true);
+  assert.equal(service.includes("customerAuthRedirect('/auth/callback?type=recovery&next=%2Freset-passcode')"),true);
+  assert.equal(recovery.includes("customerPasscode(userId, 'recover', null, newPin)"),true);
+  assert.equal(recovery.includes("mode === 'passcode'"),true);
   assert.equal(recovery.includes('recoveryReady'),true);
 });
 
