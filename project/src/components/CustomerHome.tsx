@@ -1,5 +1,5 @@
 import {ArrowRight,Car,MapPin,Wallet,Store,ShoppingBag} from 'lucide-react';
-type Props={profile:any;onNavigate:(section:string)=>void};
+type Props={profile:any;onNavigate:(section:'ride'|'account'|'services')=>void};
 export default function CustomerHome({profile,onNavigate}:Props){
  const role=String(profile?.role||'rider'),driver=role==='driver',merchant=role==='merchant';
  const name=String(profile?.first_name||profile?.full_name||profile?.business_name||'there').trim().split(/\s+/)[0];
