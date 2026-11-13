@@ -9,8 +9,8 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  const pg=new PGlite({extensions:{pgcrypto},postgresqlconf:['shared_buffers=16MB','max_connections=10','work_mem=1MB']});
  try{
  await pg.exec(`create role anon;create role authenticated;create role service_role;create schema auth;
- create function auth.uid() returns uuid language sql stable as $select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$;
- create function auth.jwt() returns jsonb language sql stable as $select coalesce(nullif(current_setting('request.jwt.claims',true),'')::jsonb,'{}'::jsonb)$;
+ create function auth.uid() returns uuid language sql stable as $select$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $select$;
+ create function auth.jwt() returns jsonb language sql stable as $select$ select coalesce(nullif(current_setting('request.jwt.claims',true),'')::jsonb,'{}'::jsonb) $select$;
  create table auth.users(id uuid primary key,recovery_sent_at timestamptz);insert into auth.users(id) values('${uid}'),('${other}'),('${staff}');
  create table auth.sessions(id uuid primary key,user_id uuid not null,created_at timestamptz not null,not_after timestamptz);
  create table profiles(id uuid primary key references auth.users(id),role text,passcode text,kyc_status text,full_name text);
@@ -103,7 +103,7 @@ test('credential recovery screens are separate and each updates only its selecte
  assert.ok(callback.includes("requestedNext === '/reset-passcode'"));
  assert.match(authService,/next=%2Freset-passcode/);
  assert.match(lock,/Your account password will not change/);
- assert.match(lock,/requestPasscodeReset\\(resetEmail\\)/);
+ assert.ok(lock.includes('requestPasscodeReset(resetEmail)'));
  assert.doesNotMatch(lock,/requestAccountPasswordReset/);
  const operationStart=screen.indexOf("if (mode === 'password') {\\n        const { error: updateError }");
  const operationElse=screen.indexOf("} else {",operationStart);
