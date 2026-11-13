@@ -4,8 +4,8 @@ type RideAction = 'accept' | 'start' | 'complete' | 'cancel' | 'cash_reserve' | 
 const urls: Record<RideAction, string> = {
   accept: '/api/accept-ride-escrow', start: '/api/start-ride',
   complete: '/api/complete-ride-payout', cancel: '/api/cancel-ride',
-  cash_reserve: '/api/start-ride?action=cash_reserve',
-  cash_confirm: '/api/start-ride?action=cash_confirm',
+  cash_reserve: '/api/accept-ride-escrow?action=cash_reserve',
+  cash_confirm: '/api/accept-ride-escrow?action=cash_confirm',
 };
 
 export async function updateRide(action: RideAction, bookingId: string) {
@@ -26,7 +26,7 @@ export async function updateRide(action: RideAction, bookingId: string) {
 }
 
 export async function readRidePayment(bookingId: string) {
-  const { response, data, finish } = await walletFetch('/api/start-ride?action=status', { bookingId });
+  const { response, data, finish } = await walletFetch('/api/accept-ride-escrow?action=status', { bookingId });
   if (!response.ok) throw new Error(data.error || 'Unable to read ride payment details.');
   finish();
   return data;
