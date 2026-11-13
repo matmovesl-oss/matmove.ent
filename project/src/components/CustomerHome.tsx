@@ -13,7 +13,7 @@ const driverServices=[
  {label:'Driver radar',detail:'Go online and view requests',icon:Navigation,illustration:'/matmove-bike.svg',accent:'bg-emerald-50 text-emerald-700'},
  {label:'My trips',detail:'Review your recent journeys',icon:Car,illustration:'/matmove-car.svg',accent:'bg-sky-50 text-sky-700'},
  {label:'Earnings',detail:'See your wallet and payouts',icon:Wallet,illustration:null,accent:'bg-amber-50 text-amber-700'},
- {label:'Vehicle rental',detail:'Explore rental opportunities',icon:KeyRound,illustration:'/matmove-van.svg',accent:'bg-violet-50 text-violet-700'},
+
 ];
 const merchantServices=[
  {label:'My shop',detail:'Manage products and orders',icon:Store,illustration:null,accent:'bg-emerald-50 text-emerald-700'},
