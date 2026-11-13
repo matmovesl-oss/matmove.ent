@@ -119,13 +119,13 @@ test('new passcodes use six through nine digits and preserve legacy verification
  const component=await readFile('src/components/CustomerPasscode.tsx','utf8');
  const screen=await readFile('src/pages/UpdatePassword.tsx','utf8');
  assert.match(migration,/digits between 6 and 10/);
- assert.match(migration,/\^\[0-9\]\{6,10\}\$/);
+ assert.match(migration,/\^\[0-9\]\{6,9\}\$/);
  assert.match(migration,/recovery_session_id = session_id/);
  assert.match(migration,/auth\.sessions/);
  assert.match(migration,/recovery_sent_at/);
  assert.doesNotMatch(migration,/auth\.jwt\(\)->'amr'/);
- assert.match(component,/\^\\d\{6,10\}\$/);
- assert.match(screen,/pattern="\[0-9\]\{6,10\}"/);
+ assert.match(component,/\^\\d\{6,9\}\$/);
+ assert.match(screen,/pattern="\[0-9\]\{6,9\}"/);
  assert.match(screen,/maxLength=\{9\}/);
  assert.match(screen,/slice\(0, 9\)/);
 });
