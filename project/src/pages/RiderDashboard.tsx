@@ -18,7 +18,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {
-  Car, Package, MapPin, ShoppingBag, Loader2,
+  Car, CarFront, Bike, Truck, Package, MapPin, ShoppingBag, Loader2,
   CalendarClock, Plus, Minus, ArrowRight, Wallet,
   RefreshCw, X, Smartphone, ArrowDownLeft,
   ArrowUpRight, Users, ShoppingCart, Activity,
@@ -604,15 +604,28 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
 
                   <div className="space-y-3">
                     <div><div className="mb-2 flex items-center justify-between"><span className="text-xs font-extrabold text-slate-800">Choose your vehicle</span><span className="text-[10px] font-semibold text-slate-400">Tap to select</span></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      {(['keke', 'bike', 'car', 'van'] as const).map(v => (
-                        <button
-                          key={v}
-                          onClick={() => setVehicleType(v)}
-                          aria-pressed={vehicleType === v} className={`min-h-12 rounded-xl border px-3 py-2 text-xs font-extrabold uppercase tracking-wide transition ${vehicleType === v ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm ring-1 ring-emerald-200' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50'}`} 
-                        >
-                          {v}
-                        </button>
-                      ))}
+                      {(['keke', 'bike', 'car', 'van'] as const).map(v => {
+                        const VehicleIcon = v === 'bike' ? Bike : v === 'van' ? Truck : CarFront;
+                        const label = v === 'bike' ? 'Motorbike' : v === 'keke' ? 'Keke' : v === 'car' ? 'Car' : 'Van';
+                        const selected = vehicleType === v;
+                        return (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setVehicleType(v)}
+                            aria-label={`Choose ${label}`}
+                            aria-pressed={selected}
+                            className={`group relative flex min-h-[76px] items-center gap-3 overflow-hidden rounded-2xl border p-3 text-left transition duration-200 ${selected ? 'border-emerald-400 bg-gradient-to-br from-emerald-50 to-white text-emerald-900 shadow-[0_8px_24px_rgba(5,150,105,.12)] ring-1 ring-emerald-200' : 'border-slate-200 bg-white text-slate-600 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md'}`}
+                          >
+                            <span aria-hidden="true" className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] shadow-inner transition ${selected ? 'bg-gradient-to-br from-emerald-600 to-teal-500 text-white' : 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600'}`}>
+                              <span className="absolute inset-1 rounded-[14px] border border-white/40"/>
+                              <VehicleIcon size={24} strokeWidth={2.1}/>
+                              {selected && <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-white ring-2 ring-emerald-500"/>}
+                            </span>
+                            <span className="min-w-0"><span className="block text-xs font-black">{label}</span><span className="mt-0.5 block text-[10px] text-slate-400">{v==='keke'?'3 seats':v==='bike'?'Quick solo ride':v==='car'?'Comfort ride':'Extra space'}</span></span>
+                          </button>
+                        );
+                      })}
                     </div></div>
 
                     <p className="text-xs leading-5 text-slate-500">Choose pickup and destination on the map above. MatMove will preview your route and estimate the fare.</p>
