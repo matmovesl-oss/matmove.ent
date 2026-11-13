@@ -146,15 +146,26 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
   const location = useLocation();
   const {session:portalSession}=useAuth();
   const sectionOwner=portalSession?.user.id||'';
+  const sessionUser=portalSession?.user;
+  const initialProfile=sessionUser?.id&&portalSession?.roles?.[0]?{
+    id:sessionUser.id,
+    email:sessionUser.email||'',
+    phone:sessionUser.phone||'',
+    first_name:sessionUser.firstName||'',
+    last_name:sessionUser.lastName||'',
+    full_name:[sessionUser.firstName,sessionUser.lastName].filter(Boolean).join(' '),
+    role:portalSession.roles[0],
+    kyc_status:portalSession.kycStatus||'not_started'
+  }:null;
 
   const [profile, setProfile] =
-    useState<any>(null);
+    useState<any>(initialProfile);
 
   const [wallet, setWallet] =
     useState<any>(null);
 
   const [loading, setLoading] =
-    useState(true);
+    useState(!initialProfile);
 
   const [portalError, setPortalError] =
     useState('');
@@ -208,7 +219,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     useCallback(async () => {
       try {
         setPortalError('');
-        setLoading(true);
+        if (!profile?.id) setLoading(true);
 
         const {
           data: { session },
@@ -277,11 +288,11 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
           wallets: walletData || [],
         });
       } catch (err: any) {
-        setPortalError(err.message);
+        if (!profile?.id) setPortalError(err.message || 'Unable to load your account.');
       } finally {
         setLoading(false);
       }
-    }, [location.pathname]);
+    }, [location.pathname, profile?.id]);
 
   useEffect(() => {
     fetchUserData();
