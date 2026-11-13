@@ -127,7 +127,20 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
     setTexts({ ...textsRef.current }); setResults(null); setSearching(null); clearRoute();
     const position = { lat: point.coords[1], lng: point.coords[0] };
     if (!markers.current[target]) {
-      const marker = new google.maps.Marker({ map: map.current, position, draggable: true, title: target === 'pickup' ? 'Pickup' : 'Destination', label: target === 'pickup' ? 'A' : 'B' });
+      const markerColour = target === 'pickup' ? '#059669' : '#0f172a';
+      const markerSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="52" height="60" viewBox="0 0 52 60"><defs><filter id="s" x="-40%" y="-30%" width="180%" height="180%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#0f172a" flood-opacity=".24"/></filter></defs><path filter="url(#s)" d="M26 2C12.75 2 2 12.75 2 26c0 17 24 32 24 32s24-15 24-32C50 12.75 39.25 2 26 2Z" fill="${markerColour}" stroke="#fff" stroke-width="3"/><circle cx="26" cy="25" r="10" fill="#fff"/><circle cx="26" cy="25" r="4" fill="${markerColour}"/></svg>`;
+      const marker = new google.maps.Marker({
+        map: map.current,
+        position,
+        draggable: true,
+        title: target === 'pickup' ? 'Pickup location' : 'Destination location',
+        icon: {
+          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(markerSvg),
+          scaledSize: new google.maps.Size(44, 52),
+          anchor: new google.maps.Point(22, 49)
+        },
+        zIndex: target === 'destination' ? 20 : 10
+      });
       const ownGeneration = generation.current;
       marker.addListener('dragend', (event: google.maps.MapMouseEvent) => {
         if (generation.current === ownGeneration && event.latLng) selectCoordinates(target, [event.latLng.lng(), event.latLng.lat()]);
