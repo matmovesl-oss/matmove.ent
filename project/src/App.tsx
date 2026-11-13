@@ -5,6 +5,7 @@ import MatMoveHelp, {customerHelpSection} from '@/components/MatMoveHelp';
 import NotificationBell from '@/components/NotificationBell';
 
 import PortalHome from '@/components/PortalHome';
+import CustomerHome from '@/components/CustomerHome';
 import PortalGuide from '@/components/PortalGuide';
 import AccountProfile, {AccountIdentity} from '@/components/AccountProfile';
 
@@ -100,6 +101,7 @@ import {
 type PortalSection =
   | 'home'
   | 'ride'
+  | 'services'
   | 'wallet'
   | 'trips'
   | 'shop'
@@ -158,7 +160,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     useState('');
 
   const [activeSection, setActiveSection] =
-    useState<PortalSection>(()=>{try{const saved=sessionStorage.getItem(`matmove:portal-section:v1:${sectionOwner}`);return ['home','ride','wallet','trips','shop','inventory','account'].includes(saved||'')?saved as PortalSection:'home';}catch{return 'home';}});
+    useState<PortalSection>(()=>{try{const saved=sessionStorage.getItem(`matmove:portal-section:v1:${sectionOwner}`);return ['home','ride','services','wallet','trips','shop','inventory','account'].includes(saved||'')?saved as PortalSection:'home';}catch{return 'home';}});
   const [guideReplay,setGuideReplay]=useState(0);
   const [sectionTransitioning,setSectionTransitioning]=useState(false);
   const previousSectionRef=useRef(activeSection);
@@ -169,7 +171,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     const timeout=window.setTimeout(()=>setSectionTransitioning(false),260);
     return ()=>window.clearTimeout(timeout);
   },[activeSection]);
-  useEffect(()=>{if(!sectionOwner||profile?.id!==sectionOwner)return;const sections=['home','ride','wallet','trips','account',...(profile.role==='rider'?['shop']:profile.role==='merchant'?['inventory']:[])];if(!sections.includes(activeSection)){setActiveSection('home');return;}try{sessionStorage.setItem(`matmove:portal-section:v1:${sectionOwner}`,activeSection);}catch{}},[sectionOwner,profile?.id,profile?.role,activeSection]);
+  useEffect(()=>{if(!sectionOwner||profile?.id!==sectionOwner)return;const sections=['home','ride','services','wallet','trips','account',...(profile.role==='rider'?['shop']:profile.role==='merchant'?['inventory']:[])];if(!sections.includes(activeSection)){setActiveSection('home');return;}try{sessionStorage.setItem(`matmove:portal-section:v1:${sectionOwner}`,activeSection);}catch{}},[sectionOwner,profile?.id,profile?.role,activeSection]);
 
   const [loggingOut, setLoggingOut] =
     useState(false);
@@ -384,8 +386,9 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
       {accountHeader}
       <div className="mx-auto max-w-6xl px-4"><KycStatusNotice profile={profile} onVerify={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal?resume=1'); }}/></div>
       <div className={sectionTransitioning ? 'mm-section-enter' : undefined}>
-        {activeSection === 'home' && <PortalHome key={`${profile.id}:${role}`} profile={profile} onNavigate={setActiveSection} />}
-        {activeSection !== 'home' && role === 'rider' && (
+        {activeSection === 'home' && <CustomerHome key={`${profile.id}:${role}`} profile={profile} onNavigate={setActiveSection} />}
+        {activeSection === 'services' && <PortalHome key={`${profile.id}:${role}:services`} profile={profile} mode="services" onNavigate={setActiveSection} />}
+        {activeSection !== 'home' && activeSection !== 'services' && role === 'rider' && (
           <RiderDashboard
             profile={profile}
             wallet={wallet}
@@ -393,7 +396,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
           />
         )}
 
-        {activeSection !== 'home' && role === 'driver' && (
+        {activeSection !== 'home' && activeSection !== 'services' && role === 'driver' && (
           <DriverDashboard
             profile={profile}
             wallet={wallet}
@@ -401,7 +404,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
           />
         )}
 
-        {activeSection !== 'home' && role === 'merchant' && (
+        {activeSection !== 'home' && activeSection !== 'services' && role === 'merchant' && (
           <MerchantDashboard
             profile={profile}
             wallet={wallet}
