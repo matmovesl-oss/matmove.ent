@@ -125,6 +125,7 @@ test('new passcodes use six through nine digits and preserve legacy verification
  assert.match(migration,/recovery_sent_at/);
  assert.doesNotMatch(migration,/auth\.jwt\(\)->'amr'/);
  assert.match(component,/\^\\d\{6,9\}\$/);
+ assert.match(component,/\[0-9\]\{6,10\}/); // existing ten-digit credentials remain verifiable
  assert.match(screen,/pattern="\[0-9\]\{6,9\}"/);
  assert.match(screen,/maxLength=\{9\}/);
  assert.match(screen,/slice\(0, 9\)/);
