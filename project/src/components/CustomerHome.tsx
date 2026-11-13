@@ -26,6 +26,7 @@ export default function CustomerHome({profile,onNavigate}:Props){
  const role=String(profile?.role||'rider'),driver=role==='driver',merchant=role==='merchant';
  const name=String(profile?.first_name||profile?.full_name||profile?.business_name||'there').trim().split(/\\s+/)[0];
  const services=driver?driverServices:merchant?merchantServices:customerServices;
+ const openRide=()=>onNavigate('ride');
  return <main className="mm-portal-morph mx-auto min-h-[calc(100dvh-136px)] max-w-6xl space-y-6 px-4 pb-28 pt-5 sm:px-6">
   <header className="flex items-center justify-between gap-3">
    <div><p className="text-xs font-bold uppercase tracking-[.18em] text-emerald-700">{driver?'Driver space':merchant?'Business space':'Your MatMove'}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Hello, {name}.</h1><p className="mt-1 text-sm text-slate-500">{driver?'Your next earning journey starts here.':merchant?'Let’s grow your business today.':'Where will today take you?'}</p></div>
@@ -39,7 +40,7 @@ export default function CustomerHome({profile,onNavigate}:Props){
     <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-emerald-100"><Sparkles size={13}/> MATMOVE · SIERRA LEONE</span>
     <h2 className="mt-5 text-3xl font-black leading-[1.08] sm:text-4xl">{driver?'Ready to get moving and earn?':merchant?'Your business, moving forward.':'Your city. Your journey. One tap away.'}</h2>
     <p className="mt-3 max-w-md text-sm leading-6 text-slate-300">{driver?'Go online when you are ready and connect with nearby customers.':merchant?'Manage your shop, serve customers and follow your business activity.':'Rides, food, parcels and rentals — the everyday services you need in one place.'}</p>
-    <button type="button" onClick={()=>onNavigate(driver?'ride':merchant?'services':'ride')} className="mt-6 inline-flex min-h-12 items-center gap-3 rounded-2xl bg-white px-5 py-3 font-bold text-slate-950 transition hover:bg-emerald-50">{driver?'Open driver radar':merchant?'Explore business tools':'Where to?'} <ArrowRight size={18}/></button>
+    <button type="button" onClick={driver||!merchant?openRide:()=>onNavigate('services')} className="mt-6 inline-flex min-h-12 items-center gap-3 rounded-2xl bg-white px-5 py-3 font-bold text-slate-950 transition hover:bg-emerald-50">{driver?'Open driver radar':merchant?'Explore business tools':'Where to?'} <ArrowRight size={18}/></button>
    </div>
    <div aria-hidden="true" className="absolute bottom-7 right-8 hidden items-center justify-center rounded-3xl border border-white/15 bg-white/10 p-5 text-emerald-100 sm:flex"><Car size={46} strokeWidth={1.4}/></div>
   </section>
@@ -55,7 +56,7 @@ export default function CustomerHome({profile,onNavigate}:Props){
 
   <section className="grid gap-3 sm:grid-cols-2">
    <button type="button" onClick={()=>onNavigate('account')} className="flex min-h-24 items-center gap-4 rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-emerald-200"><span className="rounded-2xl bg-emerald-50 p-3 text-emerald-700"><Wallet size={22}/></span><span className="min-w-0"><b className="block text-slate-950">My wallet</b><small className="text-slate-500">Balances, top-ups and payments</small></span><ArrowRight className="ml-auto shrink-0 text-slate-400"/></button>
-   <button type="button" onClick={()=>onNavigate('services')} className="flex min-h-24 items-center gap-4 rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-emerald-200"><span className="rounded-2xl bg-sky-50 p-3 text-sky-700"><MapPin size={22}/></span><span className="min-w-0"><b className="block text-slate-950">More from MatMove</b><small className="text-slate-500">Travel, events and concierge services</small></span><ArrowRight className="ml-auto shrink-0 text-slate-400"/></button>
+   <button type="button" onClick={openRide} className="flex min-h-24 items-center gap-4 rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-emerald-200"><span className="rounded-2xl bg-sky-50 p-3 text-sky-700"><MapPin size={22}/></span><span className="min-w-0"><b className="block text-slate-950">Manage places</b><small className="text-slate-500">Home, Work and favourite locations</small></span><ArrowRight className="ml-auto shrink-0 text-slate-400"/></button>
   </section>
  </main>;
 }
