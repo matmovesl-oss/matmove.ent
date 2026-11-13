@@ -79,8 +79,8 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
   await pg.query('insert into auth.sessions(id,user_id,created_at,not_after) values($1,$2,now(),null)',[secondSession,uid]);
   await session(uid);
   await pg.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({session_id:secondSession})]);
-  await assert.rejects(rpc('recover',null,'12345'),/6 and 10 digits/i);
-  await assert.rejects(rpc('recover',null,'12345678901'),/6 and 10 digits/i);
+  await assert.rejects(rpc('recover',null,'12345'),/6 and 9 digits/i);
+  await assert.rejects(rpc('recover',null,'12345678901'),/6 and 9 digits/i);
   await assert.rejects(rpc('recover',null,'1234567890'),/6 and 9 digits/i);
   const nineDigitReset=await rpc('recover',null,'123456789');
   assert.equal(nineDigitReset.code,'saved');assert.equal(nineDigitReset.digits,9);
