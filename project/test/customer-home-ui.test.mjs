@@ -121,7 +121,7 @@ test('ride location panel follows the finger continuously and the map remains fu
 });
 test('ride booking sheet height tracks the drag handle and snaps smoothly on release',async()=>{
  const page=await read('../src/pages/RiderDashboard.tsx');
- assert.match(page,/const \[bookingSheetDragging,\s*setBookingSheetDragging\]=useState\(false\)/);
+ assert.match(page,/const \[bookingSheetDragging,\s*setBookingSheetDragging\]\s*=\s*useState\(false\)/);
  assert.match(page,/calc\(\$\{sheetDragStartHeight\.current\}px - \$\{bookingSheetDragDelta\}px\)/);
  assert.match(page,/height 380ms cubic-bezier\(\.22,1,\.36,1\)/);
  assert.match(page,/setBookingSheetExpanded\(nextHeight>=maxHeight\*\.55\)/);
