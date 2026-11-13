@@ -445,6 +445,7 @@ function AccountSection({
   const navigate = useNavigate();
   const resumeVerification = () => { if (profile.kyc_status === 'approved') return; sessionStorage.setItem('ob_role', profile.role); navigate('/onboarding/personal?resume=1'); };
   const [viewingGames, setViewingGames] = useState(false);
+  const [viewingWallet, setViewingWallet] = useState(false);
   const [
     showDeleteConfirm,
     setShowDeleteConfirm,
@@ -1174,6 +1175,20 @@ function AccountSection({
     );
   }
 
+  if (viewingWallet) {
+    const walletPage = profile.role === 'rider'
+      ? <RiderDashboard profile={profile} wallet={wallet} activeSection="wallet" />
+      : profile.role === 'driver'
+        ? <DriverDashboard profile={profile} wallet={wallet} activeSection="wallet" />
+        : <MerchantDashboard profile={profile} wallet={wallet} activeSection="wallet" />;
+    return <div className="min-h-screen bg-slate-50 px-4 pb-24 pt-4">
+      <div className="mx-auto mb-3 max-w-6xl">
+        <button type="button" onClick={() => setViewingWallet(false)} className="min-h-11 rounded-xl border bg-white px-4 text-sm font-bold text-slate-700">← Back to Account</button>
+      </div>
+      {walletPage}
+    </div>;
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
       <button
@@ -1186,6 +1201,11 @@ function AccountSection({
       <h1 className="text-3xl font-bold text-slate-900 mb-6">
         Account & Profile
       </h1>
+      <button type="button" onClick={() => setViewingWallet(true)} className="mb-5 flex w-full items-center gap-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-left transition hover:bg-emerald-100">
+        <span className="rounded-2xl bg-white p-3 text-emerald-700"><Wallet size={24}/></span>
+        <span className="min-w-0 flex-1"><strong className="block text-slate-950">Wallet & payments</strong><span className="mt-1 block text-xs text-slate-600">Open balances, transactions, top-ups, withdrawals and transfers</span></span>
+        <ArrowRight className="text-emerald-700"/>
+      </button>
 
       <div className="mb-5 flex justify-end"><button type="button" onClick={onLock} className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2 font-bold text-slate-700"><LockKeyhole size={18}/>Lock app</button></div>
       <KycStatusNotice profile={profile} onVerify={resumeVerification}/>
@@ -1380,9 +1400,8 @@ function AccountSection({
 function PortalNavigation({ activeSection, onNavigate, role }: any) {
   const tabs = [
     { id: 'home', label: 'Home', icon: Home },
-    { id: 'ride', label: role === 'driver' ? 'Radar' : 'Ride', icon: role === 'driver' ? Navigation : Car },
-    ...(role === 'rider' ? [{ id: 'shop', label: 'Shop', icon: ShoppingBag }] : role === 'merchant' ? [{ id: 'inventory', label: 'Business', icon: Store }] : []),
-    { id: 'wallet', label: 'Wallet', icon: Wallet },
+    { id: 'ride', label: role === 'driver' ? 'Ride' : 'Ride', icon: role === 'driver' ? Navigation : Car },
+    { id: 'services', label: 'Services', icon: Store },
     { id: 'trips', label: 'Trips', icon: Navigation },
   ];
   return <nav className="mm-portal-nav" aria-label="Main navigation">
