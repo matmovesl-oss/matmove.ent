@@ -81,7 +81,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  async function submit(){
   if(mutex.current||!status)return;
   const creating=!status.configured,changing=upgrade;
-  if((creating||changing)&&(!/^\d{6,10}$/.test(next)||next!==confirm)){setError('Enter the same 6–9 digit passcode in both new passcode fields.');return;}
+  if((creating||changing)&&(!/^\d{6,9}$/.test(next)||next!==confirm)){setError('Enter the same 6–9 digit passcode in both new passcode fields.');return;}
   if(!creating&&!new RegExp(`^[0-9]{${status.digits}}$`).test(pin)){setError(`Enter your current ${status.digits}-digit passcode.`);return;}
   mutex.current=true;setBusy(true);setError('');const id=userId,n=++revision.current;
   try{
