@@ -118,10 +118,10 @@ test('cash fee capture destination must match the deployed MONIME_PLATFORM_FEE_A
     source.indexOf('async function readSettings'),
     source.indexOf('function providerAccountBalance')
   );
-  assert.match(settings, /process\.env\.MONIME_PLATFORM_FEE_ACCOUNT_ID/);
+  assert.match(settings, /process\.env\.MONIME_ESCROW_ACCOUNT_ID/);\n  assert.match(settings, /data\.fee_hold_account_id !== escrowAccountId/);\n  assert.match(settings, /process\.env\.MONIME_PLATFORM_FEE_ACCOUNT_ID/);
   assert.match(settings, /data\.fee_revenue_account_id !== platformFeeAccountId/);
   assert.doesNotMatch(settings, /data\.fee_hold_account_id === platformFeeAccountId/);
-  assert.match(settings, /restricted holding account is configured/i);
+  assert.match(settings, /escrow and platform-fee accounts match their production settings/i);
 });
 
 const sharedMigration = new URL(
