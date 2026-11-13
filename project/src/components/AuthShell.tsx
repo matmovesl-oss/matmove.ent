@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { ShieldCheck, ArrowLeft, Check, CarFront, MapPin, Sparkles } from 'lucide-react';
+import { ShieldCheck, ArrowLeft, Check, CarFront, MapPin, Sparkles, Package } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 function AuthJourneyVisual(){
@@ -39,9 +39,9 @@ export function AuthShell({ children }: { children: ReactNode }) {
           <p className="mt-4 max-w-md text-sm leading-6 text-slate-300">Move around town, earn on the road, support local businesses and send what matters — all with MatMove.</p>
           <AuthJourneyVisual/>
           <div className="mt-7 grid grid-cols-3 gap-3">
-           <div className="rounded-2xl border border-white/10 bg-white/5 p-3"><CarFront size={19} className="text-emerald-300"/><p className="mt-2 text-xs font-bold">Ride</p><p className="mt-1 text-[10px] text-slate-400">Move freely</p></div>
-           <div className="rounded-2xl border border-white/10 bg-white/5 p-3"><MapPin size={19} className="text-sky-300"/><p className="mt-2 text-xs font-bold">Deliver</p><p className="mt-1 text-[10px] text-slate-400">Send with ease</p></div>
-           <div className="rounded-2xl border border-white/10 bg-white/5 p-3"><Sparkles size={19} className="text-amber-200"/><p className="mt-2 text-xs font-bold">Earn</p><p className="mt-1 text-[10px] text-slate-400">Grow with us</p></div>
+           <div className="rounded-2xl border border-white/10 bg-white/5 p-3"><span className="flex h-11 items-center justify-center rounded-xl bg-white/10"><img src="/matmove-car.svg" alt="" className="h-10 w-16 object-contain"/></span><p className="mt-2 text-xs font-bold">Ride</p><p className="mt-1 text-[10px] text-slate-400">Move freely</p></div>
+           <div className="rounded-2xl border border-white/10 bg-white/5 p-3"><span className="flex h-11 items-center justify-center rounded-xl bg-sky-200/10"><Package size={23} strokeWidth={1.8} className="text-sky-200"/></span><p className="mt-2 text-xs font-bold">Deliver</p><p className="mt-1 text-[10px] text-slate-400">Send with ease</p></div>
+           <div className="rounded-2xl border border-white/10 bg-white/5 p-3"><span className="flex h-11 items-center justify-center rounded-xl bg-white/10"><img src="/matmove-bike.svg" alt="" className="h-10 w-16 object-contain"/></span><p className="mt-2 text-xs font-bold">Earn</p><p className="mt-1 text-[10px] text-slate-400">Grow with us</p></div>
           </div>
         </div>
         <div className="relative z-10 text-xs font-medium text-slate-400">© 2026 MatMove · Sierra Leone</div>
@@ -56,7 +56,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
            <svg viewBox="0 0 520 110" className="mt-1 h-24 w-full" aria-hidden="true">
             <path d="M-10 86 C65 52 82 105 155 68 S245 18 318 53 S425 85 530 20" fill="none" stroke="#1d5363" strokeWidth="17" strokeLinecap="round"/>
             <path d="M-10 86 C65 52 82 105 155 68 S245 18 318 53 S425 85 530 20" fill="none" stroke="#a7f3d0" strokeWidth="2" strokeDasharray="6 8"/>
-            <g transform="translate(-14 -8)"><rect x="-11" y="-5" width="22" height="10" rx="4" fill="#a7f3d0"/><circle cx="-6" cy="6" r="2.5" fill="#082f49"/><circle cx="6" cy="6" r="2.5" fill="#082f49"/><animateMotion dur="6s" repeatCount="indefinite" rotate="auto" path="M28 83 C65 52 82 105 155 68 S245 18 318 53 S425 85 490 28"/></g>
+            <g><image href="/matmove-car.svg" x="-36" y="-23" width="72" height="46" preserveAspectRatio="xMidYMid meet"/><animateMotion dur="6s" repeatCount="indefinite" rotate="auto" path="M28 83 C65 52 82 105 155 68 S245 18 318 53 S425 85 490 28"/></g>
            </svg>
            <p className="text-[9px] text-slate-300">Aberdeen <span className="text-emerald-300">→</span> Lumley <span className="text-emerald-300">→</span> Central Freetown · Illustrative route</p>
           </div>
