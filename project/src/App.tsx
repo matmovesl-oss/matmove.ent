@@ -44,10 +44,6 @@ import {
   AuthCallbackPage,
 } from '@/pages/AuthPages';
 import {
-  ForgotPasswordPage,
-  ForgotPasscodePage,
-} from '@/pages/PasswordPages';
-import {
   UpdatePassword,
 } from '@/pages/UpdatePassword';
 
@@ -1453,15 +1449,6 @@ export default function App() {
       <Route
         path="/signup"
         element={<SignupPage />}
-      />
-
-      <Route
-        path="/forgot-password"
-        element={<ForgotPasswordPage />}
-      />
-      <Route
-        path="/forgot-passcode"
-        element={<ForgotPasscodePage />}
       />
 
       <Route
