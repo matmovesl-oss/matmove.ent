@@ -19,14 +19,9 @@ alter table public.matmove_cash_ride_settings
     )
   );
 
--- Use the existing platform-fee Monime account for both logical roles.
--- Cash remains disabled until the deployed API passes its live account check.
-update public.matmove_cash_ride_settings
-set fee_hold_account_id = fee_revenue_account_id,
-    updated_at = clock_timestamp()
-where singleton = true
-  and fee_hold_account_id is null
-  and fee_revenue_account_id is not null;
+-- fee_hold_account_id remains explicitly configured from
+-- MONIME_ESCROW_ACCOUNT_ID by deployment operations. Do not silently
+-- substitute the platform-fee account when the holding account is absent.
 
 alter table public.matmove_cash_ride_legs
   add column if not exists settlement_mode text not null default 'provider_transfer';
