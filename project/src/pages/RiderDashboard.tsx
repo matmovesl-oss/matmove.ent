@@ -83,6 +83,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [bookingSheetExpanded, setBookingSheetExpanded] = useState(true);
   const sheetPointerStart = useRef<number | null>(null);
+  const sheetDragged = useRef(false);
 
   const {
     booking: activeBooking,
