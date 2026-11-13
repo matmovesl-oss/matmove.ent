@@ -20,6 +20,8 @@ test('duplicate clicks authorize one RPC while the original response remains pen
 test('changed sessions and a cross-user receipt cannot clear or confirm another customer request',()=>fixture(async h=>{h.switchSession(other);await assert.rejects(()=>h.state.submit(details),/sign-in changed/);assert.equal(h.calls.length,0);h.switchSession(uid);h.setHandler(async args=>({data:{id:args.p_request,rider_id:other,status:'pending'},error:null}));await assert.rejects(()=>h.state.submit(details),/receipt/);assert.equal(h.values.size,1);}));
 test('blocked browser storage fails before any trip RPC',()=>fixture(async h=>{await assert.rejects(()=>h.state.submit(details),/browser/);assert.equal(h.calls.length,0);},{blocked:true}));
 
+test('digital payment marker is omitted so the client remains compatible with Production 11-field trip RPC',()=>fixture(async h=>{const digital={...details,payment_method:'digital'};h.setHandler(async args=>{assert.equal(Object.hasOwn(args.p_details,'payment_method'),false);assert.equal(Object.keys(args.p_details).length,11);const saved=JSON.parse(h.values.get(`matmove:booking-create:v1:${uid}`));assert.equal(saved.details.payment_method,'digital');return{data:{id:args.p_request,rider_id:uid,status:'pending'},error:null};});await h.state.submit(digital);await h.settle();assert.equal(h.calls.length,1);assert.equal(h.values.size,0);}));
+
 test('RiderDashboard creates trips only through the idempotent ownership RPC and waits for recovery state',async()=>{
  const source=await readFile(new URL('../src/pages/RiderDashboard.tsx',import.meta.url),'utf8');
  assert.match(source,/useTripRequest/);
