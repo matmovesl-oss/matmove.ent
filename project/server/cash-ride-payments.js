@@ -128,11 +128,18 @@ async function readSettings(db) {
     .maybeSingle();
 
   if (error) throw new HttpError(503, 'Cash collection configuration is unavailable.');
+  const platformFeeAccountId = process.env.MONIME_PLATFORM_FEE_ACCOUNT_ID;
   if (!data?.enabled ||
       !validAccountId(data.fee_hold_account_id) ||
       !validAccountId(data.fee_revenue_account_id) ||
-      data.fee_hold_account_id === data.fee_revenue_account_id) {
-    throw new HttpError(503, 'Cash collection is disabled until Monime confirms the dedicated restricted holding and fee accounts.', 'CASH_NOT_CONFIGURED');
+      !validAccountId(platformFeeAccountId) ||
+      data.fee_revenue_account_id !== platformFeeAccountId ||
+      data.fee_hold_account_id === platformFeeAccountId) {
+    throw new HttpError(
+      503,
+      'Cash collection is disabled until its revenue destination matches MONIME_PLATFORM_FEE_ACCOUNT_ID and the restricted holding account is distinct.',
+      'CASH_NOT_CONFIGURED'
+    );
   }
 
   const environment = monimeEnvironment();
