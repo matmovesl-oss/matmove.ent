@@ -2,6 +2,7 @@ import {locationVoiceAvailable,startLocationVoice} from '@/lib/voiceLocation';
 
 
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 
 type Point = { coords: [number, number]; address: string };
@@ -44,7 +45,7 @@ export function loadGoogleMaps(apiKey: string): Promise<void> {
   return sdkPromise;
 }
 
-export function RideLocationPicker({ onChange, userId, layout = 'default' }: { onChange: (value: TripLocations) => void; userId?: string; layout?: 'default' | 'map-first' }) {
+export function RideLocationPicker({ onChange, userId, layout = 'default', sheetContent }: { onChange: (value: TripLocations) => void; userId?: string; layout?: 'default' | 'map-first'; sheetContent?: ReactNode }) {
   const mapElement = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
   const markers = useRef<Partial<Record<Target, google.maps.Marker>>>({});
@@ -85,6 +86,7 @@ export function RideLocationPicker({ onChange, userId, layout = 'default' }: { o
   const [savedError, setSavedError] = useState('');
   const [saving, setSaving] = useState(false);
   const [preferencesRetry, setPreferencesRetry] = useState(0);
+  const [sheetExpanded, setSheetExpanded] = useState(true);
 
   const emit = () => onChangeRef.current({ ...value.current });
   const clearRoute = () => {
@@ -332,8 +334,9 @@ export function RideLocationPicker({ onChange, userId, layout = 'default' }: { o
     });}catch{stopTimeout();completed=true;setRouting(false);setMessage('Route service could not start. Check your connection and retry the preview.');}
   }
 
-  return <section className="w-full min-w-0 space-y-3 rounded-2xl border bg-white p-3 sm:p-4" aria-label="Trip locations">
-    {layout === 'map-first' && <div ref={mapElement} aria-label="Choose pickup and destination on the map" style={{ height: 'clamp(340px, 58dvh, 620px)', minHeight: 340 }} className="w-full rounded-2xl bg-slate-100"/>}
+
+  const locationControls = (
+    <>
     {userId && <div className="rounded-xl bg-slate-50 p-3 text-sm"><b>Saved Home & Work</b>{savedLoading ? <p role="status" className="mt-1 text-slate-600">Loading saved places…</p> : savedError ? <p role="alert" className="mt-1 text-red-700">{savedError} <button type="button" className="min-h-10 underline" onClick={() => setPreferencesRetry(n => n+1)}>Reload saved places</button></p> : !saved.length ? <p className="mt-1 text-xs text-slate-600">Select a location below to save it as Home or Work.</p> : <p className="mt-1 text-xs text-slate-600">Choose a saved place under Pickup or Destination.</p>}</div>}
     <p className="text-xs text-slate-600">Select both locations to preview the route automatically. Voice entry is optional; your browser may send audio to its speech service. MATMOVE does not save recordings. Review spoken text and choose a matching place. {!voiceAvailable&&'Voice entry is unavailable here; typing, Find and map pins remain available.'}</p>
     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
@@ -349,6 +352,46 @@ export function RideLocationPicker({ onChange, userId, layout = 'default' }: { o
     {message && <p role="status" className="rounded-xl bg-slate-100 p-3 text-sm">{message}</p>}
     {distance !== null && <p className="text-sm font-bold text-emerald-700">Route distance: {distance.toFixed(1)} km</p>}
     {mapError ? <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{mapError} <button type="button" className="min-h-10 px-2 font-bold underline" onClick={() => setRetry(n => n+1)}>Retry map</button></p> : !ready && <p role="status" className="p-3 text-sm text-slate-600">Loading map…</p>}
-    {layout !== 'map-first' && <div ref={mapElement} aria-label="Choose pickup and destination on the map" style={{ height: 'clamp(260px, 42dvh, 440px)', minHeight: 260 }} className="w-full rounded-xl bg-slate-100"/>}
-  </section>;
+
+    </>
+  );
+
+  if (layout === 'map-first') {
+    return (
+      <section className="relative isolate h-[calc(100dvh-164px)] min-h-[460px] max-h-[820px] w-full overflow-hidden bg-slate-100 sm:rounded-3xl" aria-label="Trip map and booking">
+        <div ref={mapElement} aria-label="Choose pickup and destination on the map" className="absolute inset-0 h-full w-full bg-slate-100" />
+        <div className="absolute inset-x-2 bottom-2 z-20 flex max-h-[68%] min-h-0 flex-col overflow-hidden rounded-3xl border border-white/70 bg-white/95 shadow-2xl backdrop-blur-xl sm:inset-x-4 sm:bottom-4 sm:max-w-2xl sm:left-1/2 sm:-translate-x-1/2">
+          <button
+            type="button"
+            aria-expanded={sheetExpanded}
+            aria-controls="matmove-ride-booking-sheet-content"
+            onClick={() => setSheetExpanded(expanded => !expanded)}
+            className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-left"
+          >
+            <span className="min-w-0">
+              <span className="block text-sm font-extrabold text-slate-900">Plan your trip</span>
+              <span className="block truncate text-[11px] text-slate-500">
+                {value.current.pickup?.address || 'Choose pickup'} <span className="px-1 text-slate-300">→</span> {value.current.destination?.address || 'Choose destination'}
+              </span>
+            </span>
+            <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">{sheetExpanded ? 'Collapse' : 'Open'} {sheetExpanded ? '⌄' : '⌃'}</span>
+          </button>
+          {sheetExpanded && (
+            <div id="matmove-ride-booking-sheet-content" className="min-h-0 overflow-y-auto overscroll-contain px-3 pb-4 pt-3 sm:px-4">
+              {locationControls}
+              {sheetContent}
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="w-full min-w-0 space-y-3 rounded-2xl border bg-white p-3 sm:p-4" aria-label="Trip locations">
+      {locationControls}
+      <div ref={mapElement} aria-label="Choose pickup and destination on the map" style={{ height: 'clamp(260px, 42dvh, 440px)', minHeight: 260 }} className="w-full rounded-xl bg-slate-100"/>
+    </section>
+  );
 }
+
