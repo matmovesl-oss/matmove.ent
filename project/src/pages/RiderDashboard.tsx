@@ -603,7 +603,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                           {v}
                         </button>
                       ))}
-                    </div>
+                    </div></div>
 
                     <p className="text-xs leading-5 text-slate-500">Choose pickup and destination on the map above. MatMove will preview your route and estimate the fare.</p>
 
