@@ -165,11 +165,11 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
             <>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">New passcode (6–9 digits)</label>
-                <input type="password" inputMode="numeric" pattern="[0-9]{6,10}" minLength={6} maxLength={9} value={newPin} onChange={e => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 9))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="6 to 10 digits" />
+                <input type="password" inputMode="numeric" pattern="[0-9]{6,9}" minLength={6} maxLength={9} value={newPin} onChange={e => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 9))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="6 to 9 digits" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Confirm passcode</label>
-                <input type="password" inputMode="numeric" pattern="[0-9]{6,10}" minLength={6} maxLength={9} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 9))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="Re-enter your passcode" />
+                <input type="password" inputMode="numeric" pattern="[0-9]{6,9}" minLength={6} maxLength={9} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 9))} required autoComplete="new-password" className="w-full border border-slate-300 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-600" placeholder="Re-enter your passcode" />
               </div>
             </>
           )}
