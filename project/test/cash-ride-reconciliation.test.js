@@ -28,8 +28,18 @@ test('cash reconciliation only retries existing pending/processing transfer IDs'
 });
 
 test('cash recovery shares the existing ride API route and does not add an API entry', async () => {
-  const api = await readFile(new URL('../api/accept-ride-escrow.ts', import.meta.url), 'utf8');
+  const api = await readFile(new URL('../api/start-ride.ts', import.meta.url), 'utf8');
   const routes = await readFile(new URL('../vercel.json', import.meta.url), 'utf8');
   assert.match(api, /server\/ride-api\.js/);
   assert.match(routes, /reconcile-ride-payments/);
+});
+
+test('cash configuration can verify both Monime accounts while the live cash switch remains off', async () => {
+  const cash = await readFile(cashFile, 'utf8');
+  assert.match(cash, /async function readSettings\(db, \{ requireEnabled = true \} = \{\}\)/);
+  assert.match(cash, /readSettings\(db, \{ requireEnabled: false \}\)/);
+  assert.match(cash, /accountsVerified: true/);
+  assert.match(cash, /enabled: settings\.enabled === true/);
+  assert.match(cash, /data\.fee_hold_account_id !== escrowAccountId/);
+  assert.match(cash, /data\.fee_hold_account_id === platformFeeAccountId/);
 });
