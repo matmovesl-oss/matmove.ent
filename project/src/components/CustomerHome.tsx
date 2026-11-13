@@ -1,4 +1,4 @@
-import {ArrowRight,Car,MapPin,Wallet,Store,ShoppingBag,Package,CarFront,Utensils,KeyRound,Navigation,CalendarDays,Sparkles} from 'lucide-react';
+import {ArrowRight,Car,MapPin,Wallet,Store,ShoppingBag,Package,Utensils,KeyRound,Navigation,Sparkles} from 'lucide-react';
 
 type Props={profile:any;onNavigate:(section:'ride'|'account'|'services')=>void};
 
