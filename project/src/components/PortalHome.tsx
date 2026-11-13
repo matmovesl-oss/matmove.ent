@@ -30,7 +30,7 @@ const WHATSAPP_NUMBER = '23290330362';
 type Place = { kind: 'home' | 'work'; address: string; latitude: number | null; longitude: number | null; version: number };
 type CardReference = { id: string; nickname: string; brand: string; last_four: string };
 type Preferences = { user_id: string; places: Place[]; cardReferences: CardReference[] };
-type Props = { profile: any; onNavigate: (section: any) => void };
+type Props = { profile: any; onNavigate: (section: any) => void; mode?: 'services' };
 
 type Point = { coords: [number, number]; address: string };
 type Target = 'pickup' | 'destination';
@@ -81,7 +81,7 @@ export function RiderDashboard(props: any) {
   return <RiderMain key={props.profile?.id || 'rider-main'} {...props} />;
 }
 
-export default function PortalHome({ profile, onNavigate }: Props) {
+export default function PortalHome({ profile, onNavigate, mode = 'services' }: Props) {
   const [selectedGame, setSelectedGame] = useState<'spin'|'dice'|'fruity'|'crankling'|null>(null);
   const [currency, setCurrency] = useState<'SLE' | 'USD'>('SLE');
   const [visible, setVisible] = useState(false);
@@ -283,7 +283,7 @@ export default function PortalHome({ profile, onNavigate }: Props) {
         <div className="mm-brand"><img src="/logo.jpg" alt="MatMove" width="40" height="40"/><span>Wi dey move<span className="mm-muted">Your everyday, connected.</span></span></div>
         <button className="mm-icon-button" type="button" aria-label="Open your account" onClick={() => onNavigate('account')}><ShieldCheck size={22}/></button>
       </header>
-      <div className="mm-welcome"><p className="mm-eyebrow">{role === 'merchant' ? 'Business space' : role === 'driver' ? 'Driver space' : 'Your MatMove'}</p><h1>Hello, {name}.</h1><p>Where will today take you?</p></div>
+      <div className="mm-welcome"><p className="mm-eyebrow">{role === 'merchant' ? 'Business space' : role === 'driver' ? 'Driver space' : 'Your MatMove'}</p><h1>{mode === 'services' ? 'Your services, together.' : 'Hello, '+name+'.'}</h1><p>{mode === 'services' ? 'Explore travel, shopping, wallet tools, games, events and concierge.' : 'Where will today take you?'}</p></div>
       <div className="mm-home-grid">
         <section className={`mm-home-wallet mm-home-wallet-${currency.toLowerCase()}`} aria-label="Wallet overview">
           <div className="mm-row"><div className="mm-currency-tabs" aria-label="Wallet currency">{(['SLE','USD'] as const).map(c => <button key={c} type="button" aria-pressed={currency === c} onClick={() => { setCurrency(c); setVisible(false); }}>{c}</button>)}</div><button type="button" className="mm-glass-button" aria-label="Refresh balances" disabled={balanceLoading} onClick={() => void refreshWallets()}><RefreshCw size={18} className={balanceLoading ? 'animate-spin' : ''}/></button></div>
