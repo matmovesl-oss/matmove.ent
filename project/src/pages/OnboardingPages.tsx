@@ -211,7 +211,7 @@ function customerAccountErrorMessage(error: unknown): string {
   if (/CONFLICT: This phone number is already registered/i.test(message)) {
     return 'This phone number is already linked to another MatMove account. Sign in to that account or use a different number.';
   }
-  return message.replace(/^(INVALID|FORBIDDEN|CONFLICT|LOCKED):\\s*/i, '') || 'Unable to save your account. Please try again.';
+  return message.replace(/^(INVALID|FORBIDDEN|CONFLICT|LOCKED):\s*/i, '') || 'Unable to save your account. Please try again.';
 }
 
 
