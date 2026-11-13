@@ -293,3 +293,41 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .mm-portal-nav button::before,
   .mm-portal-nav button svg { transition: none !important; }
 }
+
+.mm-landing-car {
+  animation: mm-landing-drive 5.2s cubic-bezier(.38,.05,.2,1) infinite;
+}
+.mm-road-car {
+  animation: mm-road-pulse 3.6s ease-in-out infinite;
+}
+.mm-portal-morph {
+  animation: mm-portal-morph-in 420ms cubic-bezier(.2,.75,.25,1) both;
+  transform-origin: 50% 70%;
+}
+@keyframes mm-landing-drive {
+  0% { transform: translate(0,0) rotate(-8deg); }
+  28% { transform: translate(95px,-24px) rotate(9deg); }
+  58% { transform: translate(210px,-80px) rotate(-5deg); }
+  100% { transform: translate(355px,-145px) rotate(5deg); }
+}
+@keyframes mm-road-pulse {
+  0%,100% { transform: translate3d(0,0,0) rotate(-5deg); }
+  50% { transform: translate3d(8px,-7px,0) rotate(5deg); }
+}
+@keyframes mm-portal-morph-in {
+  from { opacity: 0; transform: translate3d(0,14px,0) scale(.985); filter: blur(2px); }
+  to { opacity: 1; transform: translate3d(0,0,0) scale(1); filter: blur(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mm-landing-car, .mm-road-car, .mm-portal-morph { animation: none !important; }
+}
+
+@keyframes mm-landing-drive-mobile {
+  0% { transform: translate(0,0) rotate(-8deg); }
+  28% { transform: translate(62px,-14px) rotate(9deg); }
+  58% { transform: translate(137px,-44px) rotate(-5deg); }
+  100% { transform: translate(215px,-82px) rotate(5deg); }
+}
+@media (max-width: 640px) {
+  .mm-landing-car { animation-name: mm-landing-drive-mobile; }
+}

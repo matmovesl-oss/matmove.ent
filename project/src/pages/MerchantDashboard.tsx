@@ -283,7 +283,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
 
   return (
     <div className="min-h-screen flex-1 bg-slate-50">
-      <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b bg-white px-4 py-4 shadow-sm sm:px-6">
+      <header className={`sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b bg-white px-4 py-4 shadow-sm sm:px-6 ${activeSection === 'wallet' ? 'hidden' : ''}`}>
         <div className="flex items-center gap-3"><div className="rounded-xl bg-orange-100 p-2 text-orange-600"><Store size={20} /></div><h2 className="font-bold text-slate-900">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
         <div className="flex gap-2">
           {!canTransact ? <span className="rounded-xl border border-red-200 bg-red-100 px-4 py-2 text-xs font-bold text-red-700">{isFrozen ? 'Wallet unavailable' : 'Approval pending'}</span> : (
@@ -297,8 +297,8 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       {activeSection==='home'&&(tripRequest.retained||tripRequest.error)&&<div role="alert" className="m-3 rounded-xl border border-amber-300 bg-amber-50 p-3"><p>{tripRequest.error||'A trip request needs confirmation. Check the original request before creating another.'}</p>{tripRequest.retained&&<button type="button" disabled={tripRequest.working||isRequesting} onClick={async()=>{try{const row=await tripRequest.submit();setActiveBooking(row);setRideNotice('Original trip request confirmed.');}catch(e){setRideNotice(e instanceof Error?e.message:'Original request unavailable.');}}} className="min-h-11 font-bold underline">Check original request</button>}</div>}
       {activeSection==='home'&&<CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} onSelect={selectTrip} onNew={()=>{startNewBooking();setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerName('');setPassengerCount(1);setRideNotice('Your previous trip remains active. Review the new pickup, destination and fare.');}}/>}
       {activeSection === 'home' && (
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 p-3 lg:flex-row">
-          <div className="w-full space-y-4 border-r bg-white p-4 lg:w-[340px] lg:shrink-0">
+        <div className="mx-auto flex max-w-6xl flex-col gap-0 p-0">
+          <div className="order-2 relative z-20 -mt-5 max-h-[58dvh] w-full overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl space-y-4">
             <p className="text-xs text-slate-500">Your balance and wallet actions are in Home and Wallet.</p>
             <h3 className="text-lg font-bold">Dispatch Request</h3>
             {tripError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{tripError}<button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry active trip</button></p>}
@@ -372,7 +372,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
               </div>
             )}
           </div>
-          <div className="min-w-0 flex-1">{activeBooking&&['accepted','in_progress'].includes(activeBooking.status)?<ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/>:<RideLocationPicker key={profile.id} userId={profile.id} onChange={(selection: TripLocations) => { setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />}</div>
+          <div className="order-1 min-w-0 flex-1">{activeBooking&&['accepted','in_progress'].includes(activeBooking.status)?<ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/>:<RideLocationPicker layout="map-first" key={profile.id} userId={profile.id} onChange={(selection: TripLocations) => { setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />}</div>
         </div>
       )}
 

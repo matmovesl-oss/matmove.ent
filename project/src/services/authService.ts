@@ -33,6 +33,11 @@ export async function getCustomerSession(): Promise<AuthSession | null> {
   scopeOnboardingDraft(session.user.id);
   const result = await supabase.rpc('matmove_customer_me');
   if (result.error) throw new Error(customerSessionErrorMessage(result.error.message));
+  const metadata = session.user.user_metadata || {};
+  const fullName = String(metadata.full_name || metadata.name || '').trim();
+  const nameParts = fullName ? fullName.split(/\s+/) : [];
+  const metadataFirstName = String(metadata.given_name || metadata.first_name || nameParts[0] || '').trim();
+  const metadataLastName = String(metadata.family_name || metadata.last_name || nameParts.slice(1).join(' ') || '').trim();
   if (result.data) {
     if (result.data.user?.id !== session.user.id || !Array.isArray(result.data.roles) ||
       result.data.roles.some((role: string) => !['rider','driver','merchant'].includes(role))) {
@@ -40,20 +45,22 @@ export async function getCustomerSession(): Promise<AuthSession | null> {
     }
     captureReferralIdentity(session.user);
     const customer=result.data as AuthSession;
-    // A phone may already be verified in Supabase Auth before the profile phone is saved.
-    // Hydrate the existing value for routing and role selection; do not create another profile.
+    // Keep Google/email profile data available to onboarding without creating a
+    // second profile or overwriting any existing customer record.
     return {...customer,user:{
       ...customer.user,
       email:customer.user.email||session.user.email||'',
-      phone:customer.user.phone||session.user.phone||session.user.user_metadata?.phone||'',
-      firstName:customer.user.firstName||session.user.user_metadata?.first_name||'',
-      lastName:customer.user.lastName||session.user.user_metadata?.last_name||''
+      phone:customer.user.phone||session.user.phone||metadata.phone||'',
+      firstName:customer.user.firstName||metadataFirstName,
+      lastName:customer.user.lastName||metadataLastName
     }};
   }
   captureReferralIdentity(session.user);
-  // An actual Auth session exists, but phone and customer role still need completing.
+  // A Google OAuth session without a Customer profile is a valid new signup.
+  // Route it to role selection and prefill verified provider identity data;
+  // the customer must still enter and save their Sierra Leone phone number.
   return { user: { id: session.user.id, email: session.user.email || '',
-    phone: session.user.phone || session.user.user_metadata?.phone || '', firstName: '', lastName: '' },
+    phone: session.user.phone || metadata.phone || '', firstName: metadataFirstName, lastName: metadataLastName },
     roles: [], kycStatus: 'not_started' };
 }
 
