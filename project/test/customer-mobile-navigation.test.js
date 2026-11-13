@@ -35,18 +35,23 @@ test('wallet has full-screen entry points from Account and Services', async () =
   assert.ok(app.includes('setViewingWallet(true)'));
   assert.ok(services.includes("onNavigate('wallet')"));
   assert.ok(services.includes('Open wallet'));
+  assert.ok(app.includes('onServices={() => setActiveSection(\'services\')}'));
 });
 
 test('ride booking uses the full map-first location picker for rider and merchant', async () => {
   const picker = await readFile('src/components/RideLocationPicker.tsx', 'utf8');
   const rider = await readFile('src/pages/RiderDashboard.tsx', 'utf8');
   const merchant = await readFile('src/pages/MerchantDashboard.tsx', 'utf8');
+  const driver = await readFile('src/pages/DriverDashboard.tsx', 'utf8');
   assert.ok(picker.includes("layout === 'map-first'"));
   assert.ok(picker.includes("clamp(340px, 58dvh, 620px)"));
   assert.ok(rider.includes('layout="map-first"'));
   assert.ok(merchant.includes('layout="map-first"'));
   assert.ok(rider.includes('max-h-[58dvh]'));
   assert.ok(merchant.includes('max-h-[58dvh]'));
+  assert.ok(driver.includes('clamp(340px, 58dvh, 620px)'));
+  assert.ok(driver.includes('order-2 relative z-20'));
+
 });
 
 test('public welcome screen rotates three clearly labelled illustrative routes and provides account entry', async () => {
