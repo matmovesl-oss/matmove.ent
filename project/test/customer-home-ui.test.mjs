@@ -65,7 +65,7 @@ test('ride vehicle selector and map pins use branded visual markers instead of p
  ]);
  assert.match(ride,/CarFront, Bike, Truck/);
  assert.match(ride,/Choose \$\{label\}/);
- assert.match(ride,/bg-gradient-to-br from-emerald-600 to-teal-500/);
+ assert.match(ride,/bg-gradient-to-br from-emerald-50 via-white to-sky-50/);\n assert.match(ride,/Who is travelling\?/);
  assert.match(picker,/markerSvg/);
  assert.match(picker,/data:image\/svg\+xml/);
  assert.match(picker,/draggable: true/);
@@ -79,4 +79,30 @@ test('homepage post storage upload allowlist grants only the named admin permiss
  assert.match(sql,/bucket_id = 'kyc-documents'/);
  assert.match(sql,/bucket_id = 'product_images'/);
  assert.doesNotMatch(sql,/to public/i);
+});
+
+
+test('customer homepage posts render complete artwork and optional USD or SLE prices',async()=>{
+ const page=await read('../src/components/CustomerHomePosts.tsx');
+ assert.match(page,/price_amount,price_currency/);
+ assert.match(page,/postPrice\(post\.price_amount,post\.price_currency\)/);
+ assert.match(page,/max-h-\[min\(72vh,620px\)\]/);
+ assert.match(page,/matmove-keke\.svg/);
+ assert.match(page,/matmove-bike\.svg/);
+ assert.match(page,/matmove-car\.svg/);
+ assert.match(page,/matmove-van\.svg/);
+});
+test('MatMove vehicle artwork covers Keke, bike, car and van with branded green and blue details',async()=>{
+ const [keke,bike,car,van]=await Promise.all([
+  read('../public/matmove-keke.svg'),read('../public/matmove-bike.svg'),read('../public/matmove-car.svg'),read('../public/matmove-van.svg')
+ ]);
+ for(const svg of [keke,bike,car,van]){assert.match(svg,/<svg/);assert.match(svg,/linearGradient/);assert.match(svg,/#2/);}
+ assert.match(keke,/viewBox="0 0 512 320"/);
+ assert.match(bike,/viewBox="0 0 512 320"/);
+});
+test('saved Home and Work addresses render as bordered updateable cards',async()=>{
+ const picker=await read('../src/components/RideLocationPicker.tsx');
+ assert.match(picker,/Save this \$\{target\}/);
+ assert.match(picker,/border border-slate-200 bg-white px-2\.5 py-2/);
+ assert.match(picker,/Update/);
 });
