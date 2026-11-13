@@ -170,8 +170,8 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
   const [portalError, setPortalError] =
     useState('');
 
-  const [activeSection, setActiveSection] =
-    useState<PortalSection>(()=>{try{const saved=sessionStorage.getItem(`matmove:portal-section:v1:${sectionOwner}`);return ['home','ride','services','wallet','trips','shop','inventory','account'].includes(saved||'')?saved as PortalSection:'home';}catch{return 'home';}});
+  // Every successful passcode unlock begins at Home, regardless of the last tab visited.
+  const [activeSection, setActiveSection] = useState<PortalSection>('home');
   const [guideReplay,setGuideReplay]=useState(0);
   const [sectionTransitioning,setSectionTransitioning]=useState(false);
   const previousSectionRef=useRef(activeSection);
