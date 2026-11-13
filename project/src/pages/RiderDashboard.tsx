@@ -401,7 +401,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     setIsRequesting(true);
     setRideNotice('');
     try {
-      const result = await updateRide('complete', activeBooking.id);
+      const result = await updateRide(activeBooking.payment_method === 'cash' ? 'cash_confirm' : 'complete', activeBooking.id);
       if (activeBooking.payment_method === 'cash') {
         const payment = result.payment;
         if (payment?.status === 'settled' && result.success === true && result.pending === false) {
