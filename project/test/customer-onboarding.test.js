@@ -181,7 +181,7 @@ test('customer account setup ignores blank and malformed legacy phone values whi
  await f.pg.exec(migration);
  const legacyA='66666666-6666-4666-8666-666666666666',legacyB='77777777-7777-4777-8777-777777777777',validOwner='88888888-8888-4888-8888-888888888888';
  await f.pg.query("insert into auth.users(id,email) values($1,'legacy-a@example.com'),($2,'legacy-b@example.com'),($3,'valid-owner@example.com')",[legacyA,legacyB,validOwner]);
- await f.pg.query("insert into profiles(id,email,phone,phone_number) values($1,'legacy-a@example.com','not-a-phone',null),($2,'legacy-b@example.com','',null)",[legacyA,legacyB]);
+ await f.pg.query("insert into profiles(id,email,phone,phone_number) values($1,'legacy-a@example.com','not-a-phone',null),($2,'legacy-b@example.com','',null),($3,'valid-owner@example.com','+23277000009','+23277000009')",[legacyA,legacyB,validOwner]);
  await f.session(merchant);
  const result=await f.rpc('matmove_save_customer_account',['merchant','+232 76 205 468']);
  assert.equal(result.user.phone,'+23276205468');
@@ -189,7 +189,6 @@ test('customer account setup ignores blank and malformed legacy phone values whi
  assert.equal((await f.pg.query("select count(*)::int as n from wallets where user_id=$1",[merchant])).rows[0].n,2);
  const match=(await f.pg.query("select public.matmove_customer_phone_match('not-a-phone') as malformed, public.matmove_customer_phone_match('') as blank, public.matmove_customer_phone_match('+232 76 205 468') as valid")).rows[0];
  assert.equal(match.malformed,null);assert.equal(match.blank,null);assert.equal(match.valid,'+23276205468');
- await f.pg.query("update profiles set phone='+23277000009',phone_number='+23277000009' where id=$1",[validOwner]);
  await f.session(driver);
  await assert.rejects(()=>f.rpc('matmove_save_customer_account',['driver','077 000 009']),/already registered/);
  await assert.rejects(()=>f.rpc('matmove_save_customer_account',['driver','+232 467 998']),/valid phone number/);
