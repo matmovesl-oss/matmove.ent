@@ -362,7 +362,7 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
     });}catch{stopTimeout();completed=true;setRouting(false);setMessage('Route service could not start. Check your connection and retry the preview.');}
   }
 
-  const mapFirst=layout==='map-first';
+  const mapFirst = layout === 'map-first';
   return <section className={mapFirst?"fixed inset-0 z-10 min-h-[100dvh] bg-[#e9eef1]":"w-full min-w-0 space-y-3 rounded-2xl border bg-white p-3 sm:p-4"} aria-label="Trip locations">
     {mapFirst&&<div className="absolute inset-0 bg-[#e9eef1]"><div ref={mapElement} aria-label="Choose pickup and destination on the map" style={{height:mapFirst?(bookingReady&&!editingRoute?(bookingSheetExpanded?'calc(100dvh - min(66dvh,700px) - 76px - env(safe-area-inset-bottom))':'calc(100dvh - 148px - 76px - env(safe-area-inset-bottom))'):(locationPanelExpanded?'calc(100dvh - min(62dvh,640px) - 76px - env(safe-area-inset-bottom))':'calc(100dvh - 260px - 76px - env(safe-area-inset-bottom))')):'100dvh',minHeight:0}} className="w-full bg-[#e9eef1]"/><div className="pointer-events-none absolute left-4 top-20 rounded-full border border-white/70 bg-white/95 px-3 py-2 text-[11px] font-extrabold tracking-wide text-slate-700 shadow-md"><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-500"/>FREETOWN · LIVE MAP</div></div>}
     {mapFirst&&<button type="button" onClick={()=>onBack?.()} aria-label="Back to MatMove home" className="fixed left-4 top-[calc(env(safe-area-inset-top)+14px)] z-40 flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white text-slate-900 shadow-lg transition hover:bg-slate-50"><svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>}
@@ -389,3 +389,4 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
     {mapFirst&&bookingReady&&!editingRoute&&<div className="fixed bottom-[calc(82px+env(safe-area-inset-bottom))] left-4 right-4 z-20 mx-auto max-w-xl text-center"><span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/90 px-4 py-2 text-xs font-bold text-slate-700 shadow-md"><span className="h-2 w-2 rounded-full bg-emerald-500"/>{distance!==null?`Route ready · ${distance.toFixed(1)} km`:'Route selected'} · Review your fare below</span></div>}
     {!mapFirst&&<div ref={mapElement} aria-label="Choose pickup and destination on the map" style={{height:'clamp(260px,42dvh,440px)',minHeight:260}} className="w-full rounded-xl bg-slate-100"/>}
   </section>;
+}
