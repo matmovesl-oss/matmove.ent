@@ -1,7 +1,7 @@
 import {ArrowRight,Car,MapPin,Wallet,Store,ShoppingBag,Package,Utensils,KeyRound,Navigation,Sparkles} from 'lucide-react';
 import CustomerHomePosts from '@/components/CustomerHomePosts';
 
-type Props={profile:any;onNavigate:(section:'ride'|'account'|'services')=>void};
+type Props={profile:any;onNavigate:(section:'ride'|'account'|'services'|'trips'|'shop'|'inventory')=>void};
 
 const customerServices=[
  {label:'Ride',detail:'Book a Keke, bike or car',icon:Car,accent:'bg-emerald-50 text-emerald-700'},
@@ -47,7 +47,7 @@ export default function CustomerHome({profile,onNavigate}:Props){
   <section aria-labelledby="quick-services-title">
    <div className="mb-3 flex items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.16em] text-slate-400">Made for your day</p><h2 id="quick-services-title" className="mt-1 text-xl font-black text-slate-950">Quick access</h2></div><button type="button" onClick={()=>onNavigate('services')} className="inline-flex min-h-10 items-center gap-1 text-sm font-bold text-emerald-700">All services <ArrowRight size={16}/></button></div>
    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-    {services.map(item=>{const Icon=item.icon;return <button key={item.label} type="button" onClick={()=>onNavigate(driver&&item.label==='Driver radar'?'ride':'services')} className="group min-h-36 rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"><span className={`mb-4 flex h-11 w-11 items-center justify-center rounded-2xl ${item.accent}`}><Icon size={21}/></span><span className="block font-bold text-slate-950">{item.label}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{item.detail}</span></button>})}
+    {services.map(item=>{const Icon=item.icon;return <button key={item.label} type="button" onClick={()=>onNavigate(driver?(item.label==='Driver radar'?'ride':item.label==='My trips'?'trips':item.label==='Earnings'?'account':'services'):merchant?(item.label==='My shop'||item.label==='Orders'?'inventory':item.label==='Earnings'?'account':'services'):item.label==='Ride'?'ride':item.label==='Food'?'shop':'services')} className="group min-h-36 rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"><span className={`mb-4 flex h-11 w-11 items-center justify-center rounded-2xl ${item.accent}`}><Icon size={21}/></span><span className="block font-bold text-slate-950">{item.label}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{item.detail}</span></button>})}
    </div>
   </section>
 
