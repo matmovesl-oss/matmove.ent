@@ -10,7 +10,8 @@ const rideServiceFile = new URL('../src/services/rideService.ts', import.meta.ur
 test('rider cash option is gated by server cash configuration and only applies to Ride', async () => {
   const code = await readFile(riderFile, 'utf8');
   assert.match(code, /start-ride\?action=cash_config/);
-  assert.match(code, /data\?\.enabled === true/);\n  assert.match(code, /data\?\.accountsVerified === true/);
+  assert.match(code, /data\?\.enabled === true/);
+  assert.match(code, /data\?\.accountsVerified === true/);
   assert.match(code, /serviceType === 'ride'/);
   assert.match(code, /disabled=\{cashConfigLoading \|\| !cashEnabled\}/);
   assert.match(code, /payment_method: paymentMethod/);
