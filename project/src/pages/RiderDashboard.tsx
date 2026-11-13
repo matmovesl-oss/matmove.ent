@@ -139,7 +139,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     }
     void (async () => {
       try {
-        const { response, data, finish } = await walletFetch('/api/start-ride?action=cash_config', {});
+        const { response, data, finish } = await walletFetch('/api/accept-ride-escrow?action=cash_config', {});
         if (!response.ok) throw new Error('Cash configuration unavailable.');
         finish();
         if (live) {
