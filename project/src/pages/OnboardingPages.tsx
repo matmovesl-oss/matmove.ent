@@ -257,11 +257,14 @@ export function RoleSelectionPage() {
     <h2 className="ob-title">How will you use MatMove?</h2>
     <p className="ob-subtitle">Save your phone number and account type. You can verify your identity now or later.</p>
     <div className="role-choice-grid">{([
-      { key: 'rider', Icon: CarFront }, { key: 'driver', Icon: Truck }, { key: 'merchant', Icon: Store }
-    ] as const).map(({ key, Icon }) => <button key={key} type="button"
+      { key: 'rider', Icon: CarFront, illustration: '/matmove-car.svg' },
+      { key: 'driver', Icon: Truck, illustration: '/matmove-bike.svg' },
+      { key: 'merchant', Icon: Store, illustration: null }
+    ] as const).map(({ key, Icon, illustration }) => <button key={key} type="button"
       className={`role-choice-card ${selected === key ? 'selected' : ''}`}
       disabled={busy || (!!session?.roles.length && session.roles[0] !== key)} onClick={() => setSelected(key)}>
-      <Icon size={26}/><strong>{roleLabels[key]}</strong><span>{roleDescriptions[key]}</span>
+      <span className="flex h-14 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 to-sky-50">{illustration?<img src={illustration} alt="" className="h-12 w-14 object-contain"/>:<Icon size={26} strokeWidth={1.8}/>}</span>
+      <strong>{roleLabels[key]}</strong><span>{roleDescriptions[key]}</span>
       {selected === key && <Check size={16}/>}</button>)}</div>
     <label className="field mt-6"><span>Phone number</span><input
       type="tel"
