@@ -283,7 +283,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
 
   return (
     <div className="min-h-screen flex-1 bg-slate-50">
-      <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b bg-white px-4 py-4 shadow-sm sm:px-6">
+      <header className={`sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b bg-white px-4 py-4 shadow-sm sm:px-6 ${activeSection === 'wallet' ? 'hidden' : ''}`}>
         <div className="flex items-center gap-3"><div className="rounded-xl bg-orange-100 p-2 text-orange-600"><Store size={20} /></div><h2 className="font-bold text-slate-900">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
         <div className="flex gap-2">
           {!canTransact ? <span className="rounded-xl border border-red-200 bg-red-100 px-4 py-2 text-xs font-bold text-red-700">{isFrozen ? 'Wallet unavailable' : 'Approval pending'}</span> : (
