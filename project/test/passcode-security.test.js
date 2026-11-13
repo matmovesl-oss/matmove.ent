@@ -22,6 +22,7 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  `);
  const home=await readFile('docs/PORTAL_HOME_SETUP.sql','utf8');await pg.exec(home.slice(home.indexOf('create or replace function public.matmove_preferences_role('),home.indexOf('create or replace function public.matmove_home_preferences(')));
  const sql=await readFile('docs/PASSCODE_SECURITY_SETUP.sql','utf8');await pg.exec(sql);
+ const nineDigitMigration=await readFile('supabase/migrations/20261113095000_matmove_passcode_new_pin_six_to_nine_digits.sql','utf8');await pg.exec(nineDigitMigration);
  const session=async(id,role='authenticated')=>{await pg.exec('reset role');await pg.query("select set_config('request.jwt.claim.sub',$1,false)",[id||'']);await pg.exec('set role '+role);};
  const rpc=async(action,pin=null,next=null)=>(await pg.query('select public.matmove_customer_passcode($1,$2,$3) d',[action,pin,next])).rows[0].d;
  await t.test('legacy PIN is salted/hashed once and cleared from the readable profile',async()=>{
@@ -52,7 +53,7 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  await session(null,'anon');await assert.rejects(rpc('status'),/permission denied/);await session(staff);await assert.rejects(rpc('status'),/Customer account required/);await session(null);await assert.rejects(rpc('status'),/Sign in/);
  });
  await t.test('reruns preserve hashes and attempt counters; status never claims an unlock',async()=>{
- await session(uid);await rpc('verify','999999');await pg.exec('reset role');const before=(await pg.query('select * from matmove_customer_passcodes where user_id=$1',[uid])).rows[0];await pg.exec(sql);assert.deepEqual((await pg.query('select * from matmove_customer_passcodes where user_id=$1',[uid])).rows[0],before);
+ await session(uid);await rpc('verify','999999');await pg.exec('reset role');const before=(await pg.query('select * from matmove_customer_passcodes where user_id=$1',[uid])).rows[0];await pg.exec(sql);await pg.exec(nineDigitMigration);assert.deepEqual((await pg.query('select * from matmove_customer_passcodes where user_id=$1',[uid])).rows[0],before);
  await session(uid);assert.equal((await rpc('status')).ok,false);assert.equal((await rpc('status')).userId,uid);
  });
 
@@ -78,11 +79,12 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
   await pg.query('insert into auth.sessions(id,user_id,created_at,not_after) values($1,$2,now(),null)',[secondSession,uid]);
   await session(uid);
   await pg.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({session_id:secondSession})]);
-  await assert.rejects(rpc('recover',null,'12345'),/6 and 10 digits/i);
-  await assert.rejects(rpc('recover',null,'12345678901'),/6 and 10 digits/i);
-  const tenDigitReset=await rpc('recover',null,'1234567890');
-  assert.equal(tenDigitReset.code,'saved');assert.equal(tenDigitReset.digits,10);
-  assert.equal((await rpc('verify','1234567890')).ok,true);
+  await assert.rejects(rpc('recover',null,'12345'),/6 and 9 digits/i);
+  await assert.rejects(rpc('recover',null,'12345678901'),/6 and 9 digits/i);
+  await assert.rejects(rpc('recover',null,'1234567890'),/6 and 9 digits/i);
+  const nineDigitReset=await rpc('recover',null,'123456789');
+  assert.equal(nineDigitReset.code,'saved');assert.equal(nineDigitReset.digits,9);
+  assert.equal((await rpc('verify','123456789')).ok,true);
   await pg.exec('reset role');
   assert.equal((await pg.query('select balance from wallets where user_id=$1',[uid])).rows[0].balance,'42.50');
   assert.equal((await pg.query('select kyc_status from profiles where id=$1',[uid])).rows[0].kyc_status,'approved');
@@ -112,18 +114,19 @@ test('credential recovery screens are separate and each updates only its selecte
  assert.doesNotMatch(passcodeBranch,/updateUser|password/);
 });
 
-test('passcode recovery accepts 6 through 10 digits and rejects shorter or longer values',async()=>{
- const migration=await readFile('supabase/migrations/20261111120000_matmove_passcode_email_recovery.sql','utf8');
+test('new passcodes use six through nine digits and preserve legacy verification',async()=>{
+ const migration=await readFile('supabase/migrations/20261113095000_matmove_passcode_new_pin_six_to_nine_digits.sql','utf8');
  const component=await readFile('src/components/CustomerPasscode.tsx','utf8');
  const screen=await readFile('src/pages/UpdatePassword.tsx','utf8');
  assert.match(migration,/digits between 6 and 10/);
- assert.match(migration,/\^\[0-9\]\{6,10\}\$/);
+ assert.match(migration,/\^\[0-9\]\{6,9\}\$/);
  assert.match(migration,/recovery_session_id = session_id/);
  assert.match(migration,/auth\.sessions/);
  assert.match(migration,/recovery_sent_at/);
  assert.doesNotMatch(migration,/auth\.jwt\(\)->'amr'/);
- assert.match(component,/\^\\d\{6,10\}\$/);
- assert.match(screen,/pattern="\[0-9\]\{6,10\}"/);
- assert.match(screen,/maxLength=\{10\}/);
- assert.match(screen,/slice\(0, 10\)/);
+ assert.match(component,/\^\\d\{6,9\}\$/);
+ assert.match(component,/\[0-9\]\{6,10\}/); // existing ten-digit credentials remain verifiable
+ assert.match(screen,/pattern="\[0-9\]\{6,9\}"/);
+ assert.match(screen,/maxLength=\{9\}/);
+ assert.match(screen,/slice\(0, 9\)/);
 });

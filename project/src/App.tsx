@@ -5,6 +5,7 @@ import MatMoveHelp, {customerHelpSection} from '@/components/MatMoveHelp';
 import NotificationBell from '@/components/NotificationBell';
 
 import PortalHome from '@/components/PortalHome';
+import CustomerHome from '@/components/CustomerHome';
 import PortalGuide from '@/components/PortalGuide';
 import AccountProfile, {AccountIdentity} from '@/components/AccountProfile';
 
@@ -43,10 +44,6 @@ import {
   SignupPage,
   AuthCallbackPage,
 } from '@/pages/AuthPages';
-import {
-  ForgotPasswordPage,
-  ForgotPasscodePage,
-} from '@/pages/PasswordPages';
 import {
   UpdatePassword,
 } from '@/pages/UpdatePassword';
@@ -104,6 +101,7 @@ import {
 type PortalSection =
   | 'home'
   | 'ride'
+  | 'services'
   | 'wallet'
   | 'trips'
   | 'shop'
@@ -148,21 +146,32 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
   const location = useLocation();
   const {session:portalSession}=useAuth();
   const sectionOwner=portalSession?.user.id||'';
+  const sessionUser=portalSession?.user;
+  const initialProfile=sessionUser?.id&&portalSession?.roles?.[0]?{
+    id:sessionUser.id,
+    email:sessionUser.email||'',
+    phone:sessionUser.phone||'',
+    first_name:sessionUser.firstName||'',
+    last_name:sessionUser.lastName||'',
+    full_name:[sessionUser.firstName,sessionUser.lastName].filter(Boolean).join(' '),
+    role:portalSession.roles[0],
+    kyc_status:portalSession.kycStatus||'not_started'
+  }:null;
 
   const [profile, setProfile] =
-    useState<any>(null);
+    useState<any>(initialProfile);
 
   const [wallet, setWallet] =
     useState<any>(null);
 
   const [loading, setLoading] =
-    useState(true);
+    useState(!initialProfile);
 
   const [portalError, setPortalError] =
     useState('');
 
-  const [activeSection, setActiveSection] =
-    useState<PortalSection>(()=>{try{const saved=sessionStorage.getItem(`matmove:portal-section:v1:${sectionOwner}`);return ['home','ride','wallet','trips','shop','inventory','account'].includes(saved||'')?saved as PortalSection:'home';}catch{return 'home';}});
+  // Every successful passcode unlock begins at Home, regardless of the last tab visited.
+  const [activeSection, setActiveSection] = useState<PortalSection>('home');
   const [guideReplay,setGuideReplay]=useState(0);
   const [sectionTransitioning,setSectionTransitioning]=useState(false);
   const previousSectionRef=useRef(activeSection);
@@ -173,7 +182,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     const timeout=window.setTimeout(()=>setSectionTransitioning(false),260);
     return ()=>window.clearTimeout(timeout);
   },[activeSection]);
-  useEffect(()=>{if(!sectionOwner||profile?.id!==sectionOwner)return;const sections=['home','ride','wallet','trips','account',...(profile.role==='rider'?['shop']:profile.role==='merchant'?['inventory']:[])];if(!sections.includes(activeSection)){setActiveSection('home');return;}try{sessionStorage.setItem(`matmove:portal-section:v1:${sectionOwner}`,activeSection);}catch{}},[sectionOwner,profile?.id,profile?.role,activeSection]);
+  useEffect(()=>{if(!sectionOwner||profile?.id!==sectionOwner)return;const sections=['home','ride','services','wallet','trips','account',...(profile.role==='rider'?['shop']:profile.role==='merchant'?['inventory']:[])];if(!sections.includes(activeSection)){setActiveSection('home');return;}try{sessionStorage.setItem(`matmove:portal-section:v1:${sectionOwner}`,activeSection);}catch{}},[sectionOwner,profile?.id,profile?.role,activeSection]);
 
   const [loggingOut, setLoggingOut] =
     useState(false);
@@ -210,7 +219,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     useCallback(async () => {
       try {
         setPortalError('');
-        setLoading(true);
+        if (!profile?.id) setLoading(true);
 
         const {
           data: { session },
@@ -279,11 +288,11 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
           wallets: walletData || [],
         });
       } catch (err: any) {
-        setPortalError(err.message);
+        if (!profile?.id) setPortalError(err.message || 'Unable to load your account.');
       } finally {
         setLoading(false);
       }
-    }, [location.pathname]);
+    }, [location.pathname, profile?.id]);
 
   useEffect(() => {
     fetchUserData();
@@ -307,8 +316,12 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
   // Do not construct the guide, header or dashboards with a null profile.
   if (loading || (!profile && !portalError)) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <p role="status">Loading your portal…</p>
+      <main className="mm-portal-morph flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[#f6faf8] px-5 py-10">
+        <div role="status" aria-label="Opening MatMove" className="w-full max-w-sm animate-[mm-home-arrive_.45s_ease-out_both] text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.35rem] bg-[#0b2236] text-2xl font-black tracking-tight text-white shadow-xl">M</div>
+          <p className="mt-5 text-xs font-black uppercase tracking-[.24em] text-emerald-700">MatMove</p>
+          <div className="mx-auto mt-7 h-1.5 w-36 overflow-hidden rounded-full bg-emerald-100"><span className="block h-full w-1/2 animate-[mm-loading-sweep_1s_ease-in-out_infinite] rounded-full bg-emerald-600"/></div>
+        </div>
       </main>
     );
   }
@@ -369,6 +382,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
             onBack={() =>
               setActiveSection('home')
             }
+            onServices={() => setActiveSection('services')}
           />
         </div>
 
@@ -388,8 +402,9 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
       {accountHeader}
       <div className="mx-auto max-w-6xl px-4"><KycStatusNotice profile={profile} onVerify={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal?resume=1'); }}/></div>
       <div className={sectionTransitioning ? 'mm-section-enter' : undefined}>
-        {activeSection === 'home' && <PortalHome key={`${profile.id}:${role}`} profile={profile} onNavigate={setActiveSection} />}
-        {activeSection !== 'home' && role === 'rider' && (
+        {activeSection === 'home' && <CustomerHome key={`${profile.id}:${role}`} profile={profile} onNavigate={setActiveSection} />}
+        {activeSection === 'services' && <PortalHome key={`${profile.id}:${role}:services`} profile={profile} mode="services" onNavigate={setActiveSection} />}
+        {activeSection !== 'home' && activeSection !== 'services' && role === 'rider' && (
           <RiderDashboard
             profile={profile}
             wallet={wallet}
@@ -397,7 +412,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
           />
         )}
 
-        {activeSection !== 'home' && role === 'driver' && (
+        {activeSection !== 'home' && activeSection !== 'services' && role === 'driver' && (
           <DriverDashboard
             profile={profile}
             wallet={wallet}
@@ -405,7 +420,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
           />
         )}
 
-        {activeSection !== 'home' && role === 'merchant' && (
+        {activeSection !== 'home' && activeSection !== 'services' && role === 'merchant' && (
           <MerchantDashboard
             profile={profile}
             wallet={wallet}
@@ -442,10 +457,12 @@ function AccountSection({
   onLogout,
   onBack,
   onLock,
+  onServices,
 }: any) {
   const navigate = useNavigate();
   const resumeVerification = () => { if (profile.kyc_status === 'approved') return; sessionStorage.setItem('ob_role', profile.role); navigate('/onboarding/personal?resume=1'); };
   const [viewingGames, setViewingGames] = useState(false);
+  const [viewingWallet, setViewingWallet] = useState(false);
   const [
     showDeleteConfirm,
     setShowDeleteConfirm,
@@ -1175,6 +1192,20 @@ function AccountSection({
     );
   }
 
+  if (viewingWallet) {
+    const walletPage = profile.role === 'rider'
+      ? <RiderDashboard profile={profile} wallet={wallet} activeSection="wallet" />
+      : profile.role === 'driver'
+        ? <DriverDashboard profile={profile} wallet={wallet} activeSection="wallet" />
+        : <MerchantDashboard profile={profile} wallet={wallet} activeSection="wallet" />;
+    return <div className="min-h-screen bg-slate-50 px-4 pb-24 pt-4">
+      <div className="mx-auto mb-3 max-w-6xl">
+        <button type="button" onClick={() => setViewingWallet(false)} className="min-h-11 rounded-xl border bg-white px-4 text-sm font-bold text-slate-700">← Back to Account</button>
+      </div>
+      {walletPage}
+    </div>;
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
       <button
@@ -1187,6 +1218,16 @@ function AccountSection({
       <h1 className="text-3xl font-bold text-slate-900 mb-6">
         Account & Profile
       </h1>
+      <button type="button" onClick={() => setViewingWallet(true)} className="mb-5 flex w-full items-center gap-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-left transition hover:bg-emerald-100">
+        <span className="rounded-2xl bg-white p-3 text-emerald-700"><Wallet size={24}/></span>
+        <span className="min-w-0 flex-1"><strong className="block text-slate-950">Wallet & payments</strong><span className="mt-1 block text-xs text-slate-600">Open balances, transactions, top-ups, withdrawals and transfers</span></span>
+        <ArrowRight className="text-emerald-700"/>
+      </button>
+      <button type="button" onClick={onServices} className="mb-5 flex w-full items-center gap-4 rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:bg-slate-50">
+        <span className="rounded-2xl bg-slate-100 p-3 text-slate-700"><Store size={24}/></span>
+        <span className="min-w-0 flex-1"><strong className="block text-slate-950">Services & tools</strong><span className="mt-1 block text-xs text-slate-600">Shop, business, travel, events, concierge and games</span></span>
+        <ArrowRight className="text-slate-500"/>
+      </button>
 
       <div className="mb-5 flex justify-end"><button type="button" onClick={onLock} className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2 font-bold text-slate-700"><LockKeyhole size={18}/>Lock app</button></div>
       <KycStatusNotice profile={profile} onVerify={resumeVerification}/>
@@ -1381,9 +1422,8 @@ function AccountSection({
 function PortalNavigation({ activeSection, onNavigate, role }: any) {
   const tabs = [
     { id: 'home', label: 'Home', icon: Home },
-    { id: 'ride', label: role === 'driver' ? 'Radar' : 'Ride', icon: role === 'driver' ? Navigation : Car },
-    ...(role === 'rider' ? [{ id: 'shop', label: 'Shop', icon: ShoppingBag }] : role === 'merchant' ? [{ id: 'inventory', label: 'Business', icon: Store }] : []),
-    { id: 'wallet', label: 'Wallet', icon: Wallet },
+    { id: 'ride', label: role === 'driver' ? 'Ride' : 'Ride', icon: role === 'driver' ? Navigation : Car },
+    { id: 'services', label: 'Services', icon: Store },
     { id: 'trips', label: 'Trips', icon: Navigation },
   ];
   return <nav className="mm-portal-nav" aria-label="Main navigation">
@@ -1453,15 +1493,6 @@ export default function App() {
       <Route
         path="/signup"
         element={<SignupPage />}
-      />
-
-      <Route
-        path="/forgot-password"
-        element={<ForgotPasswordPage />}
-      />
-      <Route
-        path="/forgot-passcode"
-        element={<ForgotPasscodePage />}
       />
 
       <Route

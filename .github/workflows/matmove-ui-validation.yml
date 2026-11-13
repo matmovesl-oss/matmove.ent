@@ -1,0 +1,43 @@
+name: MatMove UI validation
+
+on:
+  pull_request:
+    paths:
+      - "project/**"
+      - ".github/workflows/matmove-ui-validation.yml"
+  push:
+    branches:
+      - main
+      - redesign/customer-mobile-experience-20261113
+      - feat/admin-homepage-promotions-ui-20261113
+    paths:
+      - "project/**"
+      - ".github/workflows/matmove-ui-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: project
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: project/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run tests
+        run: node --test test/customer-home-ui.test.mjs test/customer-mobile-navigation.test.js test/credential-recovery-placement.test.js test/customer-assistance-ui.test.js
+      - name: Type-check
+        run: npm run typecheck
+      - name: Build production bundle
+        run: npm run build
+# Validation rerun after latest UI adjustments.
