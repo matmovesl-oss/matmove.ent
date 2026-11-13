@@ -142,8 +142,8 @@ test('legacy shared-account release remains audited while production configurati
   assert.match(sql, /set status = 'completed',[\s\S]*settlement_mode = 'internal_ledger'/i);
   assert.match(sql, /revoke all on function public\.matmove_cash_ride_settle_shared_capture/i);
   assert.match(server, /data\.fee_revenue_account_id !== platformFeeAccountId/);
-  assert.doesNotMatch(server.slice(server.indexOf('async function readSettings'), server.indexOf('function providerAccountBalance')),
-    /fee_hold_account_id === platformFeeAccountId/);
+  assert.match(server.slice(server.indexOf('async function readSettings'), server.indexOf('function providerAccountBalance')),
+    /data\.fee_hold_account_id === platformFeeAccountId/);
   assert.match(server, /kind === 'capture' && storedLeg\.source_account_ref === storedLeg\.destination_account_ref/);
   assert.match(server, /matmove_cash_ride_settle_shared_capture/);
 });
