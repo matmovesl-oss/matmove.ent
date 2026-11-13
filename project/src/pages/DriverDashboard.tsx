@@ -395,7 +395,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
       {(rideNotice || walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice && <p>{rideNotice}</p>}{walletNotice && <p>{walletNotice}</p>}</div>}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
+      <header className={`bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm ${activeSection === 'wallet' ? 'hidden' : ''}`}>
         <div className="flex items-center gap-4">
           <button type="button" aria-label={isOnline ? 'Go offline' : 'Go online'} aria-pressed={isOnline} onClick={toggleOnline} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}>
             <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${isOnline ? 'translate-x-7' : 'translate-x-1'}`} />
