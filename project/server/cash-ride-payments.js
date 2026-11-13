@@ -58,9 +58,7 @@ async function readBooking(db, bookingId) {
 
   if (error) throw new HttpError(503, 'Unable to verify the cash ride booking.');
   if (!data) throw new HttpError(404, 'Cash ride booking not found.');
-  // The database setting must match this deployment's configured platform fee
-  // account. The cash capture leg therefore settles only to MONIME_PLATFORM_FEE_ACCOUNT_ID.
-  return { ...data, fee_revenue_account_id: platformFeeAccountId };
+  return data;
 }
 
 async function readPayment(db, bookingId) {
@@ -131,15 +129,15 @@ async function readSettings(db) {
 
   if (error) throw new HttpError(503, 'Cash collection configuration is unavailable.');
   const platformFeeAccountId = process.env.MONIME_PLATFORM_FEE_ACCOUNT_ID;
-
   if (!data?.enabled ||
       !validAccountId(data.fee_hold_account_id) ||
+      !validAccountId(data.fee_revenue_account_id) ||
       !validAccountId(platformFeeAccountId) ||
       data.fee_revenue_account_id !== platformFeeAccountId ||
       data.fee_hold_account_id === platformFeeAccountId) {
     throw new HttpError(
       503,
-      'Cash collection is disabled until the restricted holding account is configured and the fee revenue account matches MONIME_PLATFORM_FEE_ACCOUNT_ID.',
+      'Cash collection is disabled until its revenue destination matches MONIME_PLATFORM_FEE_ACCOUNT_ID and the restricted holding account is distinct.',
       'CASH_NOT_CONFIGURED'
     );
   }
