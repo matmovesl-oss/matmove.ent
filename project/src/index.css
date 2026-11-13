@@ -321,3 +321,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @media (prefers-reduced-motion: reduce) {
   .mm-landing-car, .mm-road-car, .mm-portal-morph { animation: none !important; }
 }
+
+@keyframes mm-landing-drive-mobile {
+  0% { transform: translate(0,0) rotate(-8deg); }
+  28% { transform: translate(62px,-14px) rotate(9deg); }
+  58% { transform: translate(137px,-44px) rotate(-5deg); }
+  100% { transform: translate(215px,-82px) rotate(5deg); }
+}
+@media (max-width: 640px) {
+  .mm-landing-car { animation-name: mm-landing-drive-mobile; }
+}
