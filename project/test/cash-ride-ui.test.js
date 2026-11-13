@@ -9,7 +9,7 @@ const rideServiceFile = new URL('../src/services/rideService.ts', import.meta.ur
 
 test('rider cash option is gated by server cash configuration and only applies to Ride', async () => {
   const code = await readFile(riderFile, 'utf8');
-  assert.match(code, /start-ride\?action=cash_config/);
+  assert.match(code, /accept-ride-escrow\?action=cash_config/);
   assert.match(code, /data\?\.enabled === true/);
   assert.match(code, /data\?\.accountsVerified === true/);
   assert.match(code, /serviceType === 'ride'/);
@@ -52,7 +52,7 @@ test('cash trip submission uses the same booking ID for fee reservation recovery
   const service = await readFile(rideServiceFile, 'utf8');
   assert.match(hook, /payment_method\s*===\s*'cash'/);
   assert.match(hook, /reserveCashRide\(body\.id/);
-  assert.match(hook, /start-ride\?action=cash_reserve/);
+  assert.match(hook, /accept-ride-escrow\?action=cash_reserve/);
   assert.match(service, /cash_confirm: '\/api\/start-ride\?action=cash_confirm'/);
   assert.match(service, /cash_reserve: '\/api\/start-ride\?action=cash_reserve'/);
 });
