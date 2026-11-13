@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { ShieldCheck, ArrowLeft, Check, CarFront, MapPin, Sparkles, Package } from 'lucide-react';
+import { ShieldCheck, ArrowLeft, Check, MapPin, Sparkles, Package } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 function AuthJourneyVisual(){
