@@ -183,8 +183,9 @@ test('starting voice editing clears the previous destination and fare before any
 
 test('map-first ride booking keeps map visible behind one expandable pickup, destination, fare and payment sheet',()=>withPicker(async h=>{
  assert.match(h.text,/Plan your trip/);
- assert.match(h.text,/Pickup address/);
- assert.match(h.text,/Destination address/);
+ const locationInputs=nodes(h.tree).filter(n=>n.type==='input');
+ assert.ok(locationInputs.some(n=>n.props['aria-label']==='Pickup address'));
+ assert.ok(locationInputs.some(n=>n.props['aria-label']==='Destination address'));
  assert.match(h.text,/Fare and payment controls/);
  const map=nodes(h.tree).find(n=>n.type==='div'&&n.props['aria-label']==='Choose pickup and destination on the map');
  assert.ok(map);
