@@ -51,6 +51,15 @@ export function AuthShell({ children }: { children: ReactNode }) {
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-sky-100/70 blur-3xl"/>
         <div className="relative z-10 mx-auto w-full max-w-md">
           <div className="mb-8 flex items-center gap-3 lg:hidden"><img src="/logo.jpg" alt="MatMove" className="h-12 w-auto"/><div><p className="font-black text-slate-900">MatMove</p><p className="text-[9px] font-bold uppercase tracking-[.18em] text-emerald-700">Your everyday, connected</p></div></div>
+          <div className="mm-auth-map relative mb-7 overflow-hidden rounded-2xl border border-slate-200 bg-[#0b263c] p-3 shadow-lg lg:hidden">
+           <div className="flex items-center justify-between"><span className="text-[9px] font-black tracking-[.18em] text-emerald-200">FREETOWN ROUTE PREVIEW</span><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"/></div>
+           <svg viewBox="0 0 520 110" className="mt-1 h-24 w-full" aria-hidden="true">
+            <path d="M-10 86 C65 52 82 105 155 68 S245 18 318 53 S425 85 530 20" fill="none" stroke="#1d5363" strokeWidth="17" strokeLinecap="round"/>
+            <path d="M-10 86 C65 52 82 105 155 68 S245 18 318 53 S425 85 530 20" fill="none" stroke="#a7f3d0" strokeWidth="2" strokeDasharray="6 8"/>
+            <g transform="translate(-14 -8)"><rect x="-11" y="-5" width="22" height="10" rx="4" fill="#a7f3d0"/><circle cx="-6" cy="6" r="2.5" fill="#082f49"/><circle cx="6" cy="6" r="2.5" fill="#082f49"/><animateMotion dur="6s" repeatCount="indefinite" rotate="auto" path="M28 83 C65 52 82 105 155 68 S245 18 318 53 S425 85 490 28"/></g>
+           </svg>
+           <p className="text-[9px] text-slate-300">Aberdeen <span className="text-emerald-300">→</span> Lumley <span className="text-emerald-300">→</span> Central Freetown · Illustrative route</p>
+          </div>
           {children}
         </div>
       </section>
