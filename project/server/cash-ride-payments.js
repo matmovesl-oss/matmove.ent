@@ -133,15 +133,19 @@ async function readSettings(db) {
     .maybeSingle();
 
   if (error) throw new HttpError(503, 'Cash collection configuration is unavailable.');
+  const escrowAccountId = process.env.MONIME_ESCROW_ACCOUNT_ID;
   const platformFeeAccountId = process.env.MONIME_PLATFORM_FEE_ACCOUNT_ID;
 
   if (!data?.enabled ||
-      !validAccountId(data.fee_hold_account_id) ||
+      !validAccountId(escrowAccountId) ||
       !validAccountId(platformFeeAccountId) ||
+      !validAccountId(data.fee_hold_account_id) ||
+      data.fee_hold_account_id !== escrowAccountId ||
+      data.fee_hold_account_id === platformFeeAccountId ||
       data.fee_revenue_account_id !== platformFeeAccountId) {
     throw new HttpError(
       503,
-      'Cash collection is disabled until the cash-fee account is configured and the fee revenue account matches MONIME_PLATFORM_FEE_ACCOUNT_ID.',
+      'Cash collection is disabled until the escrow and platform-fee accounts match their production settings and remain separate.',
       'CASH_NOT_CONFIGURED'
     );
   }
