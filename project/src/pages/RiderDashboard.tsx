@@ -519,8 +519,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
       <div className="p-4 max-w-6xl mx-auto space-y-4">
         {(activeSection === 'home' || activeSection === 'ride' || !activeSection) && (
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] gap-4">
-            <div className="min-w-0 bg-white p-4 rounded-2xl border shadow-sm space-y-3 h-fit">
+          <div className="relative flex min-w-0 flex-col gap-0">
+            <div className="order-2 relative z-20 -mt-5 max-h-[58dvh] overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl space-y-3">
               <p className="text-xs text-slate-500">Book your ride, keke, bike, or delivery below.</p>
               <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
                 <button onClick={() => setViewMode('active')} className={`font-bold ${viewMode === 'active' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Active Request</button>
@@ -773,11 +773,12 @@ function RiderMain({ profile, wallet, activeSection }: any) {
               )}
             </div>
 
-            <div className="min-w-0">
+            <div className="order-1 min-w-0">
               {activeBooking && ['accepted', 'in_progress'].includes(activeBooking.status) ? (
                 <ActiveTripMap key={activeBooking.id} userId={profile?.id} bookingId={activeBooking.id} />
               ) : (
                 <RideLocationPicker
+                  layout="map-first"
                   key={profile?.id || 'location-picker'}
                   userId={profile?.id}
                   onChange={(selection: TripLocations) => {
