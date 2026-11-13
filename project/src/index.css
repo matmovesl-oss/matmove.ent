@@ -1,10 +1,10 @@
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root { font-family: 'DM Sans', sans-serif; color: #16263d; background: #f7f9fc; font-synthesis: none; --navy: #152d4e; --blue: #1769e0; --blue-soft: #eaf3ff; --text: #16263d; --muted: #708099; --line: #e6ebf2; --green: #16a571; --orange: #e99431; }
+:root { font-family: 'Plus Jakarta Sans', sans-serif; color: #16263d; background: #f7f9fc; font-synthesis: none; --navy: #152d4e; --blue: #1769e0; --blue-soft: #eaf3ff; --text: #16263d; --muted: #708099; --line: #e6ebf2; --green: #16a571; --orange: #e99431; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; background: #f7f9fc; }
 button, input, select, textarea { font: inherit; }
@@ -349,3 +349,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @media (prefers-reduced-motion: reduce) {
   .mm-landing-car-svg { visibility: hidden !important; }
 }
+
+/* MatMove's customer and staff experiences share one typography system. */
+.font-display, h1, h2, h3, h4 { font-family: 'Sora', 'Plus Jakarta Sans', sans-serif; }
+.font-display { letter-spacing: -.035em; }
+.mm-vehicle-art { object-fit: contain; filter: drop-shadow(0 8px 12px rgba(14, 39, 61, .13)); }

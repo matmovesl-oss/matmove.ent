@@ -562,20 +562,14 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
               {viewMode === 'new' || (!activeBooking && viewMode === 'active') ? (
                 <>
                   <div className="mb-4">
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Seats / Passengers (Max 3)</label>
-                    <div className="flex gap-2">
+                    <div className="mb-2 flex items-end justify-between gap-3"><div><label className="block text-xs font-extrabold text-slate-800">Who is travelling?</label><p className="mt-1 text-[10px] text-slate-500">Choose up to three passengers</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500">Max 3</span></div>
+                    <div className="grid grid-cols-3 gap-2">
                       {[1, 2, 3].map(count => (
-                        <button
-                          key={count}
-                          type="button"
-                          onClick={() => setPassengerCount(count)}
-                          className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
-                            passengerCount === count
-                              ? 'bg-emerald-600 text-white border-emerald-600'
-                              : 'bg-slate-50 text-slate-600 border-slate-200'
-                          }`}
-                        >
-                          {count} Seat{count > 1 ? 's' : ''}
+                        <button key={count} type="button" onClick={() => setPassengerCount(count)} aria-pressed={passengerCount===count}
+                          className={`flex min-h-[94px] flex-col items-center justify-center gap-2 rounded-2xl border p-2 transition duration-200 ${passengerCount===count?'border-emerald-400 bg-gradient-to-br from-emerald-50 to-white text-emerald-900 shadow-[0_8px_20px_rgba(5,150,105,.1)] ring-1 ring-emerald-200':'border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:shadow-sm'}`}>
+                          <span className="flex h-8 items-end justify-center gap-0.5" aria-hidden="true">{Array.from({length:count},(_,index)=><svg key={index} viewBox="0 0 22 30" className="h-7 w-5" fill="none"><circle cx="11" cy="6" r="4" fill={passengerCount===count?'#07865f':'#8193a3'}/><path d="M5 27v-7c0-4 2-7 6-7s6 3 6 7v7M3 21h16M8 15l-3 6m9-6 3 6" stroke={passengerCount===count?'#07865f':'#8193a3'} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>)}</span>
+                          <span className="text-xs font-black">{count} {count===1?'passenger':'passengers'}</span>
+                          <span className="text-[9px] font-semibold text-slate-400">{count===1?'Solo trip':count===2?'Two travelling':'Small group'}</span>
                         </button>
                       ))}
                     </div>
@@ -605,24 +599,15 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                   <div className="space-y-3">
                     <div><div className="mb-2 flex items-center justify-between"><span className="text-xs font-extrabold text-slate-800">Choose your vehicle</span><span className="text-[10px] font-semibold text-slate-400">Tap to select</span></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {(['keke', 'bike', 'car', 'van'] as const).map(v => {
-                        const VehicleIcon = v === 'bike' ? Bike : v === 'van' ? Truck : CarFront;
-                        const label = v === 'bike' ? 'Motorbike' : v === 'keke' ? 'Keke' : v === 'car' ? 'Car' : 'Van';
+                        const label = v === 'bike' ? 'Bike' : v === 'keke' ? 'Keke' : v === 'car' ? 'Car' : 'Van';
                         const selected = vehicleType === v;
+                        const artwork = v==='keke'?'/matmove-keke.svg':v==='bike'?'/matmove-bike.svg':v==='car'?'/matmove-car.svg':'/matmove-van.svg';
+                        const detail = v==='keke'?'City three-wheeler':v==='bike'?'Quick solo ride':v==='car'?'Comfort ride':'Extra space';
                         return (
-                          <button
-                            key={v}
-                            type="button"
-                            onClick={() => setVehicleType(v)}
-                            aria-label={`Choose ${label}`}
-                            aria-pressed={selected}
-                            className={`group relative flex min-h-[76px] items-center gap-3 overflow-hidden rounded-2xl border p-3 text-left transition duration-200 ${selected ? 'border-emerald-400 bg-gradient-to-br from-emerald-50 to-white text-emerald-900 shadow-[0_8px_24px_rgba(5,150,105,.12)] ring-1 ring-emerald-200' : 'border-slate-200 bg-white text-slate-600 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md'}`}
-                          >
-                            <span aria-hidden="true" className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] shadow-inner transition ${selected ? 'bg-gradient-to-br from-emerald-600 to-teal-500 text-white' : 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600'}`}>
-                              <span className="absolute inset-1 rounded-[14px] border border-white/40"/>
-                              <VehicleIcon size={24} strokeWidth={2.1}/>
-                              {selected && <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-white ring-2 ring-emerald-500"/>}
-                            </span>
-                            <span className="min-w-0"><span className="block text-xs font-black">{label}</span><span className="mt-0.5 block text-[10px] text-slate-400">{v==='keke'?'3 seats':v==='bike'?'Quick solo ride':v==='car'?'Comfort ride':'Extra space'}</span></span>
+                          <button key={v} type="button" onClick={() => setVehicleType(v)} aria-label={`Choose ${label}`} aria-pressed={selected}
+                            className={`group relative flex min-h-[132px] flex-col items-center justify-between overflow-hidden rounded-2xl border px-2 py-2.5 text-center transition duration-200 ${selected ? 'border-emerald-400 bg-gradient-to-br from-emerald-50 via-white to-sky-50 shadow-[0_8px_24px_rgba(5,150,105,.12)] ring-1 ring-emerald-200' : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md'}`}>
+                            <span className="relative flex h-[76px] w-full items-center justify-center rounded-xl bg-gradient-to-br from-slate-50 to-white"><img src={artwork} alt="" className="h-[72px] w-full object-contain transition duration-300 group-hover:scale-[1.04]"/>{selected&&<span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white"><Check size={12} strokeWidth={3}/></span>}</span>
+                            <span className="mt-1 block text-xs font-black text-slate-900">{label}</span><span className="block text-[9px] font-medium text-slate-400">{detail}</span>
                           </button>
                         );
                       })}
