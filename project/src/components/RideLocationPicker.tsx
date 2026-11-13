@@ -173,7 +173,7 @@ export function RideLocationPicker({ onChange, userId, layout = 'default' }: { o
     setReady(false); setMapError('');
     loadGoogleMaps(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').then(() => {
       if (disposed || !mapElement.current) return;
-      map.current = new google.maps.Map(mapElement.current, { center: CENTER, zoom: 14, disableDefaultUI: true, zoomControl: true, clickableIcons: false, gestureHandling: 'greedy' });
+      map.current = new google.maps.Map(mapElement.current, { center: CENTER, zoom: 13, minZoom: 11, maxZoom: 19, disableDefaultUI: true, zoomControl: true, zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }, mapTypeControl: false, streetViewControl: false, fullscreenControl: false, clickableIcons: false, gestureHandling: 'greedy', backgroundColor: '#e8eef2' });
       geocoder.current = new google.maps.Geocoder();
       renderer.current = new google.maps.DirectionsRenderer({ suppressMarkers: true, polylineOptions: { strokeColor: '#14765d', strokeWeight: 5 } });
       map.current.addListener('click', (event: google.maps.MapMouseEvent) => {
@@ -333,7 +333,7 @@ export function RideLocationPicker({ onChange, userId, layout = 'default' }: { o
   }
 
   return <section className="w-full min-w-0 space-y-3 rounded-2xl border bg-white p-3 sm:p-4" aria-label="Trip locations">
-    {layout === 'map-first' && <div ref={mapElement} aria-label="Choose pickup and destination on the map" style={{ height: 'clamp(340px, 58dvh, 620px)', minHeight: 340 }} className="w-full rounded-2xl bg-slate-100"/>}
+    {layout === 'map-first' && <div className="relative isolate overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 shadow-md"><div ref={mapElement} aria-label="Choose pickup and destination on the map" style={{ height: 'clamp(300px, 50dvh, 560px)', minHeight: 300 }} className="w-full bg-slate-100"/><div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/70 bg-white/95 px-3 py-2 text-[11px] font-extrabold tracking-wide text-slate-700 shadow-md"><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-500"/>FREETOWN · ROUTE MAP</div></div>}
     {userId && <div className="rounded-xl bg-slate-50 p-3 text-sm"><b>Saved Home & Work</b>{savedLoading ? <p role="status" className="mt-1 text-slate-600">Loading saved places…</p> : savedError ? <p role="alert" className="mt-1 text-red-700">{savedError} <button type="button" className="min-h-10 underline" onClick={() => setPreferencesRetry(n => n+1)}>Reload saved places</button></p> : !saved.length ? <p className="mt-1 text-xs text-slate-600">Select a location below to save it as Home or Work.</p> : <p className="mt-1 text-xs text-slate-600">Choose a saved place under Pickup or Destination.</p>}</div>}
     <p className="text-xs text-slate-600">Select both locations to preview the route automatically. Voice entry is optional; your browser may send audio to its speech service. MATMOVE does not save recordings. Review spoken text and choose a matching place. {!voiceAvailable&&'Voice entry is unavailable here; typing, Find and map pins remain available.'}</p>
     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">

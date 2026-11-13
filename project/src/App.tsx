@@ -86,6 +86,7 @@ import {
   Delete,
   ShoppingCart,
   ArrowRight,
+  ArrowLeft,
   Loader2,
   Trash2,
   BarChart2,
@@ -401,6 +402,13 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     <div className="portal-shell relative min-h-screen bg-slate-50 pb-24 [&_.mm-home-heading>button]:hidden">
       {accountHeader}
       <div className="mx-auto max-w-6xl px-4"><KycStatusNotice profile={profile} onVerify={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal?resume=1'); }}/></div>
+      {activeSection !== 'home' && activeSection !== 'services' && (
+        <div className="mx-auto max-w-6xl px-4 pt-3">
+          <button type="button" onClick={() => setActiveSection(activeSection === 'ride' ? 'home' : 'services')} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
+            <ArrowLeft size={16}/> {activeSection === 'ride' ? 'Back to Home' : 'Back to Services'}
+          </button>
+        </div>
+      )}
       <div className={sectionTransitioning ? 'mm-section-enter' : undefined}>
         {activeSection === 'home' && <CustomerHome key={`${profile.id}:${role}`} profile={profile} onNavigate={setActiveSection} />}
         {activeSection === 'services' && <PortalHome key={`${profile.id}:${role}:services`} profile={profile} mode="services" onNavigate={setActiveSection} />}

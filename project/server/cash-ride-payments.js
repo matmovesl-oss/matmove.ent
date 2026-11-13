@@ -11,7 +11,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const accountId = /^fac-[A-Za-z0-9_-]+$/;
 
 const safeErrors = {
-  CASH_NOT_CONFIGURED: [503, 'Cash collection is not enabled. The restricted Monime holding account has not been configured.'],
+  CASH_NOT_CONFIGURED: [503, 'Cash collection is not enabled or the Monime cash-fee account settings do not match.'],
   CASH_FEE_NOT_RESERVED: [409, 'The MatMove cash fee reserve is not verified. This ride cannot be accepted.'],
   CASH_COLLECTION_NOT_CONFIRMED: [409, 'Both rider and driver must confirm the physical cash handover before MatMove captures its fee.'],
   CASH_CAPTURE_NOT_VERIFIED: [409, 'The MatMove fee capture has not been verified. This ride is not complete.'],
@@ -60,6 +60,10 @@ async function readBooking(db, bookingId) {
   if (!data) throw new HttpError(404, 'Cash ride booking not found.');
   // The database setting must match this deployment's configured platform fee
   // account. The cash capture leg therefore settles only to MONIME_PLATFORM_FEE_ACCOUNT_ID.
+  const platformFeeAccountId = process.env.MONIME_PLATFORM_FEE_ACCOUNT_ID;
+  if (!validAccountId(platformFeeAccountId)) {
+    throw new HttpError(503, 'The platform fee destination is not configured.', 'CASH_NOT_CONFIGURED');
+  }
   return { ...data, fee_revenue_account_id: platformFeeAccountId };
 }
 
@@ -82,7 +86,7 @@ async function readPayment(db, bookingId) {
 async function readLegs(db, bookingId) {
   const { data, error } = await db
     .from('matmove_cash_ride_legs')
-    .select('leg_kind,amount_minor,currency,status,provider_transfer_id,verified_at,error_code,updated_at')
+    .select('leg_kind,amount_minor,currency,status,provider_transfer_id,settlement_mode,source_account_ref,destination_account_ref,verified_at,error_code,updated_at')
     .eq('booking_id', bookingId)
     .order('created_at', { ascending: true });
 
@@ -106,23 +110,26 @@ function publicSnapshot(payment, legs) {
     reserve: byKind.reserve ? {
       status: byKind.reserve.status,
       transferId: byKind.reserve.provider_transfer_id,
+      settlementMode: byKind.reserve.settlement_mode,
       verifiedAt: byKind.reserve.verified_at
     } : null,
     capture: byKind.capture ? {
       status: byKind.capture.status,
       transferId: byKind.capture.provider_transfer_id,
+      settlementMode: byKind.capture.settlement_mode,
       verifiedAt: byKind.capture.verified_at
     } : null,
     refund: byKind.refund ? {
       status: byKind.refund.status,
       transferId: byKind.refund.provider_transfer_id,
+      settlementMode: byKind.refund.settlement_mode,
       verifiedAt: byKind.refund.verified_at
     } : null,
     needsReview: payment.status === 'review_required' || legs.some(leg => leg.status === 'review_required')
   };
 }
 
-async function readSettings(db) {
+async function readSettings(db, { requireEnabled = true } = {}) {
   const { data, error } = await db
     .from('matmove_cash_ride_settings')
     .select('enabled,fee_hold_account_id,fee_revenue_account_id,provider_environment')
@@ -130,16 +137,19 @@ async function readSettings(db) {
     .maybeSingle();
 
   if (error) throw new HttpError(503, 'Cash collection configuration is unavailable.');
+  const escrowAccountId = process.env.MONIME_ESCROW_ACCOUNT_ID;
   const platformFeeAccountId = process.env.MONIME_PLATFORM_FEE_ACCOUNT_ID;
 
-  if (!data?.enabled ||
-      !validAccountId(data.fee_hold_account_id) ||
+  if (!data || (requireEnabled && !data.enabled) ||
+      !validAccountId(escrowAccountId) ||
       !validAccountId(platformFeeAccountId) ||
-      data.fee_revenue_account_id !== platformFeeAccountId ||
-      data.fee_hold_account_id === platformFeeAccountId) {
+      !validAccountId(data.fee_hold_account_id) ||
+      data.fee_hold_account_id !== escrowAccountId ||
+      data.fee_hold_account_id === platformFeeAccountId ||
+      data.fee_revenue_account_id !== platformFeeAccountId) {
     throw new HttpError(
       503,
-      'Cash collection is disabled until the restricted holding account is configured and the fee revenue account matches MONIME_PLATFORM_FEE_ACCOUNT_ID.',
+      'Cash collection is disabled until the escrow and platform-fee accounts match their production settings and remain separate.',
       'CASH_NOT_CONFIGURED'
     );
   }
@@ -230,6 +240,15 @@ async function runCashLeg(db, bookingId, kind, provider = monime) {
   }
 
   if (['completed','failed','review_required'].includes(storedLeg.status)) return storedLeg;
+
+  // A shared escrow/fee account uses an internal ledger release after both
+  // cash confirmations. Never create a Monime account-to-itself transfer.
+  if (kind === 'capture' && storedLeg.source_account_ref === storedLeg.destination_account_ref) {
+    return cashRpc(db, 'matmove_cash_ride_settle_shared_capture', {
+      p_booking_id: bookingId,
+      p_environment: monimeEnvironment()
+    });
+  }
 
   // Do all read-only account and balance checks before claiming the one-time POST.
   // Once claimed, no other request can obtain permission to create a provider debit.
@@ -358,7 +377,9 @@ async function finishCashLeg(db, bookingId, kind, actorId, provider) {
 export async function reconcileCashRide(db, bookingId, provider = monime) {
   const legs = await readLegs(db, bookingId);
   const activeLegs = legs.filter(leg =>
-    ['pending','processing'].includes(leg.status)
+    ['pending','processing'].includes(leg.status) ||
+    (leg.leg_kind === 'capture' && leg.status === 'ready' &&
+      leg.source_account_ref === leg.destination_account_ref)
   );
 
   for (const leg of activeLegs) {
@@ -379,18 +400,18 @@ export async function cashRideAction(
   if (action === 'cash_config') {
     try {
       assertMonimeEnvironment();
-      const settings = await readSettings(db);
-      const [holdAccount, revenueAccount] = await Promise.all([
-        provider(`financial-accounts/${encodeURIComponent(settings.fee_hold_account_id)}?withBalance=true`),
-        provider(`financial-accounts/${encodeURIComponent(settings.fee_revenue_account_id)}?withBalance=true`)
-      ]);
+      const settings = await readSettings(db, { requireEnabled: false });
+      const holdAccount = await provider(`financial-accounts/${encodeURIComponent(settings.fee_hold_account_id)}?withBalance=true`);
       providerAccountBalance(holdAccount, settings.fee_hold_account_id);
-      providerAccountBalance(revenueAccount, settings.fee_revenue_account_id);
-      return res.status(200).json({ success: true, pending: false, enabled: true });
+      if (settings.fee_revenue_account_id !== settings.fee_hold_account_id) {
+        const revenueAccount = await provider(`financial-accounts/${encodeURIComponent(settings.fee_revenue_account_id)}?withBalance=true`);
+        providerAccountBalance(revenueAccount, settings.fee_revenue_account_id);
+      }
+      return res.status(200).json({ success: true, pending: false, enabled: settings.enabled === true, accountsVerified: true });
     } catch {
-      // Do not advertise cash until both configured SLE platform accounts
-      // can be read from the matching Monime Test/Live environment.
-      return res.status(200).json({ success: true, pending: false, enabled: false });
+      // Do not advertise cash until each configured SLE account role can be
+      // read from the matching Monime Test/Live environment.
+      return res.status(200).json({ success: true, pending: false, enabled: false, accountsVerified: false });
     }
   }
 

@@ -1,5 +1,6 @@
 import {ArrowRight,Car,MapPin,Wallet,Store,ShoppingBag,Package,Utensils,KeyRound,Navigation,Sparkles} from 'lucide-react';
 import CustomerHomePosts from '@/components/CustomerHomePosts';
+import CustomerHomeMap from '@/components/CustomerHomeMap';
 
 type Props={profile:any;onNavigate:(section:'ride'|'account'|'services'|'trips'|'shop'|'inventory')=>void};
 
@@ -44,6 +45,8 @@ export default function CustomerHome({profile,onNavigate}:Props){
    </div>
    <div aria-hidden="true" className="absolute bottom-7 right-8 hidden items-center justify-center rounded-3xl border border-white/15 bg-white/10 p-5 text-emerald-100 sm:flex"><Car size={46} strokeWidth={1.4}/></div>
   </section>
+
+  <CustomerHomeMap role={role} onNavigate={onNavigate}/>
 
   <section aria-labelledby="quick-services-title">
    <div className="mb-3 flex items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.16em] text-slate-400">Made for your day</p><h2 id="quick-services-title" className="mt-1 text-xl font-black text-slate-950">Quick access</h2></div><button type="button" onClick={()=>onNavigate('services')} className="inline-flex min-h-10 items-center gap-1 text-sm font-bold text-emerald-700">All services <ArrowRight size={16}/></button></div>

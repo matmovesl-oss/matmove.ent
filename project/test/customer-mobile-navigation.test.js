@@ -44,10 +44,10 @@ test('ride booking uses the full map-first location picker for rider and merchan
   const merchant = await readFile('src/pages/MerchantDashboard.tsx', 'utf8');
   const driver = await readFile('src/pages/DriverDashboard.tsx', 'utf8');
   assert.ok(picker.includes("layout === 'map-first'"));
-  assert.ok(picker.includes("clamp(340px, 58dvh, 620px)"));
+  assert.ok(picker.includes("clamp(300px, 50dvh, 560px)"));
   assert.ok(rider.includes('layout="map-first"'));
   assert.ok(merchant.includes('layout="map-first"'));
-  assert.ok(rider.includes('max-h-[58dvh]'));
+  assert.ok(rider.includes('max-h-[min(68dvh,760px)]'));
   assert.ok(merchant.includes('max-h-[58dvh]'));
   assert.ok(driver.includes('clamp(340px, 58dvh, 620px)'));
   assert.ok(driver.includes('order-2 relative z-20'));
@@ -73,4 +73,23 @@ test('portal entry animates without delaying the authenticated session bootstrap
   assert.ok(app.includes('const initialProfile='));
   assert.ok(app.includes('useState(!initialProfile)'));
   assert.ok(css.includes('@keyframes mm-portal-morph-in'));
+});
+
+test('all customer roles have a clear back path from services and role dashboards', async () => {
+  const app = await readFile('src/App.tsx', 'utf8');
+  const services = await readFile('src/components/PortalHome.tsx', 'utf8');
+  assert.ok(app.includes('Back to Services'));
+  assert.ok(app.includes('Back to Home'));
+  assert.ok(app.includes("setActiveSection(activeSection === 'ride' ? 'home' : 'services')"));
+  assert.ok(services.includes('aria-label="Back to Home"'));
+  assert.ok(services.includes("onNavigate('home')"));
+});
+
+test('home map car motion can be paused, resumed and its selected route shared', async () => {
+  const map = await readFile('src/components/CustomerHomeMap.tsx', 'utf8');
+  assert.ok(map.includes('pauseAnimations()'));
+  assert.ok(map.includes('unpauseAnimations()'));
+  assert.ok(map.includes('Share route'));
+  assert.ok(map.includes('navigator.share'));
+  assert.ok(map.includes('setActiveRoute'));
 });

@@ -1,7 +1,7 @@
 import {RideLocationPicker} from '@/components/RideLocationPicker';
 import ConciergeServices from '@/components/ConciergeServices';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Briefcase, Car, CreditCard, Eye, EyeOff, Home, Loader2, MapPin, Navigation, RefreshCw, ShieldCheck, ShoppingBag, Store, Trash2, Wallet, X, Bus, Ticket, Sparkles, CheckCircle2, Calendar, XCircle, Smartphone, Clock, Plane, Package, Ship, CalendarClock, Minus, Plus, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Briefcase, Car, CreditCard, Eye, EyeOff, Home, Loader2, MapPin, Navigation, RefreshCw, ShieldCheck, ShoppingBag, Store, Trash2, Wallet, X, Bus, Ticket, Sparkles, CheckCircle2, Calendar, XCircle, Smartphone, Clock, Plane, Package, Ship, CalendarClock, Minus, Plus, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { walletFetch } from '@/lib/apiFetch';
 import { ArcadeGames } from '@/components/ArcadeGames';
@@ -281,7 +281,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
     <main className="mm-portal-morph mm-home overflow-hidden mx-auto max-w-[100vw]">
       <header className="mm-home-heading">
         <div className="mm-brand"><img src="/logo.jpg" alt="MatMove" width="40" height="40"/><span>Wi dey move<span className="mm-muted">Your everyday, connected.</span></span></div>
-        <button className="mm-icon-button" type="button" aria-label="Open your account" onClick={() => onNavigate('account')}><ShieldCheck size={22}/></button>
+        <div className="flex items-center gap-2"><button className="mm-icon-button" type="button" aria-label="Back to Home" onClick={() => onNavigate('home')}><ArrowLeft size={21}/></button><button className="mm-icon-button" type="button" aria-label="Open your account" onClick={() => onNavigate('account')}><ShieldCheck size={22}/></button></div>
       </header>
       <div className="mm-welcome"><p className="mm-eyebrow">{role === 'merchant' ? 'Business space' : role === 'driver' ? 'Driver space' : 'Your MatMove'}</p><h1>{mode === 'services' ? 'Your services, together.' : 'Hello, '+name+'.'}</h1><p>{mode === 'services' ? 'Explore travel, shopping, wallet tools, games, events and concierge.' : 'Where will today take you?'}</p></div>
       <div className="mm-home-grid">

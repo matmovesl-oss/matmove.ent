@@ -74,6 +74,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [offerAmount, setOfferAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'digital' | 'cash'>('digital');
   const [cashEnabled, setCashEnabled] = useState(false);
+  const [cashAccountsVerified, setCashAccountsVerified] = useState(false);
   const [cashConfigLoading, setCashConfigLoading] = useState(true);
   const [tripDistanceKm, setTripDistanceKm] = useState<number | null>(null);
   const [scheduledTime, setScheduledTime] = useState('');
@@ -131,6 +132,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     let live = true;
     setCashConfigLoading(true);
     setCashEnabled(false);
+    setCashAccountsVerified(false);
     if (!profile?.id) {
       setCashConfigLoading(false);
       return () => { live = false; };
@@ -140,9 +142,12 @@ function RiderMain({ profile, wallet, activeSection }: any) {
         const { response, data, finish } = await walletFetch('/api/accept-ride-escrow?action=cash_config', {});
         if (!response.ok) throw new Error('Cash configuration unavailable.');
         finish();
-        if (live) setCashEnabled(data?.enabled === true);
+        if (live) {
+          setCashEnabled(data?.enabled === true);
+          setCashAccountsVerified(data?.accountsVerified === true);
+        }
       } catch {
-        if (live) setCashEnabled(false);
+        if (live) { setCashEnabled(false); setCashAccountsVerified(false); }
       } finally {
         if (live) setCashConfigLoading(false);
       }
@@ -401,7 +406,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     setIsRequesting(true);
     setRideNotice('');
     try {
-      const result = await updateRide('complete', activeBooking.id);
+      const result = await updateRide(activeBooking.payment_method === 'cash' ? 'cash_confirm' : 'complete', activeBooking.id);
       if (activeBooking.payment_method === 'cash') {
         const payment = result.payment;
         if (payment?.status === 'settled' && result.success === true && result.pending === false) {
@@ -517,12 +522,12 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
       {walletSetupPanel}
 
-      <div className="p-4 max-w-6xl mx-auto space-y-4">
+      <div className="mx-auto max-w-7xl space-y-4 px-0 pb-8 sm:px-4">
         {(activeSection === 'home' || activeSection === 'ride' || !activeSection) && (
-          <div className="relative flex min-w-0 flex-col gap-0">
-            <div className="order-2 relative z-20 -mt-5 max-h-[58dvh] overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl space-y-3">
-              <p className="text-xs text-slate-500">Book your ride, keke, bike, or delivery below.</p>
-              <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
+          <div className="relative flex min-w-0 flex-col gap-0 overflow-visible">
+            <div className="order-2 relative z-20 -mt-6 max-h-[min(68dvh,760px)] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-5 shadow-[0_-18px_50px_rgba(15,23,42,0.16)] space-y-4 sm:px-6">
+              <div className="mx-auto mb-1 h-1.5 w-12 rounded-full bg-slate-200" aria-hidden="true"/><div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><p className="mt-1 text-sm text-slate-500">Choose a service, set your route and review your fare.</p></div>
+              <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
                 <button onClick={() => setViewMode('active')} className={`font-bold ${viewMode === 'active' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Active Request</button>
                 <button onClick={() => setViewMode('new')} className={`font-bold ${viewMode === 'new' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Create New</button>
               </div>
@@ -571,45 +576,43 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                     </div>
                   </div>
 
-                  <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
+                  <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1.5" aria-label="Choose a booking service">
                     <button
                       onClick={() => setServiceType('ride')}
-                      className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+                      aria-pressed={serviceType === 'ride'} className={`min-h-[4.5rem] rounded-xl px-2 py-3 text-xs font-extrabold flex flex-col items-center justify-center gap-1.5 transition ${serviceType === 'ride' ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-100' : 'text-slate-500 hover:bg-white/70'}`}
                     >
                       <Car size={16} /> Ride
                     </button>
                     <button
                       onClick={() => setServiceType('delivery')}
-                      className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}
+                      aria-pressed={serviceType === 'delivery'} className={`min-h-[4.5rem] rounded-xl px-2 py-3 text-xs font-extrabold flex flex-col items-center justify-center gap-1.5 transition ${serviceType === 'delivery' ? 'bg-white text-orange-700 shadow-sm ring-1 ring-orange-100' : 'text-slate-500 hover:bg-white/70'}`}
                     >
                       <Package size={16} /> Delivery
                     </button>
                     <button
                       onClick={() => setServiceType('scheduled')}
-                      className={`flex-1 py-2 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}
+                      aria-pressed={serviceType === 'scheduled'} className={`min-h-[4.5rem] rounded-xl px-2 py-3 text-xs font-extrabold flex flex-col items-center justify-center gap-1.5 transition ${serviceType === 'scheduled' ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-100' : 'text-slate-500 hover:bg-white/70'}`}
                     >
                       <CalendarClock size={16} /> Schedule
                     </button>
                   </div>
 
                   <div className="space-y-3">
-                    <div className="grid grid-cols-4 gap-2 mb-2">
+                    <div><div className="mb-2 flex items-center justify-between"><span className="text-xs font-extrabold text-slate-800">Choose your vehicle</span><span className="text-[10px] font-semibold text-slate-400">Tap to select</span></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {(['keke', 'bike', 'car', 'van'] as const).map(v => (
                         <button
                           key={v}
                           onClick={() => setVehicleType(v)}
-                          className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition ${vehicleType === v ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-600' : 'bg-slate-100 text-slate-500'}`}
+                          aria-pressed={vehicleType === v} className={`min-h-12 rounded-xl border px-3 py-2 text-xs font-extrabold uppercase tracking-wide transition ${vehicleType === v ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm ring-1 ring-emerald-200' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50'}`} 
                         >
                           {v}
                         </button>
                       ))}
-                    </div>
+                    </div></div>
 
-                    <p className="text-xs text-slate-600">
-                      Choose your pickup and destination on the map to calculate the distance.
-                    </p>
+                    <p className="text-xs leading-5 text-slate-500">Choose pickup and destination on the map above. MatMove will preview your route and estimate the fare.</p>
 
-                    <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
+                    <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-slate-500 font-bold text-sm px-2">Total Fare (SLE)</span>
                         <input
@@ -662,7 +665,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                         {cashConfigLoading ? (
                           <p className="mt-2 text-xs text-slate-500">Checking cash collection availability…</p>
                         ) : !cashEnabled ? (
-                          <p className="mt-2 text-xs text-amber-800">Physical cash rides are currently unavailable. MatMove must first configure and verify its restricted Monime cash-fee holding account.</p>
+                          <p className="mt-2 text-xs text-amber-800">{cashAccountsVerified ? 'Both Monime SLE accounts are verified. Physical cash rides remain disabled until MatMove completes final production approval.' : 'Physical cash rides are not enabled yet. MatMove is still verifying the separate escrow and platform-fee accounts.'}</p>
                         ) : null}
                         {paymentMethod === 'cash' && Number(offerAmount) > 0 && (() => {
                           const fareMinor = Math.round(Number(offerAmount) * 100);
@@ -670,7 +673,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                           const feeMinor = fareMinor - driverCashMinor;
                           return (
                             <p className="mt-2 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-950">
-                              Driver receives {'SLE ' + (driverCashMinor / 100).toFixed(2)} in physical cash. MatMove reserves {'SLE ' + (feeMinor / 100).toFixed(2)} from your SLE wallet. Your total fare remains {'SLE ' + (fareMinor / 100).toFixed(2)}.
+                              Driver receives {'SLE ' + (driverCashMinor / 100).toFixed(2)} in physical cash. MatMove secures {'SLE ' + (feeMinor / 100).toFixed(2)} from your SLE wallet into escrow, then releases it to the platform fee account after both rider and driver confirm the handover. Your total fare remains {'SLE ' + (fareMinor / 100).toFixed(2)}.
                             </p>
                           );
                         })()}

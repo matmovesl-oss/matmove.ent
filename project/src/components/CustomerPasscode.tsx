@@ -1,6 +1,6 @@
 import {useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import {supabase} from '@/lib/supabase';
-import {resetPassword as requestAccountPasswordReset} from '@/services/authService';
+import {resetPasscode as requestPasscodeReset} from '@/services/authService';
 import {setPortalUnlocked} from '@/lib/portalPrivacy';
 import {profilePhotoPickerOpen,onProfilePhotoPickerEnd,clearProfilePhotoPicker} from '@/lib/profilePhotoPicker';
 
@@ -71,11 +71,11 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
   if(mutex.current||!resetEmail.trim())return;
   mutex.current=true;setBusy(true);setError('');setResetSent(false);
   try{
-   // This action resets the account password only. The MatMove unlock passcode
-   // remains unchanged and is still verified by the separate passcode RPC.
-   await requestAccountPasswordReset(resetEmail);
+   // Passcode recovery uses its own redirect and update flow. It does not change
+   // the customer's account password.
+   await requestPasscodeReset(resetEmail);
    setResetSent(true);
-  }catch(e){setError(e instanceof Error?e.message:'Could not send the password recovery email. Try again.');}
+  }catch(e){setError(e instanceof Error?e.message:'Could not send the passcode recovery email. Try again.');}
   finally{mutex.current=false;setBusy(false);}
  }
 
@@ -122,8 +122,8 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
              <p className="text-xs font-bold tracking-[.2em] text-emerald-700">MATMOVE</p>
              {forgotMode ? (
                 <>
-                  <h1 className="mt-2 text-xl font-bold">Reset Password</h1>
-                  <p className="mt-1 text-xs text-slate-500">We will email you a secure link to create a new account password. Your MatMove passcode will remain unchanged.</p>
+                  <h1 className="mt-2 text-xl font-bold">Reset Passcode</h1>
+                  <p className="mt-1 text-xs text-slate-500">We will email you a secure link to create a new MatMove passcode. Your account password will remain unchanged.</p>
                 </>
               ) : (
                 <>
@@ -139,9 +139,9 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
                  Account email address
                  <input type="email" required autoComplete="email" value={resetEmail} onChange={e=>setResetEmail(e.target.value)} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" />
                </label>
-               {resetSent&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">Password recovery email requested. Open the link in your inbox to create a new account password. Your MatMove passcode will not change.</p>}
+               {resetSent&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">Passcode recovery email requested. Open the link in your inbox to create a new MatMove passcode. Your account password will not change.</p>}
                <button type="submit" disabled={busy||!resetEmail.trim()} className="flex h-11 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:opacity-50">
-                 {busy?'Sending password reset…':'Email me a password reset link'}
+                 {busy?'Sending passcode reset…':'Email me a passcode reset link'}
                </button>
                {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p>}
                <button type="button" disabled={busy} onClick={()=>{setForgotMode(false);setResetEmail('');setResetSent(false);setError('');}} className="min-h-11 w-full text-xs text-slate-600 underline">Back to passcode</button>
@@ -165,7 +165,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
                
                {!creating && (
                  <button type="button" onClick={() => {setError('');setResetSent(false);setForgotMode(true);void supabase.auth.getUser().then(({data})=>{if(data.user?.email)setResetEmail(data.user.email);});}} className="w-full text-left pt-2 pb-1 text-xs text-slate-500 hover:text-emerald-700 transition">
-                   Forgot password?
+                   Forgot passcode?
                  </button>
                )}
              </>
