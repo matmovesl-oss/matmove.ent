@@ -792,7 +792,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                   )}
                 </div>
               )}
-            </div>)}
+            </div>}
 
             <div className="order-1 min-w-0">
               {activeBooking && ['accepted', 'in_progress'].includes(activeBooking.status) ? (
