@@ -35,7 +35,7 @@ export async function getCustomerSession(): Promise<AuthSession | null> {
   if (result.error) throw new Error(customerSessionErrorMessage(result.error.message));
   const metadata = session.user.user_metadata || {};
   const fullName = String(metadata.full_name || metadata.name || '').trim();
-  const nameParts = fullName ? fullName.split(/\\s+/) : [];
+  const nameParts = fullName ? fullName.split(/\s+/) : [];
   const metadataFirstName = String(metadata.given_name || metadata.first_name || nameParts[0] || '').trim();
   const metadataLastName = String(metadata.family_name || metadata.last_name || nameParts.slice(1).join(' ') || '').trim();
   if (result.data) {
