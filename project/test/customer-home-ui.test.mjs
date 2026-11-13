@@ -65,7 +65,8 @@ test('ride vehicle selector and map pins use branded visual markers instead of p
  ]);
  assert.match(ride,/CarFront, Bike, Truck/);
  assert.match(ride,/Choose \$\{label\}/);
- assert.match(ride,/bg-gradient-to-br from-emerald-50 via-white to-sky-50/);\n assert.match(ride,/Who is travelling\?/);
+ assert.match(ride,/bg-gradient-to-br from-emerald-50 via-white to-sky-50/);
+ assert.match(ride,/Who is travelling\?/);
  assert.match(picker,/markerSvg/);
  assert.match(picker,/data:image\/svg\+xml/);
  assert.match(picker,/draggable: true/);
