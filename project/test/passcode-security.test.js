@@ -22,6 +22,7 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  `);
  const home=await readFile('docs/PORTAL_HOME_SETUP.sql','utf8');await pg.exec(home.slice(home.indexOf('create or replace function public.matmove_preferences_role('),home.indexOf('create or replace function public.matmove_home_preferences(')));
  const sql=await readFile('docs/PASSCODE_SECURITY_SETUP.sql','utf8');await pg.exec(sql);
+ const nineDigitMigration=await readFile('supabase/migrations/20261113095000_matmove_passcode_new_pin_six_to_nine_digits.sql','utf8');await pg.exec(nineDigitMigration);
  const session=async(id,role='authenticated')=>{await pg.exec('reset role');await pg.query("select set_config('request.jwt.claim.sub',$1,false)",[id||'']);await pg.exec('set role '+role);};
  const rpc=async(action,pin=null,next=null)=>(await pg.query('select public.matmove_customer_passcode($1,$2,$3) d',[action,pin,next])).rows[0].d;
  await t.test('legacy PIN is salted/hashed once and cleared from the readable profile',async()=>{
@@ -52,7 +53,7 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  await session(null,'anon');await assert.rejects(rpc('status'),/permission denied/);await session(staff);await assert.rejects(rpc('status'),/Customer account required/);await session(null);await assert.rejects(rpc('status'),/Sign in/);
  });
  await t.test('reruns preserve hashes and attempt counters; status never claims an unlock',async()=>{
- await session(uid);await rpc('verify','999999');await pg.exec('reset role');const before=(await pg.query('select * from matmove_customer_passcodes where user_id=$1',[uid])).rows[0];await pg.exec(sql);assert.deepEqual((await pg.query('select * from matmove_customer_passcodes where user_id=$1',[uid])).rows[0],before);
+ await session(uid);await rpc('verify','999999');await pg.exec('reset role');const before=(await pg.query('select * from matmove_customer_passcodes where user_id=$1',[uid])).rows[0];await pg.exec(sql);await pg.exec(nineDigitMigration);assert.deepEqual((await pg.query('select * from matmove_customer_passcodes where user_id=$1',[uid])).rows[0],before);
  await session(uid);assert.equal((await rpc('status')).ok,false);assert.equal((await rpc('status')).userId,uid);
  });
 
