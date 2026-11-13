@@ -1,6 +1,26 @@
-
 {
   "routes": [
+    {
+      "src": "/api/(.*)",
+      "headers": {
+        "Cache-Control": "no-store",
+        "Pragma": "no-cache",
+        "Vary": "Authorization"
+      },
+      "continue": true
+    },
+    {
+      "src": "/(.*)",
+      "headers": {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+        "Content-Security-Policy": "frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
+        "Permissions-Policy": "geolocation=(self), camera=(self), microphone=()"
+      },
+      "continue": true
+    },
     {
       "src": "/api/cancel-ride/?",
       "dest": "/api/accept-ride-escrow?action=cancel"
@@ -8,6 +28,10 @@
     {
       "src": "/api/reconcile-ride-payments/?",
       "dest": "/api/accept-ride-escrow?action=reconcile"
+    },
+    {
+      "src": "/api/reconcile-all-payments/?",
+      "dest": "/api/get-live-wallet?action=payment_reconcile"
     },
     {
       "handle": "filesystem"

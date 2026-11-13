@@ -4,13 +4,13 @@ import {customerAuthRedirect} from '@/services/authRedirect';
 import {setPortalUnlocked} from '@/lib/portalPrivacy';
 import {profilePhotoPickerOpen,onProfilePhotoPickerEnd,clearProfilePhotoPicker} from '@/lib/profilePhotoPicker';
 
-type Receipt={userId:string;configured:boolean;digits:4|6;ok:boolean;code:string;attemptsRemaining:number;retryAfterSeconds:number};
+type Receipt={userId:string;configured:boolean;digits:4|6|7|8|9|10;ok:boolean;code:string;attemptsRemaining:number;retryAfterSeconds:number};
 const codes=['status','cooldown','already_configured','saved','setup_required','upgrade_required','verified','incorrect'];
 
 export async function customerPasscode(userId:string,action:'status'|'create'|'verify'|'change'|'recover',pin:string|null=null,newPin:string|null=null):Promise<Receipt>{
  if(!userId||!['status','create','verify','change','recover'].includes(action))throw Error('Invalid passcode request.');
- if(['create','change','recover'].includes(action)&&!/^\d{6}$/.test(newPin||''))throw Error('Choose exactly six digits.');
- if(['verify','change'].includes(action)&&!/^([0-9]{4}|[0-9]{6})$/.test(pin||''))throw Error('Enter your current passcode.');
+ if(['create','change','recover'].includes(action)&&!/^\d{6,10}$/.test(newPin||''))throw Error('Choose between 6 and 10 digits.');
+ if(['verify','change'].includes(action)&&!/^(?:[0-9]{4}|[0-9]{6,10})$/.test(pin||''))throw Error('Enter your current passcode.');
  const session=await supabase.auth.getSession();
  if(session.error||session.data.session?.user.id!==userId||!session.data.session.access_token)throw Error('Your sign-in changed. Sign in again.');
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
@@ -25,8 +25,8 @@ export async function customerPasscode(userId:string,action:'status'|'create'|'v
   const after=await supabase.auth.getSession();
   if(after.error||after.data.session?.user.id!==userId)throw Error('Your sign-in changed. Sign in again.');
   const d=r.data;
-  if(d?.userId!==userId||typeof d.configured!=='boolean'||![4,6].includes(d.digits)||typeof d.ok!=='boolean'||!codes.includes(d.code)||!Number.isInteger(d.attemptsRemaining)||d.attemptsRemaining<0||d.attemptsRemaining>5||!Number.isInteger(d.retryAfterSeconds)||d.retryAfterSeconds<0||d.retryAfterSeconds>300||
-   (d.ok&&(!d.configured||!['saved','verified','upgrade_required'].includes(d.code)))||(d.ok&&d.digits!==6&&d.code!=='upgrade_required')||
+  if(d?.userId!==userId||typeof d.configured!=='boolean'||!(d.digits===4||(Number.isInteger(d.digits)&&d.digits>=6&&d.digits<=10))||typeof d.ok!=='boolean'||!codes.includes(d.code)||!Number.isInteger(d.attemptsRemaining)||d.attemptsRemaining<0||d.attemptsRemaining>5||!Number.isInteger(d.retryAfterSeconds)||d.retryAfterSeconds<0||d.retryAfterSeconds>300||
+   (d.ok&&(!d.configured||!['saved','verified','upgrade_required'].includes(d.code)))||(d.ok&&(d.digits<6||d.digits>10)&&d.code!=='upgrade_required')||
    (d.code==='upgrade_required'&&d.digits!==4)||
    (d.code==='verified'&&action!=='verify')||(d.code==='saved'&&!['create','change','recover'].includes(action)))throw Error('Passcode response could not be verified. Reload and try again.');
   return d;
@@ -70,7 +70,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
   if(mutex.current||!resetEmail.trim())return;
   mutex.current=true;setBusy(true);setError('');setResetSent(false);
   try{
-   const {error}=await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(),{redirectTo:customerAuthRedirect('/auth/callback?type=recovery&next=%2Freset-password')});
+   const {error}=await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(),{redirectTo:customerAuthRedirect('/auth/callback?type=recovery&next=%2Freset-passcode')});
    if(error)throw error;
    setResetSent(true);
   }catch(e){setError(e instanceof Error?e.message:'Could not send the recovery email. Try again.');}
@@ -80,20 +80,20 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  async function submit(){
   if(mutex.current||!status)return;
   const creating=!status.configured,changing=upgrade;
-  if((creating||changing)&&(!/^\d{6}$/.test(next)||next!==confirm)){setError('Enter the same six-digit passcode in both new passcode fields.');return;}
+  if((creating||changing)&&(!/^\d{6,10}$/.test(next)||next!==confirm)){setError('Enter the same 6–10 digit passcode in both new passcode fields.');return;}
   if(!creating&&!new RegExp(`^[0-9]{${status.digits}}$`).test(pin)){setError(`Enter your current ${status.digits}-digit passcode.`);return;}
   mutex.current=true;setBusy(true);setError('');const id=userId,n=++revision.current;
   try{
    const d=await customerPasscode(id,creating?'create':changing?'change':'verify',creating?null:pin,creating||changing?next:null);
    if(!valid(id,n))return;setStatus(d);
-   if(d.ok&&d.digits===6&&['saved','verified'].includes(d.code)){clear();setUpgrade(false);setPortalUnlocked(id,true);unlockedNow.current=true;setEnteredUser(id);setUnlocked(true);}
+   if(d.ok&&d.digits>=6&&['saved','verified'].includes(d.code)){clear();setUpgrade(false);setPortalUnlocked(id,true);unlockedNow.current=true;setEnteredUser(id);setUnlocked(true);}
    else if(d.ok&&d.code==='upgrade_required'){setUpgrade(true);setNext('');setConfirm('');}
-   else{clear();setUpgrade(false);setError(d.code==='cooldown'?`Too many attempts. Try again in ${d.retryAfterSeconds} seconds.`:d.code==='already_configured'?'A passcode is already saved. Enter it to continue.':d.code==='setup_required'?'Create your six-digit passcode.':`Incorrect passcode. ${d.attemptsRemaining} attempts remaining.`);}
+   else{clear();setUpgrade(false);setError(d.code==='cooldown'?`Too many attempts. Try again in ${d.retryAfterSeconds} seconds.`:d.code==='already_configured'?'A passcode is already saved. Enter it to continue.':d.code==='setup_required'?'Create your 6–10 digit passcode.':`Incorrect passcode. ${d.attemptsRemaining} attempts remaining.`);}
   }catch(e){if(valid(id,n)){clear();setUpgrade(false);setError(e instanceof Error?e.message:'Passcode service unavailable.');}}
   finally{if(valid(id,n)){mutex.current=false;setBusy(false);}}
  }
  
- const allowed=unlocked&&status?.userId===userId&&status.configured&&status.digits===6;
+ const allowed=unlocked&&status?.userId===userId&&status.configured&&status.digits>=6;
  useLayoutEffect(()=>{
   const dialog=privacyDialog.current,root=workspace.current;
   if(root){if(allowed)root.removeAttribute('inert');else root.setAttribute('inert','');}
@@ -121,12 +121,12 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
              {forgotMode ? (
                 <>
                   <h1 className="mt-2 text-xl font-bold">Reset Passcode</h1>
-                  <p className="mt-1 text-xs text-slate-500">We will email you a secure MatMove recovery link. It opens this app so you can set a new password and six-digit passcode.</p>
+                  <p className="mt-1 text-xs text-slate-500">We will email you a secure link so you can change only your 6–10 digit passcode.</p>
                 </>
               ) : (
                 <>
-                  <h1 className="mt-2 text-xl font-bold">{upgrade?'Upgrade to six digits':creating?'Create passcode':'Unlock your account'}</h1>
-                  <p className="mt-1 text-xs text-slate-500">{upgrade?'Choose your new six-digit passcode.':creating?'Choose and confirm six digits.':'Enter your passcode to continue.'}</p>
+                  <h1 className="mt-2 text-xl font-bold">{upgrade?'Upgrade to 6–10 digits':creating?'Create passcode':'Unlock your account'}</h1>
+                  <p className="mt-1 text-xs text-slate-500">{upgrade?'Choose a new passcode between 6 and 10 digits.':creating?'Choose and confirm a passcode between 6 and 10 digits.':'Enter your passcode to continue.'}</p>
                 </>
               )}
            </div>
@@ -137,7 +137,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
                  Account email address
                  <input type="email" required autoComplete="email" value={resetEmail} onChange={e=>setResetEmail(e.target.value)} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" />
                </label>
-               {resetSent&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">Recovery email requested. Open the link in your inbox to return to MatMove and choose a new password and six-digit passcode.</p>}
+               {resetSent&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">Recovery email requested. Open the link in your inbox to set a new 6–10 digit passcode. Your account password will not change.</p>}
                <button type="submit" disabled={busy||!resetEmail.trim()} className="flex h-11 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:opacity-50">
                  {busy?'Sending recovery link…':'Email me a recovery link'}
                </button>
@@ -147,10 +147,10 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
 
            ) : (
              <>
-               {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose six digits.</p>}
+               {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose 6–10 digits.</p>}
                {!status?<p role="status" className="text-center text-sm text-slate-600">{busy?'Checking passcode…':'Passcode setup unavailable.'}</p>:<>
                 {!creating&&!upgrade&&field(`Current ${status.digits}-digit passcode`,pin,setPin,status.digits)}
-                {(creating||upgrade)&&<>{field('New six-digit passcode',next,setNext,6)}{field('Confirm six-digit passcode',confirm,setConfirm,6)}</>}
+                {(creating||upgrade)&&<>{field('New passcode (6–10 digits)',next,setNext,10)}{field('Confirm passcode',confirm,setConfirm,10)}</>}
                 <button type="submit" disabled={busy} className="h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">{busy?'Checking…':creating||upgrade?'Save passcode':'Unlock'}</button>
                </>}
                

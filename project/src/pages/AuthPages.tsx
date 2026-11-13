@@ -41,23 +41,17 @@ export function LoginPage() {
           </label>
           
           <label className="field">
-            {/* Added Forgot Password Link Here */}
-            <div className="flex justify-between items-center w-full">
-              <span>Password</span>
-              <button 
-                type="button" 
-                onClick={() => navigate('/forgot-password')} 
-                className="text-sm font-semibold text-[#184f9a] hover:underline"
-              >
-                Forgot password?
-              </button>
-            </div>
+            <span>Password</span>
             <div className="input-field">
               <Lock size={17} />
               <input type={showPass ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
               <button type="button" className="input-toggle absolute right-4 top-3.5 text-slate-400" onClick={() => setShowPass(!showPass)}>
                 {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
               </button>
+            </div>
+            <div className="mt-2 flex justify-between gap-4 text-sm">
+              <button type="button" onClick={() => navigate('/forgot-password')} className="font-semibold text-[#184f9a] hover:underline">Forgot password?</button>
+              <button type="button" onClick={() => navigate('/forgot-passcode')} className="font-semibold text-[#184f9a] hover:underline">Forgot passcode?</button>
             </div>
           </label>
           
@@ -158,13 +152,15 @@ export function AuthCallbackPage() {
     const params = new URLSearchParams(window.location.search);
     const fragment = new URLSearchParams(window.location.hash.slice(1));
     const providerError = params.get('error_description') || fragment.get('error_description');
-    const recovery = params.get('type') === 'recovery' || params.get('next') === '/reset-password';
+    const requestedNext = params.get('next');
+    const recoveryNext = requestedNext === '/reset-passcode' ? '/reset-passcode' : '/reset-password';
+    const recovery = params.get('type') === 'recovery' || requestedNext === '/reset-password' || requestedNext === '/reset-passcode';
     if (providerError) { setError(providerError); return; }
     // Supabase exchanges the one-time PKCE code before the session read completes.
     void refreshSession().then(current => {
       if (!mounted) return;
       if (!current) throw new Error('Sign-in was not confirmed. Please return to sign in.');
-      navigate(recovery ? '/reset-password?type=recovery' : customerPath(current), { replace: true });
+      navigate(recovery ? `${recoveryNext}?type=recovery` : customerPath(current), { replace: true });
     }).catch(error => { if (mounted) setError(error.message); });
     return () => { mounted = false; };
   }, [refreshSession, navigate]);

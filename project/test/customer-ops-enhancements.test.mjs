@@ -83,26 +83,36 @@ test('Customer account closure creates a reviewed request rather than deleting f
 });
 
 
-test('Forgot passcode sends a Supabase recovery email to the active app origin, not the parked domain',async()=>{
+test('password and passcode recovery use separate email destinations and only update the selected credential',async()=>{
   const fs=await import('node:fs/promises');
-  const [lock,recovery,service]=await Promise.all([
-    fs.readFile('src/components/CustomerPasscode.tsx','utf8'),
+  const [login,forgot,recovery,service,lock]=await Promise.all([
+    fs.readFile('src/pages/AuthPages.tsx','utf8'),
+    fs.readFile('src/pages/PasswordPages.tsx','utf8'),
     fs.readFile('src/pages/UpdatePassword.tsx','utf8'),
-    fs.readFile('src/services/authService.ts','utf8')
+    fs.readFile('src/services/authService.ts','utf8'),
+    fs.readFile('src/components/CustomerPasscode.tsx','utf8')
   ]);
-  assert.match(lock,/resetPasswordForEmail\(resetEmail\.trim\(\)\.toLowerCase\(\)/);
-  assert.match(lock,/customerAuthRedirect\('\/auth\/callback\?type=recovery&next=%2Freset-password'\)/);
-  assert.doesNotMatch(lock,/https:\/\/matmove\.com\/reset-passcode/);
-  assert.match(recovery,/PASSWORD_RECOVERY/);
-  assert.match(recovery,/customerPasscode\(sessionData\.session\.user\.id,'recover',null,newPin\)/);
-  assert.match(recovery,/^.*Save password and six-digit passcode.*$/m);
-  assert.match(service,/phone:customer\.user\.phone\|\|session\.user\.phone/);
+  assert.match(login,/Forgot password\?/);
+  assert.match(login,/Forgot passcode\?/);
+  assert.match(login,/navigate\('\/forgot-password'\)/);
+  assert.match(login,/navigate\('\/forgot-passcode'\)/);
+  assert.match(forgot,/export function ForgotPasswordPage/);
+  assert.match(forgot,/export function ForgotPasscodePage/);
   assert.match(service,/customerAuthRedirect\('\/auth\/callback\?type=recovery&next=%2Freset-password'\)/);
-  assert.match(service,/customerAuthRedirect\('\/auth\/callback'\)/);
+  assert.match(service,/customerAuthRedirect\('\/auth\/callback\?type=recovery&next=%2Freset-passcode'\)/);
+  assert.match(recovery,/supabase\.auth\.updateUser\(\{ password \}\)/);
+  assert.match(recovery,/customerPasscode\(userId, 'recover', null, newPin\)/);
+  assert.match(recovery,/Save new password/);
+  assert.match(recovery,/Save new passcode/);
+  assert.match(recovery,/Choose a passcode between 6 and 10 digits/);
+  assert.match(recovery,/Your account password will remain unchanged/);
+  assert.match(recovery,/Your other credential was not changed/);
+  assert.match(lock,/resetPasswordForEmail\(resetEmail\.trim\(\)\.toLowerCase\(\)/);
+  assert.doesNotMatch(lock,/https:\/\/matmove\.com\/reset-passcode/);
+  assert.match(service,/phone:customer\.user\.phone\|\|session\.user\.phone/);
   const redirect=await fs.readFile('src/services/authRedirect.ts','utf8');
   assert.match(redirect,/https:\/\/matmoveent\.vercel\.app/);
   assert.match(redirect,/VITE_CUSTOMER_APP_URL/);
-  assert.match(recovery,/setSuccess\(true\)/);
 });
 
 test('Event USD is a display quote and ticket purchases continue to debit the SLE amount',async()=>{

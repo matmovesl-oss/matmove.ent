@@ -70,6 +70,10 @@ test('actual net settlement matches the code owner, account, amount and referenc
  assert.equal(await topupSettlement(c,async()=>[receipt,{...receipt,id:'pay-second'}]),null);
  assert.equal(await topupSettlement(c,async()=>[{...receipt,fees:undefined}]),null);
  assert.equal(await topupSettlement(c,async()=>[{...receipt,fees:[{amount:{currency:'USD',value:5}}]}]),null);
+ const conflictingLineage={...receipt,ownershipGraph:{owner:{id:'pay-match',type:'payment',owner:{id:'another-code',type:'payment_code'}}}};
+ assert.equal(await topupSettlement(c,async()=>[conflictingLineage]),null);
+ const exactLineage={...receipt,ownershipGraph:{owner:{id:'pay-match',type:'payment',owner:{id:c.id,type:'payment_code'}}}};
+ assert.deepEqual(await topupSettlement(c,async()=>[exactLineage]),{paymentId:'pay-match',feeMinor:5,creditMinor:495});
 });
 test('1% gross-up covers the exported receiving-side deduction for SLE2 and SLE5',()=>{
  const env=configured({rateBps:100,fixedMinor:0,minimumMinor:0,taxBps:0,rounding:'nearest'});
@@ -155,4 +159,39 @@ test('lost POST response keeps the same logical key and never automatically retr
   for(const [key,value] of [['MATMOVE_TOPUP_NET_ENABLED',original.enabled],['MONIME_TOPUP_FEE_CONFIG',original.config]])
    if(value===undefined)delete process.env[key];else process.env[key]=value;
  }
+});
+
+test('Payment ownership graph proves the exact Payment Code lineage when provider reference is absent', async () => {
+ const c={...code,status:'completed'};
+ const payment={
+  id:'pay-owned-by-code',
+  status:'completed',
+  financialAccountId:c.financialAccountId,
+  amount:c.amount,
+  fees:[{amount:{currency:'SLE',value:5}}],
+  ownershipGraph:{owner:{
+   id:'pay-owned-by-code',
+   type:'payment',
+   owner:{
+    id:c.id,
+    type:'payment_code'
+   }
+  }}
+ };
+ const result=await topupSettlement(c,async()=>[payment]);
+ assert.deepEqual(result,{paymentId:'pay-owned-by-code',feeMinor:5,creditMinor:495});
+
+ const unrelated={...payment,ownershipGraph:{owner:{
+  id:'pay-owned-by-code',
+  type:'payment',
+  owner:{id:'code-other',type:'payment_code'}
+ }}};
+ assert.equal(await topupSettlement(c,async()=>[unrelated]),null);
+
+ const unrelatedType={...payment,ownershipGraph:{owner:{
+  id:'pay-owned-by-code',
+  type:'payment',
+  owner:{id:c.id,type:'checkout_session'}
+ }}};
+ assert.equal(await topupSettlement(c,async()=>[unrelatedType]),null);
 });

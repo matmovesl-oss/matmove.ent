@@ -1,0 +1,67 @@
+{
+  "version": "1.0",
+  "pages": [
+    {
+      "id": "welcome",
+      "component": {
+        "type": "menu",
+        "label": "MatMove. Choose a payment type:",
+        "items": [
+          {
+            "label": "Ride",
+            "value": "ride"
+          },
+          {
+            "label": "Food / merchant order",
+            "value": "food"
+          },
+          {
+            "label": "Package delivery",
+            "value": "package"
+          },
+          {
+            "label": "Rental",
+            "value": "rental"
+          }
+        ]
+      }
+    },
+    {
+      "id": "order_reference",
+      "component": {
+        "type": "prompt",
+        "data_type": "text",
+        "label": "Enter the booking or order reference sent by MatMove:",
+        "min_length": 4,
+        "max_length": 32,
+        "max_invalid_input_attempts": 3
+      },
+      "on_done": {
+        "action": "exchange",
+        "url": "https://YOUR-MATMOVE-TEST-HOST/api/ussd/exchange",
+        "dataExport": {
+          "service_choice": "$(page.welcome.value)",
+          "booking_order_reference": "$(page.order_reference.value)"
+        }
+      }
+    },
+    {
+      "id": "collect_payment",
+      "component": {
+        "type": "template",
+        "template_name": "collect_payment",
+        "label": "Enter your $(session.network_provider_name) PIN to pay {{amount}} for MatMove order $(data.payment_reference).",
+        "template_data": {
+          "amount": "$(data.amount)",
+          "payment_target_ref": "$(data.payment_target_ref)",
+          "receipt_name": "MatMove",
+          "reference": "$(data.payment_reference)"
+        }
+      },
+      "options": {
+        "terminal": true,
+        "terminal_message": "Payment request submitted. MatMove will confirm after provider verification. Do not pay again while pending."
+      }
+    }
+  ]
+}

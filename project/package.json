@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "test": "node --test test/*.test.js test/*.test.mjs",
     "test:release": "node --test test/customer-ops-enhancements.test.mjs test/customer-assistance-ui.test.js",
-    "test:legacy": "node --test test/*.test.js test/*.test.mjs"
+    "test:legacy": "node --test test/*.test.js test/*.test.mjs",
+    "test:security": "node --test test/cron-auth.test.js test/ledger-anon-grants.test.js test/cash-payment-rules.test.js test/cash-ussd-preview.test.js test/cash-payment-ledger-migration.test.js test/cash-ride-state-machine-migration.test.js test/cash-transfer-current-object.test.js test/cash-ride-ui.test.js test/cash-ride-reconciliation.test.js test/api-routing.test.js test/monime-webhook-inbox.test.js test/monime-webhook-route.test.js test/monime-webhook-worker.test.js test/ride-cancellation-policy.test.js test/payment-reconciliation.test.js test/purchase-payment-reconciliation.test.js test/monime-return.test.js test/payout-payments.test.js test/topup-recovery.test.js test/ride-transfer-verification.test.js test/merchant-payments.test.js test/travel-event-payments.test.js test/travel-purchase-idempotency-migration.test.js test/wallet-topup-provider-reference.test.js test/wallet-security-log-redaction.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

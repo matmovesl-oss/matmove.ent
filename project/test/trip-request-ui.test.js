@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {build} from 'esbuild';import {mkdtemp,rm} from 'node:fs/promises';import {join} from 'node:path';import {pathToFileURL} from 'node:url';
+import test from 'node:test';import assert from 'node:assert/strict';import {build} from 'esbuild';import {mkdtemp,rm,readFile} from 'node:fs/promises';import {join} from 'node:path';import {pathToFileURL} from 'node:url';
 const uid='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
 const details={client_version:1,service_type:'ride',vehicle_type:'car',pickup_location:'A',destination_location:'B',fare_amount:'100.00',scheduled_time:null,passenger_count:3,passenger_name:null,pickup_pin:{lat:8,lng:-13},destination_pin:{lat:8.1,lng:-13.1}};
 const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return{promise,resolve};};
@@ -19,3 +19,13 @@ test('restored requests never auto-submit and retry only their stored reviewed p
 test('duplicate clicks authorize one RPC while the original response remains pending',()=>fixture(async h=>{const wait=deferred();h.setHandler(()=>wait.promise);const first=h.state.submit(details);await h.settle();await assert.rejects(()=>h.state.submit(details),/already being checked/);assert.equal(h.calls.length,1);wait.resolve({data:{id:h.calls[0].args.p_request,rider_id:uid,status:'pending'},error:null});await first;}));
 test('changed sessions and a cross-user receipt cannot clear or confirm another customer request',()=>fixture(async h=>{h.switchSession(other);await assert.rejects(()=>h.state.submit(details),/sign-in changed/);assert.equal(h.calls.length,0);h.switchSession(uid);h.setHandler(async args=>({data:{id:args.p_request,rider_id:other,status:'pending'},error:null}));await assert.rejects(()=>h.state.submit(details),/receipt/);assert.equal(h.values.size,1);}));
 test('blocked browser storage fails before any trip RPC',()=>fixture(async h=>{await assert.rejects(()=>h.state.submit(details),/browser/);assert.equal(h.calls.length,0);},{blocked:true}));
+
+test('digital payment marker is omitted so the client remains compatible with Production 11-field trip RPC',()=>fixture(async h=>{const digital={...details,payment_method:'digital'};h.setHandler(async args=>{assert.equal(Object.hasOwn(args.p_details,'payment_method'),false);assert.equal(Object.keys(args.p_details).length,11);const saved=JSON.parse(h.values.get(`matmove:booking-create:v1:${uid}`));assert.equal(saved.details.payment_method,'digital');return{data:{id:args.p_request,rider_id:uid,status:'pending'},error:null};});await h.state.submit(digital);await h.settle();assert.equal(h.calls.length,1);assert.equal(h.values.size,0);}));
+
+test('RiderDashboard creates trips only through the idempotent ownership RPC and waits for recovery state',async()=>{
+ const source=await readFile(new URL('../src/pages/RiderDashboard.tsx',import.meta.url),'utf8');
+ assert.match(source,/useTripRequest/);
+ assert.match(source,/tripRequest\.submit\(details\)/);
+ assert.match(source,/disabled=\{isRequesting \|\| !tripRequest\.ready/);
+ assert.doesNotMatch(source,/\.from\(['"]bookings['"]\)\s*\.insert/);
+});

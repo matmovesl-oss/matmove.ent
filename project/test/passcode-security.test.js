@@ -9,8 +9,10 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  const pg=new PGlite({extensions:{pgcrypto},postgresqlconf:['shared_buffers=16MB','max_connections=10','work_mem=1MB']});
  try{
  await pg.exec(`create role anon;create role authenticated;create role service_role;create schema auth;
- create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
- create table auth.users(id uuid primary key);insert into auth.users values('${uid}'),('${other}'),('${staff}');
+ create function auth.uid() returns uuid language sql stable as $select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$;
+ create function auth.jwt() returns jsonb language sql stable as $select coalesce(nullif(current_setting('request.jwt.claims',true),'')::jsonb,'{}'::jsonb)$;
+ create table auth.users(id uuid primary key,recovery_sent_at timestamptz);insert into auth.users(id) values('${uid}'),('${other}'),('${staff}');
+ create table auth.sessions(id uuid primary key,user_id uuid not null,created_at timestamptz not null,not_after timestamptz);
  create table profiles(id uuid primary key references auth.users(id),role text,passcode text,kyc_status text,full_name text);
  insert into profiles values('${uid}','rider','0123','approved','Verified Customer'),('${other}','merchant',null,'pending','Merchant'),('${staff}','driver',null,'approved','Staff');
  create table user_roles(profile_id uuid,role text);insert into user_roles select id,role from profiles;
@@ -53,5 +55,75 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  await session(uid);await rpc('verify','999999');await pg.exec('reset role');const before=(await pg.query('select * from matmove_customer_passcodes where user_id=$1',[uid])).rows[0];await pg.exec(sql);assert.deepEqual((await pg.query('select * from matmove_customer_passcodes where user_id=$1',[uid])).rows[0],before);
  await session(uid);assert.equal((await rpc('status')).ok,false);assert.equal((await rpc('status')).userId,uid);
  });
+
+ await t.test('passcode recovery requires a fresh one-time verified Auth session and changes no password or wallet data',async()=>{
+  await session(uid);
+  await assert.rejects(rpc('recover',null,'654321'),/fresh, verified email-recovery session/i);
+
+  const firstSession='44444444-4444-4444-8444-444444444444';
+  await pg.exec('reset role');
+  await pg.query('update auth.users set recovery_sent_at=now() where id=$1',[uid]);
+  await pg.query('insert into auth.sessions(id,user_id,created_at,not_after) values($1,$2,now(),null)',[firstSession,uid]);
+  await session(uid);
+  await pg.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({session_id:firstSession})]);
+
+  const recovered=await rpc('recover',null,'654321');
+  assert.equal(recovered.code,'saved');assert.equal(recovered.ok,true);assert.equal(recovered.digits,6);
+  assert.equal((await rpc('verify','654321')).ok,true);
+  await assert.rejects(rpc('recover',null,'123456'),/already reset the passcode/i);
+
+  const secondSession='55555555-5555-4555-8555-555555555555';
+  await pg.exec('reset role');
+  await pg.query('update auth.users set recovery_sent_at=now() where id=$1',[uid]);
+  await pg.query('insert into auth.sessions(id,user_id,created_at,not_after) values($1,$2,now(),null)',[secondSession,uid]);
+  await session(uid);
+  await pg.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({session_id:secondSession})]);
+  await assert.rejects(rpc('recover',null,'12345'),/6 and 10 digits/i);
+  await assert.rejects(rpc('recover',null,'12345678901'),/6 and 10 digits/i);
+  const tenDigitReset=await rpc('recover',null,'1234567890');
+  assert.equal(tenDigitReset.code,'saved');assert.equal(tenDigitReset.digits,10);
+  assert.equal((await rpc('verify','1234567890')).ok,true);
+  await pg.exec('reset role');
+  assert.equal((await pg.query('select balance from wallets where user_id=$1',[uid])).rows[0].balance,'42.50');
+  assert.equal((await pg.query('select kyc_status from profiles where id=$1',[uid])).rows[0].kyc_status,'approved');
+ });
  }finally{await pg.close();}
+});
+
+test('credential recovery screens are separate and each updates only its selected credential',async()=>{
+ const app=await readFile('src/App.tsx','utf8');
+ const callback=await readFile('src/pages/AuthPages.tsx','utf8');
+ const screen=await readFile('src/pages/UpdatePassword.tsx','utf8');
+ const lock=await readFile('src/components/CustomerPasscode.tsx','utf8');
+ assert.ok(app.includes('path="/reset-password"') && app.includes('mode="password"'));
+ assert.ok(app.includes('path="/reset-passcode"') && app.includes('mode="passcode"'));
+ assert.ok(callback.includes("requestedNext === '/reset-passcode'"));
+ assert.match(lock,/next=%2Freset-passcode/);
+ assert.match(lock,/Your account password will not change/);
+ const operationStart=screen.indexOf("if (mode === 'password') {\\n        const { error: updateError }");
+ const operationElse=screen.indexOf("} else {",operationStart);
+ const operationEnd=screen.indexOf("localStorage.removeItem",operationElse);
+ const passwordBranch=screen.slice(operationStart,operationElse);
+ const passcodeBranch=screen.slice(operationElse,operationEnd);
+ assert.ok(operationStart>=0 && operationElse>operationStart && operationEnd>operationElse);
+ assert.match(passwordBranch,/supabase\\.auth\\.updateUser\\(\\{ password \\}\\)/);
+ assert.doesNotMatch(passwordBranch,/customerPasscode|newPin/);
+ assert.match(passcodeBranch,/customerPasscode\\(userId, 'recover', null, newPin\\)/);
+ assert.doesNotMatch(passcodeBranch,/updateUser|password/);
+});
+
+test('passcode recovery accepts 6 through 10 digits and rejects shorter or longer values',async()=>{
+ const migration=await readFile('supabase/migrations/20261111120000_matmove_passcode_email_recovery.sql','utf8');
+ const component=await readFile('src/components/CustomerPasscode.tsx','utf8');
+ const screen=await readFile('src/pages/UpdatePassword.tsx','utf8');
+ assert.match(migration,/digits between 6 and 10/);
+ assert.match(migration,/\^\[0-9\]\{6,10\}\$/);
+ assert.match(migration,/recovery_session_id = session_id/);
+ assert.match(migration,/auth\.sessions/);
+ assert.match(migration,/recovery_sent_at/);
+ assert.doesNotMatch(migration,/auth\.jwt\(\)->'amr'/);
+ assert.match(component,/\^\\d\{6,10\}\$/);
+ assert.match(screen,/pattern="\[0-9\]\{6,10\}"/);
+ assert.match(screen,/maxLength=\{10\}/);
+ assert.match(screen,/slice\(0, 10\)/);
 });

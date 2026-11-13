@@ -246,3 +246,50 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .portal-shell .h-\[350px\] { height:300px; }
 }
 @media(prefers-reduced-motion:reduce) { .portal-shell * { scroll-behavior:auto !important; } }
+
+
+/* MatMove portal motion: short, lightweight transitions that do not delay navigation. */
+.mm-section-enter {
+  animation: mm-section-in 260ms cubic-bezier(.2,.75,.25,1) both;
+  will-change: opacity, transform;
+}
+@keyframes mm-section-in {
+  from { opacity: 0; transform: translate3d(0, 9px, 0) scale(.996); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+.mm-portal-nav button {
+  position: relative;
+  isolation: isolate;
+  transition: color 180ms ease, transform 180ms ease;
+}
+.mm-portal-nav button::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 2px 7px;
+  border-radius: 13px;
+  background: #eaf6f0;
+  opacity: 0;
+  transform: scale(.9);
+  transition: opacity 200ms ease, transform 220ms cubic-bezier(.2,.75,.25,1);
+}
+.mm-portal-nav button[aria-current=page] {
+  background: transparent;
+  color: #087658;
+}
+.mm-portal-nav button[aria-current=page]::before {
+  opacity: 1;
+  transform: scale(1);
+}
+.mm-portal-nav button svg {
+  transition: transform 220ms cubic-bezier(.2,.75,.25,1);
+}
+.mm-portal-nav button[aria-current=page] svg {
+  transform: translateY(-1px) scale(1.06);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mm-section-enter { animation: none !important; will-change: auto; }
+  .mm-portal-nav button,
+  .mm-portal-nav button::before,
+  .mm-portal-nav button svg { transition: none !important; }
+}

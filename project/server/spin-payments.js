@@ -227,7 +227,7 @@ export async function reconcileSpins(req, res) {
   const secret = process.env.CRON_SECRET;
   const actual = Buffer.from(String(req.headers.authorization || ''));
   const expected = Buffer.from(`Bearer ${secret || ''}`);
-  if (!secret || actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+  if (typeof secret !== 'string' || secret.length < 32 || secret.length > 256 || actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
     return res.status(401).json({ error: 'Unauthorized.' });
   }
   try {

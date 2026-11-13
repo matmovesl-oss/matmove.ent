@@ -86,23 +86,54 @@ export async function transferHandler(req, res) {
   });
 
   const transfer = rawResponse?.result || rawResponse;
-  const status = String(transfer?.status || 'completed').toLowerCase();
+  const status = String(transfer?.status || '').toLowerCase();
+  const receiptMatches =
+    typeof transfer?.id === 'string' &&
+    transfer.id.length > 0 &&
+    transfer.amount?.currency === currency &&
+    transfer.amount?.value === minor &&
+    transfer.sourceFinancialAccount?.id === accountId &&
+    transfer.destinationFinancialAccount?.id === recipientId;
 
-  if (status === 'failed') {
-    return res.status(400).json({
-      error: 'The transfer failed.',
-      status: 'failed',
-      data: { ...transfer, status: 'failed' },
+  if (!receiptMatches) {
+    return res.status(202).json({
+      success: false,
+      pending: true,
+      status: 'review_required',
+      error: 'The provider receipt could not be matched to this transfer. Do not submit another transfer.',
     });
   }
 
-  // Treat 'processing' or 'completed' as successful completion for internal transfers
-  const resolvedStatus = status === 'failed' ? 'failed' : 'completed';
+  if (status === 'failed') {
+    return res.status(400).json({
+      success: false,
+      status: 'failed',
+      data: transfer,
+    });
+  }
+
+  if (status === 'pending' || status === 'processing') {
+    return res.status(202).json({
+      success: false,
+      pending: true,
+      status,
+      data: transfer,
+    });
+  }
+
+  if (status !== 'completed') {
+    return res.status(202).json({
+      success: false,
+      pending: true,
+      status: 'review_required',
+      error: 'The provider has not confirmed a final transfer status.',
+    });
+  }
 
   return res.status(200).json({
     success: true,
-    status: resolvedStatus,
-    data: { ...transfer, status: resolvedStatus },
+    status: 'completed',
+    data: transfer,
   });
 }
 

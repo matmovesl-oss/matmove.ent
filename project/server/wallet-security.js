@@ -96,17 +96,17 @@ export function monimeEnvironment() {
 }
 
 export function assertMonimeEnvironment() {
-  const expected =
-    process.env.MONIME_ENVIRONMENT ||
-    (
-      process.env.VERCEL_ENV === 'production'
-        ? 'live'
-        : null
-    );
+  const configured = process.env.MONIME_ENVIRONMENT || null;
+  const deploymentMode =
+    process.env.VERCEL_ENV === 'production'
+      ? 'live'
+      : process.env.VERCEL_ENV === 'preview'
+        ? 'test'
+        : null;
 
   if (
-    expected &&
-    !['live', 'test'].includes(expected)
+    configured &&
+    !['live', 'test'].includes(configured)
   ) {
     throw new HttpError(
       503,
@@ -114,16 +114,29 @@ export function assertMonimeEnvironment() {
     );
   }
 
-  const actual = monimeEnvironment();
-
-  if (
-    expected &&
-    actual !== 'unknown' &&
-    expected !== actual
-  ) {
+  // An environment variable must never override Vercel's deployment mode.
+  // Production can only use Live; Preview deployments can only use Test.
+  if (deploymentMode && configured && configured !== deploymentMode) {
     throw new HttpError(
       503,
-      'Monime token mode does not match MONIME_ENVIRONMENT. Check the server token and the dashboard Live/Test mode.'
+      'MONIME_ENVIRONMENT conflicts with the Vercel deployment environment.'
+    );
+  }
+
+  const expected = deploymentMode || configured;
+  const actual = monimeEnvironment();
+
+  if (actual === 'unknown') {
+    throw new HttpError(
+      503,
+      'Monime API key must use the documented Live or Test token prefix.'
+    );
+  }
+
+  if (expected && expected !== actual) {
+    throw new HttpError(
+      503,
+      'Monime token mode does not match this deployment. Check the server token and the dashboard Live/Test mode.'
     );
   }
 }
@@ -179,10 +192,24 @@ export async function monime(path, options = {}) {
       ) ||
       'The wallet provider could not complete this request.';
 
-    console.error(
-      `Monime API Error (${response.status} on /v1/${path}):`,
-      body
-    );
+    const resourceName = String(path).split(/[/?]/, 1)[0];
+    const safeResource = /^[A-Za-z0-9-]{1,48}$/.test(resourceName)
+      ? resourceName
+      : 'unknown';
+    const safeProviderField = value =>
+      typeof value === 'string' && /^[A-Za-z0-9:_-]{1,80}$/.test(value)
+        ? value
+        : null;
+
+    // Provider error bodies may contain payer, account or transaction data.
+    // Log only stable diagnostics, never the response body or dynamic path ID.
+    console.error('Monime API request failed', {
+      status: response.status,
+      resource: safeResource,
+      requestId: safeProviderField(response.headers?.get?.('Monime-Request-Id')),
+      providerCode: safeProviderField(body?.error?.code),
+      providerReason: safeProviderField(body?.error?.reason)
+    });
 
     throw new HttpError(
       response.status >= 400 &&

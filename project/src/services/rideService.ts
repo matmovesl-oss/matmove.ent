@@ -1,9 +1,11 @@
 import { walletFetch } from '@/lib/apiFetch';
 
-type RideAction = 'accept' | 'start' | 'complete' | 'cancel';
+type RideAction = 'accept' | 'start' | 'complete' | 'cancel' | 'cash_reserve' | 'cash_confirm';
 const urls: Record<RideAction, string> = {
   accept: '/api/accept-ride-escrow', start: '/api/start-ride',
   complete: '/api/complete-ride-payout', cancel: '/api/cancel-ride',
+  cash_reserve: '/api/accept-ride-escrow?action=cash_reserve',
+  cash_confirm: '/api/accept-ride-escrow?action=cash_confirm',
 };
 
 export async function updateRide(action: RideAction, bookingId: string) {

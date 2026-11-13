@@ -48,7 +48,7 @@ export function createReferralApi({database=dbClient,provider=referralProvider,r
    (req.query.probe!==undefined && (req.query.probe!=='true'||!uuid.test(req.query.challenge||'')))||
    (req.query.probe===undefined && req.query.challenge!==undefined))return res.status(400).json({error:'Invalid referral reconciliation request.'});
   const secret=env.CRON_SECRET,header=req.headers?.authorization;
-  if(typeof secret!=='string'||!secret||typeof header!=='string'||header.length>1024)return res.status(401).json({error:'Unauthorized.'});
+  if(typeof secret!=='string'||secret.length<32||secret.length>256||typeof header!=='string'||header.length>1024)return res.status(401).json({error:'Unauthorized.'});
   const a=Buffer.from(header),b=Buffer.from(`Bearer ${secret}`);if(a.length!==b.length||!timingSafeEqual(a,b))return res.status(401).json({error:'Unauthorized.'});
   try{
    if(req.query.probe==='true'){

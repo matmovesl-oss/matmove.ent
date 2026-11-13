@@ -103,3 +103,9 @@ export async function resetPassword(email: string): Promise<void> {
     redirectTo: customerAuthRedirect('/auth/callback?type=recovery&next=%2Freset-password') });
   if (error) throw error;
 }
+
+export async function resetPasscode(email: string): Promise<void> {
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+    redirectTo: customerAuthRedirect('/auth/callback?type=recovery&next=%2Freset-passcode') });
+  if (error) throw error;
+}

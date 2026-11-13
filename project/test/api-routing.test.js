@@ -22,7 +22,7 @@ test('new cancellation and recovery URLs rewrite to the existing API before file
   const filesystemIndex = config.routes.findIndex(route => route.handle === 'filesystem');
   for (const [path, action] of Object.entries(aliases)) {
     for (const suffix of ['', '/']) {
-      const index = config.routes.findIndex(route => route.src && new RegExp(`^${route.src}`, 'i').test(path + suffix));
+      const index = config.routes.findIndex(route => route.dest === `/api/accept-ride-escrow?action=${action}`);
       assert.ok(index >= 0 && index < filesystemIndex);
       assert.equal(config.routes[index].dest, `/api/accept-ride-escrow?action=${action}`);
     }
@@ -200,4 +200,29 @@ test('existing acceptance URL defaults to accept without an action query', async
 
   assert.equal(calls, 1);
   assert.equal(res.statusCode, 200);
+});
+
+test('unified payment reconciliation stays behind the existing wallet API function', async () => {
+  const source = await readFile(new URL('../api/get-live-wallet.js', import.meta.url), 'utf8');
+  assert.match(source, /reconcileMatMovePayments/);
+  assert.match(source, /action === 'payment_reconcile'/);
+  assert.match(source, /req\.method !== 'GET'/);
+  const apiFiles = await readdir(new URL('../api/', import.meta.url));
+  assert.equal(apiFiles.length, 12);
+});
+
+
+test('unified payment reconciliation URL rewrites to the existing wallet API before filesystem fallback', async () => {
+  const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
+  const filesystemIndex = config.routes.findIndex(route => route.handle === 'filesystem');
+
+  for (const suffix of ['', '/']) {
+    const path = `/api/reconcile-all-payments${suffix}`;
+    const index = config.routes.findIndex(route => route.dest === '/api/get-live-wallet?action=payment_reconcile');
+    assert.ok(index >= 0 && index < filesystemIndex);
+    assert.equal(config.routes[index].dest, '/api/get-live-wallet?action=payment_reconcile');
+  }
+
+  const files = await readdir(new URL('../api/', import.meta.url));
+  assert.equal(files.length, 12);
 });

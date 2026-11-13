@@ -123,11 +123,26 @@ export function publicPaymentCode(code, context) {
 export async function topupSettlement(code, provider) {
   const payments=await provider(`payments?financialAccountId=${encodeURIComponent(code.financialAccountId)}&limit=50`);
   if(!Array.isArray(payments))return null;
-  const belongs=p=>{
-    if(typeof code.reference==='string'&&code.reference&&p.reference===code.reference)return true;
-    let owner=p.ownershipGraph?.owner;
-    for(let i=0;owner&&i<8;i++,owner=owner.owner)if(owner.type==='payment_code'&&owner.id===code.id)return true;
-    return false;
+  const belongs = payment => {
+    // Monime's immutable Ownership Graph takes precedence over a matching
+    // reference. A populated graph that points elsewhere is a hard mismatch.
+    const graph = payment?.ownershipGraph;
+    if (graph && typeof graph === 'object') {
+      let owner = graph.owner;
+      for (let depth = 0; owner && depth < 8; depth++, owner = owner.owner) {
+        if (owner.type === 'payment_code') {
+          return owner.id === code.id &&
+            (!code.reference || payment.reference === code.reference);
+        }
+      }
+      return false;
+    }
+
+    // Some list responses may omit lineage; in that case require the exact
+    // unique reference created for this Payment Code.
+    return typeof code.reference === 'string' &&
+      code.reference.length > 0 &&
+      payment.reference === code.reference;
   };
   const found=payments.filter(p=>p?.status==='completed'&&p.financialAccountId===code.financialAccountId&&p.amount?.currency==='SLE'&&p.amount.value===code.amount.value&&belongs(p));
   if(found.length!==1)return null;
