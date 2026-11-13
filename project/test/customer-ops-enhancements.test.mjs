@@ -94,20 +94,21 @@ test('password recovery is offered only on the passcode screen and changes only 
   ]);
   const login=auth.slice(auth.indexOf('export function LoginPage'),auth.indexOf('export function SignupPage'));
   const signup=auth.slice(auth.indexOf('export function SignupPage'),auth.indexOf('function GoogleButton'));
-  assert.doesNotMatch(login,/Forgot password\\?|Forgot passcode\\?/);
-  assert.doesNotMatch(signup,/Forgot password\\?|Forgot passcode\\?/);
-  assert.match(lock,/Forgot password\\?/);
-  assert.doesNotMatch(lock,/Forgot passcode\\?/);
-  assert.match(lock,/requestAccountPasswordReset\\(resetEmail\\)/);
-  assert.match(lock,/Reset Password/);
-  assert.match(lock,/Your MatMove passcode will remain unchanged/);
-  assert.doesNotMatch(app,/path="\\/forgot-password"|path="\\/forgot-passcode"/);
-  assert.match(app,/path="\\/reset-password"/);
-  assert.match(service,/customerAuthRedirect\\('\\/auth\\/callback\\?type=recovery&next=%2Freset-password'\\)/);
-  assert.match(recovery,/supabase\\.auth\\.updateUser\\(\\{ password \\}\\)/);
-  assert.match(recovery,/mode === 'password'/);
-  assert.match(recovery,/Your MatMove passcode will remain unchanged/);
-  assert.match(recovery,/recoveryReady/);
+  assert.equal(login.includes('Forgot password?'),false);
+  assert.equal(login.includes('Forgot passcode?'),false);
+  assert.equal(signup.includes('Forgot password?'),false);
+  assert.equal(signup.includes('Forgot passcode?'),false);
+  assert.equal(lock.includes('Forgot password?'),true);
+  assert.equal(lock.includes('Forgot passcode?'),false);
+  assert.equal(lock.includes('requestAccountPasswordReset(resetEmail)'),true);
+  assert.equal(lock.includes('Your MatMove passcode will remain unchanged'),true);
+  assert.equal(app.includes('path="/forgot-password"'),false);
+  assert.equal(app.includes('path="/forgot-passcode"'),false);
+  assert.equal(app.includes('path="/reset-password"'),true);
+  assert.equal(service.includes("customerAuthRedirect('/auth/callback?type=recovery&next=%2Freset-password')"),true);
+  assert.equal(recovery.includes("supabase.auth.updateUser({ password })"),true);
+  assert.equal(recovery.includes("mode === 'password'"),true);
+  assert.equal(recovery.includes('recoveryReady'),true);
 });
 
 test('Event USD is a display quote and ticket purchases continue to debit the SLE amount',async()=>{
