@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowUpRight, Car, MapPin, Navigation, Package, Utensils } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ArrowUpRight, Car, MapPin, Navigation, Package, Utensils, Pause, Play, Share2, Check } from 'lucide-react';
 
 type RouteKey = 'ride' | 'food' | 'package';
 type Props = {
@@ -51,11 +51,30 @@ const routes: Record<RouteKey, {
 
 export default function CustomerHomeMap({ role, onNavigate }: Props) {
   const [activeRoute, setActiveRoute] = useState<RouteKey>('ride');
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [shareNotice, setShareNotice] = useState('');
+  const mapRef = useRef<SVGSVGElement | null>(null);
   const route = routes[activeRoute];
   const Icon = route.Icon;
   const driver = role === 'driver';
   const merchant = role === 'merchant';
   const openMap = () => onNavigate(driver || !merchant ? 'ride' : 'services');
+  const toggleMotion = () => {
+    const svg = mapRef.current;
+    if (!svg) return;
+    if (isPlaying) svg.pauseAnimations(); else svg.unpauseAnimations();
+    setIsPlaying(!isPlaying);
+  };
+  const shareRoute = async () => {
+    const message = `MatMove route preview: ${route.start} to ${route.end}, Freetown. Open MatMove to plan your journey.`;
+    try {
+      if (navigator.share) await navigator.share({ title: 'MatMove route', text: message });
+      else if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(message); setShareNotice('Route details copied.'); }
+      else setShareNotice('Sharing is not available on this device.');
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'AbortError') setShareNotice('Could not share this route.');
+    }
+  };
 
   return (
     <section aria-labelledby="customer-home-map-title" className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
@@ -73,7 +92,7 @@ export default function CustomerHomeMap({ role, onNavigate }: Props) {
 
       <div className="relative mx-3 overflow-hidden rounded-[1.5rem] border border-emerald-100 bg-[#e7f0e9] sm:mx-5">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(255,255,255,.9),transparent_28%),radial-gradient(circle_at_80%_80%,rgba(255,255,255,.55),transparent_32%)]" />
-        <svg viewBox="0 0 740 280" role="img" aria-label={`Illustrative animated Freetown route from ${route.start} to ${route.end}`} className="relative block h-[190px] w-full sm:h-[260px]">
+        <svg ref={mapRef} viewBox="0 0 740 280" role="img" aria-label={`Illustrative animated Freetown route from ${route.start} to ${route.end}`} className="relative block h-[190px] w-full sm:h-[260px]">
           <defs>
             <pattern id="mm-home-map-grid" width="42" height="42" patternUnits="userSpaceOnUse">
               <path d="M 42 0 L 0 0 0 42" fill="none" stroke="#b8cdbd" strokeWidth="1" opacity=".55" />
@@ -139,10 +158,13 @@ export default function CustomerHomeMap({ role, onNavigate }: Props) {
         </div>
         <div className="flex items-center gap-2">
           <span className="hidden text-xs text-slate-500 sm:inline">{route.action}</span>
+          <button type="button" onClick={toggleMotion} aria-pressed={isPlaying} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:border-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">{isPlaying ? <Pause size={15}/> : <Play size={15}/>} {isPlaying ? 'Pause car' : 'Move car'}</button>
+          <button type="button" onClick={() => void shareRoute()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:border-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"><Share2 size={15}/> Share route</button>
           <button type="button" onClick={openMap} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#0b2236] px-4 text-sm font-bold text-white transition hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
             {driver ? 'Open driver radar' : merchant ? 'Open services' : 'Open ride map'} <ArrowUpRight size={16}/>
           </button>
         </div>
+        {shareNotice && <p role="status" className="w-full text-xs font-semibold text-emerald-700">{shareNotice}</p>}
         <p className="w-full text-[11px] text-slate-400">Illustrative route preview · open the map to choose real pickup and destination points.</p>
       </div>
     </section>
