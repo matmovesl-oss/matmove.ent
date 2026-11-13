@@ -44,10 +44,12 @@ test('ride booking uses the full map-first location picker for rider and merchan
   const merchant = await readFile('src/pages/MerchantDashboard.tsx', 'utf8');
   const driver = await readFile('src/pages/DriverDashboard.tsx', 'utf8');
   assert.ok(picker.includes("layout === 'map-first'"));
-  assert.ok(picker.includes("clamp(340px, 58dvh, 620px)"));
-  assert.ok(rider.includes('layout="map-first"'));
+  assert.ok(picker.includes("layout === 'map-first'"));
+  assert.ok(picker.includes('h-[calc(100dvh-164px)]'));
+  assert.ok(picker.includes('absolute inset-0 h-full w-full'));
+  assert.ok(picker.includes('max-h-[68%]'));
+  assert.ok(rider.includes('sheetContent={bookingPanelContent}'));
   assert.ok(merchant.includes('layout="map-first"'));
-  assert.ok(rider.includes('max-h-[58dvh]'));
   assert.ok(merchant.includes('max-h-[58dvh]'));
   assert.ok(driver.includes('clamp(340px, 58dvh, 620px)'));
   assert.ok(driver.includes('order-2 relative z-20'));
