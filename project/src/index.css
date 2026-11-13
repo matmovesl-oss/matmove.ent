@@ -345,3 +345,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @media (prefers-reduced-motion: reduce) {
   .mm-portal-morph, .mm-portal-morph * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .mm-landing-car-svg { visibility: hidden !important; }
+}
