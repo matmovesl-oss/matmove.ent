@@ -3,7 +3,7 @@ type Props={profile:any;onNavigate:(section:string)=>void};
 export default function CustomerHome({profile,onNavigate}:Props){
  const role=String(profile?.role||'rider'),driver=role==='driver',merchant=role==='merchant';
  const name=String(profile?.first_name||profile?.full_name||profile?.business_name||'there').trim().split(/\s+/)[0];
- return <main className="mx-auto min-h-[calc(100dvh-136px)] max-w-6xl space-y-4 px-4 pb-28 pt-5 sm:px-6">
+ return <main className="mm-portal-morph mx-auto min-h-[calc(100dvh-136px)] max-w-6xl space-y-4 px-4 pb-28 pt-5 sm:px-6">
   <header className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-emerald-700">{driver?'Driver space':merchant?'Business space':'Your MatMove'}</p><h1 className="mt-1 text-2xl font-black text-slate-950">Hello, {name}.</h1><p className="mt-1 text-sm text-slate-500">{driver?'Ready for your next trip?':'Where will today take you?'}</p></div><button onClick={()=>onNavigate('account')} aria-label="Open account" className="flex h-12 w-12 items-center justify-center rounded-2xl border bg-white"><BriefcaseBusiness/></button></header>
   <section className="relative isolate overflow-hidden rounded-[2rem] bg-[#0c1d31] p-6 text-white shadow-xl sm:p-8">
    <svg viewBox="0 0 700 250" className="pointer-events-none absolute inset-0 h-full w-full opacity-50" preserveAspectRatio="xMidYMid slice"><path d="M-20 206 C100 160 130 235 240 165 S390 76 470 137 S590 210 730 64" fill="none" stroke="#2d8a75" strokeWidth="24" strokeLinecap="round"/><path d="M-20 206 C100 160 130 235 240 165 S390 76 470 137 S590 210 730 64" fill="none" stroke="#d7ede7" strokeWidth="2" strokeDasharray="9 12"/></svg>
