@@ -9,12 +9,12 @@ const journeys=[
 ];
 
 const services=[
- {name:'Ride',detail:'Go where life takes you.',icon:Car},
- {name:'Earn',detail:'Drive and grow with MatMove.',icon:Navigation},
- {name:'Food',detail:'Discover local food and shops.',icon:Store},
- {name:'Package',detail:'Send parcels across town.',icon:Package},
- {name:'Rental',detail:'Find a vehicle for longer trips.',icon:Truck},
- {name:'Travel',detail:'Plan journeys beyond the city.',icon:Bike}
+ {name:'Ride',detail:'Go where life takes you.',icon:Car,illustration:'/matmove-car.svg'},
+ {name:'Earn',detail:'Drive and grow with MatMove.',icon:Navigation,illustration:'/matmove-bike.svg'},
+ {name:'Food',detail:'Discover local food and shops.',icon:Store,illustration:null},
+ {name:'Package',detail:'Send parcels across town.',icon:Package,illustration:null},
+ {name:'Rental',detail:'Find a vehicle for longer trips.',icon:Truck,illustration:'/matmove-van.svg'},
+ {name:'Travel',detail:'Plan journeys beyond the city.',icon:Bike,illustration:'/matmove-keke.svg'}
 ];
 
 export function LandingPage(){
@@ -35,7 +35,7 @@ export function LandingPage(){
   <section className="mx-auto grid max-w-7xl items-center gap-10 px-5 pb-16 pt-8 sm:px-8 lg:grid-cols-[.92fr_1.08fr] lg:gap-14 lg:pb-24 lg:pt-14">
    <div className="relative z-10">
     <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-[.16em] text-emerald-800"><Sparkles size={15}/> Sierra Leone moves with MatMove</p>
-    <h1 className="max-w-2xl text-5xl font-black leading-[1.02] tracking-[-.045em] text-slate-950 sm:text-6xl lg:text-7xl">Your world moves. <span className="text-[#168163]">MatMove moves with you.</span></h1>
+    <h1 className="font-display max-w-2xl text-5xl font-black leading-[1.02] tracking-[-.055em] text-slate-950 sm:text-6xl lg:text-7xl">Your world moves. <span className="text-[#168163]">MatMove moves with you.</span></h1>
     <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600">One connected place for rides, earning, food, deliveries, rentals and travel. Built around the way Sierra Leone moves.</p>
     <div className="mt-8 flex flex-wrap gap-3"><button onClick={()=>navigate('/signup')} className="inline-flex min-h-14 items-center gap-3 rounded-2xl bg-[#1554a0] px-7 text-base font-bold text-white shadow-xl shadow-blue-900/20 transition hover:-translate-y-0.5 hover:bg-[#10427f]">Create your account <ArrowRight size={19}/></button><button onClick={()=>navigate('/login')} className="min-h-14 rounded-2xl border border-slate-300 bg-white px-7 font-bold text-slate-800 hover:border-slate-400">I already have an account</button></div>
     <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-xs font-semibold text-slate-500"><span>Ride across town</span><span>Earn on your schedule</span><span>Support local business</span></div>
@@ -58,7 +58,7 @@ export function LandingPage(){
       <div className="absolute left-[7%] top-[69%] rounded-xl border border-white/10 bg-[#0b1d2e]/90 px-3 py-2 backdrop-blur"><p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Start</p><p className="mt-0.5 text-sm font-bold">{item.from}</p></div>
       <div className="absolute left-[54%] top-[36%] rounded-xl border border-white/10 bg-[#0b1d2e]/90 px-3 py-2 backdrop-blur"><p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Passing</p><p className="mt-0.5 text-sm font-bold">{item.via.split(' · ')[0]}</p></div>
       <div className="absolute bottom-[10%] right-[5%] rounded-xl border border-white/10 bg-[#0b1d2e]/90 px-3 py-2 backdrop-blur"><p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Destination</p><p className="mt-0.5 text-sm font-bold">{item.to}</p></div>
-      <svg viewBox="0 0 680 330" className="mm-landing-car-svg pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible" aria-hidden="true"><g transform="translate(-18 -12)"><rect x="-15" y="-7" width="30" height="14" rx="5" fill="#a7f3d0" stroke="#063b35" strokeWidth="1.5"/><path d="M-9 -7L-5 -12H6L11 -7" fill="#d1fae5" stroke="#063b35" strokeWidth="1.3"/><circle cx="-8" cy="8" r="3" fill="#082f49"/><circle cx="8" cy="8" r="3" fill="#082f49"/><animateMotion dur="5.2s" repeatCount="indefinite" rotate="auto" path="M78 250 C68 220 108 292 201 226 S333 82 418 151 S550 250 630 102"/></g></svg>
+      <svg viewBox="0 0 680 330" className="mm-landing-car-svg pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible" aria-hidden="true"><g><image href="/matmove-car.svg" x="-42" y="-28" width="84" height="56" preserveAspectRatio="xMidYMid meet"/><animateMotion dur="5.2s" repeatCount="indefinite" rotate="auto" path="M78 250 C68 220 108 292 201 226 S333 82 418 151 S550 250 630 102"/></g></svg>
       <div className="absolute bottom-4 left-4 rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-semibold text-slate-200 backdrop-blur">Illustrative route preview · not live tracking</div>
      </div>
      <div className="mt-5 flex items-center justify-between gap-4">
@@ -70,9 +70,10 @@ export function LandingPage(){
    </div>
   </section>
 
+  <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8"><div className="mb-5"><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-700">MatMove fleet</p><h2 className="font-display mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Choose your way to move.</h2><p className="mt-2 text-sm text-slate-500">A ride for every road and every day.</p></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[{label:'Keke',src:'/matmove-keke.svg',detail:'Easy city trips'},{label:'Bike',src:'/matmove-bike.svg',detail:'Quick solo rides'},{label:'Car',src:'/matmove-car.svg',detail:'Comfortable journeys'},{label:'Van',src:'/matmove-van.svg',detail:'Extra room' }].map(item=><div key={item.label} className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"><div className="flex h-28 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-50 via-white to-emerald-50"><img src={item.src} alt={`MatMove ${item.label}`} className="h-24 w-full object-contain"/></div><p className="mt-3 text-sm font-black text-slate-950">{item.label}</p><p className="mt-1 text-xs text-slate-500">{item.detail}</p></div>)}</div></section>
   <section className="border-y border-slate-200 bg-white py-16 sm:py-20">
-   <div className="mx-auto max-w-7xl px-5 sm:px-8"><div className="mb-9 max-w-2xl"><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-700">One platform, many ways to move</p><h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">More than a ride. A whole city connected.</h2><p className="mt-3 leading-7 text-slate-500">Start with what you need today. Your MatMove account brings your services and activity together.</p></div>
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{services.map((service,i)=>{const Icon=service.icon;return <div key={service.name} className="group rounded-3xl border border-slate-200 bg-[#fbfdfc] p-5 transition hover:-translate-y-1 hover:border-emerald-200 hover:shadow-lg"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-800"><Icon size={22}/></div><h3 className="mt-4 text-lg font-extrabold">{service.name}</h3><p className="mt-1 text-sm text-slate-500">{service.detail}</p></div>})}</div>
+   <div className="mx-auto max-w-7xl px-5 sm:px-8"><div className="mb-9 max-w-2xl"><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-700">One platform, many ways to move</p><h2 className="font-display mt-3 text-3xl font-black tracking-tight sm:text-4xl">More than a ride. A whole city connected.</h2><p className="mt-3 leading-7 text-slate-500">Start with what you need today. Your MatMove account brings your services and activity together.</p></div>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{services.map((service,i)=>{const Icon=service.icon;return <div key={service.name} className="group rounded-3xl border border-slate-200 bg-[#fbfdfc] p-5 transition hover:-translate-y-1 hover:border-emerald-200 hover:shadow-lg"><div className="flex h-16 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 via-white to-sky-50">{service.illustration?<img src={service.illustration} alt="" className="h-14 w-[4.5rem] object-contain drop-shadow-sm"/>:<Icon size={25} strokeWidth={1.9} className="text-emerald-800"/>}</div><h3 className="mt-4 text-lg font-extrabold">{service.name}</h3><p className="mt-1 text-sm text-slate-500">{service.detail}</p></div>})}</div>
     <div className="mt-10 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-[#eaf4f1] p-6"><div><h3 className="text-xl font-black">Ready to move with MatMove?</h3><p className="mt-1 text-sm text-slate-600">Create your account and choose the services that fit you.</p></div><button onClick={()=>navigate('/signup')} className="min-h-12 rounded-xl bg-[#1554a0] px-5 font-bold text-white">Get started <ArrowRight className="ml-1 inline" size={17}/></button></div>
    </div>
   </section>
