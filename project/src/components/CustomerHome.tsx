@@ -1,6 +1,5 @@
 import {ArrowRight,Car,MapPin,Wallet,Store,ShoppingBag,Package,Utensils,KeyRound,Navigation,Sparkles} from 'lucide-react';
 import CustomerHomePosts from '@/components/CustomerHomePosts';
-import CustomerHomeMap from '@/components/CustomerHomeMap';
 
 type Props={profile:any;onNavigate:(section:'ride'|'account'|'services'|'trips'|'shop'|'inventory')=>void};
 
@@ -46,7 +45,7 @@ export default function CustomerHome({profile,onNavigate}:Props){
    <div aria-hidden="true" className="absolute bottom-7 right-8 hidden items-center justify-center rounded-3xl border border-white/15 bg-white/10 p-5 text-emerald-100 sm:flex"><Car size={46} strokeWidth={1.4}/></div>
   </section>
 
-  <CustomerHomeMap role={role} onNavigate={onNavigate}/>
+  <CustomerHomePosts userId={profile.id}/>
 
   <section aria-labelledby="quick-services-title">
    <div className="mb-3 flex items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.16em] text-slate-400">Made for your day</p><h2 id="quick-services-title" className="mt-1 text-xl font-black text-slate-950">Quick access</h2></div><button type="button" onClick={()=>onNavigate('services')} className="inline-flex min-h-10 items-center gap-1 text-sm font-bold text-emerald-700">All services <ArrowRight size={16}/></button></div>
@@ -54,8 +53,6 @@ export default function CustomerHome({profile,onNavigate}:Props){
     {services.map(item=>{const Icon=item.icon;return <button key={item.label} type="button" onClick={()=>onNavigate(driver?(item.label==='Driver radar'?'ride':item.label==='My trips'?'trips':item.label==='Earnings'?'account':'services'):merchant?(item.label==='My shop'||item.label==='Orders'?'inventory':item.label==='Earnings'?'account':'services'):item.label==='Ride'?'ride':item.label==='Food'?'shop':'services')} className="group min-h-36 rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"><span className={`mb-4 flex h-11 w-11 items-center justify-center rounded-2xl ${item.accent}`}><Icon size={21}/></span><span className="block font-bold text-slate-950">{item.label}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{item.detail}</span></button>})}
    </div>
   </section>
-
-  <CustomerHomePosts userId={profile.id}/>
 
   <section className="grid gap-3 sm:grid-cols-2">
    <button type="button" onClick={()=>onNavigate('account')} className="flex min-h-24 items-center gap-4 rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-emerald-200"><span className="rounded-2xl bg-emerald-50 p-3 text-emerald-700"><Wallet size={22}/></span><span className="min-w-0"><b className="block text-slate-950">My wallet</b><small className="text-slate-500">Balances, top-ups and payments</small></span><ArrowRight className="ml-auto shrink-0 text-slate-400"/></button>
