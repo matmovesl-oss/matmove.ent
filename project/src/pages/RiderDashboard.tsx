@@ -8,6 +8,7 @@ import MerchantCheckout from '@/components/MerchantCheckout';
 import TripHistory from '@/components/TripHistory';
 import PayoutPanel from '@/components/PayoutPanel';
 import { RideLocationPicker, TripLocations } from '@/components/RideLocationPicker';
+import {VehicleSticker,PassengerSticker} from '@/components/MatMoveStickers';
 import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
@@ -565,17 +566,11 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                     <label className="block text-xs font-bold text-slate-700 mb-1">Seats / Passengers (Max 3)</label>
                     <div className="flex gap-2">
                       {[1, 2, 3].map(count => (
-                        <button
-                          key={count}
-                          type="button"
-                          onClick={() => setPassengerCount(count)}
-                          className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
-                            passengerCount === count
-                              ? 'bg-emerald-600 text-white border-emerald-600'
-                              : 'bg-slate-50 text-slate-600 border-slate-200'
-                          }`}
-                        >
-                          {count} Seat{count > 1 ? 's' : ''}
+                        <button key={count} type="button" onClick={() => setPassengerCount(count)}
+                          aria-pressed={passengerCount===count}
+                          className={`flex-1 flex min-h-[82px] flex-col items-center justify-center gap-1.5 rounded-2xl border px-2 py-2 text-xs font-bold transition ${passengerCount===count?'border-emerald-400 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200 shadow-sm':'border-slate-200 bg-white text-slate-600 hover:border-emerald-200'}`}>
+                          <span className="flex items-center gap-0.5">{Array.from({length:count},(_,i)=><PassengerSticker key={i} size={30}/>)}</span>
+                          <span>{count} Passenger{count>1?'s':''}</span>
                         </button>
                       ))}
                     </div>
@@ -605,24 +600,15 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                   <div className="space-y-3">
                     <div><div className="mb-2 flex items-center justify-between"><span className="text-xs font-extrabold text-slate-800">Choose your vehicle</span><span className="text-[10px] font-semibold text-slate-400">Tap to select</span></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {(['keke', 'bike', 'car', 'van'] as const).map(v => {
-                        const VehicleIcon = v === 'bike' ? Bike : v === 'van' ? Truck : CarFront;
                         const label = v === 'bike' ? 'Motorbike' : v === 'keke' ? 'Keke' : v === 'car' ? 'Car' : 'Van';
                         const selected = vehicleType === v;
                         return (
-                          <button
-                            key={v}
-                            type="button"
-                            onClick={() => setVehicleType(v)}
-                            aria-label={`Choose ${label}`}
-                            aria-pressed={selected}
-                            className={`group relative flex min-h-[76px] items-center gap-3 overflow-hidden rounded-2xl border p-3 text-left transition duration-200 ${selected ? 'border-emerald-400 bg-gradient-to-br from-emerald-50 to-white text-emerald-900 shadow-[0_8px_24px_rgba(5,150,105,.12)] ring-1 ring-emerald-200' : 'border-slate-200 bg-white text-slate-600 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md'}`}
-                          >
-                            <span aria-hidden="true" className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] shadow-inner transition ${selected ? 'bg-gradient-to-br from-emerald-600 to-teal-500 text-white' : 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600'}`}>
-                              <span className="absolute inset-1 rounded-[14px] border border-white/40"/>
-                              <VehicleIcon size={24} strokeWidth={2.1}/>
-                              {selected && <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-white ring-2 ring-emerald-500"/>}
-                            </span>
-                            <span className="min-w-0"><span className="block text-xs font-black">{label}</span><span className="mt-0.5 block text-[10px] text-slate-400">{v==='keke'?'3 seats':v==='bike'?'Quick solo ride':v==='car'?'Comfort ride':'Extra space'}</span></span>
+                          <button key={v} type="button" onClick={() => setVehicleType(v)} aria-label={`Choose ${label}`} aria-pressed={selected}
+                            className={`group relative flex min-h-[112px] flex-col items-center justify-center overflow-hidden rounded-2xl border p-2 text-center transition duration-200 ${selected ? 'border-emerald-400 bg-gradient-to-br from-emerald-50 to-white text-emerald-950 shadow-[0_8px_24px_rgba(5,150,105,.12)] ring-1 ring-emerald-200' : 'border-slate-200 bg-white text-slate-600 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md'}`}>
+                            <VehicleSticker kind={v} size={104}/>
+                            <span className="mt-1 block text-xs font-black">{label}</span>
+                            <span className="mt-0.5 block text-[10px] text-slate-400">{v==='keke'?'3 seats':v==='bike'?'Quick solo ride':v==='car'?'Comfort ride':'Extra space'}</span>
+                            {selected&&<span className="absolute right-2 top-2 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-white"/>}
                           </button>
                         );
                       })}
