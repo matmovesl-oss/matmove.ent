@@ -107,7 +107,7 @@ test('passcode recovery is offered only on the passcode screen and changes only 
   assert.equal(app.includes('path="/reset-password"'),true);
   assert.equal(service.includes("customerAuthRedirect('/auth/callback?type=recovery&next=%2Freset-passcode')"),true);
   assert.equal(recovery.includes("customerPasscode(userId, 'recover', null, newPin)"),true);
-  assert.equal(recovery.includes("mode === 'passcode'"),true);
+  assert.equal(recovery.includes("type RecoveryMode = 'password' | 'passcode'"),true);
   assert.equal(recovery.includes('recoveryReady'),true);
 });
 
