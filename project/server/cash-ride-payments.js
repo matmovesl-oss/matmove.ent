@@ -82,7 +82,7 @@ async function readPayment(db, bookingId) {
 async function readLegs(db, bookingId) {
   const { data, error } = await db
     .from('matmove_cash_ride_legs')
-    .select('leg_kind,amount_minor,currency,status,provider_transfer_id,verified_at,error_code,updated_at')
+    .select('leg_kind,amount_minor,currency,status,provider_transfer_id,settlement_mode,source_account_ref,destination_account_ref,verified_at,error_code,updated_at')
     .eq('booking_id', bookingId)
     .order('created_at', { ascending: true });
 
@@ -106,16 +106,19 @@ function publicSnapshot(payment, legs) {
     reserve: byKind.reserve ? {
       status: byKind.reserve.status,
       transferId: byKind.reserve.provider_transfer_id,
+      settlementMode: byKind.reserve.settlement_mode,
       verifiedAt: byKind.reserve.verified_at
     } : null,
     capture: byKind.capture ? {
       status: byKind.capture.status,
       transferId: byKind.capture.provider_transfer_id,
+      settlementMode: byKind.capture.settlement_mode,
       verifiedAt: byKind.capture.verified_at
     } : null,
     refund: byKind.refund ? {
       status: byKind.refund.status,
       transferId: byKind.refund.provider_transfer_id,
+      settlementMode: byKind.refund.settlement_mode,
       verifiedAt: byKind.refund.verified_at
     } : null,
     needsReview: payment.status === 'review_required' || legs.some(leg => leg.status === 'review_required')
@@ -135,8 +138,7 @@ async function readSettings(db) {
   if (!data?.enabled ||
       !validAccountId(data.fee_hold_account_id) ||
       !validAccountId(platformFeeAccountId) ||
-      data.fee_revenue_account_id !== platformFeeAccountId ||
-      data.fee_hold_account_id === platformFeeAccountId) {
+      data.fee_revenue_account_id !== platformFeeAccountId) {
     throw new HttpError(
       503,
       'Cash collection is disabled until the restricted holding account is configured and the fee revenue account matches MONIME_PLATFORM_FEE_ACCOUNT_ID.',
@@ -230,6 +232,15 @@ async function runCashLeg(db, bookingId, kind, provider = monime) {
   }
 
   if (['completed','failed','review_required'].includes(storedLeg.status)) return storedLeg;
+
+  // A shared escrow/fee account uses an internal ledger release after both
+  // cash confirmations. Never create a Monime account-to-itself transfer.
+  if (kind === 'capture' && storedLeg.source_account_ref === storedLeg.destination_account_ref) {
+    return cashRpc(db, 'matmove_cash_ride_settle_shared_capture', {
+      p_booking_id: bookingId,
+      p_environment: monimeEnvironment()
+    });
+  }
 
   // Do all read-only account and balance checks before claiming the one-time POST.
   // Once claimed, no other request can obtain permission to create a provider debit.
@@ -358,7 +369,9 @@ async function finishCashLeg(db, bookingId, kind, actorId, provider) {
 export async function reconcileCashRide(db, bookingId, provider = monime) {
   const legs = await readLegs(db, bookingId);
   const activeLegs = legs.filter(leg =>
-    ['pending','processing'].includes(leg.status)
+    ['pending','processing'].includes(leg.status) ||
+    (leg.leg_kind === 'capture' && leg.status === 'ready' &&
+      leg.source_account_ref === leg.destination_account_ref)
   );
 
   for (const leg of activeLegs) {
@@ -380,12 +393,12 @@ export async function cashRideAction(
     try {
       assertMonimeEnvironment();
       const settings = await readSettings(db);
-      const [holdAccount, revenueAccount] = await Promise.all([
-        provider(`financial-accounts/${encodeURIComponent(settings.fee_hold_account_id)}?withBalance=true`),
-        provider(`financial-accounts/${encodeURIComponent(settings.fee_revenue_account_id)}?withBalance=true`)
-      ]);
+      const holdAccount = await provider(`financial-accounts/${encodeURIComponent(settings.fee_hold_account_id)}?withBalance=true`);
       providerAccountBalance(holdAccount, settings.fee_hold_account_id);
-      providerAccountBalance(revenueAccount, settings.fee_revenue_account_id);
+      if (settings.fee_revenue_account_id !== settings.fee_hold_account_id) {
+        const revenueAccount = await provider(`financial-accounts/${encodeURIComponent(settings.fee_revenue_account_id)}?withBalance=true`);
+        providerAccountBalance(revenueAccount, settings.fee_revenue_account_id);
+      }
       return res.status(200).json({ success: true, pending: false, enabled: true });
     } catch {
       // Do not advertise cash until both configured SLE platform accounts
