@@ -14,7 +14,7 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  create table auth.users(id uuid primary key,recovery_sent_at timestamptz);insert into auth.users(id) values('${uid}'),('${other}'),('${staff}');
  create table auth.sessions(id uuid primary key,user_id uuid not null,created_at timestamptz not null,not_after timestamptz);
  create table profiles(id uuid primary key references auth.users(id),role text,passcode text,kyc_status text,full_name text);
- insert into profiles values('${uid}','rider','0123','approved','Verified Customer'),('${other}','merchant',null,'pending','Merchant'),('${staff}','driver',null,'approved','Staff');
+ insert into profiles values('${uid}','rider','012345','approved','Verified Customer'),('${other}','merchant',null,'pending','Merchant'),('${staff}','driver',null,'approved','Staff');
  create table user_roles(profile_id uuid,role text);insert into user_roles select id,role from profiles;
  create table matmove_staff_access(id uuid primary key,is_active boolean,removed_at timestamptz);insert into matmove_staff_access values('${staff}',true,null);
  create table wallets(user_id uuid,balance numeric);insert into wallets values('${uid}',42.50);
