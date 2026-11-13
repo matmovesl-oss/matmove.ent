@@ -131,11 +131,11 @@ const sharedMigration = new URL(
   import.meta.url
 );
 
-test('shared escrow and fee account uses an audited internal ledger release, never a provider self-transfer', async () => {
+test('legacy shared-account release remains audited while production configuration requires distinct accounts', async () => {
   const sql = await readFile(sharedMigration, 'utf8');
   const server = await readFile(new URL('../server/cash-ride-payments.js', import.meta.url), 'utf8');
   assert.match(sql, /drop constraint if exists matmove_cash_ride_settings_accounts_distinct/i);
-  assert.match(sql, /fee_hold_account_id = fee_revenue_account_id/i);
+  assert.match(sql, /cfg\.fee_hold_account_id <> cfg\.fee_revenue_account_id/i);
   assert.match(sql, /settlement_mode in \('provider_transfer','internal_ledger'\)/i);
   assert.match(sql, /create or replace function public\.matmove_cash_ride_settle_shared_capture/i);
   assert.match(sql, /both cash parties must confirm/i);
