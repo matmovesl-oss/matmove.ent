@@ -97,11 +97,14 @@ test('credential recovery screens are separate and each updates only its selecte
  const callback=await readFile('src/pages/AuthPages.tsx','utf8');
  const screen=await readFile('src/pages/UpdatePassword.tsx','utf8');
  const lock=await readFile('src/components/CustomerPasscode.tsx','utf8');
+ const authService=await readFile('src/services/authService.ts','utf8');
  assert.ok(app.includes('path="/reset-password"') && app.includes('mode="password"'));
  assert.ok(app.includes('path="/reset-passcode"') && app.includes('mode="passcode"'));
  assert.ok(callback.includes("requestedNext === '/reset-passcode'"));
- assert.match(lock,/next=%2Freset-passcode/);
+ assert.match(authService,/next=%2Freset-passcode/);
  assert.match(lock,/Your account password will not change/);
+ assert.match(lock,/requestPasscodeReset\\(resetEmail\\)/);
+ assert.doesNotMatch(lock,/requestAccountPasswordReset/);
  const operationStart=screen.indexOf("if (mode === 'password') {\\n        const { error: updateError }");
  const operationElse=screen.indexOf("} else {",operationStart);
  const operationEnd=screen.indexOf("localStorage.removeItem",operationElse);
