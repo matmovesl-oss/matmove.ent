@@ -51,7 +51,8 @@ begin
   end if;
 
   if p_action in ('create','change','recover')
-     and (p_new_pin is null or p_new_pin !~ '^[0-9]{6,9}
+     and (p_new_pin is null or p_new_pin !~ '^[0-9]{6,9}$') then
+    raise exception 'INVALID: Choose between 6 and 9 digits.';
   end if;
 
   if p_action in ('create','recover') and p_pin is not null then
