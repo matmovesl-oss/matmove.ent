@@ -182,7 +182,7 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
   }
 
   useEffect(()=>{
-    if(!map.current||!mapFirst)return;
+    if(!map.current||layout!=='map-first')return;
     const center=map.current.getCenter();
     google.maps.event.trigger(map.current,'resize');
     if(center)map.current.setCenter(center);
