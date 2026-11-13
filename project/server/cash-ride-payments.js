@@ -58,9 +58,9 @@ async function readBooking(db, bookingId) {
 
   if (error) throw new HttpError(503, 'Unable to verify the cash ride booking.');
   if (!data) throw new HttpError(404, 'Cash ride booking not found.');
-  // The database setting must match this deployment's configured platform fee
-  // account. The cash capture leg therefore settles only to MONIME_PLATFORM_FEE_ACCOUNT_ID.
-  return { ...data, fee_revenue_account_id: platformFeeAccountId };
+  // Keep internal Monime revenue-account identifiers out of customer booking data.
+  // readSettings() independently verifies the configured destination before any transfer.
+  return data;
 }
 
 async function readPayment(db, bookingId) {
