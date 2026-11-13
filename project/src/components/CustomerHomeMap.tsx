@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ArrowUpRight, Car, MapPin, Navigation, Package, Utensils, Pause, Play, Share2, Check } from 'lucide-react';
+import { ArrowUpRight, Car, MapPin, Navigation, Package, Utensils, Pause, Play, Share2 } from 'lucide-react';
 
 type RouteKey = 'ride' | 'food' | 'package';
 type Props = {
