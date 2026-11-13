@@ -74,6 +74,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [offerAmount, setOfferAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'digital' | 'cash'>('digital');
   const [cashEnabled, setCashEnabled] = useState(false);
+  const [cashAccountsVerified, setCashAccountsVerified] = useState(false);
   const [cashConfigLoading, setCashConfigLoading] = useState(true);
   const [tripDistanceKm, setTripDistanceKm] = useState<number | null>(null);
   const [scheduledTime, setScheduledTime] = useState('');
@@ -131,6 +132,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
     let live = true;
     setCashConfigLoading(true);
     setCashEnabled(false);
+    setCashAccountsVerified(false);
     if (!profile?.id) {
       setCashConfigLoading(false);
       return () => { live = false; };
@@ -140,9 +142,12 @@ function RiderMain({ profile, wallet, activeSection }: any) {
         const { response, data, finish } = await walletFetch('/api/start-ride?action=cash_config', {});
         if (!response.ok) throw new Error('Cash configuration unavailable.');
         finish();
-        if (live) setCashEnabled(data?.enabled === true);
+        if (live) {
+          setCashEnabled(data?.enabled === true);
+          setCashAccountsVerified(data?.accountsVerified === true);
+        }
       } catch {
-        if (live) setCashEnabled(false);
+        if (live) { setCashEnabled(false); setCashAccountsVerified(false); }
       } finally {
         if (live) setCashConfigLoading(false);
       }
@@ -660,7 +665,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                         {cashConfigLoading ? (
                           <p className="mt-2 text-xs text-slate-500">Checking cash collection availability…</p>
                         ) : !cashEnabled ? (
-                          <p className="mt-2 text-xs text-amber-800">Physical cash rides are not enabled yet. The separate escrow and platform-fee accounts are configured; final production verification is still required.</p>
+                          <p className="mt-2 text-xs text-amber-800">{cashAccountsVerified ? 'Both Monime SLE accounts are verified. Physical cash rides remain disabled until MatMove completes final production approval.' : 'Physical cash rides are not enabled yet. MatMove is still verifying the separate escrow and platform-fee accounts.'}</p>
                         ) : null}
                         {paymentMethod === 'cash' && Number(offerAmount) > 0 && (() => {
                           const fareMinor = Math.round(Number(offerAmount) * 100);
