@@ -89,7 +89,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
    if(!valid(id,n))return;setStatus(d);
    if(d.ok&&d.digits>=6&&['saved','verified'].includes(d.code)){clear();setUpgrade(false);setPortalUnlocked(id,true);unlockedNow.current=true;setEnteredUser(id);setUnlocked(true);}
    else if(d.ok&&d.code==='upgrade_required'){setUpgrade(true);setNext('');setConfirm('');}
-   else{clear();setUpgrade(false);setError(d.code==='cooldown'?`Too many attempts. Try again in ${d.retryAfterSeconds} seconds.`:d.code==='already_configured'?'A passcode is already saved. Enter it to continue.':d.code==='setup_required'?'Create your 6–10 digit passcode.':`Incorrect passcode. ${d.attemptsRemaining} attempts remaining.`);}
+   else{clear();setUpgrade(false);setError(d.code==='cooldown'?`Too many attempts. Try again in ${d.retryAfterSeconds} seconds.`:d.code==='already_configured'?'A passcode is already saved. Enter it to continue.':d.code==='setup_required'?'Create your 6–9 digit passcode.':`Incorrect passcode. ${d.attemptsRemaining} attempts remaining.`);}
   }catch(e){if(valid(id,n)){clear();setUpgrade(false);setError(e instanceof Error?e.message:'Passcode service unavailable.');}}
   finally{if(valid(id,n)){mutex.current=false;setBusy(false);}}
  }
@@ -148,7 +148,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
 
            ) : (
              <>
-               {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose 6–10 digits.</p>}
+               {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose a new 6–9 digit passcode.</p>}
                {!status?<p role="status" className="text-center text-sm text-slate-600">{busy?'Checking passcode…':'Passcode setup unavailable.'}</p>:<>
                 {!creating&&!upgrade&&field(`Current ${status.digits}-digit passcode`,pin,setPin,status.digits)}
                 {(creating||upgrade)&&<>{field('New passcode (6–9 digits)',next,setNext,9)}{field('Confirm passcode',confirm,setConfirm,9)}</>}
