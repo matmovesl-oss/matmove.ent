@@ -378,6 +378,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
             onBack={() =>
               setActiveSection('home')
             }
+            onServices={() => setActiveSection('services')}
           />
         </div>
 
@@ -452,6 +453,7 @@ function AccountSection({
   onLogout,
   onBack,
   onLock,
+  onServices,
 }: any) {
   const navigate = useNavigate();
   const resumeVerification = () => { if (profile.kyc_status === 'approved') return; sessionStorage.setItem('ob_role', profile.role); navigate('/onboarding/personal?resume=1'); };
@@ -1216,6 +1218,11 @@ function AccountSection({
         <span className="rounded-2xl bg-white p-3 text-emerald-700"><Wallet size={24}/></span>
         <span className="min-w-0 flex-1"><strong className="block text-slate-950">Wallet & payments</strong><span className="mt-1 block text-xs text-slate-600">Open balances, transactions, top-ups, withdrawals and transfers</span></span>
         <ArrowRight className="text-emerald-700"/>
+      </button>
+      <button type="button" onClick={onServices} className="mb-5 flex w-full items-center gap-4 rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:bg-slate-50">
+        <span className="rounded-2xl bg-slate-100 p-3 text-slate-700"><Store size={24}/></span>
+        <span className="min-w-0 flex-1"><strong className="block text-slate-950">Services & tools</strong><span className="mt-1 block text-xs text-slate-600">Shop, business, travel, events, concierge and games</span></span>
+        <ArrowRight className="text-slate-500"/>
       </button>
 
       <div className="mb-5 flex justify-end"><button type="button" onClick={onLock} className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2 font-bold text-slate-700"><LockKeyhole size={18}/>Lock app</button></div>
