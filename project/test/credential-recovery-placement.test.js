@@ -7,10 +7,10 @@ test('password recovery appears only on sign-in and passcode recovery only on th
   const lock = await readFile('src/components/CustomerPasscode.tsx', 'utf8');
   const login = auth.slice(auth.indexOf('export function LoginPage'), auth.indexOf('export function SignupPage'));
 
-  assert.match(login, /Forgot password\\?/);
-  assert.doesNotMatch(login, /Forgot passcode\\?/);
-  assert.match(login, /navigate\\('\\/forgot-password'\\)/);
-  assert.doesNotMatch(login, /navigate\\('\\/forgot-passcode'\\)/);
-  assert.match(lock, /Forgot passcode\\?/);
-  assert.match(lock, /next=%2Freset-passcode/);
+  assert.ok(login.includes('Forgot password?'));
+  assert.ok(!login.includes('Forgot passcode?'));
+  assert.ok(login.includes("navigate('/forgot-password')"));
+  assert.ok(!login.includes("navigate('/forgot-passcode')"));
+  assert.ok(lock.includes('Forgot passcode?'));
+  assert.ok(lock.includes('next=%2Freset-passcode'));
 });
