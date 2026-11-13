@@ -20,7 +20,8 @@ test('rider cash booking requires only the 15 percent fee in the digital SLE wal
   const code = await readFile(riderFile, 'utf8');
   assert.match(code, /paymentMethod === 'cash'[\s\S]*?\(fareMinor - driverCashMinor\) \/ 100/);
   assert.match(code, /cash-ride fee/);
-  assert.match(code, /Confirm Cash Handed to Driver/);\n  assert.match(code, /updateRide\(activeBooking\.payment_method === 'cash' \? 'cash_confirm' : 'complete'/);
+  assert.match(code, /Confirm Cash Handed to Driver/);
+  assert.match(code, /updateRide\(activeBooking\.payment_method === 'cash' \? 'cash_confirm' : 'complete'/);
   assert.match(code, /payment\?\.status === 'settled'/);
 });
 
@@ -49,6 +50,8 @@ test('cash trip submission uses the same booking ID for fee reservation recovery
   const hook = await readFile(tripHookFile, 'utf8');
   const service = await readFile(rideServiceFile, 'utf8');
   assert.match(hook, /payment_method\s*===\s*'cash'/);
-  assert.match(hook, /reserveCashRide\(body\.id/);\n  assert.match(hook, /start-ride\?action=cash_reserve/);
-  assert.match(service, /cash_confirm: '\/api\/start-ride\?action=cash_confirm'/);\n  assert.match(service, /cash_reserve: '\/api\/start-ride\?action=cash_reserve'/);
+  assert.match(hook, /reserveCashRide\(body\.id/);
+  assert.match(hook, /start-ride\?action=cash_reserve/);
+  assert.match(service, /cash_confirm: '\/api\/start-ride\?action=cash_confirm'/);
+  assert.match(service, /cash_reserve: '\/api\/start-ride\?action=cash_reserve'/);
 });
