@@ -36,11 +36,11 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  await pg.exec('reset role');assert.equal((await pg.query('select kyc_status from profiles where id=$1',[uid])).rows[0].kyc_status,'approved');assert.equal((await pg.query('select balance from wallets where user_id=$1',[uid])).rows[0].balance,'42.50');
  });
  await t.test('five wrong guesses persist a cooldown across status, create and verify calls',async()=>{
- await session(uid);await rpc('verify','012345');for(let i=0;i<5;i++){const r=await rpc('verify','999999');assert.equal(r.ok,false);assert.equal(r.attemptsRemaining,4-i);}
- const blocked=await rpc('verify','012345');assert.equal(blocked.code,'cooldown');assert.equal(blocked.ok,false);assert.ok(blocked.retryAfterSeconds>0);
+ await session(uid);await rpc('verify','112233');for(let i=0;i<5;i++){const r=await rpc('verify','999999');assert.equal(r.ok,false);assert.equal(r.attemptsRemaining,4-i);}
+ const blocked=await rpc('verify','112233');assert.equal(blocked.code,'cooldown');assert.equal(blocked.ok,false);assert.ok(blocked.retryAfterSeconds>0);
  assert.equal((await rpc('status')).code,'cooldown');assert.equal((await rpc('create',null,'777777')).code,'cooldown');
  await pg.exec('reset role');assert.equal((await pg.query('select failures from matmove_customer_passcodes where user_id=$1',[uid])).rows[0].failures,5);
- await pg.query("update matmove_customer_passcodes set blocked_until=now()-interval '1 second' where user_id=$1",[uid]);await session(uid);assert.equal((await rpc('verify','012345')).ok,true);assert.equal((await rpc('status')).attemptsRemaining,5);
+ await pg.query("update matmove_customer_passcodes set blocked_until=now()-interval '1 second' where user_id=$1",[uid]);await session(uid);assert.equal((await rpc('verify','112233')).ok,true);assert.equal((await rpc('status')).attemptsRemaining,5);
  });
  await t.test('new setup requires six digits and cannot reset an existing passcode',async()=>{
  await session(other);assert.equal((await rpc('status')).configured,false);await assert.rejects(rpc('create',null,'1234'),/6 and 9 digits/);
