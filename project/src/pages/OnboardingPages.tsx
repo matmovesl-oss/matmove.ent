@@ -10,6 +10,7 @@ import { OnboardingShell } from '@/components/AuthShell';
 import { DocumentUpload, SelfieUpload, isUploadedKyc, verifyKycDocument } from '@/components/DocumentUpload';
 import { useAuth } from '@/context/AuthContext';
 import { roleLabels, roleDescriptions } from '@/services/roleService';
+import { normalizeCustomerPhone } from '../../shared/customer-access.js';
 import type { UserRole, PersonalInfo, IdentityInfo, DriverInfo, MerchantInfo, UploadedDocument, DocumentType } from '@/types';
 
 function ReferralSignupNotice({userId}:{userId:string}){
@@ -189,29 +190,67 @@ function normalizePhone(value: string): string {
   return value.trim().replace(/[^\d+]/g, '');
 }
 
+function formatSierraLeonePhone(value: string): string {
+  try {
+    const normalized = normalizeCustomerPhone(value);
+    if (normalized.startsWith('+232') && normalized.length === 12) {
+      const local = normalized.slice(4);
+      return `+232 ${local.slice(0, 2)} ${local.slice(2, 5)} ${local.slice(5, 8)}`;
+    }
+    return normalized;
+  } catch {
+    return value.trim();
+  }
+}
+
+function customerAccountErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (/INVALID:.*valid phone number/i.test(message)) {
+    return 'Enter a valid Sierra Leone mobile number, for example +232 76 000 000. You can also enter the 8 local digits.';
+  }
+  if (/CONFLICT: This phone number is already registered/i.test(message)) {
+    return 'This phone number is already linked to another MatMove account. Sign in to that account or use a different number.';
+  }
+  return message.replace(/^(INVALID|FORBIDDEN|CONFLICT|LOCKED):\\s*/i, '') || 'Unable to save your account. Please try again.';
+}
+
+
 export function RoleSelectionPage() {
   const navigate = useNavigate();
   const { session, saveAccount, loading } = useAuth();
   const [selected, setSelected] = useState<UserRole | null>(session?.roles[0] || null);
   const [phone, setPhone] = useState(session?.user.phone || '');
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const phoneIsValid = (() => { try { normalizeCustomerPhone(phone); return true; } catch { return false; } })();
+  const phoneValidationMessage = phoneTouched && phone.trim() && !phoneIsValid
+    ? 'Enter a valid Sierra Leone mobile number, for example +232 76 000 000.'
+    : '';
   const proceeding=useRef(false),accountNow=useRef(session?.user.id),alive=useRef(true);accountNow.current=session?.user.id;
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
-  useEffect(()=>{proceeding.current=false;setBusy(false);setSelected(session?.roles[0]||null);setPhone(session?.user.phone||'');},[session?.user.id]);
+  useEffect(()=>{proceeding.current=false;setBusy(false);setSelected(session?.roles[0]||null);setPhone(session?.user.phone||'');setPhoneTouched(false);setError('');},[session?.user.id]);
   useEffect(() => {
     if (session?.roles[0]) setSelected(session.roles[0]);
     if (session?.user.phone) setPhone(session.user.phone);
   }, [session]);
   const proceed = async (skip: boolean) => {
     if (!selected || busy || proceeding.current || !session?.user.id) return;
+    let normalizedPhone: string;
+    try {
+      normalizedPhone = normalizeCustomerPhone(phone);
+    } catch {
+      setPhoneTouched(true);
+      setError('Enter a valid Sierra Leone mobile number, for example +232 76 000 000.');
+      return;
+    }
     const actor=session.user.id;proceeding.current=true;
     setBusy(true); setError('');
     try {
-      const current = await saveAccount(selected, phone);
+      const current = await saveAccount(selected, normalizedPhone);
       if(!alive.current||accountNow.current!==actor||current.user.id!==actor)return;
       navigate(skip ? `/customer/${current.roles[0]}` : '/onboarding/personal');
-    } catch (error: any) { if(alive.current&&accountNow.current===actor)setError(error.message || 'Unable to save your account.'); }
+    } catch (error: unknown) { if(alive.current&&accountNow.current===actor)setError(customerAccountErrorMessage(error)); }
     finally { if(alive.current&&accountNow.current===actor){proceeding.current=false;setBusy(false);} }
   };
   return <OnboardingShell step={2}><div className="ob-page animate-in">
@@ -224,11 +263,25 @@ export function RoleSelectionPage() {
       disabled={busy || (!!session?.roles.length && session.roles[0] !== key)} onClick={() => setSelected(key)}>
       <Icon size={26}/><strong>{roleLabels[key]}</strong><span>{roleDescriptions[key]}</span>
       {selected === key && <Check size={16}/>}</button>)}</div>
-    <label className="field mt-6"><span>Phone number</span><input type="tel" autoComplete="tel" className="input-field" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+232 76 000 000" /></label>
+    <label className="field mt-6"><span>Phone number</span><input
+      type="tel"
+      inputMode="tel"
+      autoComplete="tel"
+      maxLength={24}
+      aria-invalid={!!phoneValidationMessage}
+      aria-describedby="customer-phone-help"
+      className={`input-field ${phoneValidationMessage ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : ''}`}
+      value={phone}
+      onChange={e => { setPhone(e.target.value); setError(''); }}
+      onBlur={() => { setPhoneTouched(true); setPhone(current => formatSierraLeonePhone(current)); }}
+      placeholder="+232 76 000 000"
+    /></label>
+    <p id="customer-phone-help" className="mt-2 text-xs text-slate-500">Use your Sierra Leone mobile number, for example +232 76 000 000. Spaces are optional.</p>
+    {phoneValidationMessage && <p role="alert" className="mt-2 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{phoneValidationMessage}</p>}
     <p className="mt-4 text-sm text-slate-600">Riders can load their wallet before verification. Transfers and withdrawals require completed verification. Driver and merchant wallets require approval.</p>
     {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
-    <div className="ob-actions"><button type="button" className="primary-button" disabled={!selected || !phone.trim() || busy || loading} onClick={() => void proceed(false)}>{busy ? 'Saving…' : 'Verify identity now'}<ArrowRight size={17}/></button>
-    <button type="button" className="back-button" disabled={!selected || !phone.trim() || busy || loading} onClick={() => void proceed(true)}>Skip KYC for now</button></div>
+    <div className="ob-actions"><button type="button" className="primary-button" disabled={!selected || !phone.trim() || !phoneIsValid || busy || loading} onClick={() => void proceed(false)}>{busy ? 'Saving…' : 'Verify identity now'}<ArrowRight size={17}/></button>
+    <button type="button" className="back-button" disabled={!selected || !phone.trim() || !phoneIsValid || busy || loading} onClick={() => void proceed(true)}>Skip KYC for now</button></div>
   </div></OnboardingShell>;
 }
 
