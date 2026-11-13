@@ -30,7 +30,7 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  await session(uid);const status=await rpc('status');assert.equal(status.digits,4);assert.equal(status.configured,true);assert.equal(status.ok,false);assert.ok(!JSON.stringify(status).includes('0123'));assert.ok(!('pin_hash' in status));
  });
  await t.test('four-digit verification requires a six-digit upgrade and preserves identity and balance',async()=>{
- assert.equal((await rpc('verify','0123')).code,'upgrade_required');await assert.rejects(rpc('change','0123','1234'),/exactly six/);
+ assert.equal((await rpc('verify','0123')).code,'upgrade_required');await assert.rejects(rpc('change','0123','1234'),/6 and 9 digits/);
  const saved=await rpc('change','0123','012345');assert.equal(saved.code,'saved');assert.equal(saved.digits,6);assert.equal(saved.ok,true);
  assert.equal((await rpc('verify','012345')).code,'verified');assert.equal((await rpc('verify','0123')).ok,false);
  await pg.exec('reset role');assert.equal((await pg.query('select kyc_status from profiles where id=$1',[uid])).rows[0].kyc_status,'approved');assert.equal((await pg.query('select balance from wallets where user_id=$1',[uid])).rows[0].balance,'42.50');
@@ -43,7 +43,7 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  await pg.query("update matmove_customer_passcodes set blocked_until=now()-interval '1 second' where user_id=$1",[uid]);await session(uid);assert.equal((await rpc('verify','012345')).ok,true);assert.equal((await rpc('status')).attemptsRemaining,5);
  });
  await t.test('new setup requires six digits and cannot reset an existing passcode',async()=>{
- await session(other);assert.equal((await rpc('status')).configured,false);await assert.rejects(rpc('create',null,'1234'),/six digits/);
+ await session(other);assert.equal((await rpc('status')).configured,false);await assert.rejects(rpc('create',null,'1234'),/6 and 9 digits/);
  assert.equal((await rpc('create',null,'654321')).code,'saved');assert.equal((await rpc('create',null,'000000')).code,'already_configured');
  assert.equal((await rpc('change','999999','777777')).ok,false);assert.equal((await rpc('verify','654321')).ok,true);assert.equal((await rpc('change','654321','777777')).code,'saved');assert.equal((await rpc('verify','777777')).ok,true);
  });
