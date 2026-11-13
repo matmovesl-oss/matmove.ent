@@ -26,7 +26,7 @@ export async function updateRide(action: RideAction, bookingId: string) {
 }
 
 export async function readRidePayment(bookingId: string) {
-  const { response, data, finish } = await walletFetch('/api/accept-ride-escrow?action=status', { bookingId });
+  const { response, data, finish } = await walletFetch('/api/start-ride?action=status', { bookingId });
   if (!response.ok) throw new Error(data.error || 'Unable to read ride payment details.');
   finish();
   return data;
