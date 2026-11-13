@@ -47,7 +47,7 @@ test('ride booking uses the full map-first location picker for rider and merchan
   assert.ok(picker.includes("clamp(300px, 50dvh, 560px)"));
   assert.ok(rider.includes('layout="map-first"'));
   assert.ok(merchant.includes('layout="map-first"'));
-  assert.ok(rider.includes('max-h-[58dvh]'));
+  assert.ok(rider.includes('max-h-[min(68dvh,760px)]'));
   assert.ok(merchant.includes('max-h-[58dvh]'));
   assert.ok(driver.includes('clamp(340px, 58dvh, 620px)'));
   assert.ok(driver.includes('order-2 relative z-20'));
