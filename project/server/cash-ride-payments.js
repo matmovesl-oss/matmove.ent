@@ -129,7 +129,7 @@ function publicSnapshot(payment, legs) {
   };
 }
 
-async function readSettings(db) {
+async function readSettings(db, { requireEnabled = true } = {}) {
   const { data, error } = await db
     .from('matmove_cash_ride_settings')
     .select('enabled,fee_hold_account_id,fee_revenue_account_id,provider_environment')
@@ -140,7 +140,7 @@ async function readSettings(db) {
   const escrowAccountId = process.env.MONIME_ESCROW_ACCOUNT_ID;
   const platformFeeAccountId = process.env.MONIME_PLATFORM_FEE_ACCOUNT_ID;
 
-  if (!data?.enabled ||
+  if (!data || (requireEnabled && !data.enabled) ||
       !validAccountId(escrowAccountId) ||
       !validAccountId(platformFeeAccountId) ||
       !validAccountId(data.fee_hold_account_id) ||
@@ -400,18 +400,18 @@ export async function cashRideAction(
   if (action === 'cash_config') {
     try {
       assertMonimeEnvironment();
-      const settings = await readSettings(db);
+      const settings = await readSettings(db, { requireEnabled: false });
       const holdAccount = await provider(`financial-accounts/${encodeURIComponent(settings.fee_hold_account_id)}?withBalance=true`);
       providerAccountBalance(holdAccount, settings.fee_hold_account_id);
       if (settings.fee_revenue_account_id !== settings.fee_hold_account_id) {
         const revenueAccount = await provider(`financial-accounts/${encodeURIComponent(settings.fee_revenue_account_id)}?withBalance=true`);
         providerAccountBalance(revenueAccount, settings.fee_revenue_account_id);
       }
-      return res.status(200).json({ success: true, pending: false, enabled: true });
+      return res.status(200).json({ success: true, pending: false, enabled: settings.enabled === true, accountsVerified: true });
     } catch {
       // Do not advertise cash until each configured SLE account role can be
       // read from the matching Monime Test/Live environment.
-      return res.status(200).json({ success: true, pending: false, enabled: false });
+      return res.status(200).json({ success: true, pending: false, enabled: false, accountsVerified: false });
     }
   }
 
