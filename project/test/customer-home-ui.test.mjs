@@ -103,7 +103,7 @@ test('MatMove vehicle artwork covers Keke, bike, car and van with branded green 
 });
 test('saved Home and Work addresses render as bordered updateable cards',async()=>{
  const picker=await read('../src/components/RideLocationPicker.tsx');
- assert.match(picker,/Save this \\{target\\}/);
+ assert.ok(picker.includes('Save this {target}'));
  assert.match(picker,/border border-slate-200 bg-white px-2\.5 py-2/);
  assert.match(picker,/Update/);
 });
