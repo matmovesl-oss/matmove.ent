@@ -24,10 +24,10 @@ test('rider cash booking requires only the 15 percent fee in the digital SLE wal
   assert.match(code, /payment\?\.status === 'settled'/);
 });
 
-test('cash rider UI does not show the digital fare negotiation or claim the cash is escrowed', async () => {
+test('cash rider UI explains the escrow hold and verified release without digital fare negotiation', async () => {
   const code = await readFile(riderFile, 'utf8');
   assert.match(code, /activeBooking\.payment_method !== 'cash'[\s\S]*?FareNegotiation/);
-  assert.match(code, /activeBooking\.payment_method === 'cash'[\s\S]*?physically; MatMove/);
+  assert.match(code, /activeBooking\.payment_method === 'cash'[\s\S]*?physically; MatMove/);\n  assert.match(code, /into escrow, then releases it to the platform fee account after both rider and driver confirm/);
   assert.match(code, /Accepted cash rides cannot be cancelled by the rider/);
 });
 
