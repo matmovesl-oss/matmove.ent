@@ -81,6 +81,9 @@ function RiderMain({ profile, wallet, activeSection }: any) {
   const [isRequesting, setIsRequesting] = useState(false);
   const [passengerCount, setPassengerCount] = useState(1);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [bookingSheetExpanded, setBookingSheetExpanded] = useState(true);
+  const sheetPointerStart = useRef<number | null>(null);
+  const sheetDragged = useRef(false);
 
   const {
     booking: activeBooking,
@@ -525,8 +528,8 @@ function RiderMain({ profile, wallet, activeSection }: any) {
       <div className="mx-auto max-w-7xl space-y-4 px-0 pb-8 sm:px-4">
         {(activeSection === 'home' || activeSection === 'ride' || !activeSection) && (
           <div className="relative flex min-w-0 flex-col gap-0 overflow-visible">
-            <div className="order-2 relative z-20 -mt-6 max-h-[min(68dvh,760px)] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-5 shadow-[0_-18px_50px_rgba(15,23,42,0.16)] space-y-4 sm:px-6">
-              <div className="mx-auto mb-1 h-1.5 w-12 rounded-full bg-slate-200" aria-hidden="true"/><div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><p className="mt-1 text-sm text-slate-500">Choose a service, set your route and review your fare.</p></div>
+            <div className={`order-2 relative z-20 -mt-6 ${bookingSheetExpanded ? 'max-h-[min(68dvh,760px)]' : 'max-h-[min(30dvh,320px)]'} overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.16)] space-y-4 sm:px-6`}>
+              <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded} onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;event.currentTarget.setPointerCapture(event.pointerId);}} onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start;if(Math.abs(delta)>24){sheetDragged.current=true;if(delta<0)setBookingSheetExpanded(true);else setBookingSheetExpanded(false);}sheetPointerStart.current=null;}} onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}} className="mx-auto flex h-6 w-16 touch-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button><div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><p className="mt-1 text-sm text-slate-500">Choose a service, set your route and review your fare.</p></div>
               <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
                 <button onClick={() => setViewMode('active')} className={`font-bold ${viewMode === 'active' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Active Request</button>
                 <button onClick={() => setViewMode('new')} className={`font-bold ${viewMode === 'new' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Create New</button>

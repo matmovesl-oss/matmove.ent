@@ -173,7 +173,7 @@ export function RideLocationPicker({ onChange, userId, layout = 'default' }: { o
     setReady(false); setMapError('');
     loadGoogleMaps(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').then(() => {
       if (disposed || !mapElement.current) return;
-      map.current = new google.maps.Map(mapElement.current, { center: CENTER, zoom: 13, minZoom: 11, maxZoom: 19, disableDefaultUI: true, zoomControl: true, zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }, mapTypeControl: false, streetViewControl: false, fullscreenControl: false, clickableIcons: false, gestureHandling: 'greedy', backgroundColor: '#e8eef2' });
+      map.current = new google.maps.Map(mapElement.current, { center: CENTER, zoom: 13, minZoom: 11, maxZoom: 19, disableDefaultUI: true, zoomControl: true, zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }, mapTypeControl: false, streetViewControl: false, fullscreenControl: false, keyboardShortcuts: false, clickableIcons: false, gestureHandling: 'greedy', backgroundColor: '#e8eef2' });
       geocoder.current = new google.maps.Geocoder();
       renderer.current = new google.maps.DirectionsRenderer({ suppressMarkers: true, polylineOptions: { strokeColor: '#14765d', strokeWeight: 5 } });
       map.current.addListener('click', (event: google.maps.MapMouseEvent) => {

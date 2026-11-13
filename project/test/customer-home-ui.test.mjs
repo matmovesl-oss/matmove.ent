@@ -16,3 +16,24 @@ test('passcode unlock remounts the workspace and returns the user to Home',async
  const [app,pass]=await Promise.all([read('../src/App.tsx'),read('../src/components/CustomerPasscode.tsx')]);
  assert.match(app,/useState<PortalSection>\('home'\)/);assert.match(pass,/workspaceVersion/);
 });
+
+test('homepage feed replaces the decorative route demo with admin-published moving post cards',async()=>{
+ const [home,feed,ride,map]=await Promise.all([
+  read('../src/components/CustomerHome.tsx'),
+  read('../src/components/CustomerHomePosts.tsx'),
+  read('../src/pages/RiderDashboard.tsx'),
+  read('../src/components/RideLocationPicker.tsx')
+ ]);
+ assert.doesNotMatch(home,/CustomerHomeMap/);
+ assert.match(home,/CustomerHomePosts userId=\{profile\.id\}/);
+ assert.match(feed,/Happening in Sierra Leone/);
+ assert.match(feed,/animateMotion/);
+ assert.match(feed,/postgres_changes/);
+ assert.match(feed,/starts_at\.lte/);
+ assert.match(feed,/expires_at\.gt/);
+ assert.match(feed,/matmove_submit_homepage_post_enquiry/);
+ assert.match(ride,/bookingSheetExpanded/);
+ assert.match(ride,/onPointerDown/);
+ assert.match(ride,/onPointerUp/);
+ assert.match(map,/keyboardShortcuts: false/);
+});
