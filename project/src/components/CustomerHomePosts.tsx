@@ -1,5 +1,5 @@
 import {useEffect,useState,useRef} from 'react';
-import {ArrowRight,Megaphone,CalendarDays,Send,X,Image as ImageIcon,MapPin,Truck,Car, Bike} from 'lucide-react';
+import {ArrowRight,Megaphone,CalendarDays,Send,X,MapPin} from 'lucide-react';
 import {supabase} from '@/lib/supabase';
 type Post={id:string;title:string;summary:string;body:string;image_path:string|null;starts_at:string|null;expires_at:string|null;display_order:number;created_at:string};
 const bucket='matmove-homepage-posts';
