@@ -60,6 +60,10 @@ async function readBooking(db, bookingId) {
   if (!data) throw new HttpError(404, 'Cash ride booking not found.');
   // The database setting must match this deployment's configured platform fee
   // account. The cash capture leg therefore settles only to MONIME_PLATFORM_FEE_ACCOUNT_ID.
+  const platformFeeAccountId = process.env.MONIME_PLATFORM_FEE_ACCOUNT_ID;
+  if (!validAccountId(platformFeeAccountId)) {
+    throw new HttpError(503, 'The platform fee destination is not configured.', 'CASH_NOT_CONFIGURED');
+  }
   return { ...data, fee_revenue_account_id: platformFeeAccountId };
 }
 
