@@ -635,7 +635,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
                         {cashConfigLoading ? (
                           <p className="mt-2 text-xs text-slate-500">Checking cash collection availability…</p>
                         ) : !cashEnabled ? (
-                          <p className="mt-2 text-xs text-amber-800">Physical cash rides are currently unavailable. MatMove must first configure and verify its restricted Monime cash-fee holding account.</p>
+                          <p className="mt-2 text-xs text-amber-800">Cash rides are temporarily unavailable while MatMove configures a separate restricted Monime fee-holding account. This account must be distinct from the platform fee account.</p>
                         ) : null}
                         {paymentMethod === 'cash' && Number(offerAmount) > 0 && (() => {
                           const fareMinor = Math.round(Number(offerAmount) * 100);
