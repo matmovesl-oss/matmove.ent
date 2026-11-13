@@ -93,9 +93,10 @@ test('password and passcode recovery use separate email destinations and only up
     fs.readFile('src/components/CustomerPasscode.tsx','utf8')
   ]);
   assert.match(login,/Forgot password\?/);
-  assert.match(login,/Forgot passcode\?/);
+  assert.doesNotMatch(login,/Forgot passcode\?/);
   assert.match(login,/navigate\('\/forgot-password'\)/);
-  assert.match(login,/navigate\('\/forgot-passcode'\)/);
+  assert.doesNotMatch(login,/navigate\('\/forgot-passcode'\)/);
+  assert.match(lock,/Forgot passcode\?/);
   assert.match(forgot,/export function ForgotPasswordPage/);
   assert.match(forgot,/export function ForgotPasscodePage/);
   assert.match(service,/customerAuthRedirect\('\/auth\/callback\?type=recovery&next=%2Freset-password'\)/);
