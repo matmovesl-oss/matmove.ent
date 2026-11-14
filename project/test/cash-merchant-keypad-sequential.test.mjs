@@ -26,7 +26,7 @@ test('cash confirmation status is read-only and refreshes the same cash ledger f
 
 test('driver confirmation persists receipt state and removes the action once the driver has confirmed',async()=>{
  const driver=await read('../src/pages/DriverDashboard.tsx');
- assert.match(driver,/cashPayment: result\.payment \|\| item\.cashPayment/);
+ assert.match(driver,/cashPayment: verifiedPayment/);
  assert.match(driver,/r\.cashPayment\?\.driverCashConfirmed/);
  assert.match(driver,/Waiting for the customer to confirm the handover/);
  assert.match(driver,/Both parties confirmed/);
@@ -48,7 +48,7 @@ test('Merchant can book cash rides, reserve only the fee, and confirm the same t
   read('../src/lib/useTripRequest.ts'),
   read('../server/ride-api.js'),
   read('../server/cash-ride-payments.js'),
-  read('../supabase/migrations/20261114090000_matmove_cash_ride_merchant_role_and_audit_support_v1.sql')
+  read('../supabase/migrations/20261114091738_matmove_cash_ride_merchant_role_and_audit_support_v1.sql')
  ]);
  assert.match(merchant,/payment_method:serviceType==='ride'\?paymentMethod:'digital'/);
  assert.match(merchant,/serviceType === 'ride' && paymentMethod === 'cash'/);
