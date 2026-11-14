@@ -310,7 +310,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       const result = await updateRide('accept', booking.id);
       if (!mounted.current || currentDriver.current !== userId) return;
       radarMutation.current++;
-      setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking, cashPayment:payment }) : item));
+      setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking, cashPayment: result.payment || item.cashPayment }) : item));
       setNegotiatingId(null);
       setRideNotice(result.pending ? 'Escrow funding is processing. This trip has not been accepted yet; check again using this same request.' : 'Customer debit and escrow funding are confirmed. You can start the trip.');
       await fetchLiveBalance();
@@ -515,7 +515,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 
                     {r.status === 'in_progress' && r.driver_id === profile.id && (
                       r.payment_method === 'cash' ? (
-                        <div className="space-y-2">
+                        r.cashPayment?.driverCashConfirmed ? <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-xs font-semibold text-emerald-900">{r.cashPayment?.riderCashConfirmed ? 'Both parties confirmed. MatMove fee capture is being verified.' : 'Waiting for the customer to confirm the handover.'}</div> : <div className="space-y-2">
                           <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">
                             Collect the agreed physical cash from the rider. Confirm only after you have actually received it.
                           </div>
