@@ -16,7 +16,7 @@ test('Rider and Merchant active trip state restores on foreground, focus, pagesh
 
 test('Driver radar restores assigned rides on foreground and resolves rider contact cards',async()=>{
  const driver=await read('../src/pages/DriverDashboard.tsx');
- assert.match(driver,/attachTripContacts\(visible\)/);
+ assert.match(driver,/attachTripContacts\(withCash\)/);
  assert.match(driver,/document\.addEventListener\('visibilitychange'/);
  assert.match(driver,/window\.addEventListener\('pageshow'/);
  assert.match(driver,/tel:/);
