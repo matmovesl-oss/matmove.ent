@@ -59,7 +59,7 @@ export default function ActiveTripMap({userId,bookingId,driver=false}:{userId:st
      if(!point({lat,lng})||!Number.isFinite(accuracy)||accuracy<0||accuracy>150||!Number.isFinite(position.timestamp)||Date.now()-position.timestamp>60000||position.timestamp-Date.now()>15000){setGpsError('GPS is approximate or stale. Move to a clearer signal; your old position is not sent.');return;}
      publishing=true;lastSent=Date.now();
      void tripLocationRpc(userId,bookingId,'publish',{lat,lng,accuracy,observed:new Date(position.timestamp).toISOString()},shareKey,!driver).then(raw=>{const d=validateTripSnapshot(raw,userId,bookingId,driver);if(valid()){if(driver)acceptSnapshot(d);else setCustomerSnapshot(d);setError('');setGpsError('');}}).catch(()=>fail('Location sharing could not be confirmed. Check your connection and choose Share live location again.')).finally(()=>{publishing=false;});
-    },()=>fail('Location permission was unavailable. You can still use the saved trip pins.'),{enableHighAccuracy:true,timeout:10000,maximumAge:5000});
+    },error=>fail(error.code===1?'MatMove location permission is denied. Allow Location in your phone or browser settings, then tap Share live location again.':error.code===3?'The phone GPS timed out. Turn on Location Services and retry sharing.':'The phone could not get a GPS fix. Move to a clearer signal and retry sharing.'),{enableHighAccuracy:true,timeout:12000,maximumAge:5000});
    }catch{fail('Could not confirm your assigned trip. Reload before sharing GPS.');}
   })();
   return()=>{live=false;if(watch!==undefined)navigator.geolocation.clearWatch(watch);if(shareKey)void tripLocationRpc(userId,bookingId,'clear',undefined,shareKey,!driver).catch(()=>{});};
