@@ -49,19 +49,20 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const [status,setStatus]=useState<Receipt|null>(null),[unlocked,setUnlocked]=useState(false),[upgrade,setUpgrade]=useState(false);
  const [workspaceVersion,setWorkspaceVersion]=useState(0);
  const [pin,setPin]=useState(''),[next,setNext]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [activePinField,setActivePinField]=useState<'pin'|'next'|'confirm'>('pin');
  const [forgotMode, setForgotMode] = useState(false);
  const [resetEmail, setResetEmail] = useState('');
  const [resetSent,setResetSent]=useState(false);
 
  const unlockedNow=useRef(false),statusNow=useRef<Receipt|null>(null);statusNow.current=status;
  const current=useRef(userId);current.current=userId;const mounted=useRef(false),revision=useRef(0),mutex=useRef(false);
- const clear=()=>{setPin('');setNext('');setConfirm('');};
+ const clear=()=>{setPin('');setNext('');setConfirm('');setActivePinField(statusNow.current?.configured?'pin':'next');};
  const valid=(id:string,n:number)=>mounted.current&&current.current===id&&revision.current===n;
  
  function lock(){setPortalUnlocked(userId,false);unlockedNow.current=false;clearProfilePhotoPicker(userId);revision.current++;mutex.current=false;setBusy(false);setUnlocked(false);setUpgrade(false);setForgotMode(false);setResetEmail('');setResetSent(false);clear();setError('');}
  
  async function load(){if(mutex.current)return;mutex.current=true;const n=++revision.current,id=userId;setBusy(true);setError('');clear();unlockedNow.current=false;setUnlocked(false);setUpgrade(false);setForgotMode(false);
-  try{const d=await customerPasscode(id,'status');if(valid(id,n))setStatus(d);}catch(e){if(valid(id,n)){setStatus(null);setError(e instanceof Error?e.message:'Passcode service unavailable.');}}
+  try{const d=await customerPasscode(id,'status');if(valid(id,n)){setStatus(d);setActivePinField(d.configured?'pin':'next');}}catch(e){if(valid(id,n)){setStatus(null);setError(e instanceof Error?e.message:'Passcode service unavailable.');}}
   finally{if(valid(id,n)){mutex.current=false;setBusy(false);}}
  }
  
@@ -89,7 +90,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
    const d=await customerPasscode(id,creating?'create':changing?'change':'verify',creating?null:pin,creating||changing?next:null);
    if(!valid(id,n))return;setStatus(d);
    if(d.ok&&d.digits>=6&&['saved','verified'].includes(d.code)){clear();setUpgrade(false);setPortalUnlocked(id,true);unlockedNow.current=true;setEnteredUser(id);setWorkspaceVersion(v=>v+1);setUnlocked(true);}
-   else if(d.ok&&d.code==='upgrade_required'){setUpgrade(true);setNext('');setConfirm('');}
+   else if(d.ok&&d.code==='upgrade_required'){setUpgrade(true);setNext('');setConfirm('');setActivePinField('next');}
    else{clear();setUpgrade(false);setError(d.code==='cooldown'?`Too many attempts. Try again in ${d.retryAfterSeconds} seconds.`:d.code==='already_configured'?'A passcode is already saved. Enter it to continue.':d.code==='setup_required'?'Create your 6–9 digit passcode.':`Incorrect passcode. ${d.attemptsRemaining} attempts remaining.`);}
   }catch(e){if(valid(id,n)){clear();setUpgrade(false);setError(e instanceof Error?e.message:'Passcode service unavailable.');}}
   finally{if(valid(id,n)){mutex.current=false;setBusy(false);}}
@@ -110,7 +111,24 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  },[allowed,enteredUser,userId]);
  
  const creating=status&&!status.configured;
- const field=(label:string,value:string,set:(v:string)=>void,length:number)=><label className="block text-xs font-semibold text-slate-600">{label}<input aria-label={label} type="password" inputMode="numeric" autoComplete="off" maxLength={length} value={value} disabled={busy} onChange={e=>set(e.target.value.replace(/\D/g,'').slice(0,length))} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-center text-xl tracking-[.45em] text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"/></label>;
+ const activeValue=activePinField==='pin'?pin:activePinField==='next'?next:confirm;
+ const activeLimit=(creating||upgrade)?9:(status?.digits||9);
+ const setActiveValue=(value:string)=>{if(activePinField==='pin')setPin(value);else if(activePinField==='next')setNext(value);else setConfirm(value);};
+ const appendDigit=(digit:string)=>{
+  if(busy||!/^\\d$/.test(digit)||activeValue.length>=activeLimit)return;
+  const value=activeValue+digit;setActiveValue(value);
+  if((creating||upgrade)&&activePinField==='next'&&value.length===9)setActivePinField('confirm');
+ };
+ const eraseDigit=()=>{if(busy)return;setActiveValue(activeValue.slice(0,-1));};
+ const clearActiveDigits=()=>{if(busy)return;setActiveValue('');};
+ const pinField=(label:string,field:'pin'|'next'|'confirm',value:string,length:number)=>(
+  <button type="button" disabled={busy} onClick={()=>setActivePinField(field)} aria-label={`Select ${label}`} aria-pressed={activePinField===field} className={`block w-full rounded-xl border p-3 text-left transition ${activePinField===field?'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100':'border-slate-200 bg-slate-50'} disabled:opacity-70`}>
+   <span className="block text-xs font-semibold text-slate-600">{label}</span>
+   <span className="mt-2 grid grid-cols-9 gap-1">
+    {Array.from({length},(_,index)=><span key={index} className={`flex h-7 min-w-0 items-center justify-center rounded-md border text-sm ${index<value.length?'border-emerald-300 bg-emerald-100 text-emerald-800':'border-slate-200 bg-white text-slate-300'}`}>{index<value.length?'•':''}</span>)}
+   </span>
+  </button>
+ );
 
  return (
    <>
@@ -151,8 +169,20 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
              <>
                {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose a new 6–9 digit passcode.</p>}
                {!status?<p role="status" className="text-center text-sm text-slate-600">{busy?'Checking passcode…':'Passcode setup unavailable.'}</p>:<>
-                {!creating&&!upgrade&&field(`Current ${status.digits}-digit passcode`,pin,setPin,status.digits)}
-                {(creating||upgrade)&&<>{field('New passcode (6–9 digits)',next,setNext,9)}{field('Confirm passcode',confirm,setConfirm,9)}</>}
+                {!creating&&!upgrade&&pinField(`Current ${status.digits}-digit passcode`,'pin',pin,status.digits)}
+                {(creating||upgrade)&&<div className="space-y-3">
+                  {pinField('New passcode (6–9 digits)','next',next,9)}
+                  {pinField('Confirm new passcode','confirm',confirm,9)}
+                </div>}
+                <div className="space-y-2" aria-label="Passcode keypad">
+                  <p className="text-center text-[11px] text-slate-500">Use the MatMove keypad to enter digits 0–9.</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['1','2','3','4','5','6','7','8','9'].map(digit=><button key={digit} type="button" disabled={busy||activeValue.length>=activeLimit} onClick={()=>appendDigit(digit)} className="h-12 rounded-xl border border-slate-200 bg-white text-xl font-semibold text-slate-900 shadow-sm transition hover:bg-emerald-50 active:scale-[.98] disabled:opacity-40">{digit}</button>)}
+                    <button type="button" disabled={busy||!activeValue.length} onClick={clearActiveDigits} className="h-12 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600 disabled:opacity-40">Clear</button>
+                    <button type="button" disabled={busy||activeValue.length>=activeLimit} onClick={()=>appendDigit('0')} className="h-12 rounded-xl border border-slate-200 bg-white text-xl font-semibold text-slate-900 shadow-sm transition hover:bg-emerald-50 disabled:opacity-40">0</button>
+                    <button type="button" disabled={busy||!activeValue.length} onClick={eraseDigit} aria-label="Delete last digit" className="h-12 rounded-xl border border-slate-200 bg-slate-50 text-xl font-semibold text-slate-700 disabled:opacity-40">⌫</button>
+                  </div>
+                </div>
                 <button type="submit" disabled={busy} className="h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">{busy?'Checking…':creating||upgrade?'Save passcode':'Unlock'}</button>
                </>}
                
