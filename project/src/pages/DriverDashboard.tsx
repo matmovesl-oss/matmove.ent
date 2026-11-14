@@ -328,15 +328,19 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       const result = await updateRide('cash_confirm', booking.id);
       if (!mounted.current || currentDriver.current !== userId) return;
       let verifiedPayment = result.payment || booking.cashPayment || null;
-      try { verifiedPayment = (await readCashRideStatus(booking.id)).payment; }
-      catch { /* The radar will retry this read-only status check. */ }
+      let verifiedBooking = result.booking || {};
+      try {
+        const status = await readCashRideStatus(booking.id);
+        verifiedPayment = status.payment;
+        verifiedBooking = status.booking || verifiedBooking;
+      } catch { /* The radar will retry this safe status recovery. */ }
       radarMutation.current++;
-      if (verifiedPayment?.status === 'settled' && result.success === true && result.pending === false) {
+      if (verifiedPayment?.status === 'settled') {
         setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
         setRideNotice('Both parties confirmed the handover. MatMove fee capture is verified and the cash ride is settled.');
       } else {
         setActiveRequests(previous => previous.map(item => item.id === booking.id
-          ? mergeRideRow(item, { ...item, ...result.booking, cashPayment: verifiedPayment })
+          ? mergeRideRow(item, { ...item, ...verifiedBooking, cashPayment: verifiedPayment })
           : item));
         setRideNotice(result.pending
           ? 'Your cash receipt is recorded. MatMove fee capture is still being verified; do not repeat the cash collection.'
