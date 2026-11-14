@@ -317,31 +317,43 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
             {tripError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{tripError}<button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry active trip</button></p>}
               {tripLoading && !activeBooking ? <div role="status" aria-label="Loading active trip" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4"><SkeletonBlock className="h-4 w-2/5" rounded="rounded-md"/><SkeletonBlock className="h-3 w-4/5" rounded="rounded-md"/><SkeletonBlock className="h-24 w-full" rounded="rounded-lg"/></div> : tripError && !activeBooking ? null : !activeBooking ? (
               <>
-                <div className="flex gap-2 rounded-xl bg-slate-100 p-1">
-                  <button onClick={() => setServiceType('delivery')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' :'text-slate-500'}`}><Package size={16} /> Delivery</button>
-                  <button onClick={() => setServiceType('ride')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16} /> Ride</button>
-                  <button onClick={() => setServiceType('scheduled')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size={16} /> Schedule</button>
+                <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1.5" aria-label="Choose a booking service">
+                  <button type="button" onClick={() => setServiceType('ride')} aria-pressed={serviceType==='ride'} className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-xs font-extrabold transition ${serviceType==='ride'?'bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-100':'text-slate-500 hover:bg-white/70'}`}><Car size={16}/>Ride</button>
+                  <button type="button" onClick={() => setServiceType('delivery')} aria-pressed={serviceType==='delivery'} className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-xs font-extrabold transition ${serviceType==='delivery'?'bg-white text-orange-700 shadow-sm ring-1 ring-orange-100':'text-slate-500 hover:bg-white/70'}`}><Package size={16}/>Delivery</button>
+                  <button type="button" onClick={() => setServiceType('scheduled')} aria-pressed={serviceType==='scheduled'} className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-xs font-extrabold transition ${serviceType==='scheduled'?'bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-100':'text-slate-500 hover:bg-white/70'}`}><CalendarClock size={16}/>Schedule</button>
                 </div>
-                {['ride','delivery','scheduled'].includes(serviceType) && (
-                  <div className="grid grid-cols-4 gap-2">{(['keke', 'bike', 'car', 'van'] as VehicleType[]).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`rounded-xl py-2 text-xs font-bold uppercase ${vehicleType === v ? 'bg-orange-100 text-orange-700 ring-2 ring-orange-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}</div>
-                )}
-                <p className="text-sm text-slate-600">Choose pickup and destination in the map panel, then preview your route.</p>
-                {['ride','delivery','scheduled'].includes(serviceType) && (
-                  <div className="rounded-xl border bg-slate-50 p-3">
-                    <label className="text-sm font-bold text-slate-600">Total Fare (SLE)</label>
-                    <div className="mt-2 flex items-center gap-2">
-                      <input type="number" min="0" step="0.01" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="min-w-0 flex-1 rounded-lg border bg-white p-2 text-lg font-bold" placeholder="Amount" />
-                      <button onClick={() => setOfferAmount(previous => Math.max(pricingRates[vehicleType]?.min || 1, Number(previous || 0) - 5).toString())} className="rounded-lg border bg-white p-2"><Minus size={16} /></button>
-                      <button onClick={() => setOfferAmount(previous => (Number(previous || 0) + 5).toString())} className="rounded-lg border bg-white p-2"><Plus size={16} /></button>
-                    </div>
-                    {Number(offerAmount) > 0 && (
-                      <div className="mt-3 flex justify-between gap-2 text-xs font-bold"><span className="text-emerald-600">Driver: SLE {(Number(offerAmount) * 0.85).toFixed(2)}</span><span className="text-rose-600">Platform: SLE {(Number(offerAmount) * 0.15).toFixed(2)}</span></div>
-                    )}
-                  </div>
-                )}
-                <div className="space-y-2 rounded-xl border p-3"><label className="block text-sm font-bold">Passengers<select aria-label="Passenger count" value={passengerCount} onChange={e=>setPassengerCount(Number(e.target.value))} className="ml-3 rounded-lg border p-2"><option value={1}>1 passenger</option><option value={2}>2 passengers</option><option value={3}>3 passengers</option></select></label><p className="text-xs text-slate-600">Maximum three passengers. Contact support for larger groups. The reviewed fare is the total trip fare.</p><label className="block text-sm">Optional passenger name<input aria-label="Passenger name" maxLength={120} value={passengerName} onChange={e=>setPassengerName(e.target.value)} className="mt-1 w-full rounded-lg border p-2"/></label></div>
-                {serviceType === 'scheduled' && <label className="block text-sm font-bold">Schedule delivery<input type="datetime-local" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="mt-2 w-full rounded-xl border p-3" /></label>}
-                <button onClick={() => void handleDispatchDelivery()} disabled={isRequesting} className="w-full rounded-xl bg-slate-900 py-4 font-bold text-white disabled:opacity-50">{isRequesting ? <Loader2 size={20} className="mx-auto animate-spin" /> : 'Request Dispatch'}</button>
+                <div className="space-y-3">
+                  <div><div className="mb-2 flex items-center justify-between"><span className="text-xs font-extrabold text-slate-800">Choose your vehicle</span><span className="text-[10px] font-semibold text-slate-400">Tap to select</span></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {(['keke','bike','car','van'] as const).map(v=>{
+                      const label=v==='bike'?'Bike':v==='keke'?'Keke':v==='car'?'Car':'Van';
+                      const art=v==='keke'?'/matmove-keke.svg':v==='bike'?'/matmove-bike.svg':v==='car'?'/matmove-car.svg':'/matmove-van.svg';
+                      const selected=vehicleType===v;
+                      const detail=v==='keke'?'City three-wheeler':v==='bike'?'Quick solo ride':v==='car'?'Comfort ride':'Extra space';
+                      return <button key={v} type="button" onClick={()=>setVehicleType(v)} aria-label={`Choose ${label}`} aria-pressed={selected}
+                        className={`group relative flex min-h-[132px] flex-col items-center justify-between overflow-hidden rounded-2xl border px-2 py-2.5 text-center transition duration-200 ${selected?'border-emerald-400 bg-gradient-to-br from-emerald-50 via-white to-sky-50 shadow-[0_8px_24px_rgba(5,150,105,.12)] ring-1 ring-emerald-200':'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md'}`}>
+                        <span className="relative flex h-[76px] w-full items-center justify-center rounded-xl bg-gradient-to-br from-slate-50 to-white"><img src={art} alt="" className="h-[72px] w-full object-contain transition duration-300 group-hover:scale-[1.04]"/>{selected&&<span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white"><Check size={12} strokeWidth={3}/></span>}</span>
+                        <span className="mt-1 block text-xs font-black text-slate-900">{label}</span><span className="block text-[9px] font-medium text-slate-400">{detail}</span>
+                      </button>;
+                    })}
+                  </div></div>
+                </div>
+                <p className="text-xs leading-5 text-slate-500">Choose pickup and destination on the map. MatMove will preview the route and estimate the fare.</p>
+                <div className="mb-2">
+                  <div className="mb-2 flex items-end justify-between gap-3"><div><label className="block text-xs font-extrabold text-slate-800">Who is travelling?</label><p className="mt-1 text-[10px] text-slate-500">Choose up to three passengers</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500">Max 3</span></div>
+                  <div className="grid grid-cols-3 gap-2">{[1,2,3].map(count=><button key={count} type="button" onClick={()=>setPassengerCount(count)} aria-pressed={passengerCount===count}
+                    className={`flex min-h-[94px] flex-col items-center justify-center gap-2 rounded-2xl border p-2 transition duration-200 ${passengerCount===count?'border-emerald-400 bg-gradient-to-br from-emerald-50 to-white text-emerald-900 shadow-[0_8px_20px_rgba(5,150,105,.1)] ring-1 ring-emerald-200':'border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:shadow-sm'}`}>
+                    <span className="flex h-8 items-end justify-center gap-0.5" aria-hidden="true">{Array.from({length:count},(_,index)=><svg key={index} viewBox="0 0 22 30" className="h-7 w-5" fill="none"><circle cx="11" cy="6" r="4" fill={passengerCount===count?'#07865f':'#8193a3'}/><path d="M5 27v-7c0-4 2-7 6-7s6 3 6 7v7M3 21h16M8 15l-3 6m9-6 3 6" stroke={passengerCount===count?'#07865f':'#8193a3'} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>)}</span>
+                    <span className="text-xs font-black">{count} {count===1?'passenger':'passengers'}</span><span className="text-[9px] font-semibold text-slate-400">{count===1?'Solo trip':count===2?'Two travelling':'Small group'}</span>
+                  </button>)}</div>
+                  <label className="mt-3 block text-xs font-bold text-slate-700">Passenger name (optional)<input aria-label="Passenger name" maxLength={120} value={passengerName} onChange={e=>setPassengerName(e.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm"/></label>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
+                  <div className="mb-2 flex items-center gap-2"><label className="text-xs font-extrabold text-slate-700">Total Fare (SLE)</label><input aria-label="Total fare in SLE" type="number" min="0" step="0.01" value={offerAmount} onChange={e=>setOfferAmount(e.target.value)} className="w-full bg-transparent pr-2 text-right text-lg font-bold text-slate-900 outline-none" placeholder="Amount"/></div>
+                  <div className="flex gap-1 justify-end"><button type="button" onClick={()=>setOfferAmount(previous=>Math.max(pricingRates[vehicleType]?.min||1,Number(previous||0)-5).toString())} className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-600"><Minus size={16}/></button><button type="button" onClick={()=>setOfferAmount(previous=>(Number(previous||0)+5).toString())} className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-600"><Plus size={16}/></button></div>
+                  {Number(offerAmount)>0&&<div className="mt-3 flex justify-between rounded-xl border border-slate-100 bg-white p-2 text-[11px] font-bold shadow-sm"><span className="text-emerald-700">Driver earns: SLE {(Number(offerAmount)*.85).toFixed(2)}</span><span className="text-rose-600">Platform fee: SLE {(Number(offerAmount)*.15).toFixed(2)}</span></div>}
+                </div>
+                {serviceType==='scheduled'&&<label className="block text-xs font-bold text-slate-700">Schedule your trip<input type="datetime-local" value={scheduledTime} onChange={e=>setScheduledTime(e.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm"/></label>}
+                <button type="button" onClick={()=>void handleDispatchDelivery()} disabled={isRequesting||tripLoading||!!tripError||tripRequest.retained||!!tripRequest.error||!pickupCoords||!destinationCoords} className="w-full rounded-2xl bg-slate-900 py-4 font-bold text-white shadow-lg transition hover:bg-slate-800 disabled:opacity-50">{isRequesting?<Loader2 size={20} className="mx-auto animate-spin"/>:serviceType==='delivery'?'Confirm Delivery Request':'Confirm Request'}</button>
               </>
             ) : (
               <div className="py-6 text-center">
