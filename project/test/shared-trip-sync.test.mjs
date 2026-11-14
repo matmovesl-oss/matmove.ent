@@ -43,7 +43,7 @@ test('Rider and Merchant show driver name and tap-to-call phone after acceptance
  const [rider,merchant]=await Promise.all([read('../src/pages/RiderDashboard.tsx'),read('../src/pages/MerchantDashboard.tsx')]);
  for(const source of [rider,merchant]){
   assert.match(source,/Driver accepted · on the way/);
-  assert.match(source,/href=\{\`tel:/);
+  assert.ok(source.includes('href={`tel:'));
   assert.match(source,/activeBooking\.driver\?\.full_name/);
  }
 });
