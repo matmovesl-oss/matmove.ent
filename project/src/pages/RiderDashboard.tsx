@@ -761,12 +761,13 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                           <div className="space-y-2">
                             {activeBooking.cashPayment?.status === 'settled' ? (
                               <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-900">Both parties confirmed. MatMove fee capture is verified.</p>
+                            ) : activeBooking.cashPayment?.driverCashConfirmed && activeBooking.cashPayment?.riderCashConfirmed ? (
+                              <p role="status" className="rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-900">MatMove's fee capture is being verified. Do not repeat the cash handover.</p>
                             ) : activeBooking.cashPayment?.riderCashConfirmed ? (
                               <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">Your cash handover is confirmed. Waiting for the assigned driver to confirm receipt.</p>
                             ) : (
                               <>
                                 {activeBooking.cashPayment?.driverCashConfirmed && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">The driver has confirmed receiving cash. Confirm only if you handed over the agreed amount.</p>}
-                                {activeBooking.cashPayment?.driverCashConfirmed && activeBooking.cashPayment?.riderCashConfirmed && <p role="status" className="rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-900">MatMove's fee capture is being verified. Do not repeat the cash handover.</p>}
                                 <button onClick={executeRidePayment} disabled={isRequesting} className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl text-xs hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2">
                                   {isRequesting ? <Loader2 size={18} className="animate-spin" /> : 'Confirm Cash Handed to Driver'}
                                 </button>
