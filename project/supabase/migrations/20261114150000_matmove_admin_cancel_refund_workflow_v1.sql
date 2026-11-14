@@ -71,6 +71,7 @@ begin
       update public.bookings set status='cancelled',updated_at=clock_timestamp()
         where id=b.id returning * into b;
       outcome := 'not_required';
+      cp.status := 'cancelled';
     elsif cp.status='reserve_pending' then
       select * into reserve from public.matmove_cash_ride_legs
         where booking_id=b.id and leg_kind='reserve' for update;
@@ -83,6 +84,7 @@ begin
         update public.bookings set status='cancelled',updated_at=clock_timestamp()
           where id=b.id returning * into b;
         outcome := 'not_required';
+        cp.status := 'cancelled';
       elsif not found or reserve.status<>'completed' then
         raise exception 'PAYMENT_PENDING: Cash reserve is still being verified. Reconcile it, then retry Admin cancellation.';
       else
