@@ -515,12 +515,29 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                     {r.status === 'in_progress' && r.driver_id === profile.id && (
                       r.payment_method === 'cash' ? (
                         <div className="space-y-2">
-                          <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">
-                            Collect the agreed physical cash from the rider. Confirm only after you have actually received it.
-                          </div>
-                          <button type="button" onClick={() => void handleConfirmCashReceived(r)} disabled={acceptingId === r.id || !canTransact} className="w-full rounded-xl bg-emerald-700 py-3.5 font-bold text-white disabled:opacity-50">
-                            {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Confirm Cash Received'}
-                          </button>
+                          {r.cashPayment?.status === 'settled' ? (
+                            <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-xs font-bold text-emerald-900">
+                              Cash handover verified. MatMove's 15% fee is settled and this trip is complete.
+                            </div>
+                          ) : r.cashPayment?.driverCashConfirmed && r.cashPayment?.riderCashConfirmed ? (
+                            <div role="status" className="flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-center text-xs font-semibold text-blue-900">
+                              <Loader2 size={15} className="animate-spin"/>
+                              Both parties confirmed. MatMove's 15% fee capture is being verified. Do not collect cash again.
+                            </div>
+                          ) : r.cashPayment?.driverCashConfirmed ? (
+                            <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-950">
+                              You confirmed that you received SLE {Number(r.cashPayment.driverCash || 0).toFixed(2)}. Waiting for the customer to confirm the handover.
+                            </div>
+                          ) : (
+                            <>
+                              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">
+                                Collect SLE {Number(r.cashPayment?.driverCash || Number(r.fare_amount || 0) * .85).toFixed(2)} in physical cash. Confirm only after you have actually received it.
+                              </div>
+                              <button type="button" onClick={() => void handleConfirmCashReceived(r)} disabled={acceptingId === r.id || !canTransact} className="w-full rounded-xl bg-emerald-700 py-3.5 font-bold text-white disabled:opacity-50">
+                                {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Confirm Cash Received'}
+                              </button>
+                            </>
+                          )}
                         </div>
                       ) : (
                         <div className="w-full bg-amber-100 text-amber-800 font-bold py-3.5 rounded-xl text-center text-sm border border-amber-200 flex items-center justify-center gap-2 shadow-inner">
