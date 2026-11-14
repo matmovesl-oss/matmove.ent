@@ -38,6 +38,9 @@ begin
      and position('role_name not in (''rider'',''merchant'')' in v_definition)=0 then
     raise exception 'Merchant cash ride migration could not verify customer trip role guard.';
   end if;
+  if position('b.id,''cash_payment_created'',''rider'',u,' in v_updated)>0 then
+    raise exception 'Merchant cash ride creation audit identity was not updated.';
+  end if;
   execute v_updated;
 
   -- The reserve source remains the customer's own unique, unfrozen SLE wallet.
@@ -87,6 +90,9 @@ begin
   if v_updated = v_definition
      and position('p_actor_type not in (''rider'',''merchant'',''driver'')' in v_definition)=0 then
     raise exception 'Merchant cash ride migration could not verify confirmation actor guard.';
+  end if;
+  if position('values(p_booking_id,''rider_cash_confirmed'',''rider'',p_actor_id);' in v_updated)>0 then
+    raise exception 'Merchant cash handover audit identity was not updated.';
   end if;
   execute v_updated;
 
