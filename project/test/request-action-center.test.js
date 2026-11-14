@@ -34,3 +34,22 @@ test('Admin cancellation is dispatch-authorized, idempotent and keeps paid booki
   assert.match(migration, /matmove_dispatch_audit/);
   assert.match(migration, /matmove_cash_ride_payments where booking_id=b\.id/);
 });
+
+test('protected scheduled reconciliation runs the stale-ticket sweep and is configured as a Vercel cron', async () => {
+  const api = await read('../server/ride-api.js');
+  const routes = await read('../vercel.json');
+  assert.match(api, /db\.rpc\('matmove_ride_stale_request_sweep'\)/);
+  assert.match(api, /staleRequests: staleSweep\.data/);
+  assert.match(routes, /"path": "\/api\/reconcile-ride-payments"/);
+  assert.match(routes, /"schedule": "\* \* \* \* \*"/);
+});
+
+test('automatic abandonment never cancels a request with any payment ledger or an assigned driver', async () => {
+  const migration = await read('../supabase/migrations/20261114150000_matmove_admin_cancel_refund_workflow_v1.sql');
+  assert.match(migration, /interval '30 minutes'/);
+  assert.match(migration, /interval '60 minutes'/);
+  assert.match(migration, /b\.driver_id is null/);
+  assert.match(migration, /not exists\(select 1 from public\.ride_payments/);
+  assert.match(migration, /not exists\(select 1 from public\.matmove_cash_ride_payments/);
+  assert.match(migration, /matmove_ride_investigation_tickets/);
+});
