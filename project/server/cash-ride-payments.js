@@ -373,6 +373,37 @@ async function finishCashLeg(db, bookingId, kind, actorId, provider) {
   return snapshot;
 }
 
+// Recover only a leg that is authorized and has not been attempted yet.
+// The database claim records attempted_at before the single provider POST;
+// later refreshes can only look up the recorded provider transfer ID.
+async function recoverCashRide(db, bookingId, actorId, isRider, provider = monime) {
+  let snapshot = await cashStatus(db, bookingId);
+  let legs = await readLegs(db, bookingId);
+  const readyToStart = leg => !leg || (leg.status === 'ready' && !leg.attempted_at);
+
+  const reserve = legs.find(leg => leg.leg_kind === 'reserve');
+  if (isRider && ['reserve_ready','reserve_pending'].includes(snapshot?.status) && readyToStart(reserve)) {
+    snapshot = await finishCashLeg(db, bookingId, 'reserve', actorId, provider);
+    legs = await readLegs(db, bookingId);
+  }
+
+  const capture = legs.find(leg => leg.leg_kind === 'capture');
+  if (snapshot?.status === 'capture_pending' &&
+      snapshot.driverCashConfirmed === true &&
+      snapshot.riderCashConfirmed === true &&
+      readyToStart(capture)) {
+    snapshot = await finishCashLeg(db, bookingId, 'capture', actorId, provider);
+    legs = await readLegs(db, bookingId);
+  }
+
+  const refund = legs.find(leg => leg.leg_kind === 'refund');
+  if (snapshot?.status === 'refund_pending' && readyToStart(refund)) {
+    snapshot = await finishCashLeg(db, bookingId, 'refund', actorId, provider);
+  }
+
+  return reconcileCashRide(db, bookingId, provider);
+}
+
 
 export async function reconcileCashRide(db, bookingId, provider = monime) {
   const legs = await readLegs(db, bookingId);
@@ -433,12 +464,10 @@ export async function cashRideAction(
 
   if (action === 'status' || action === 'cash_status') {
     if (!isRider && !isDriver) throw new HttpError(403, 'This is another customer’s cash booking.');
-    let snapshot = await cashStatus(db, bookingId);
-    // Recover provider status for an already-attempted leg. reconcileCashRide
-    // only looks up existing provider references; it never creates a new POST.
-    if (['reserve_pending','capture_pending','refund_pending'].includes(snapshot?.status)) {
-      snapshot = await reconcileCashRide(db, bookingId, provider);
-    }
+    // Safe recovery may start a leg only when the customer authorized the
+    // reserve or both parties confirmed collection, and no POST was attempted.
+    // The database claim makes the first POST single-use; later reads use GET.
+    const snapshot = await recoverCashRide(db, bookingId, user.id, isRider, provider);
     return res.status(200).json({
       success: true, pending: false, booking: await readBooking(db, bookingId), payment: snapshot
     });
