@@ -117,7 +117,7 @@ test('passcode uses a custom visible 0–9 keypad without a native numeric or pa
  assert.match(passcode,/appendDigit\('0'\)/);
  assert.match(passcode,/Delete last digit/);
  assert.match(passcode,/pinField\('New passcode/);
- assert.match(passcode,/Confirm new passcode/);
+ assert.match(passcode,/Confirm passcode/);
  assert.match(passcode,/setActivePinField\(creating\|\|upgrade\?'next':'pin'\)/);
  assert.doesNotMatch(passcode,/inputMode="numeric"/);
  assert.doesNotMatch(passcode,/type="password"/);
