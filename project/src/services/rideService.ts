@@ -35,12 +35,13 @@ export async function readRidePayment(bookingId: string) {
  * operation; it never records a confirmation or creates a Monime transfer. */
 export async function readCashRideStatus(bookingId: string) {
   if (!bookingId) throw new Error('A cash ride booking is required.');
-  const { response, data } = await walletFetch('/api/accept-ride-escrow?action=cash_status', { bookingId });
+  const { response, data, finish } = await walletFetch('/api/accept-ride-escrow?action=cash_status', { bookingId });
   if (!response.ok || data?.success !== true || data?.pending !== false ||
       data?.booking?.id !== bookingId || !data?.payment ||
       typeof data.payment.driverCashConfirmed !== 'boolean' ||
       typeof data.payment.riderCashConfirmed !== 'boolean') {
     throw new Error(data?.error || 'Cash collection status could not be verified.');
   }
+  finish();
   return data;
 }
