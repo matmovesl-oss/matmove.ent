@@ -113,7 +113,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const creating=status&&!status.configured;
  useEffect(()=>{setActivePinField(creating||upgrade?'next':'pin');},[creating,upgrade,status?.digits]);
  const appendDigit=(digit:string)=>{
-  if(!/^\\d$/.test(digit)||busy)return;
+  if(!/^\d$/.test(digit)||busy)return;
   if(activePinField==='pin')setPin(value=>value.length<(status?.digits||9)?value+digit:value);
   else if(activePinField==='next')setNext(value=>value.length<9?value+digit:value);
   else setConfirm(value=>value.length<9?value+digit:value);
