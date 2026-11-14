@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { FareSnapshot } from '@/services/fareNegotiationService';
 import { attachTripContacts } from '@/lib/tripContacts';
+import { readCashRideStatus } from '@/services/rideService';
 
 // A booking poll may have started before a customer confirmed a newer fare.
 // Keep that fare while still accepting fresh trip status/driver details.
@@ -83,7 +84,14 @@ export function useCustomerActiveRide(userId: string) {
         if (error) throw error;
         if(!Array.isArray(rows)||rows.length>100||rows.some(row=>typeof row?.id!=='string'||row.rider_id!==userId||!['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(row.status))||new Set(rows.map(row=>row.id)).size!==rows.length)throw new Error('Active requests could not be verified.');
         const owned=rows.filter(row=>!terminal.current[`${userId}:${row.id}`]);
-        const enriched=await attachTripContacts(owned);
+        const cashRows=owned.filter(row=>row.payment_method==='cash'&&row.service_type==='ride');
+        const cashEntries=await Promise.all(cashRows.map(async row=>{
+          try { const snapshot=await readCashRideStatus(row.id); return [row.id,snapshot.payment] as const; }
+          catch { return [row.id,null] as const; }
+        }));
+        const cashById=new Map(cashEntries);
+        const withCash=owned.map(row=>({...row,cashPayment:cashById.get(row.id)}));
+        const enriched=await attachTripContacts(withCash);
         const data=enriched.find(row=>row.id===selection.current)||enriched[0]||null;
         if (!disposed && identity.current === userId && version === mutation.current) {
           setBookings(previous=>enriched.map(row=>mergeRideRow(previous.find(old=>old.id===row.id),row)));
