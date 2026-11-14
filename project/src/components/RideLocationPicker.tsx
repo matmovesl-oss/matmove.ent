@@ -172,16 +172,71 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
     });
   }
   function locate(explicit: boolean) {
-    if (!navigator.geolocation) { if (explicit) setMessage('Location is not supported. Search for an address or place a pin.'); return; }
     const ownGeneration = generation.current;
     const token = ++tokens.current.pickup;
-    if (explicit) setMessage('Finding your current location…');
-    navigator.geolocation.getCurrentPosition(position => {
-      if (generation.current !== ownGeneration || tokens.current.pickup !== token) return;
-      if (!Number.isFinite(position.coords.accuracy) || position.coords.accuracy < 0 || position.coords.accuracy > 1000) { setMessage('Your location is approximate. Search for your street or place an exact map pin.'); return; }
-      selectCoordinates('pickup', [position.coords.longitude, position.coords.latitude]);
-      if (explicit) setMessage('Pickup selected. Check the pin before requesting.');
-    }, () => { if (generation.current === ownGeneration && tokens.current.pickup === token && explicit) setMessage('Location permission was not available. Search for an address or place a pin.'); }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 });
+    const isCurrent = () => generation.current === ownGeneration && tokens.current.pickup === token;
+    const report = (message: string) => { if (isCurrent()) setMessage(message); };
+
+    if (!navigator.geolocation) {
+      report('This browser does not provide GPS access. Allow location for MatMove, or search for your pickup or place a map pin.');
+      return;
+    }
+
+    report(explicit ? 'Finding your current phone location…' : 'Checking your phone GPS for the pickup location…');
+
+    const acceptPosition = (position: GeolocationPosition, networkFallback = false) => {
+      if (!isCurrent()) return;
+      const { latitude, longitude, accuracy } = position.coords;
+      const ageMs = Date.now() - position.timestamp;
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+          !Number.isFinite(accuracy) || accuracy < 0 ||
+          !Number.isFinite(position.timestamp) || ageMs > 60000 || ageMs < -15000) {
+        report('The phone returned an old or invalid GPS reading. Tap Use live location to retry, or choose your pickup on the map.');
+        return;
+      }
+      if (accuracy > 1000) {
+        report(`Your phone location is too approximate (about ${Math.ceil(accuracy)} m accuracy). Move to a clearer GPS signal, then retry, or search/place your pickup pin.`);
+        return;
+      }
+      selectCoordinates('pickup', [longitude, latitude]);
+      report(`Phone GPS selected your pickup (about ${Math.ceil(accuracy)} m accuracy)${networkFallback ? ' using the available network-assisted location' : ''}. Check the map pin before requesting.`);
+    };
+
+    if (typeof navigator.permissions?.query === 'function') {
+      void navigator.permissions.query({ name: 'geolocation' }).then(permission => {
+        if (!isCurrent()) return;
+        if (permission.state === 'denied') {
+          report('Location permission is blocked for MatMove. Allow Location for this site in your browser settings, then tap Use live location.');
+          return;
+        }
+        if (permission.state === 'prompt') report('MatMove needs permission to use your phone location. Choose Allow when your phone asks.');
+      }).catch(() => {});
+    }
+
+    const retryWithNetworkLocation = (reason: GeolocationPositionError) => {
+      if (!isCurrent()) return;
+      if (reason.code === 1) {
+        report('MatMove does not have location permission. Allow Location for MatMove in your browser or phone settings, then tap Use live location.');
+        return;
+      }
+      report('GPS is taking longer than expected. Trying the phone’s network-assisted location…');
+      navigator.geolocation.getCurrentPosition(
+        position => acceptPosition(position, true),
+        fallbackError => {
+          if (!isCurrent()) return;
+          report(fallbackError.code === 3
+            ? 'Your phone GPS timed out. Check that Location Services are on, then tap Use live location again or choose a map pin.'
+            : 'Your phone could not provide a usable location. Check Location Services, move near a window or outdoors, then retry or place a map pin.');
+        },
+        { enableHighAccuracy: false, timeout: 12000, maximumAge: 30000 }
+      );
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      position => acceptPosition(position),
+      retryWithNetworkLocation,
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 }
+    );
   }
 
   useEffect(()=>{
