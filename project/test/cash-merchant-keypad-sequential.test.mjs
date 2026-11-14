@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const read=path=>readFile(new URL(path,import.meta.url),'utf8');
 
-test('cash confirmation status is read-only and refreshes the same cash ledger for customer and assigned driver',async()=>{
+test('cash status refresh reconciles existing provider references without repeating confirmation or starting a second transfer',async()=>{
  const [service,api,server,hook,driver]=await Promise.all([
   read('../src/services/rideService.ts'),
   read('../server/ride-api.js'),
@@ -18,6 +18,8 @@ test('cash confirmation status is read-only and refreshes the same cash ledger f
  assert.match(api,/cash_status/);
  assert.match(server,/action === 'status' \|\| action === 'cash_status'/);
  assert.match(server,/if \(!isRider && !isDriver\)/);
+ assert.match(server,/reconcileCashRide\(db, bookingId, provider\)/);
+ assert.match(server,/never creates a new POST/);
  assert.match(hook,/readCashRideStatus\(row\.id\)/);
  assert.match(hook,/cashPayment:cashById\.get\(row\.id\)/);
  assert.match(driver,/readCashRideStatus\(item\.id\)/);
@@ -105,6 +107,14 @@ test('Services back arrow is left of the Wi dey move brand',async()=>{
  assert.match(portal,/mode==='services'&&<button className="mm-icon-button shrink-0" type="button" aria-label="Back to Home"/);
  assert.match(portal,/mm-brand/);
  assert.match(portal,/Open your account/);
+});
+
+test('new digital rides fail closed unless escrow and platform fee accounts are distinct',async()=>{
+ const rideServer=await read('../server/ride-payments.js');
+ assert.match(rideServer,/if \(escrow === revenue\)/);
+ assert.match(rideServer,/The SLE escrow and platform fee accounts must be separate/);
+ assert.match(rideServer,/p_escrow_account: platform\.escrow/);
+ assert.match(rideServer,/p_fee_account: platform\.revenue/);
 });
 
 test('passcode uses a custom visible 0–9 keypad without a native numeric or password input',async()=>{
