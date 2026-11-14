@@ -20,7 +20,7 @@ test('cash status refresh safely recovers a confirmed settlement without duplica
  assert.match(server,/if \(!isRider && !isDriver\)/);
  assert.match(server,/reconcileCashRide\(db, bookingId, provider\)/);
  assert.match(server,/Reserve retries remain an explicit customer action/);
- assert.match(server,/database claim makes the first POST single-use/);
+ assert.match(server,/database claim records attempted_at before the single provider POST/);
  assert.match(hook,/readCashRideStatus\(row\.id\)/);
  assert.match(hook,/cashPayment:cashById\.get\(row\.id\)/);
  assert.match(driver,/readCashRideStatus\(item\.id\)/);
