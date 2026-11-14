@@ -25,6 +25,15 @@ export async function updateRide(action: RideAction, bookingId: string) {
   throw new Error('Unable to read trip status.');
 }
 
+export async function readCashRideStatus(bookingId: string) {
+  const { response, data, finish } = await walletFetch('/api/accept-ride-escrow?action=cash_status', { bookingId });
+  if (!response.ok || data?.success !== true || data?.pending !== false || !data?.payment) {
+    throw new Error(data?.error || 'Unable to verify the cash handover status.');
+  }
+  finish();
+  return data;
+}
+
 export async function readRidePayment(bookingId: string) {
   const { response, data, finish } = await walletFetch('/api/accept-ride-escrow?action=status', { bookingId });
   if (!response.ok) throw new Error(data.error || 'Unable to read ride payment details.');
