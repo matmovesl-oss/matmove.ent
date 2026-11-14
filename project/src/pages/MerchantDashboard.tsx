@@ -290,6 +290,26 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     finally { setIsRequesting(false); }
   };
 
+  const handleCashRideConfirmation = async () => {
+    if (!activeBooking || activeBooking.payment_method!=='cash' || isRequesting) return;
+    setIsRequesting(true); setRideNotice('');
+    try {
+      const result=await updateRide('cash_confirm',activeBooking.id);
+      const payment=result.payment;
+      if(payment?.status==='settled'&&result.success===true&&result.pending===false){
+        setRideNotice("Both cash confirmations are verified. MatMove's 15% fee capture is settled and the trip is complete.");
+        setActiveBooking(null);
+      }else{
+        setActiveBooking({...activeBooking,...(result.booking||{}),cashPayment:payment||activeBooking.cashPayment});
+        setRideNotice(payment?.driverCashConfirmed&&payment?.riderCashConfirmed
+          ? "Both parties confirmed. MatMove's fee capture is being verified. Do not repeat the cash handover."
+          : "Your cash handover confirmation is recorded. The assigned driver must also confirm receipt.");
+      }
+      await fetchLiveBalance();
+    }catch(err:any){setRideNotice(err.message||'Cash handover confirmation could not be verified.');}
+    finally{setIsRequesting(false);}
+  };
+
   const handleOpenPaymentModal = async () => {
     if (!activeBooking || isRequesting) return;
     setIsRequesting(true); setRideNotice('');
@@ -398,6 +418,21 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                   <div className="flex gap-1 justify-end"><button type="button" onClick={()=>setOfferAmount(previous=>Math.max(pricingRates[vehicleType]?.min||1,Number(previous||0)-5).toString())} className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-600"><Minus size={16}/></button><button type="button" onClick={()=>setOfferAmount(previous=>(Number(previous||0)+5).toString())} className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-600"><Plus size={16}/></button></div>
                   {Number(offerAmount)>0&&<div className="mt-3 flex justify-between rounded-xl border border-slate-100 bg-white p-2 text-[11px] font-bold shadow-sm"><span className="text-emerald-700">Driver earns: SLE {(Number(offerAmount)*.85).toFixed(2)}</span><span className="text-rose-600">Platform fee: SLE {(Number(offerAmount)*.15).toFixed(2)}</span></div>}
                 </div>
+                {serviceType==='ride'&&(
+                  <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <label className="block text-xs font-bold text-slate-700">Payment method
+                      <select value={paymentMethod} disabled={cashConfigLoading||!cashEnabled} onChange={e=>setPaymentMethod(e.target.value as 'digital'|'cash')} className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold disabled:opacity-60">
+                        <option value="digital">Digital wallet — full fare held in escrow</option>
+                        <option value="cash" disabled={!cashEnabled}>Physical cash + 15% SLE wallet fee</option>
+                      </select>
+                    </label>
+                    {cashConfigLoading?<p className="mt-2 text-xs text-slate-500">Checking cash collection availability…</p>:!cashEnabled?<p className="mt-2 text-xs text-amber-800">{cashAccountsVerified?'Monime cash accounts are verified, but cash booking is not enabled for this environment.':'Physical cash rides are unavailable until MatMove verifies its SLE escrow and platform-fee accounts.'}</p>:null}
+                    {paymentMethod==='cash'&&Number(offerAmount)>0&&(()=>{
+                      const fareMinor=Math.round(Number(offerAmount)*100),driverCashMinor=Math.round(fareMinor*.85),feeMinor=fareMinor-driverCashMinor;
+                      return <p className="mt-2 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-950">The customer pays SLE {(driverCashMinor/100).toFixed(2)} directly to the driver. MatMove reserves SLE {(feeMinor/100).toFixed(2)} from the customer's SLE wallet. Both the customer and driver must confirm the cash handover before the reserved fee is captured. The ride is not complete until that capture is verified.</p>;
+                    })()}
+                  </div>
+                )}
                 {serviceType==='scheduled'&&<label className="block text-xs font-bold text-slate-700">Schedule your trip<input type="datetime-local" value={scheduledTime} onChange={e=>setScheduledTime(e.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm"/></label>}
                 <button type="button" onClick={()=>void handleDispatchDelivery()} disabled={isRequesting||tripLoading||!!tripError||!canCreateTrip||!!tripRequest.retained||!!tripRequest.error||!pickupCoords||!destinationCoords} className="w-full rounded-2xl bg-slate-900 py-4 font-bold text-white shadow-lg transition hover:bg-slate-800 disabled:opacity-50">{isRequesting?<Loader2 size={20} className="mx-auto animate-spin"/>:serviceType==='delivery'?'Confirm Delivery Request':'Confirm Request'}</button>
               </>
@@ -415,17 +450,28 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                         : <p className="mt-2 text-xs text-amber-800">Driver phone is syncing. Pull to refresh in a moment.</p>}
                     </div>
                     {activeBooking.status === 'accepted' && <button onClick={cancelTrip} disabled={isRequesting} className="mb-4 text-red-600 font-bold">Cancel & Refund Held Fare</button>}
-                    {activeBooking.status === 'in_progress' && (
+                    {activeBooking.status === 'in_progress' && activeBooking.payment_method !== 'cash' && (
                       <div className="mt-4 mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm text-left">
-                        <h5 className="font-bold text-slate-900 border-b pb-2 mb-2 flex items-center gap-2"><ShieldCheck size={16} className="text-orange-600" />Payment Breakdown</h5>
-                        <div className="flex justify-between mb-1"><span className="text-slate-500">Total Fare (in Escrow)</span><span className="font-bold text-slate-900">SLE {activeBooking.fare_amount}</span></div>
-                        <div className="flex justify-between mb-1"><span className="text-slate-500">Driver Take-Home (85%)</span><span className="font-bold text-emerald-600">SLE {(activeBooking.fare_amount * 0.85).toFixed(2)}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500">Platform Fee (15%)</span><span className="font-bold text-rose-500">SLE {(activeBooking.fare_amount * 0.15).toFixed(2)}</span></div>
-                        <div className="mt-3 pt-3 border-t text-xs text-slate-400">Funds will be transferred directly to the driver's Monime wallet upon completion.</div>
+                        <h5 className="font-bold text-slate-900 border-b pb-2 mb-2 flex items-center gap-2"><ShieldCheck size={16} className="text-orange-600" />Digital fare settlement</h5>
+                        <div className="flex justify-between mb-1"><span className="text-slate-500">Total Fare (held in escrow)</span><span className="font-bold text-slate-900">SLE {activeBooking.fare_amount}</span></div>
+                        <div className="flex justify-between mb-1"><span className="text-slate-500">Driver share (85%)</span><span className="font-bold text-emerald-600">SLE {(activeBooking.fare_amount * 0.85).toFixed(2)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">MatMove fee (15%)</span><span className="font-bold text-rose-500">SLE {(activeBooking.fare_amount * 0.15).toFixed(2)}</span></div>
+                        <div className="mt-3 border-t pt-3 text-xs text-slate-400">Driver credit and fee settlement are verified by the transfer receipts.</div>
                       </div>
                     )}
-                    {activeBooking.status === 'in_progress' && (
-                      <button onClick={handleOpenPaymentModal} disabled={isRequesting} className="w-full rounded-xl bg-emerald-600 py-4 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2">
+                    {activeBooking.status === 'in_progress' && activeBooking.payment_method === 'cash' && (
+                      <div className="mt-4 mb-5 space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left">
+                        <h5 className="font-bold text-amber-950">Physical cash handover</h5>
+                        <div className="flex justify-between text-sm"><span className="text-amber-900">Cash due to driver (85%)</span><b>SLE {Number(activeBooking.cashPayment?.driverCash ?? Number(activeBooking.fare_amount||0)*.85).toFixed(2)}</b></div>
+                        <div className="flex justify-between text-sm"><span className="text-amber-900">MatMove fee reserved (15%)</span><b>SLE {Number(activeBooking.cashPayment?.matmoveFee ?? Number(activeBooking.fare_amount||0)*.15).toFixed(2)}</b></div>
+                        {activeBooking.cashPayment?.status==='settled' ? <p role="status" className="rounded-xl bg-white p-3 text-xs font-bold text-emerald-800">Both confirmations and the fee capture are verified. This ride is complete.</p>
+                          : activeBooking.cashPayment?.driverCashConfirmed&&activeBooking.cashPayment?.riderCashConfirmed ? <p role="status" className="rounded-xl bg-white p-3 text-xs font-semibold text-blue-900">Both parties confirmed. MatMove is verifying the fee capture. Do not repeat the cash handover.</p>
+                          : activeBooking.cashPayment?.riderCashConfirmed ? <p role="status" className="rounded-xl bg-white p-3 text-xs font-semibold text-amber-950">You confirmed the cash handover. Waiting for the driver to confirm the cash received.</p>
+                          : <><p className="text-xs text-amber-900">Confirm only after the driver has received the physical cash. The driver must also confirm before MatMove captures its fee.</p><button type="button" onClick={handleCashRideConfirmation} disabled={isRequesting} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 py-3 font-bold text-white disabled:opacity-50">{isRequesting?<Loader2 size={18} className="animate-spin"/>:'Confirm Cash Handed to Driver'}</button></>}
+                      </div>
+                    )}
+                    {activeBooking.status === 'in_progress' && activeBooking.payment_method !== 'cash' && (
+                      <button onClick={handleOpenPaymentModal} disabled={isRequesting} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-4 font-bold text-white disabled:opacity-50">
                         {isRequesting ? <Loader2 size={20} className="animate-spin" /> : <><Banknote size={20}/> Confirm Arrival & Release Payment</>}
                       </button>
                     )}
