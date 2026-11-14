@@ -300,18 +300,12 @@ begin
   set status='cancelled',updated_at=clock_timestamp()
   from abandoned a
   where b.id=a.id
-  returning b.id into strict cancelled_count;
+  returning b.id;
+  get diagnostics cancelled_count = row_count;
 
   return jsonb_build_object(
     'ticketsCreatedOrRefreshed',ticket_count,
     'unfundedRequestsAutoCancelled',coalesce(cancelled_count,0),
-    'ticketAfterMinutes',30,
-    'autoCancelAfterMinutes',60
-  );
-exception when no_data_found then
-  return jsonb_build_object(
-    'ticketsCreatedOrRefreshed',ticket_count,
-    'unfundedRequestsAutoCancelled',0,
     'ticketAfterMinutes',30,
     'autoCancelAfterMinutes',60
   );
