@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { FareSnapshot } from '@/services/fareNegotiationService';
+import { attachTripContacts } from '@/lib/tripContacts';
 
 // A booking poll may have started before a customer confirmed a newer fare.
 // Keep that fare while still accepting fresh trip status/driver details.
@@ -82,9 +83,10 @@ export function useCustomerActiveRide(userId: string) {
         if (error) throw error;
         if(!Array.isArray(rows)||rows.length>100||rows.some(row=>typeof row?.id!=='string'||row.rider_id!==userId||!['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(row.status))||new Set(rows.map(row=>row.id)).size!==rows.length)throw new Error('Active requests could not be verified.');
         const owned=rows.filter(row=>!terminal.current[`${userId}:${row.id}`]);
-        const data=owned.find(row=>row.id===selection.current)||owned[0]||null;
+        const enriched=await attachTripContacts(owned);
+        const data=enriched.find(row=>row.id===selection.current)||enriched[0]||null;
         if (!disposed && identity.current === userId && version === mutation.current) {
-          setBookings(previous=>owned.map(row=>mergeRideRow(previous.find(old=>old.id===row.id),row)));
+          setBookings(previous=>enriched.map(row=>mergeRideRow(previous.find(old=>old.id===row.id),row)));
           setState(previous => ({ userId, booking: mergeRideRow(previous.userId === userId ? previous.booking : null, data&&terminal.current[`${userId}:${data.id}`]?null:data || null), loading: false, error: '' }));
         }
       } catch {
@@ -97,11 +99,24 @@ export function useCustomerActiveRide(userId: string) {
       }
     };
     void refresh();
+    const refreshOnResume=()=>{if(document.visibilityState!=='hidden')void refresh();};
+    const onVisibility=()=>{if(document.visibilityState==='visible')void refresh();};
     const channel = supabase.channel(`customer-active-${userId}`).on('postgres_changes', {
       event: '*', schema: 'public', table: 'bookings', filter: `rider_id=eq.${userId}`
-    }, () => { void refresh(); }).subscribe();
+    }, () => { void refresh(); }).subscribe(status=>{if(status==='SUBSCRIBED')void refresh();});
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 5000);
-    return () => { disposed = true; window.clearInterval(timer); void supabase.removeChannel(channel); };
+    document.addEventListener('visibilitychange',onVisibility);
+    window.addEventListener('focus',refreshOnResume);
+    window.addEventListener('pageshow',refreshOnResume);
+    window.addEventListener('online',refreshOnResume);
+    return () => {
+      disposed = true; window.clearInterval(timer);
+      document.removeEventListener('visibilitychange',onVisibility);
+      window.removeEventListener('focus',refreshOnResume);
+      window.removeEventListener('pageshow',refreshOnResume);
+      window.removeEventListener('online',refreshOnResume);
+      void supabase.removeChannel(channel);
+    };
   }, [userId, retryCount]);
 
   const retry = useCallback(() => setRetryCount(value => value + 1), []);
