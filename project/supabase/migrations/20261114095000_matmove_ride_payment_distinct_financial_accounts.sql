@@ -11,7 +11,7 @@ BEGIN
      AND NOT EXISTS (
        SELECT 1
        FROM pg_constraint
-       WHERE conrelid = 'public.ride_payments'::regclass
+       WHERE conrelid = to_regclass('public.ride_payments')
          AND conname = 'ride_payments_active_platform_accounts_distinct'
      ) THEN
     ALTER TABLE public.ride_payments
