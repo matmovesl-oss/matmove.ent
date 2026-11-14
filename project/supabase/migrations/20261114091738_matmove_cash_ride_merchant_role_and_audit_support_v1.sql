@@ -8,7 +8,9 @@ ALTER TABLE public.matmove_cash_ride_audit_events
   DROP CONSTRAINT IF EXISTS matmove_cash_ride_audit_events_actor_type_check;
 ALTER TABLE public.matmove_cash_ride_audit_events
   ADD CONSTRAINT matmove_cash_ride_audit_events_actor_type_check
-  CHECK (actor_type = ANY (ARRAY['system'::text, 'rider'::text, 'merchant'::text, 'driver'::text, 'admin'::text]));
+  CHECK (actor_type = ANY (ARRAY['system','rider','merchant','driver','admin']::text[]));
+
+-- Reject any customer role other than the supported Rider and Merchant roles: role not in ('rider','merchant').
 
 CREATE OR REPLACE FUNCTION public.matmove_create_customer_trip(p_request uuid, p_details jsonb)
  RETURNS jsonb
