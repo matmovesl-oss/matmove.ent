@@ -1,4 +1,5 @@
 import ActiveTripMap from '@/components/ActiveTripMap';
+import CustomerTripSwitcher from '@/components/CustomerTripSwitcher';
 import { ProductGallery, catalogMoney, catalogCheckoutAllowed } from '@/components/ProductCatalog';
 import FareNegotiation from '@/components/FareNegotiation';
 import { useCustomerActiveRide } from '@/lib/useRideNegotiation';
@@ -95,7 +96,12 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
     loading: tripLoading,
     error: tripError,
     retry: retryTrip,
-    applySnapshot: applyFareSnapshot
+    applySnapshot: applyFareSnapshot,
+    bookings: activeTrips,
+    creating: creatingTrip,
+    canCreate: canCreateTrip,
+    selectBooking: selectTrip,
+    startNewBooking
   } = useCustomerActiveRide(profile?.id);
   const tripRequest = useTripRequest(profile?.id || '');
 
@@ -529,6 +535,10 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
 
       {walletSetupPanel}
 
+      <div className="mx-auto max-w-7xl px-0 pt-2 sm:px-4">
+        <CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} onSelect={selectTrip} onNew={()=>{startNewBooking();setRouteEditing(true);setBookingSheetExpanded(true);setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerCount(1);setPaymentMethod('digital');setRideNotice('Your previous trip remains active. Review the new pickup, destination and fare.');}} />
+        {activeTrips.some(row=>Date.now()-Date.parse(row.created_at||'')>24*60*60*1000) && <p role="status" className="mx-3 mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">An older request is still open. Select it above to review the driver's latest status and complete any pending cash confirmation. Do not submit a duplicate request.</p>}
+      </div>
       <div className="mx-auto max-w-7xl space-y-4 px-0 pb-8 sm:px-4">
         {(activeSection === 'home' || activeSection === 'ride' || !activeSection) && (
           <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
