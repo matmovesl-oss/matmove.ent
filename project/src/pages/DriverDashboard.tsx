@@ -5,6 +5,7 @@ import FareNegotiation from '@/components/FareNegotiation';
 import { readRideFares, type FareSnapshot } from '@/services/fareNegotiationService';
 import { applyRideFare, assertDriverFare, mergeRideRow } from '@/lib/useRideNegotiation';
 import { attachTripContacts } from '@/lib/tripContacts';
+import { readCashRideStatus } from '@/services/rideService';
 import { loadGoogleMaps } from '@/components/RideLocationPicker';
 
 
@@ -253,8 +254,15 @@ function DriverMain({ profile, wallet, activeSection }: any) {
         if (!Array.isArray(data)) throw new Error('Invalid radar response.');
         const visible=data.filter(item=>item.driver_id===profile.id||(!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)));
         const enriched=await attachTripContacts(visible);
+        const cashRows=enriched.filter(item=>item.driver_id===profile.id&&item.payment_method==='cash'&&item.status==='in_progress').slice(0,10);
+        const cashResults=await Promise.all(cashRows.map(async item=>{
+          try{const result=await readCashRideStatus(item.id);return [item.id,result.payment] as const;}
+          catch{return [item.id,null] as const;}
+        }));
+        const cashById=new Map(cashResults.filter((entry):entry is readonly [string,any]=>entry[1]!==null));
+        const synchronized=enriched.map(item=>cashById.has(item.id)?{...item,cashPayment:cashById.get(item.id)}:item);
         if (!disposed && readVersion === radarMutation.current) {
-          setActiveRequests(previous => enriched.map(item => mergeRideRow(previous.find(old => old.id === item.id), item)));
+          setActiveRequests(previous => synchronized.map(item => mergeRideRow(previous.find(old => old.id === item.id), item)));
           setNegotiatingId(previous => enriched.some(item => !item.driver_id && item.id === previous && ['pending', 'pending_admin'].includes(item.status)) ? previous : null);
           setRequestsError('');
         }
@@ -302,7 +310,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       const result = await updateRide('accept', booking.id);
       if (!mounted.current || currentDriver.current !== userId) return;
       radarMutation.current++;
-      setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
+      setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking, cashPayment: result.payment || item.cashPayment }) : item));
       setNegotiatingId(null);
       setRideNotice(result.pending ? 'Escrow funding is processing. This trip has not been accepted yet; check again using this same request.' : 'Customer debit and escrow funding are confirmed. You can start the trip.');
       await fetchLiveBalance();
