@@ -525,6 +525,10 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                             <div role="status" className="w-full rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-xs font-bold text-emerald-900">
                               Both parties confirmed. MatMove fee capture is verified.
                             </div>
+                          ) : r.cashPayment?.driverCashConfirmed && r.cashPayment?.riderCashConfirmed ? (
+                            <div role="status" className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">
+                              Both parties confirmed. MatMove's fee capture is being verified.
+                            </div>
                           ) : r.cashPayment?.driverCashConfirmed ? (
                             <div role="status" className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">
                               Your cash receipt is recorded. Waiting for the customer to confirm the handover.
