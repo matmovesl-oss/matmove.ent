@@ -305,7 +305,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
           ? "Both parties confirmed. MatMove's fee capture is being verified. Do not repeat the cash handover."
           : "Your cash handover confirmation is recorded. The assigned driver must also confirm receipt.");
       }
-      await fetchLiveBalance();
+      void fetchLiveBalance();
     }catch(err:any){setRideNotice(err.message||'Cash handover confirmation could not be verified.');}
     finally{setIsRequesting(false);}
   };

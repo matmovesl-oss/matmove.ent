@@ -157,6 +157,7 @@ export function createRidePaymentsHandler({
         'status',
         'cash_reserve',
         'cash_confirm',
+        'cash_status',
         'cash_config',
         'reconcile'
       ].includes(action)

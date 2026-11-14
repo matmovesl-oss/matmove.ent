@@ -123,7 +123,7 @@ test('cash fee capture destination must match the deployed MONIME_PLATFORM_FEE_A
   assert.match(settings, /process\.env\.MONIME_PLATFORM_FEE_ACCOUNT_ID/);
   assert.match(settings, /data\.fee_revenue_account_id !== platformFeeAccountId/);
   assert.match(settings, /data\.fee_hold_account_id === platformFeeAccountId/);
-  assert.match(settings, /escrow and platform-fee accounts match their production settings/i);
+  assert.match(settings, /configured SLE escrow and platform-fee accounts match this deployment's production settings/i);
 });
 
 const sharedMigration = new URL(

@@ -338,7 +338,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
           ? 'Your cash receipt is recorded. MatMove fee capture is still being verified; do not repeat the cash collection.'
           : 'Your confirmation that you received the physical cash is recorded. The rider must also confirm the handover.');
       }
-      await fetchLiveBalance();
+      void fetchLiveBalance();
     } catch (err: any) {
       if (mounted.current && currentDriver.current === userId) setRideNotice(err.message || 'Cash receipt confirmation could not be verified.');
     } finally {

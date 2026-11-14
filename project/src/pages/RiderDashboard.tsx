@@ -425,7 +425,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
             : 'Your cash-handover confirmation is recorded. The assigned driver must also confirm receipt before MatMove captures its fee.');
           setActiveBooking({ ...activeBooking, ...(result.booking || {}), cashPayment: payment || activeBooking.cashPayment });
         }
-        await fetchLiveBalance();
+        void fetchLiveBalance();
         return;
       }
       if (!result.pending && result.payment?.settled !== true) throw new Error('Driver credit is not confirmed.');

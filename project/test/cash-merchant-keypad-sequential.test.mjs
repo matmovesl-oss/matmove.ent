@@ -16,6 +16,7 @@ test('cash confirmation status is read-only and refreshes the same cash ledger f
  assert.match(service,/accept-ride-escrow\?action=cash_status/);
  assert.match(service,/finish\(\)/);
  assert.match(api,/cash_status/);
+ assert.match(api,/'cash_status',\s*'reconcile'/);
  assert.match(server,/action === 'status' \|\| action === 'cash_status'/);
  assert.match(server,/if \(!isRider && !isDriver\)/);
  assert.match(hook,/readCashRideStatus\(row\.id\)/);
@@ -26,6 +27,9 @@ test('cash confirmation status is read-only and refreshes the same cash ledger f
 
 test('driver confirmation persists receipt state and removes the action once the driver has confirmed',async()=>{
  const driver=await read('../src/pages/DriverDashboard.tsx');
+ const handler=driver.slice(driver.indexOf('const handleConfirmCashReceived'),driver.indexOf('const handleCancelRide'));
+ assert.match(handler,/void fetchLiveBalance\(\)/);
+ assert.doesNotMatch(handler,/await fetchLiveBalance\(\)/);
  assert.match(driver,/cashPayment: result\.payment \|\| item\.cashPayment/);
  assert.match(driver,/r\.cashPayment\?\.driverCashConfirmed/);
  assert.match(driver,/Waiting for the customer to confirm the handover/);
