@@ -74,6 +74,9 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   const [bookingSheetExpanded,setBookingSheetExpanded]=useState(true);
   const [routeEditing,setRouteEditing]=useState(true);
   const [paymentMethod,setPaymentMethod]=useState<'digital'|'cash'>('digital');
+  const [cashConfigLoading,setCashConfigLoading]=useState(true);
+  const [cashEnabled,setCashEnabled]=useState(false);
+  const [cashAccountsVerified,setCashAccountsVerified]=useState(false);
   const [bookingSheetDragDelta,setBookingSheetDragDelta]=useState(0);
   const [bookingSheetDragging,setBookingSheetDragging]=useState(false);
   const sheetPointerStart=useRef<number|null>(null);
@@ -111,6 +114,13 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   }, [tripDistanceKm, vehicleType, pricingRates]);
 
   useEffect(() => {
+    let live=true;
+    setCashConfigLoading(true);
+    void walletFetch('/api/accept-ride-escrow?action=cash_config', {}).then(({response,data,finish})=>{
+      if(!response.ok)throw new Error('Cash configuration unavailable.');
+      finish();
+      if(live){setCashEnabled(data?.enabled===true&&data?.accountsVerified===true);setCashAccountsVerified(data?.accountsVerified===true);}
+    }).catch(()=>{if(live){setCashEnabled(false);setCashAccountsVerified(false);}}).finally(()=>{if(live)setCashConfigLoading(false);});
     supabase.from('pricing_settings').select('*').then(({ data }) => {
       if (data?.length) {
         const rates: any = {};
@@ -119,6 +129,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       }
     });
     if (profile?.id && !localStorage.getItem(`matmove_policy_${profile.id}`)) setShowPolicy(true);
+    return ()=>{live=false;};
   }, [profile?.id]);
 
   const handleAcceptPolicy = () => { localStorage.setItem(`matmove_policy_${profile.id}`, 'true'); setShowPolicy(false); };
@@ -209,6 +220,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     if (finalAmount < minimumFare) return alert(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minimumFare}.`);
     if (serviceType === 'scheduled' && (!Number.isFinite(Date.parse(scheduledTime)) || Date.parse(scheduledTime) <= Date.now())) return alert('Choose a future scheduled time.');
 
+    if (serviceType === 'ride' && paymentMethod === 'cash' && !cashEnabled) { setRideNotice('Physical cash rides are unavailable until MatMove verifies both dedicated Monime fee accounts and enables cash collection.'); return; }
     if (paymentMethod !== 'cash' && Number(sleWallet?.balance || 0) < finalAmount) return alert(`Insufficient balance. You need SLE ${finalAmount} for this request.`);
 
     setIsRequesting(true);
@@ -367,7 +379,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                   </button>)}</div>
                   <label className="mt-3 block text-xs font-bold text-slate-700">Passenger name (optional)<input aria-label="Passenger name" maxLength={120} value={passengerName} onChange={e=>setPassengerName(e.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm"/></label>
                 </div>
-                {serviceType==='ride'&&<div className="rounded-2xl border border-slate-200 bg-white p-3"><p className="mb-2 text-xs font-extrabold text-slate-800">Payment method</p><div className="grid grid-cols-2 gap-2"><button type="button" aria-pressed={paymentMethod==='digital'} onClick={()=>setPaymentMethod('digital')} className={`min-h-11 rounded-xl border text-sm font-bold ${paymentMethod==='digital'?'border-emerald-500 bg-emerald-50 text-emerald-800':'border-slate-200 text-slate-600'}`}>Wallet / digital</button><button type="button" aria-pressed={paymentMethod==='cash'} onClick={()=>setPaymentMethod('cash')} className={`min-h-11 rounded-xl border text-sm font-bold ${paymentMethod==='cash'?'border-emerald-500 bg-emerald-50 text-emerald-800':'border-slate-200 text-slate-600'}`}>Cash</button></div>{serviceType === 'ride' && paymentMethod === 'cash' && <p className="mt-2 text-xs text-slate-500">The 15% MatMove fee is reserved digitally. The driver and merchant must both confirm the physical cash handover.</p>}</div>}
+                {serviceType==='ride'&&<div className="rounded-2xl border border-slate-200 bg-white p-3"><p className="mb-2 text-xs font-extrabold text-slate-800">Payment method</p><div className="grid grid-cols-2 gap-2"><button type="button" aria-pressed={paymentMethod==='digital'} onClick={()=>setPaymentMethod('digital')} className={`min-h-11 rounded-xl border text-sm font-bold ${paymentMethod==='digital'?'border-emerald-500 bg-emerald-50 text-emerald-800':'border-slate-200 text-slate-600'}`}>Wallet / digital</button><button type="button" aria-pressed={paymentMethod==='cash'} disabled={cashConfigLoading||!cashEnabled} onClick={()=>setPaymentMethod('cash')} className={`min-h-11 rounded-xl border text-sm font-bold disabled:opacity-40 ${paymentMethod==='cash'?'border-emerald-500 bg-emerald-50 text-emerald-800':'border-slate-200 text-slate-600'}`}>Cash</button></div>{cashConfigLoading ? <p className="mt-2 text-xs text-slate-500">Checking cash collection readiness…</p> : !cashEnabled ? <p className="mt-2 text-xs text-amber-800">{cashAccountsVerified?'Monime accounts are verified, but cash collection is not enabled yet.':'Physical cash rides remain disabled until both dedicated Monime fee accounts are verified.'}</p> : null}{serviceType === 'ride' && paymentMethod === 'cash' && <p className="mt-2 text-xs text-slate-500">The 15% MatMove fee is reserved digitally. The driver and merchant must both confirm the physical cash handover.</p>}</div>}
                 <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
                   <div className="mb-2 flex items-center gap-2"><label className="text-xs font-extrabold text-slate-700">Total Fare (SLE)</label><input aria-label="Total fare in SLE" type="number" min="0" step="0.01" value={offerAmount} onChange={e=>setOfferAmount(e.target.value)} className="w-full bg-transparent pr-2 text-right text-lg font-bold text-slate-900 outline-none" placeholder="Amount"/></div>
                   <div className="flex gap-1 justify-end"><button type="button" onClick={()=>setOfferAmount(previous=>Math.max(pricingRates[vehicleType]?.min||1,Number(previous||0)-5).toString())} className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-600"><Minus size={16}/></button><button type="button" onClick={()=>setOfferAmount(previous=>(Number(previous||0)+5).toString())} className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-600"><Plus size={16}/></button></div>
