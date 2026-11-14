@@ -145,3 +145,13 @@ test('customer passcode keypad accepts numeric keys and rejects non-digits',asyn
  for(const digit of ['0','1','2','3','4','5','6','7','8','9'])assert.equal(isDigit.test(digit),true);
  for(const value of ['','a','12',' 1','١'])assert.equal(isDigit.test(value),false);
 });
+
+
+test('customer keypad appends digits using explicit numeric bounds and functional state updates',async()=>{
+ const component=await readFile('src/components/CustomerPasscode.tsx','utf8');
+ assert.match(component,/digit\.length!==1\|\|digit<'0'\|\|digit>'9'/);
+ assert.match(component,/setPin\(value=>value\.length<limit\?value\+digit:value\)/);
+ assert.match(component,/setNext\(value=>value\.length<9\?value\+digit:value\)/);
+ assert.match(component,/setConfirm\(value=>value\.length<9\?value\+digit:value\)/);
+ assert.match(component,/onClick=\{event=>\{event\.preventDefault\(\);appendDigit\(digit\);\}\}/);
+});
