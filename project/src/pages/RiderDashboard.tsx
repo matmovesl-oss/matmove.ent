@@ -712,7 +712,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                     <>
                       <Car size={44} className="text-emerald-600 mx-auto mb-3" />
                       <h4 className="font-bold text-lg text-slate-900">
-                        {activeBooking.status === 'in_progress' ? 'Trip in Progress!' : 'Driver is on the way!'}
+                        {activeBooking.status === 'in_progress' ? 'Your trip is in progress' : 'Driver accepted · on the way'}
                       </h4>
                       <p className="text-xs text-slate-500 mt-1">
                         {activeBooking.payment_method === 'cash'
@@ -720,13 +720,13 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                           : 'Fare (SLE ' + Number(activeBooking.fare_amount || 0).toLocaleString() + ') held securely in Escrow.'}
                       </p>
 
-                      {activeBooking.driver && (
-                        <div className="mt-4 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-left mb-4">
-                          <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Assigned Driver</span>
-                          <span className="font-bold text-slate-900 block text-sm">{activeBooking.driver.full_name}</span>
-                          <span className="text-xs text-slate-600 flex items-center gap-1 mt-0.5"><Smartphone size={13} /> {activeBooking.driver.phone}</span>
-                        </div>
-                      )}
+                      <div className="mt-4 mb-4 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-left">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-700">{activeBooking.status==='in_progress'?'Your driver':'Your driver is arriving'}</span>
+                        <span className="mt-1 block text-sm font-bold text-slate-900">{activeBooking.driver?.full_name||'Driver details syncing…'}</span>
+                        {String(activeBooking.driver?.phone||activeBooking.driver?.phone_number||'').trim()
+                          ? <a href={`tel:${String(activeBooking.driver.phone||activeBooking.driver.phone_number).replace(/[^+0-9]/g,'')}`} className="mt-2 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-emerald-800 underline"><Smartphone size={13}/>{activeBooking.driver.phone||activeBooking.driver.phone_number}</a>
+                          : <span className="mt-1 block text-xs text-amber-800">Driver phone is syncing. Rechecking live trip details…</span>}
+                      </div>
 
                       {activeBooking.status === 'accepted' && activeBooking.payment_method !== 'cash' && (
                         <div className={`p-3 rounded-2xl border text-xs mb-3 space-y-1 ${elapsedSeconds <= 300 ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
