@@ -254,7 +254,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
         const visible=data.filter(item=>item.driver_id===profile.id||(!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)));
         const enriched=await attachTripContacts(visible);
         const cashById = new Map<string, any>();
-        await Promise.all(enriched.filter(item => item.payment_method === 'cash').map(async item => {
+        await Promise.all(enriched.filter(item => item.payment_method === 'cash' && item.driver_id === profile.id).map(async item => {
           try {
             const status = await readCashRideStatus(item.id);
             if (status.booking?.id === item.id && status.payment) cashById.set(item.id, status.payment);
