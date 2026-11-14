@@ -94,7 +94,7 @@ export async function reconcileRidePayments(req, res) {
     const cashQueue = await db
       .from('matmove_cash_ride_legs')
       .select('booking_id')
-      .in('status', ['pending','processing'])
+      .or('status.in.(pending,processing),and(leg_kind.eq.refund,status.eq.ready)')
       .order('updated_at')
       .limit(5);
 
@@ -113,6 +113,11 @@ export async function reconcileRidePayments(req, res) {
       cashBookingIds.map(bookingId => reconcileCashRide(db, bookingId))
     );
 
+    // The same protected worker opens durable investigation tickets for stale
+    // unfinished requests and auto-cancels only unassigned, unpaid requests.
+    const staleSweep = await db.rpc('matmove_ride_stale_request_sweep');
+    if (staleSweep.error) throw staleSweep.error;
+
     const failed = results.filter(
       result => result.status === 'rejected'
     ).length;
@@ -125,7 +130,8 @@ export async function reconcileRidePayments(req, res) {
       failed,
       cashChecked: cashBookingIds.length,
       cashFailed,
-      cashAvailable: !missingCashSchema
+      cashAvailable: !missingCashSchema,
+      staleRequests: staleSweep.data
     });
   } catch {
     return res.status(503).json({

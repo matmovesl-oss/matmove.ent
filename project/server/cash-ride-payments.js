@@ -376,10 +376,13 @@ async function finishCashLeg(db, bookingId, kind, actorId, provider) {
 
 export async function reconcileCashRide(db, bookingId, provider = monime) {
   const legs = await readLegs(db, bookingId);
+  const payment = await readPayment(db, bookingId);
   const activeLegs = legs.filter(leg =>
     ['pending','processing'].includes(leg.status) ||
     (leg.leg_kind === 'capture' && leg.status === 'ready' &&
-      leg.source_account_ref === leg.destination_account_ref)
+      leg.source_account_ref === leg.destination_account_ref) ||
+    (leg.leg_kind === 'refund' && leg.status === 'ready' &&
+      payment?.status === 'refund_pending')
   );
 
   for (const leg of activeLegs) {

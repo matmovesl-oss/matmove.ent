@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { shareReceiptPdf } from '@/lib/pdfReceipt';
 import { SkeletonList } from '@/components/Skeleton';
 import { filterTripHistory } from '@/lib/tripHistory';
+import { updateRide } from '@/services/rideService';
 
 type Props = { userId: string; role: 'rider' | 'driver' | 'merchant' };
 const date = (value: unknown) => {
@@ -105,6 +106,22 @@ export default function TripHistory({ userId, role }: Props) {
   const ownedTrips=loadedOwner===userId?trips:[];
   const selected = ownedTrips.find(t => t.id === selectedId);
   const filteredTrips=filterTripHistory(ownedTrips,period,statusFilter);
+  const activeRequests = ownedTrips.filter(t => ['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(t.status));
+  const [cancellingId,setCancellingId]=useState<string|null>(null);
+  const [actionError,setActionError]=useState('');
+  const [actionNotice,setActionNotice]=useState('');
+  async function cancelRequest(t:any){
+    if(cancellingId||!['pending','pending_admin','cash_reserve_pending'].includes(t.status))return;
+    const confirmed=window.confirm('Cancel this request? If a payment has already been taken, MatMove will verify the refund before showing the request as cancelled.');
+    if(!confirmed)return;
+    setCancellingId(t.id);setActionError('');setActionNotice('');
+    try{
+      const result=await updateRide('cancel',t.id);
+      await refresh();
+      setActionNotice(result.pending?'Cancellation received. Any required refund is still being verified. Keep this request reference.':result.message||'Request cancellation verified.');
+    }catch(error:any){setActionError(error?.message||'Cancellation could not be verified. Refresh this same request; do not submit another payment.');}
+    finally{setCancellingId(null);}
+  }
   useEffect(() => {
     if (selectedId && dialog.current && !dialog.current.open) dialog.current.showModal();
   }, [selectedId]);
@@ -157,6 +174,20 @@ export default function TripHistory({ userId, role }: Props) {
       </div>
     </div>
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
+    {actionError&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{actionError}</p>}
+    {actionNotice&&<p role="status" className="rounded-xl bg-blue-50 p-3 text-blue-900">{actionNotice}</p>}
+    <section aria-label="Unfinished requests" className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
+      <div><h2 className="text-lg font-bold">Unfinished requests</h2><p className="text-sm text-slate-600">Requests still awaiting a driver, confirmation, completion or payment verification.</p></div>
+      {loading?<p className="text-sm text-slate-500">Checking unfinished requests…</p>:activeRequests.length===0?<p className="rounded-xl bg-white p-4 text-sm text-slate-600">You have no unfinished requests.</p>:activeRequests.map(t=><article key={`active-${t.id}`} className="rounded-xl border bg-white p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2"><strong className="capitalize">{t.service_type||'Ride'} request</strong><span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{t.status.replace(/_/g,' ')}</span></div>
+        <p className="mt-2 text-sm">{t.pickup_location||'Pickup not recorded'} → {t.destination_location||'Destination not recorded'}</p>
+        <p className="mt-1 text-xs text-slate-500">Reference: {t.id}</p>
+        <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={()=>setSelectedId(t.id)} className="min-h-10 rounded-lg border px-3 text-sm font-semibold">Open request details</button>
+        {['pending','pending_admin','cash_reserve_pending'].includes(t.status)&&<button type="button" disabled={!!cancellingId} onClick={()=>void cancelRequest(t)} className="min-h-10 rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-700 disabled:opacity-50">{cancellingId===t.id?'Cancelling…':'Cancel request'}</button>}
+        </div>
+        {['accepted','in_progress','cash_review_required'].includes(t.status)&&<p className="mt-2 text-xs text-slate-600">This request has progressed beyond the self-cancellation stage. Contact MatMove support or ask Admin to review it; any cancellation must pass the refund checks.</p>}
+      </article>)}
+    </section>
     {!selectedId && notice && <p role="status" className="rounded-xl bg-emerald-50 p-3">{notice}</p>}
     {loading ? <SkeletonList count={4} /> : !ownedTrips.length && !error ? <p className="rounded-2xl border bg-white py-10 text-center text-slate-500">No trips or deliveries yet.</p> : null}
     {!loading&&ownedTrips.length>0&&filteredTrips.length===0&&<p className="rounded-2xl border bg-white p-6 text-center text-sm text-slate-600">No trips match these filters. Try a wider time period or another status.</p>}

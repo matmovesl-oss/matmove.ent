@@ -104,6 +104,19 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
     startNewBooking
   } = useCustomerActiveRide(profile?.id);
   const tripRequest = useTripRequest(profile?.id || '');
+  const [cancellingRequestId,setCancellingRequestId]=useState<string|null>(null);
+  const handleCancelCustomerRequest=async(id:string)=>{
+    if(cancellingRequestId)return;
+    setCancellingRequestId(id);setRideNotice('');
+    try{
+      const result=await updateRide('cancel',id);
+      if(result.booking)setActiveBooking(result.booking);
+      retryTrip();
+      setRideNotice(result.pending?'Cancellation received. Any required refund is still being verified. Keep this same request open and do not submit another payment.':result.message||'Request cancellation verified.');
+    }catch(error:any){setRideNotice(error?.message||'Cancellation could not be verified. Refresh this original request before trying again.');}
+    finally{setCancellingRequestId(null);}
+  };
+
 
   useEffect(() => {
     let timer: any;
@@ -536,7 +549,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
       {walletSetupPanel}
 
       <div className="mx-auto max-w-7xl px-0 pt-2 sm:px-4">
-        <CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} refreshing={tripLoading} onRefresh={retryTrip} onSelect={selectTrip} onNew={()=>{startNewBooking();setRouteEditing(true);setBookingSheetExpanded(true);setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerCount(1);setPaymentMethod('digital');setRideNotice('Your previous trip remains active. Review the new pickup, destination and fare.');}} />
+        <CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} refreshing={tripLoading} onRefresh={retryTrip} onSelect={selectTrip} onCancel={handleCancelCustomerRequest} cancellingId={cancellingRequestId} onNew={()=>{startNewBooking();setRouteEditing(true);setBookingSheetExpanded(true);setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerCount(1);setPaymentMethod('digital');setRideNotice('Your previous trip remains active. Review the new pickup, destination and fare.');}} />
         {activeTrips.some(row=>Date.now()-Date.parse(row.created_at||'')>24*60*60*1000) && <p role="status" className="mx-3 mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">An older request is still open. Select it above to review the driver's latest status and complete any pending cash confirmation. Do not submit a duplicate request.</p>}
       </div>
       <div className="mx-auto max-w-7xl space-y-4 px-0 pb-8 sm:px-4">
