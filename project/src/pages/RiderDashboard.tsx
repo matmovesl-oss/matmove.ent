@@ -754,6 +754,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                         </button>
                       )}
 
+                      {activeBooking.status === 'in_progress' && activeBooking.payment_method === 'cash' && <p role="status" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{activeBooking.cashPayment?.driverCashConfirmed ? 'The assigned driver has confirmed cash received.' : 'Waiting for the assigned driver to confirm receipt.'} {activeBooking.cashPayment?.riderCashConfirmed ? 'Your cash handover is recorded.' : 'Confirm only after handing over the physical cash.'} MatMove's fee capture is being verified after both confirmations.</p>}
                       {activeBooking.status === 'in_progress' && (
                         <button
                           onClick={executeRidePayment}
