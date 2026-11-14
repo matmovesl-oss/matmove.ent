@@ -122,7 +122,7 @@ export function useCustomerActiveRide(userId: string) {
   const retry = useCallback(() => setRetryCount(value => value + 1), []);
   const current = state.userId === userId ? state : { userId, booking: null, loading: true, error: '' };
   const selectBooking=(id:string)=>{const row=bookings.find(item=>item.id===id&&item.rider_id===userId);if(!row||identity.current!==userId)return;selection.current=id;mutation.current++;setCreating(false);setState({userId,booking:row,loading:false,error:''});};
-  const canCreate=current.userId===userId&&!current.loading&&!current.error&&!bookings.some(row=>row.rider_id===userId&&['pending','pending_admin','cash_reserve_pending','cash_review_required'].includes(row.status));
+  const canCreate=current.userId===userId&&!current.loading&&!current.error&&!bookings.some(row=>row.rider_id===userId&&['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(row.status));
   const startNewBooking=()=>{if(!canCreate)return;mutation.current++;setCreating(true);};
   return { ...current, booking:creating?null:current.booking, bookings:bookings.filter(row=>row.rider_id===userId),creating,canCreate,selectBooking,startNewBooking,setBooking,applySnapshot,retry };
 }
