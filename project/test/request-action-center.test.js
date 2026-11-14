@@ -68,3 +68,14 @@ test('Admin can cancel an in-progress digital ride through full refund, but cann
   assert.match(migration, /PAYMENT_LEDGER_MISSING/);
   assert.match(migration, /paymentMethod/);
 });
+
+test('Admin can trigger immediate server-side refund reconciliation using a dispatch-authorized session', async () => {
+  const api = await read('../server/ride-api.js');
+  assert.match(api, /async function adminReconcileBooking/);
+  assert.match(api, /matmove_dispatch_actor/);
+  assert.match(api, /reconcileCashRide\\(db,bookingId\\)/);
+  assert.match(api, /reconcileRide\\(db,bookingId\\)/);
+  assert.match(api, /Access-Control-Allow-Origin/);
+  assert.match(api, /'admin_reconcile'/);
+  assert.match(api, /refundVerified:paymentStatus==='refunded'/);
+});
