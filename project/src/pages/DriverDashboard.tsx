@@ -20,7 +20,7 @@ import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
-import { updateRide, readRidePayment } from '@/services/rideService';
+import { updateRide, readRidePayment, readCashRideStatus } from '@/services/rideService';
 import {
   Car, MapPin, Navigation, Power, User, Phone,
   Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft,
@@ -252,7 +252,14 @@ function DriverMain({ profile, wallet, activeSection }: any) {
         if (error) throw error;
         if (!Array.isArray(data)) throw new Error('Invalid radar response.');
         const visible=data.filter(item=>item.driver_id===profile.id||(!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)));
-        const enriched=await attachTripContacts(visible);
+        const cashRows=visible.filter(item=>item.payment_method==='cash'&&item.service_type==='ride');
+        const cashEntries=await Promise.all(cashRows.map(async item=>{
+          try { const snapshot=await readCashRideStatus(item.id); return [item.id,snapshot.payment] as const; }
+          catch { return [item.id,null] as const; }
+        }));
+        const cashById=new Map(cashEntries);
+        const withCash=visible.map(item=>({...item,cashPayment:cashById.get(item.id)}));
+        const enriched=await attachTripContacts(withCash);
         if (!disposed && readVersion === radarMutation.current) {
           setActiveRequests(previous => enriched.map(item => mergeRideRow(previous.find(old => old.id === item.id), item)));
           setNegotiatingId(previous => enriched.some(item => !item.driver_id && item.id === previous && ['pending', 'pending_admin'].includes(item.status)) ? previous : null);
@@ -312,7 +319,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   };
 
   const handleConfirmCashReceived = async (booking: any) => {
-    if (!canTransact || tripMutex.current || booking.payment_method !== 'cash') return;
+    if (tripMutex.current || booking.payment_method !== 'cash' || booking.cashPayment?.driverCashConfirmed) return;
     tripMutex.current = true;
     const userId = profile.id;
     setAcceptingId(booking.id);
@@ -320,15 +327,22 @@ function DriverMain({ profile, wallet, activeSection }: any) {
     try {
       const result = await updateRide('cash_confirm', booking.id);
       if (!mounted.current || currentDriver.current !== userId) return;
+      let verifiedPayment = result.payment || booking.cashPayment || null;
+      try { verifiedPayment = (await readCashRideStatus(booking.id)).payment; }
+      catch { /* The radar will retry this read-only status check. */ }
       radarMutation.current++;
-      if (result.payment?.status === 'settled' && result.success === true && result.pending === false) {
+      if (verifiedPayment?.status === 'settled' && result.success === true && result.pending === false) {
         setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
-        setRideNotice('Your cash receipt and the rider handover are both confirmed. MatMove fee capture is verified and the cash ride is settled.');
+        setRideNotice('Both parties confirmed the handover. MatMove fee capture is verified and the cash ride is settled.');
       } else {
-        setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
+        setActiveRequests(previous => previous.map(item => item.id === booking.id
+          ? mergeRideRow(item, { ...item, ...result.booking, cashPayment: verifiedPayment })
+          : item));
         setRideNotice(result.pending
           ? 'Your cash receipt is recorded. MatMove fee capture is still being verified; do not repeat the cash collection.'
-          : 'Your confirmation that you received the physical cash is recorded. The rider must also confirm the handover.');
+          : verifiedPayment?.driverCashConfirmed
+            ? 'Your cash receipt is recorded. Waiting for the customer to confirm the handover.'
+            : 'Cash receipt confirmation was received. Refresh the trip status before trying again.');
       }
       await fetchLiveBalance();
     } catch (err: any) {
@@ -507,12 +521,24 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                     {r.status === 'in_progress' && r.driver_id === profile.id && (
                       r.payment_method === 'cash' ? (
                         <div className="space-y-2">
-                          <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">
-                            Collect the agreed physical cash from the rider. Confirm only after you have actually received it.
-                          </div>
-                          <button type="button" onClick={() => void handleConfirmCashReceived(r)} disabled={acceptingId === r.id || !canTransact} className="w-full rounded-xl bg-emerald-700 py-3.5 font-bold text-white disabled:opacity-50">
-                            {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Confirm Cash Received'}
-                          </button>
+                          {r.cashPayment?.status === 'settled' ? (
+                            <div role="status" className="w-full rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-xs font-bold text-emerald-900">
+                              Both parties confirmed. MatMove fee capture is verified.
+                            </div>
+                          ) : r.cashPayment?.driverCashConfirmed ? (
+                            <div role="status" className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">
+                              Your cash receipt is recorded. Waiting for the customer to confirm the handover.
+                            </div>
+                          ) : (
+                            <>
+                              <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">
+                                Collect the agreed physical cash from the customer. Confirm only after you have actually received it.
+                              </div>
+                              <button type="button" onClick={() => void handleConfirmCashReceived(r)} disabled={acceptingId === r.id} className="w-full rounded-xl bg-emerald-700 py-3.5 font-bold text-white disabled:opacity-50">
+                                {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Confirm Cash Received'}
+                              </button>
+                            </>
+                          )}
                         </div>
                       ) : (
                         <div className="w-full bg-amber-100 text-amber-800 font-bold py-3.5 rounded-xl text-center text-sm border border-amber-200 flex items-center justify-center gap-2 shadow-inner">
