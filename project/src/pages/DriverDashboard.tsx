@@ -252,7 +252,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
         if (error) throw error;
         if (!Array.isArray(data)) throw new Error('Invalid radar response.');
         const visible=data.filter(item=>item.driver_id===profile.id||(!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)));
-        const cashRows=visible.filter(item=>item.payment_method==='cash'&&item.service_type==='ride');
+        const cashRows=visible.filter(item=>item.payment_method==='cash'&&item.service_type==='ride'&&item.driver_id===profile.id);
         const cashEntries=await Promise.all(cashRows.map(async item=>{
           try { const snapshot=await readCashRideStatus(item.id); return [item.id,snapshot.payment] as const; }
           catch { return [item.id,null] as const; }
