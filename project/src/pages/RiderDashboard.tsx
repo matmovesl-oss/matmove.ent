@@ -416,16 +416,20 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
       const result = await updateRide(activeBooking.payment_method === 'cash' ? 'cash_confirm' : 'complete', activeBooking.id);
       if (activeBooking.payment_method === 'cash') {
         let payment = result.payment || activeBooking.cashPayment || null;
-        try { payment = (await readCashRideStatus(activeBooking.id)).payment; }
-        catch { /* Active-trip refresh retries this read-only status check. */ }
-        if (payment?.status === 'settled' && result.success === true && result.pending === false) {
+        let verifiedBooking = result.booking || {};
+        try {
+          const status = await readCashRideStatus(activeBooking.id);
+          payment = status.payment;
+          verifiedBooking = status.booking || verifiedBooking;
+        } catch { /* Active-trip refresh retries this safe status recovery. */ }
+        if (payment?.status === 'settled') {
           setRideNotice('Both cash confirmations are verified and MatMove has captured its reserved fee. Cash collection is settled.');
           setActiveBooking(null);
         } else {
           setRideNotice(payment?.driverCashConfirmed && payment?.riderCashConfirmed
             ? 'Both cash confirmations are recorded. MatMove fee capture is still being verified; do not repeat the cash handover.'
             : 'Your cash-handover confirmation is recorded. The assigned driver must also confirm receipt before MatMove captures its fee.');
-          setActiveBooking({ ...activeBooking, ...(result.booking || {}), cashPayment: payment || activeBooking.cashPayment });
+          setActiveBooking({ ...activeBooking, ...verifiedBooking, cashPayment: payment || activeBooking.cashPayment });
         }
         await fetchLiveBalance();
         return;
