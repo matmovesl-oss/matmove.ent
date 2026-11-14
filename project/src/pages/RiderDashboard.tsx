@@ -539,9 +539,9 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                 <button onClick={() => setViewMode('new')} className={`font-bold ${viewMode === 'new' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Create New</button>
               </div>
 
-              {(tripError || tripRequest.error || rideNotice) && (
+              {(tripError || tripRequest.error || (rideNotice && !tripRequest.retained)) && (
                 <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">
-                  {tripRequest.error || rideNotice || tripError}
+                  {tripRequest.error || (rideNotice && !tripRequest.retained) || tripError}
                   {tripError && <button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry trip</button>}
                 </p>
               )}
