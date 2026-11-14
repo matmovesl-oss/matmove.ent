@@ -111,6 +111,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  },[allowed,enteredUser,userId]);
  
  const creating=status&&!status.configured;
+ useEffect(()=>{setActivePinField(creating||upgrade?'next':'pin');},[creating,upgrade]);
  const pinField=(label:string,value:string,key:'pin'|'next'|'confirm',length:number)=><button type="button" aria-label={label} aria-pressed={activePinField===key} disabled={busy} onClick={()=>setActivePinField(key)} className={`block w-full rounded-xl border p-3 text-left transition ${activePinField===key?'border-emerald-500 bg-emerald-50':'border-slate-200 bg-slate-50'}`}><span className="block text-xs font-semibold text-slate-600">{label}</span><span className="mt-2 flex min-h-8 items-center justify-center gap-3" aria-label={`${value.length} of ${length} digits entered`}>{Array.from({length},(_,i)=><span key={i} className={`h-2.5 w-2.5 rounded-full ${i<value.length?'bg-emerald-700':'bg-slate-300'}`}/>)}</span></button>;
  const appendDigit=(digit:string)=>{if(busy||!/^\\d$/.test(digit))return;const value=activePinField==='pin'?pin:activePinField==='next'?next:confirm;const setter=activePinField==='pin'?setPin:activePinField==='next'?setNext:setConfirm;const limit=activePinField==='pin'?(status?.digits||9):9;if(value.length<limit)setter(value+digit);};
  const deleteLastDigit=()=>{if(busy)return;const setter=activePinField==='pin'?setPin:activePinField==='next'?setNext:setConfirm;const value=activePinField==='pin'?pin:activePinField==='next'?next:confirm;setter(value.slice(0,-1));};
