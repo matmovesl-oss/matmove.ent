@@ -373,6 +373,32 @@ async function finishCashLeg(db, bookingId, kind, actorId, provider) {
   return snapshot;
 }
 
+// Recover only a leg that is authorized and has not been attempted yet.
+// The database claim records attempted_at before the single provider POST;
+// later refreshes can only look up the recorded provider transfer ID.
+async function recoverCashRide(db, bookingId, actorId, provider = monime) {
+  let snapshot = await cashStatus(db, bookingId);
+  const legs = await readLegs(db, bookingId);
+  const readyToStart = leg => !leg || (leg.status === 'ready' && !leg.attempted_at);
+
+  // Reserve retries remain an explicit customer action so wallet/KYC/frozen
+  // checks are never bypassed by a background status refresh.
+  const capture = legs.find(leg => leg.leg_kind === 'capture');
+  if (snapshot?.status === 'capture_pending' &&
+      snapshot.driverCashConfirmed === true &&
+      snapshot.riderCashConfirmed === true &&
+      readyToStart(capture)) {
+    snapshot = await finishCashLeg(db, bookingId, 'capture', actorId, provider);
+  }
+
+  const refund = legs.find(leg => leg.leg_kind === 'refund');
+  if (snapshot?.status === 'refund_pending' && readyToStart(refund)) {
+    snapshot = await finishCashLeg(db, bookingId, 'refund', actorId, provider);
+  }
+
+  return reconcileCashRide(db, bookingId, provider);
+}
+
 
 export async function reconcileCashRide(db, bookingId, provider = monime) {
   const legs = await readLegs(db, bookingId);
@@ -431,17 +457,20 @@ export async function cashRideAction(
   const isRider = booking.rider_id === user.id;
   const isDriver = booking.driver_id === user.id;
 
-  if (action === 'status') {
+  if (action === 'status' || action === 'cash_status') {
     if (!isRider && !isDriver) throw new HttpError(403, 'This is another customer’s cash booking.');
-    const snapshot = await cashStatus(db, bookingId);
+    // Safe recovery may start a leg only when the customer authorized the
+    // reserve or both parties confirmed collection, and no POST was attempted.
+    // The database claim makes the first POST single-use; later reads use GET.
+    const snapshot = await recoverCashRide(db, bookingId, user.id, provider);
     return res.status(200).json({
-      success: true, pending: false, booking, payment: snapshot
+      success: true, pending: false, booking: await readBooking(db, bookingId), payment: snapshot
     });
   }
 
   if (action === 'cash_reserve') {
-    if (profile.role !== 'rider' || !isRider) {
-      throw new HttpError(403, 'Only the booking rider can reserve the cash-ride MatMove fee.');
+    if (!['rider','merchant'].includes(profile.role) || !isRider) {
+      throw new HttpError(403, 'Only the booking customer can reserve the cash-ride MatMove fee.');
     }
     assertAllowed(profile, wallets, 'purchase');
     const sleWallets = wallets.filter(wallet => wallet.currency === 'SLE');
@@ -497,14 +526,14 @@ export async function cashRideAction(
 
   if (action === 'complete' || action === 'cash_confirm') {
     const actorType = action === 'complete' ? 'rider' : profile.role;
-    if (actorType === 'rider' && (!isRider || profile.role !== 'rider')) {
-      throw new HttpError(403, 'Only the booking rider can confirm cash handed to the driver.');
+    if (['rider','merchant'].includes(actorType) && (!isRider || profile.role !== actorType)) {
+      throw new HttpError(403, 'Only the booking customer can confirm cash handed to the driver.');
     }
     if (actorType === 'driver' && (!isDriver || profile.role !== 'driver')) {
       throw new HttpError(403, 'Only the assigned driver can confirm cash received.');
     }
-    if (!['rider','driver'].includes(actorType)) {
-      throw new HttpError(403, 'Rider or assigned driver confirmation is required.');
+    if (!['rider','merchant','driver'].includes(actorType)) {
+      throw new HttpError(403, 'The booking customer or assigned driver must confirm the handover.');
     }
 
     const confirmation = await cashRpc(db, 'matmove_cash_ride_confirm_collection', {
@@ -541,9 +570,9 @@ export async function cashRideAction(
   }
 
   if (action === 'cancel') {
-    const actorType = profile.role === 'driver' ? 'driver' : profile.role === 'rider' ? 'rider' : null;
-    if (!actorType || (actorType === 'rider' && !isRider) || (actorType === 'driver' && !isDriver)) {
-      throw new HttpError(403, 'Only the rider or assigned driver can cancel this cash ride.');
+    const actorType = profile.role === 'driver' ? 'driver' : ['rider','merchant'].includes(profile.role) ? profile.role : null;
+    if (!actorType || (['rider','merchant'].includes(actorType) && !isRider) || (actorType === 'driver' && !isDriver)) {
+      throw new HttpError(403, 'Only the booking customer or assigned driver can cancel this cash ride.');
     }
 
     const result = await cashRpc(db, 'matmove_cash_ride_cancel', {

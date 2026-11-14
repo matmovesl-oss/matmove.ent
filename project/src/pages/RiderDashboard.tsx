@@ -12,7 +12,7 @@ import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
-import { updateRide } from '@/services/rideService';
+import { updateRide, readCashRideStatus } from '@/services/rideService';
 import { useTripRequest } from '@/lib/useTripRequest';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -415,15 +415,21 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
     try {
       const result = await updateRide(activeBooking.payment_method === 'cash' ? 'cash_confirm' : 'complete', activeBooking.id);
       if (activeBooking.payment_method === 'cash') {
-        const payment = result.payment;
-        if (payment?.status === 'settled' && result.success === true && result.pending === false) {
+        let payment = result.payment || activeBooking.cashPayment || null;
+        let verifiedBooking = result.booking || {};
+        try {
+          const status = await readCashRideStatus(activeBooking.id);
+          payment = status.payment;
+          verifiedBooking = status.booking || verifiedBooking;
+        } catch { /* Active-trip refresh retries this safe status recovery. */ }
+        if (payment?.status === 'settled') {
           setRideNotice('Both cash confirmations are verified and MatMove has captured its reserved fee. Cash collection is settled.');
           setActiveBooking(null);
         } else {
           setRideNotice(payment?.driverCashConfirmed && payment?.riderCashConfirmed
             ? 'Both cash confirmations are recorded. MatMove fee capture is still being verified; do not repeat the cash handover.'
             : 'Your cash-handover confirmation is recorded. The assigned driver must also confirm receipt before MatMove captures its fee.');
-          setActiveBooking({ ...activeBooking, ...(result.booking || {}) });
+          setActiveBooking({ ...activeBooking, ...verifiedBooking, cashPayment: payment || activeBooking.cashPayment });
         }
         await fetchLiveBalance();
         return;
@@ -532,8 +538,8 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
       <div className="mx-auto max-w-7xl space-y-4 px-0 pb-8 sm:px-4">
         {(activeSection === 'home' || activeSection === 'ride' || !activeSection) && (
           <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
-            {(activeBooking || (pickupCoords && destinationCoords && !routeEditing)) && <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[min(66dvh,700px)] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6" style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(66dvh,700px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
-              <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded} onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;sheetDragStartHeight.current=bookingSheetExpanded?Math.min(window.innerHeight*.66,700):148;setBookingSheetDragging(true);setBookingSheetDragDelta(0);event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={event=>{if(sheetPointerStart.current!==null){const maxHeight=Math.min(window.innerHeight*.66,700),base=sheetDragStartHeight.current,delta=event.clientY-sheetPointerStart.current;setBookingSheetDragDelta(Math.max(base-maxHeight,Math.min(base-148,delta)));}}} onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start,base=sheetDragStartHeight.current,maxHeight=Math.min(window.innerHeight*.66,700),nextHeight=Math.max(148,Math.min(maxHeight,base-delta));if(Math.abs(delta)>6){sheetDragged.current=true;setBookingSheetExpanded(nextHeight>=maxHeight*.55);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}} onPointerCancel={()=>{sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}} onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}} className="mx-auto flex h-6 w-16 touch-none select-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button><div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><p className="mt-1 text-sm text-slate-500">Choose a service, set your route and review your fare.</p></div>
+            {((activeBooking && (!routeEditing || ['accepted','in_progress'].includes(activeBooking.status))) || (!activeBooking && pickupCoords && destinationCoords && !routeEditing)) && <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[min(66dvh,700px)] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6" style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(66dvh,700px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
+              <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded} onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;sheetDragStartHeight.current=bookingSheetExpanded?Math.min(window.innerHeight*.66,700):148;setBookingSheetDragging(true);setBookingSheetDragDelta(0);event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={event=>{if(sheetPointerStart.current!==null){const maxHeight=Math.min(window.innerHeight*.66,700),base=sheetDragStartHeight.current,delta=event.clientY-sheetPointerStart.current;setBookingSheetDragDelta(Math.max(base-maxHeight,Math.min(base-148,delta)));}}} onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start,base=sheetDragStartHeight.current,maxHeight=Math.min(window.innerHeight*.66,700),nextHeight=Math.max(148,Math.min(maxHeight,base-delta));if(Math.abs(delta)>6){sheetDragged.current=true;setBookingSheetExpanded(nextHeight>=maxHeight*.4);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}} onPointerCancel={()=>{sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}} onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}} className="mx-auto flex h-6 w-16 touch-none select-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button><div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><p className="mt-1 text-sm text-slate-500">Choose a service, set your route and review your fare.</p></div>
               <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
                 <button onClick={() => setViewMode('active')} className={`font-bold ${viewMode === 'active' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Active Request</button>
                 <button onClick={() => setViewMode('new')} className={`font-bold ${viewMode === 'new' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Create New</button>
@@ -755,13 +761,28 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                       )}
 
                       {activeBooking.status === 'in_progress' && (
-                        <button
-                          onClick={executeRidePayment}
-                          disabled={isRequesting}
-                          className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl text-xs hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2"
-                        >
-                          {isRequesting ? <Loader2 size={18} className="animate-spin" /> : activeBooking.payment_method === 'cash' ? 'Confirm Cash Handed to Driver' : 'Confirm Arrival & Release Driver Payment'}
-                        </button>
+                        activeBooking.payment_method === 'cash' ? (
+                          <div className="space-y-2">
+                            {activeBooking.cashPayment?.status === 'settled' ? (
+                              <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-900">Both parties confirmed. MatMove fee capture is verified.</p>
+                            ) : activeBooking.cashPayment?.driverCashConfirmed && activeBooking.cashPayment?.riderCashConfirmed ? (
+                              <p role="status" className="rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-900">MatMove's fee capture is being verified. Do not repeat the cash handover.</p>
+                            ) : activeBooking.cashPayment?.riderCashConfirmed ? (
+                              <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">Your cash handover is confirmed. Waiting for the assigned driver to confirm receipt.</p>
+                            ) : (
+                              <>
+                                {activeBooking.cashPayment?.driverCashConfirmed && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">The driver has confirmed receiving cash. Confirm only if you handed over the agreed amount.</p>}
+                                <button onClick={executeRidePayment} disabled={isRequesting} className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl text-xs hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2">
+                                  {isRequesting ? <Loader2 size={18} className="animate-spin" /> : 'Confirm Cash Handed to Driver'}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <button onClick={executeRidePayment} disabled={isRequesting} className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl text-xs hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2">
+                            {isRequesting ? <Loader2 size={18} className="animate-spin" /> : 'Confirm Arrival & Release Driver Payment'}
+                          </button>
+                        )
                       )}
                     </>
                   ) : activeBooking ? (

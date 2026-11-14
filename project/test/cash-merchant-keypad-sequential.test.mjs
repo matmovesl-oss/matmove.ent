@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const read=path=>readFile(new URL(path,import.meta.url),'utf8');
 
-test('cash confirmation status is read-only and refreshes the same cash ledger for customer and assigned driver',async()=>{
+test('cash status refresh safely recovers a confirmed settlement without duplicating a provider transfer',async()=>{
  const [service,api,server,hook,driver]=await Promise.all([
   read('../src/services/rideService.ts'),
   read('../server/ride-api.js'),
@@ -18,6 +18,9 @@ test('cash confirmation status is read-only and refreshes the same cash ledger f
  assert.match(api,/cash_status/);
  assert.match(server,/action === 'status' \|\| action === 'cash_status'/);
  assert.match(server,/if \(!isRider && !isDriver\)/);
+ assert.match(server,/reconcileCashRide\(db, bookingId, provider\)/);
+ assert.match(server,/Reserve retries remain an explicit customer action/);
+ assert.match(server,/database claim records attempted_at before the single provider POST/);
  assert.match(hook,/readCashRideStatus\(row\.id\)/);
  assert.match(hook,/cashPayment:cashById\.get\(row\.id\)/);
  assert.match(driver,/readCashRideStatus\(item\.id\)/);
@@ -26,7 +29,7 @@ test('cash confirmation status is read-only and refreshes the same cash ledger f
 
 test('driver confirmation persists receipt state and removes the action once the driver has confirmed',async()=>{
  const driver=await read('../src/pages/DriverDashboard.tsx');
- assert.match(driver,/cashPayment: result\.payment \|\| item\.cashPayment/);
+ assert.match(driver,/cashPayment: verifiedPayment/);
  assert.match(driver,/r\.cashPayment\?\.driverCashConfirmed/);
  assert.match(driver,/Waiting for the customer to confirm the handover/);
  assert.match(driver,/Both parties confirmed/);
@@ -48,7 +51,7 @@ test('Merchant can book cash rides, reserve only the fee, and confirm the same t
   read('../src/lib/useTripRequest.ts'),
   read('../server/ride-api.js'),
   read('../server/cash-ride-payments.js'),
-  read('../supabase/migrations/20261114090000_matmove_cash_ride_merchant_role_and_audit_support_v1.sql')
+  read('../supabase/migrations/20261114091738_matmove_cash_ride_merchant_role_and_audit_support_v1.sql')
  ]);
  assert.match(merchant,/payment_method:serviceType==='ride'\?paymentMethod:'digital'/);
  assert.match(merchant,/serviceType === 'ride' && paymentMethod === 'cash'/);
@@ -75,11 +78,11 @@ test('cash capture still requires both customer and driver confirmation and the 
  assert.match(cashServer,/finishCashLeg\(db, bookingId, 'capture'/);
  assert.match(migration,/p\.driver_cash_confirmed_at is not null/);
  assert.match(migration,/p\.rider_cash_confirmed_at is not null/);
- assert.match(migration,/reserve\.status <> 'completed'/);
+ assert.match(migration,/reserve_leg\.status <> 'completed'/);
  assert.match(migration,/capture_leg\.source_account_ref <> cfg\.fee_hold_account_id/);
  assert.match(cashServer,/data\.fee_hold_account_id !== escrowAccountId/);
  assert.match(cashServer,/data\.fee_revenue_account_id !== platformFeeAccountId/);
- assert.doesNotMatch(cashServer,/data\.fee_hold_account_id === platformFeeAccountId/);
+ assert.match(cashServer,/data\.fee_hold_account_id === platformFeeAccountId/);
 });
 
 test('Merchant location selection and Ride booking form are sequential with one bottom sheet at a time',async()=>{
@@ -88,12 +91,15 @@ test('Merchant location selection and Ride booking form are sequential with one 
   read('../src/pages/RiderDashboard.tsx'),
   read('../src/components/RideLocationPicker.tsx')
  ]);
- assert.match(merchant,/const \[routeEditing,setRouteEditing\]=useState\(true\)/);
- assert.match(merchant,/activeBooking \|\| \(pickupCoords && destinationCoords && !routeEditing\)/);
+ assert.match(merchant,/const \[routeEditing,setRouteEditing\]\s*=\s*useState\(true\)/);
+ assert.match(merchant,/activeBooking && \(!routeEditing \|\| \['accepted','in_progress'\]\.includes\(activeBooking\.status\)\)/);
+ assert.match(merchant,/!activeBooking && pickupCoords && destinationCoords && !routeEditing/);
  assert.match(merchant,/bookingReady=\{Boolean\(pickupCoords && destinationCoords\)\}/);
  assert.match(merchant,/onRouteEditingChange=\{setRouteEditing\}/);
  assert.match(merchant,/setRouteEditing\(!ready\)/);
  assert.match(rider,/routeEditing/);
+ assert.match(rider,/activeBooking && \(!routeEditing \|\| \['accepted','in_progress'\]\.includes\(activeBooking\.status\)\)/);
+ assert.match(rider,/!activeBooking && pickupCoords && destinationCoords && !routeEditing/);
  assert.match(picker,/bookingReady&&!editingRoute/);
  assert.match(picker,/sticky top-0 z-20/);
  assert.match(merchant,/sticky top-0 z-20/);
@@ -105,6 +111,14 @@ test('Services back arrow is left of the Wi dey move brand',async()=>{
  assert.match(portal,/mode==='services'&&<button className="mm-icon-button shrink-0" type="button" aria-label="Back to Home"/);
  assert.match(portal,/mm-brand/);
  assert.match(portal,/Open your account/);
+});
+
+test('new digital rides fail closed unless escrow and platform fee accounts are distinct',async()=>{
+ const rideServer=await read('../server/ride-payments.js');
+ assert.match(rideServer,/if \(escrow === revenue\)/);
+ assert.match(rideServer,/The SLE escrow and platform fee accounts must be separate/);
+ assert.match(rideServer,/p_escrow_account: platform\.escrow/);
+ assert.match(rideServer,/p_fee_account: platform\.revenue/);
 });
 
 test('passcode uses a custom visible 0–9 keypad without a native numeric or password input',async()=>{

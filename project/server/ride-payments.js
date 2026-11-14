@@ -132,6 +132,13 @@ async function platformAccounts(provider) {
     );
   }
 
+  if (escrow === revenue) {
+    throw new HttpError(
+      409,
+      'The SLE escrow and platform fee accounts must be separate. No ride payment was initiated.'
+    );
+  }
+
   const ids = [escrow, revenue];
 
   const results = await Promise.all(

@@ -21,7 +21,7 @@ import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
-import { updateRide, readRidePayment } from '@/services/rideService';
+import { updateRide, readRidePayment, readCashRideStatus } from '@/services/rideService';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {
   Store, Plus, Package, RefreshCw, X, Loader2, MapPin,
@@ -63,6 +63,11 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
 
   const [serviceType,setServiceType] = useState<ServiceType>('ride');
+  const [paymentMethod,setPaymentMethod] = useState<'digital'|'cash'>('digital');
+  const [cashEnabled,setCashEnabled] = useState(false);
+  const [cashAccountsVerified,setCashAccountsVerified] = useState(false);
+  const [cashConfigLoading,setCashConfigLoading] = useState(true);
+  const [routeEditing,setRouteEditing] = useState(true);
   const [vehicleType, setVehicleType] = useState<VehicleType>('car');
   const [offerAmount, setOfferAmount] = useState('');
   const [tripDistanceKm, setTripDistanceKm] = useState<number | null>(null);
@@ -109,6 +114,18 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   }, [tripDistanceKm, vehicleType, pricingRates]);
 
   useEffect(() => {
+    let live=true;
+    setCashConfigLoading(true);
+    void (async()=>{
+      let finish=()=>{};
+      try {
+        const result=await walletFetch('/api/accept-ride-escrow?action=cash_config',{});
+        finish=result.finish;
+        if(!result.response.ok)throw new Error('Cash configuration unavailable.');
+        if(live){setCashEnabled(result.data?.enabled===true);setCashAccountsVerified(result.data?.accountsVerified===true);}
+      } catch { if(live){setCashEnabled(false);setCashAccountsVerified(false);} }
+      finally { finish(); if(live)setCashConfigLoading(false); }
+    })();
     supabase.from('pricing_settings').select('*').then(({ data }) => {
       if (data?.length) {
         const rates: any = {};
@@ -117,6 +134,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       }
     });
     if (profile?.id && !localStorage.getItem(`matmove_policy_${profile.id}`)) setShowPolicy(true);
+    return ()=>{live=false;};
   }, [profile?.id]);
 
   const handleAcceptPolicy = () => { localStorage.setItem(`matmove_policy_${profile.id}`, 'true'); setShowPolicy(false); };
@@ -199,6 +217,10 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     if (isRequesting) return;
     if (!pickupCoords || !destinationCoords) return alert('Choose pickup and destination using search or map pins.');
     if (serviceType === 'scheduled' && !scheduledTime) return alert('Select a time for your scheduled request.');
+    if (serviceType === 'ride' && paymentMethod === 'cash' && (!cashEnabled || !cashAccountsVerified || cashConfigLoading)) {
+      setRideNotice('Cash rides are unavailable until the Live fee-holding and revenue accounts are verified. Choose digital payment or try again later.');
+      return;
+    }
 
     if(!Number.isInteger(passengerCount)||passengerCount<1||passengerCount>3||(passengerName.trim()&&passengerName.trim().length<2)) {setRideNotice('Choose one to three passengers and check the optional passenger name.');return;}
     const finalAmount = Number(offerAmount);
@@ -207,13 +229,45 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     if (finalAmount < minimumFare) return alert(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minimumFare}.`);
     if (serviceType === 'scheduled' && (!Number.isFinite(Date.parse(scheduledTime)) || Date.parse(scheduledTime) <= Date.now())) return alert('Choose a future scheduled time.');
 
-    if (Number(sleWallet?.balance || 0) < finalAmount) return alert(`Insufficient balance. You need SLE ${finalAmount} for this request.`);
+    const fareMinor=Math.round(finalAmount*100);
+    const driverCashMinor=Math.round(fareMinor*0.85);
+    const requiredWalletAmount=serviceType==='ride'&&paymentMethod==='cash'?(fareMinor-driverCashMinor)/100:finalAmount;
+    if (Number(sleWallet?.balance || 0) < requiredWalletAmount) return alert(paymentMethod==='cash'&&serviceType==='ride'
+      ? `Insufficient SLE wallet balance. You need SLE ${requiredWalletAmount.toFixed(2)} to reserve MatMove's 15% cash-ride fee.`
+      : `Insufficient balance. You need SLE ${requiredWalletAmount} for this request.`);
 
     setIsRequesting(true);
     try {
-      const data=await tripRequest.submit({client_version:1,service_type:serviceType,vehicle_type:vehicleType,pickup_location:pickup,destination_location:destination,fare_amount:finalAmount.toFixed(2),scheduled_time:serviceType==='scheduled'?new Date(scheduledTime).toISOString():null,passenger_count:passengerCount,passenger_name:passengerName.trim()||null,pickup_pin:{lat:pickupCoords[1],lng:pickupCoords[0]},destination_pin:{lat:destinationCoords[1],lng:destinationCoords[0]}});
+      const data=await tripRequest.submit({client_version:1,service_type:serviceType,vehicle_type:vehicleType,payment_method:serviceType==='ride'?paymentMethod:'digital',pickup_location:pickup,destination_location:destination,fare_amount:finalAmount.toFixed(2),scheduled_time:serviceType==='scheduled'?new Date(scheduledTime).toISOString():null,passenger_count:passengerCount,passenger_name:passengerName.trim()||null,pickup_pin:{lat:pickupCoords[1],lng:pickupCoords[0]},destination_pin:{lat:destinationCoords[1],lng:destinationCoords[0]}});
       setActiveBooking(data);
+      if(serviceType==='ride'&&paymentMethod==='cash')setRideNotice('Your cash ride request is saved. MatMove is verifying the 15% fee reserve before drivers can see it.');
     } catch (err: any) { alert(err.message); } finally { setIsRequesting(false); }
+  };
+
+  const handleCashRideConfirmation = async () => {
+    if (!activeBooking || activeBooking.payment_method !== 'cash' || activeBooking.status !== 'in_progress' || isRequesting || activeBooking.cashPayment?.riderCashConfirmed) return;
+    setIsRequesting(true);setRideNotice('');
+    try {
+      const result=await updateRide('cash_confirm',activeBooking.id);
+      let payment=result.payment||activeBooking.cashPayment||null;
+      let verifiedBooking=result.booking||{};
+      try {
+        const status=await readCashRideStatus(activeBooking.id);
+        payment=status.payment;
+        verifiedBooking=status.booking||verifiedBooking;
+      } catch { /* Active-trip refresh retries this safe status recovery. */ }
+      if(payment?.status==='settled') setActiveBooking(null);
+      else setActiveBooking({...activeBooking,...verifiedBooking,cashPayment:payment});
+      setRideNotice(payment?.status==='settled'
+        ? 'Cash handover and MatMove fee capture are verified. The ride is settled.'
+        : payment?.driverCashConfirmed&&payment?.riderCashConfirmed
+          ? 'Both parties confirmed. MatMove fee capture is being verified.'
+          : payment?.riderCashConfirmed
+            ? 'Cash handover confirmation is recorded. Waiting for the driver to confirm receipt.'
+            : 'Cash handover confirmation could not be verified. Refresh the trip before trying again.');
+      await fetchLiveBalance();
+    } catch(err:any) { setRideNotice(err.message||'Cash handover confirmation could not be verified.'); }
+    finally { setIsRequesting(false); }
   };
 
   const cancelTrip = async () => {
@@ -304,12 +358,12 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       {activeSection==='home'&&<CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} onSelect={selectTrip} onNew={()=>{startNewBooking();setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerName('');setPassengerCount(1);setRideNotice('Your previous trip remains active. Review the new pickup, destination and fare.');}}/>}
       {activeSection === 'home' && (
         <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
-          <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[min(66dvh,700px)] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6"
-            style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(66dvh,700px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
+          {((activeBooking && (!routeEditing || ['accepted','in_progress'].includes(activeBooking.status))) || (!activeBooking && pickupCoords && destinationCoords && !routeEditing)) && <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[58dvh] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6"
+            style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(58dvh,620px))`:bookingSheetExpanded?'min(58dvh,620px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
             <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded}
-              onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;sheetDragStartHeight.current=bookingSheetExpanded?Math.min(window.innerHeight*.66,700):148;setBookingSheetDragging(true);setBookingSheetDragDelta(0);event.currentTarget.setPointerCapture(event.pointerId);}}
-              onPointerMove={event=>{if(sheetPointerStart.current!==null){const maxHeight=Math.min(window.innerHeight*.66,700),base=sheetDragStartHeight.current,delta=event.clientY-sheetPointerStart.current;setBookingSheetDragDelta(Math.max(base-maxHeight,Math.min(base-148,delta)));}}}
-              onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start,base=sheetDragStartHeight.current,maxHeight=Math.min(window.innerHeight*.66,700),nextHeight=Math.max(148,Math.min(maxHeight,base-delta));if(Math.abs(delta)>6){sheetDragged.current=true;setBookingSheetExpanded(nextHeight>=maxHeight*.55);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}}
+              onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;sheetDragStartHeight.current=bookingSheetExpanded?Math.min(window.innerHeight*.58,620):148;setBookingSheetDragging(true);setBookingSheetDragDelta(0);event.currentTarget.setPointerCapture(event.pointerId);}}
+              onPointerMove={event=>{if(sheetPointerStart.current!==null){const maxHeight=Math.min(window.innerHeight*.58,620),base=sheetDragStartHeight.current,delta=event.clientY-sheetPointerStart.current;setBookingSheetDragDelta(Math.max(base-maxHeight,Math.min(base-148,delta)));}}}
+              onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start,base=sheetDragStartHeight.current,maxHeight=Math.min(window.innerHeight*.58,620),nextHeight=Math.max(148,Math.min(maxHeight,base-delta));if(Math.abs(delta)>6){sheetDragged.current=true;setBookingSheetExpanded(nextHeight>=maxHeight*.4);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}}
               onPointerCancel={()=>{sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}}
               onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}}
               className="mx-auto flex h-6 w-16 touch-none select-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button>
@@ -322,6 +376,15 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                   <button type="button" onClick={() => setServiceType('delivery')} aria-pressed={serviceType==='delivery'} className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-xs font-extrabold transition ${serviceType==='delivery'?'bg-white text-orange-700 shadow-sm ring-1 ring-orange-100':'text-slate-500 hover:bg-white/70'}`}><Package size={16}/>Delivery</button>
                   <button type="button" onClick={() => setServiceType('scheduled')} aria-pressed={serviceType==='scheduled'} className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-xs font-extrabold transition ${serviceType==='scheduled'?'bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-100':'text-slate-500 hover:bg-white/70'}`}><CalendarClock size={16}/>Schedule</button>
                 </div>
+                {serviceType==='ride'&&<div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-extrabold text-slate-800">How would you like to pay?</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={()=>setPaymentMethod('digital')} aria-pressed={paymentMethod==='digital'} className={`rounded-xl border px-3 py-3 text-xs font-bold ${paymentMethod==='digital'?'border-emerald-500 bg-emerald-50 text-emerald-800':'border-slate-200 bg-white text-slate-600'}`}>MatMove wallet</button>
+                    <button type="button" onClick={()=>setPaymentMethod('cash')} aria-pressed={paymentMethod==='cash'} disabled={cashConfigLoading||!cashEnabled||!cashAccountsVerified} className={`rounded-xl border px-3 py-3 text-xs font-bold disabled:opacity-50 ${paymentMethod==='cash'?'border-emerald-500 bg-emerald-50 text-emerald-800':'border-slate-200 bg-white text-slate-600'}`}>Cash to driver</button>
+                  </div>
+                  {paymentMethod==='cash'&&<p className="text-[11px] leading-5 text-slate-600">The driver receives 85% in physical cash. MatMove reserves 15% from your SLE wallet and captures it only after both you and the driver confirm the handover.</p>}
+                  {!cashEnabled||!cashAccountsVerified ? <p className="text-[10px] text-slate-500">Cash payment is unavailable until the Live fee accounts are verified.</p>:null}
+                </div>}
                 <div className="space-y-3">
                   <div><div className="mb-2 flex items-center justify-between"><span className="text-xs font-extrabold text-slate-800">Choose your vehicle</span><span className="text-[10px] font-semibold text-slate-400">Tap to select</span></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {(['keke','bike','car','van'] as const).map(v=>{
@@ -350,7 +413,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                 <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
                   <div className="mb-2 flex items-center gap-2"><label className="text-xs font-extrabold text-slate-700">Total Fare (SLE)</label><input aria-label="Total fare in SLE" type="number" min="0" step="0.01" value={offerAmount} onChange={e=>setOfferAmount(e.target.value)} className="w-full bg-transparent pr-2 text-right text-lg font-bold text-slate-900 outline-none" placeholder="Amount"/></div>
                   <div className="flex gap-1 justify-end"><button type="button" onClick={()=>setOfferAmount(previous=>Math.max(pricingRates[vehicleType]?.min||1,Number(previous||0)-5).toString())} className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-600"><Minus size={16}/></button><button type="button" onClick={()=>setOfferAmount(previous=>(Number(previous||0)+5).toString())} className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-600"><Plus size={16}/></button></div>
-                  {Number(offerAmount)>0&&<div className="mt-3 flex justify-between rounded-xl border border-slate-100 bg-white p-2 text-[11px] font-bold shadow-sm"><span className="text-emerald-700">Driver earns: SLE {(Number(offerAmount)*.85).toFixed(2)}</span><span className="text-rose-600">Platform fee: SLE {(Number(offerAmount)*.15).toFixed(2)}</span></div>}
+                  {Number(offerAmount)>0&&<div className="mt-3 flex justify-between rounded-xl border border-slate-100 bg-white p-2 text-[11px] font-bold shadow-sm"><span className="text-emerald-700">Driver receives: SLE {(Number(offerAmount)*.85).toFixed(2)}</span><span className="text-rose-600">MatMove fee: SLE {(Number(offerAmount)*.15).toFixed(2)}</span></div>}
                 </div>
                 {serviceType==='scheduled'&&<label className="block text-xs font-bold text-slate-700">Schedule your trip<input type="datetime-local" value={scheduledTime} onChange={e=>setScheduledTime(e.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm"/></label>}
                 <button type="button" onClick={()=>void handleDispatchDelivery()} disabled={isRequesting||tripLoading||!!tripError||!canCreateTrip||!!tripRequest.retained||!!tripRequest.error||!pickupCoords||!destinationCoords} className="w-full rounded-2xl bg-slate-900 py-4 font-bold text-white shadow-lg transition hover:bg-slate-800 disabled:opacity-50">{isRequesting?<Loader2 size={20} className="mx-auto animate-spin"/>:serviceType==='delivery'?'Confirm Delivery Request':'Confirm Request'}</button>
@@ -372,13 +435,19 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                     {activeBooking.status === 'in_progress' && (
                       <div className="mt-4 mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm text-left">
                         <h5 className="font-bold text-slate-900 border-b pb-2 mb-2 flex items-center gap-2"><ShieldCheck size={16} className="text-orange-600" />Payment Breakdown</h5>
-                        <div className="flex justify-between mb-1"><span className="text-slate-500">Total Fare (in Escrow)</span><span className="font-bold text-slate-900">SLE {activeBooking.fare_amount}</span></div>
-                        <div className="flex justify-between mb-1"><span className="text-slate-500">Driver Take-Home (85%)</span><span className="font-bold text-emerald-600">SLE {(activeBooking.fare_amount * 0.85).toFixed(2)}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500">Platform Fee (15%)</span><span className="font-bold text-rose-500">SLE {(activeBooking.fare_amount * 0.15).toFixed(2)}</span></div>
-                        <div className="mt-3 pt-3 border-t text-xs text-slate-400">Funds will be transferred directly to the driver's Monime wallet upon completion.</div>
+                        <div className="flex justify-between mb-1"><span className="text-slate-500">{activeBooking.payment_method==='cash'?'Total Cash Fare':'Total Fare (in Escrow)'}</span><span className="font-bold text-slate-900">SLE {activeBooking.fare_amount}</span></div>
+                        <div className="flex justify-between mb-1"><span className="text-slate-500">{activeBooking.payment_method==='cash'?'Driver receives in cash (85%)':'Driver Take-Home (85%)'}</span><span className="font-bold text-emerald-600">SLE {(activeBooking.fare_amount * 0.85).toFixed(2)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">{activeBooking.payment_method==='cash'?'MatMove fee reserve (15%)':'Platform Fee (15%)'}</span><span className="font-bold text-rose-500">SLE {(activeBooking.fare_amount * 0.15).toFixed(2)}</span></div>
+                        <div className="mt-3 pt-3 border-t text-xs text-slate-400">{activeBooking.payment_method==='cash'?'The 15% MatMove fee stays reserved until both parties confirm the physical cash handover.':'Funds will be transferred directly to the driver’s Monime wallet upon completion.'}</div>
                       </div>
                     )}
-                    {activeBooking.status === 'in_progress' && (
+                    {activeBooking.status === 'in_progress' && activeBooking.payment_method === 'cash' && (
+                      activeBooking.cashPayment?.status === 'settled' ? <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-900">Both parties confirmed. MatMove fee capture is verified and the cash ride is settled.</div>
+                      : activeBooking.cashPayment?.driverCashConfirmed && activeBooking.cashPayment?.riderCashConfirmed ? <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">Both parties confirmed. MatMove's fee capture is being verified.</div>
+                      : activeBooking.cashPayment?.riderCashConfirmed ? <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">Cash handover confirmation is recorded. Waiting for the driver to confirm receipt.</div>
+                      : <div className="space-y-2">{activeBooking.cashPayment?.driverCashConfirmed&&<p role="status" className="rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-900">The driver has confirmed receiving the cash. Confirm only if you handed over the agreed amount.</p>}<button onClick={()=>void handleCashRideConfirmation()} disabled={isRequesting} className="w-full rounded-xl bg-emerald-700 py-4 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2">{isRequesting?<Loader2 size={20} className="animate-spin"/>:<><Banknote size={20}/> Confirm Cash Handed to Driver</>}</button></div>
+                    )}
+                    {activeBooking.status === 'in_progress' && activeBooking.payment_method !== 'cash' && (
                       <button onClick={handleOpenPaymentModal} disabled={isRequesting} className="w-full rounded-xl bg-emerald-600 py-4 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2">
                         {isRequesting ? <Loader2 size={20} className="animate-spin" /> : <><Banknote size={20}/> Confirm Arrival & Release Payment</>}
                       </button>
@@ -396,8 +465,8 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                 )}
               </div>
             )}
-          </div>
-          <div className="order-1 min-w-0 flex-1">{activeBooking&&['accepted','in_progress'].includes(activeBooking.status)?<ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/>:<RideLocationPicker layout="map-first" key={profile.id} userId={profile.id} onChange={(selection: TripLocations) => { setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />}</div>
+          </div>}
+          <div className="order-1 min-w-0 flex-1">{activeBooking&&['accepted','in_progress'].includes(activeBooking.status)?<ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/>:<RideLocationPicker layout="map-first" key={profile.id} userId={profile.id} bookingReady={Boolean(pickupCoords && destinationCoords)} onRouteEditingChange={setRouteEditing} onChange={(selection: TripLocations) => { const ready=Boolean(selection.pickup && selection.destination); setRouteEditing(!ready); if(ready)setBookingSheetExpanded(true); setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />}</div>
         </div>
       )}
 

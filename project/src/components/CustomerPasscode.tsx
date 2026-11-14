@@ -52,6 +52,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const [forgotMode, setForgotMode] = useState(false);
  const [resetEmail, setResetEmail] = useState('');
  const [resetSent,setResetSent]=useState(false);
+ const [activePinField,setActivePinField]=useState<'pin'|'next'|'confirm'>('pin');
 
  const unlockedNow=useRef(false),statusNow=useRef<Receipt|null>(null);statusNow.current=status;
  const current=useRef(userId);current.current=userId;const mounted=useRef(false),revision=useRef(0),mutex=useRef(false);
@@ -110,7 +111,21 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  },[allowed,enteredUser,userId]);
  
  const creating=status&&!status.configured;
- const field=(label:string,value:string,set:(v:string)=>void,length:number)=><label className="block text-xs font-semibold text-slate-600">{label}<input aria-label={label} type="password" inputMode="numeric" autoComplete="off" maxLength={length} value={value} disabled={busy} onChange={e=>set(e.target.value.replace(/\D/g,'').slice(0,length))} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-center text-xl tracking-[.45em] text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"/></label>;
+ useEffect(()=>{setActivePinField(creating||upgrade?'next':'pin');},[creating,upgrade,status?.digits]);
+ const appendDigit=(digit:string)=>{
+  if(!/^\d$/.test(digit)||busy)return;
+  if(activePinField==='pin')setPin(value=>value.length<(status?.digits||9)?value+digit:value);
+  else if(activePinField==='next')setNext(value=>value.length<9?value+digit:value);
+  else setConfirm(value=>value.length<9?value+digit:value);
+ };
+ const deleteLastDigit=()=>{
+  if(busy)return;
+  if(activePinField==='pin')setPin(value=>value.slice(0,-1));
+  else if(activePinField==='next')setNext(value=>value.slice(0,-1));
+  else setConfirm(value=>value.slice(0,-1));
+ };
+ const pinField=(label:string,value:string,length:number,field:'pin'|'next'|'confirm')=><button type="button" aria-pressed={activePinField===field} onClick={()=>setActivePinField(field)} disabled={busy} className={`w-full rounded-xl border p-3 text-left transition ${activePinField===field?'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100':'border-slate-200 bg-slate-50'}`}><span className="block text-xs font-semibold text-slate-600">{label}</span><span aria-label={`${value.length} of ${length} digits entered`} className="mt-2 flex min-h-8 items-center justify-center gap-2">{Array.from({length},(_,index)=><span key={index} className={`h-2.5 w-2.5 rounded-full ${index<value.length?'bg-slate-900':'bg-slate-300'}`}/>)}</span></button>;
+ const keypad=<div className="space-y-2" aria-label="Passcode keypad"><p className="text-center text-xs font-bold text-slate-600">Passcode keypad</p><div className="grid grid-cols-3 gap-2">{['1','2','3','4','5','6','7','8','9'].map(digit=><button key={digit} type="button" onClick={()=>appendDigit(digit)} disabled={busy} aria-label={`Passcode keypad digit ${digit}`} className="h-12 rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-sm transition active:scale-95 disabled:opacity-50">{digit}</button>)}<span aria-hidden="true"/><button type="button" onClick={()=>appendDigit('0')} disabled={busy} aria-label="Passcode keypad digit 0" className="h-12 rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-sm transition active:scale-95 disabled:opacity-50">0</button><button type="button" onClick={deleteLastDigit} disabled={busy} aria-label="Delete last digit" className="h-12 rounded-xl border border-slate-200 bg-slate-100 text-sm font-bold text-slate-700 shadow-sm disabled:opacity-50">Delete</button></div></div>;
 
  return (
    <>
@@ -151,8 +166,9 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
              <>
                {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose a new 6–9 digit passcode.</p>}
                {!status?<p role="status" className="text-center text-sm text-slate-600">{busy?'Checking passcode…':'Passcode setup unavailable.'}</p>:<>
-                {!creating&&!upgrade&&field(`Current ${status.digits}-digit passcode`,pin,setPin,status.digits)}
-                {(creating||upgrade)&&<>{field('New passcode (6–9 digits)',next,setNext,9)}{field('Confirm passcode',confirm,setConfirm,9)}</>}
+                {!creating&&!upgrade&&pinField(`Current ${status.digits}-digit passcode`,pin,status.digits,'pin')}
+                {(creating||upgrade)&&<>{pinField('New passcode (6–9 digits)',next,9,'next')}{pinField('Confirm new passcode',confirm,9,'confirm')}</>}
+                {keypad}
                 <button type="submit" disabled={busy} className="h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">{busy?'Checking…':creating||upgrade?'Save passcode':'Unlock'}</button>
                </>}
                
