@@ -333,7 +333,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
         setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
         setRideNotice('Your cash receipt and the rider handover are both confirmed. MatMove fee capture is verified and the cash ride is settled.');
       } else {
-        setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
+        setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking, cashPayment: result.payment || item.cashPayment }) : item));
         setRideNotice(result.pending
           ? 'Your cash receipt is recorded. MatMove fee capture is still being verified; do not repeat the cash collection.'
           : 'Your confirmation that you received the physical cash is recorded. The rider must also confirm the handover.');
