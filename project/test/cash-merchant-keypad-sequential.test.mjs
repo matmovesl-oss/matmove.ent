@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const read=path=>readFile(new URL(path,import.meta.url),'utf8');
 
-test('cash status refresh reconciles existing provider references without repeating confirmation or starting a second transfer',async()=>{
+test('cash status refresh safely recovers a confirmed settlement without duplicating a provider transfer',async()=>{
  const [service,api,server,hook,driver]=await Promise.all([
   read('../src/services/rideService.ts'),
   read('../server/ride-api.js'),
@@ -19,7 +19,8 @@ test('cash status refresh reconciles existing provider references without repeat
  assert.match(server,/action === 'status' \|\| action === 'cash_status'/);
  assert.match(server,/if \(!isRider && !isDriver\)/);
  assert.match(server,/reconcileCashRide\(db, bookingId, provider\)/);
- assert.match(server,/never creates a new POST/);
+ assert.match(server,/Reserve retries remain an explicit customer action/);
+ assert.match(server,/database claim makes the first POST single-use/);
  assert.match(hook,/readCashRideStatus\(row\.id\)/);
  assert.match(hook,/cashPayment:cashById\.get\(row\.id\)/);
  assert.match(driver,/readCashRideStatus\(item\.id\)/);
