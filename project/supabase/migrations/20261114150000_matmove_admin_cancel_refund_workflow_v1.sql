@@ -300,7 +300,7 @@ begin
   set status='cancelled',updated_at=clock_timestamp()
   from abandoned a
   where b.id=a.id
-  returning b.id;
+  ;
   get diagnostics cancelled_count = row_count;
 
   return jsonb_build_object(
