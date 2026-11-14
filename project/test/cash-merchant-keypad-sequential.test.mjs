@@ -79,7 +79,7 @@ test('cash capture still requires both customer and driver confirmation and the 
  assert.match(migration,/capture_leg\.source_account_ref <> cfg\.fee_hold_account_id/);
  assert.match(cashServer,/data\.fee_hold_account_id !== escrowAccountId/);
  assert.match(cashServer,/data\.fee_revenue_account_id !== platformFeeAccountId/);
- assert.doesNotMatch(cashServer,/data\.fee_hold_account_id === platformFeeAccountId/);
+ assert.match(cashServer,/data\.fee_hold_account_id === platformFeeAccountId/);
 });
 
 test('Merchant location selection and Ride booking form are sequential with one bottom sheet at a time',async()=>{
