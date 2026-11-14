@@ -133,3 +133,15 @@ test('new passcodes use six through nine digits and preserve legacy verification
  assert.match(screen,/maxLength=\{9\}/);
  assert.match(screen,/slice\(0, 9\)/);
 });
+
+
+test('customer passcode keypad accepts numeric keys and rejects non-digits',async()=>{
+ const component=await readFile('src/components/CustomerPasscode.tsx','utf8');
+ assert.match(component,/if\(busy\|\|!\/\^\\d\$\/\.test\(digit\)\)return/);
+ assert.match(component,/value\.length<limit\)setter\(value\+digit\)/);
+ assert.match(component,/value\.slice\(0,-1\)/);
+ assert.match(component,/setPin\(''\)|setNext\(''\)|setConfirm\(''\)/);
+ const isDigit=/^\d$/;
+ for(const digit of ['0','1','2','3','4','5','6','7','8','9'])assert.equal(isDigit.test(digit),true);
+ for(const value of ['','a','12',' 1','١'])assert.equal(isDigit.test(value),false);
+});
