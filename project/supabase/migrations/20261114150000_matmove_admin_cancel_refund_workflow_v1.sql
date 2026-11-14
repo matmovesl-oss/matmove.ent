@@ -315,6 +315,42 @@ $function$;
 revoke all on function public.matmove_ride_stale_request_sweep() from public, anon, authenticated;
 grant execute on function public.matmove_ride_stale_request_sweep() to service_role;
 
+-- Supabase Cron can run every minute on this project (Vercel Hobby cron is daily-only).
+-- Vault holds the same CRON_SECRET as the production Vercel deployment.
+do $schedule$
+begin
+  if not exists (
+    select 1 from cron.job where jobname='matmove-ride-reconciliation-v1'
+  ) then
+    if not exists (
+      select 1 from vault.decrypted_secrets
+      where name='matmove_cron_secret' and length(decrypted_secret)>=32
+    ) then
+      raise exception 'MatMove scheduler Vault secret is missing or invalid.';
+    end if;
+    perform cron.schedule(
+      'matmove-ride-reconciliation-v1',
+      '* * * * *',
+      $job$
+        select net.http_get(
+          'https://matmoveent.vercel.app/api/reconcile-ride-payments',
+          '{}'::jsonb,
+          jsonb_build_object(
+            'Authorization',
+            'Bearer ' || (
+              select decrypted_secret
+              from vault.decrypted_secrets
+              where name='matmove_cron_secret'
+            )
+          ),
+          10000
+        );
+      $job$
+    );
+  end if;
+end;
+$schedule$;
+
 comment on function public.matmove_admin_cancel_booking(uuid,bigint,uuid,text,uuid) is
   'Dispatch-authorized cancellation of unstarted bookings. Refunds are idempotently queued and bookings are not marked cancelled until the provider receipt is verified.';
 
