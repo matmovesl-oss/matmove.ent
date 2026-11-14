@@ -204,6 +204,123 @@ begin
 end;
 $migration$;
 
+-- Stale request investigation and conservative abandonment policy.
+create table if not exists public.matmove_ride_investigation_tickets (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null references public.bookings(id) on delete restrict,
+  reason_code text not null,
+  source_status text not null,
+  status text not null default 'open' check (status in ('open','reviewed','resolved')),
+  first_seen_at timestamptz not null default clock_timestamp(),
+  last_seen_at timestamptz not null default clock_timestamp(),
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default clock_timestamp(),
+  updated_at timestamptz not null default clock_timestamp(),
+  unique(booking_id)
+);
+
+create index if not exists matmove_ride_investigation_tickets_open_idx
+  on public.matmove_ride_investigation_tickets(status, last_seen_at desc);
+
+alter table public.matmove_ride_investigation_tickets enable row level security;
+revoke all on public.matmove_ride_investigation_tickets from public, anon, authenticated;
+grant select on public.matmove_ride_investigation_tickets to authenticated;
+drop policy if exists matmove_ride_investigation_tickets_dispatch_read
+  on public.matmove_ride_investigation_tickets;
+create policy matmove_ride_investigation_tickets_dispatch_read
+  on public.matmove_ride_investigation_tickets
+  for select to authenticated
+  using (public.matmove_admin_can('dispatch'));
+
+create or replace function public.matmove_ride_stale_request_sweep()
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $function$
+declare
+  ticket_count integer := 0;
+  cancelled_count integer := 0;
+begin
+  -- Every unfinished request that has not moved for 30 minutes receives
+  -- one durable investigation ticket. The same ticket is refreshed on later sweeps.
+  with stale as (
+    select b.id,b.status,b.payment_method,b.driver_id,b.updated_at,b.created_at
+    from public.bookings b
+    where b.status in (
+      'pending','pending_admin','cash_reserve_pending',
+      'cash_review_required','accepted','in_progress'
+    )
+    and coalesce(b.updated_at,b.created_at) < clock_timestamp() - interval '30 minutes'
+    order by coalesce(b.updated_at,b.created_at)
+    limit 500
+  ), upserted as (
+    insert into public.matmove_ride_investigation_tickets(
+      booking_id,reason_code,source_status,last_seen_at,details
+    )
+    select s.id,
+      case
+        when s.status='cash_review_required' then 'cash_payment_review_overdue'
+        when s.status='in_progress' then 'trip_in_progress_stale'
+        when s.status='accepted' then 'accepted_request_stale'
+        when s.status='cash_reserve_pending' then 'cash_reserve_stale'
+        else 'unassigned_or_pending_request_stale'
+      end,
+      s.status,clock_timestamp(),
+      jsonb_build_object('paymentMethod',s.payment_method,'driverAssigned',s.driver_id is not null,
+        'lastBookingUpdate',s.updated_at)
+    from stale s
+    on conflict(booking_id) do update
+      set last_seen_at=excluded.last_seen_at,
+          source_status=excluded.source_status,
+          reason_code=excluded.reason_code,
+          details=excluded.details,
+          updated_at=clock_timestamp()
+      where public.matmove_ride_investigation_tickets.status <> 'resolved'
+    returning 1
+  )
+  select count(*) into ticket_count from upserted;
+
+  -- Only a truly abandoned, unassigned, unpaid request is auto-cancelled.
+  -- Any payment/cash ledger, assigned driver, started trip or uncertainty blocks this path.
+  with abandoned as (
+    select b.id
+    from public.bookings b
+    where b.status in ('pending','pending_admin')
+      and b.driver_id is null
+      and b.started_at is null
+      and coalesce(b.updated_at,b.created_at) < clock_timestamp() - interval '60 minutes'
+      and not exists(select 1 from public.ride_payments rp where rp.booking_id=b.id)
+      and not exists(select 1 from public.matmove_cash_ride_payments cp where cp.booking_id=b.id)
+    order by coalesce(b.updated_at,b.created_at)
+    limit 200
+    for update skip locked
+  )
+  update public.bookings b
+  set status='cancelled',updated_at=clock_timestamp()
+  from abandoned a
+  where b.id=a.id
+  returning b.id into strict cancelled_count;
+
+  return jsonb_build_object(
+    'ticketsCreatedOrRefreshed',ticket_count,
+    'unfundedRequestsAutoCancelled',coalesce(cancelled_count,0),
+    'ticketAfterMinutes',30,
+    'autoCancelAfterMinutes',60
+  );
+exception when no_data_found then
+  return jsonb_build_object(
+    'ticketsCreatedOrRefreshed',ticket_count,
+    'unfundedRequestsAutoCancelled',0,
+    'ticketAfterMinutes',30,
+    'autoCancelAfterMinutes',60
+  );
+end;
+$function$;
+
+revoke all on function public.matmove_ride_stale_request_sweep() from public, anon, authenticated;
+grant execute on function public.matmove_ride_stale_request_sweep() to service_role;
+
 comment on function public.matmove_admin_cancel_booking(uuid,bigint,uuid,text,uuid) is
   'Dispatch-authorized cancellation of unstarted bookings. Refunds are idempotently queued and bookings are not marked cancelled until the provider receipt is verified.';
 
