@@ -145,11 +145,10 @@ async function readSettings(db, { requireEnabled = true } = {}) {
       !validAccountId(platformFeeAccountId) ||
       !validAccountId(data.fee_hold_account_id) ||
       data.fee_hold_account_id !== escrowAccountId ||
-      data.fee_hold_account_id === platformFeeAccountId ||
       data.fee_revenue_account_id !== platformFeeAccountId) {
     throw new HttpError(
       503,
-      'Cash collection is disabled until the escrow and platform-fee accounts match their production settings and remain separate.',
+      'Cash collection is disabled until the configured SLE escrow and platform-fee accounts match this deployment's production settings.',
       'CASH_NOT_CONFIGURED'
     );
   }
@@ -431,7 +430,7 @@ export async function cashRideAction(
   const isRider = booking.rider_id === user.id;
   const isDriver = booking.driver_id === user.id;
 
-  if (action === 'status') {
+  if (action === 'status' || action === 'cash_status') {
     if (!isRider && !isDriver) throw new HttpError(403, 'This is another customer’s cash booking.');
     const snapshot = await cashStatus(db, bookingId);
     return res.status(200).json({
@@ -440,8 +439,8 @@ export async function cashRideAction(
   }
 
   if (action === 'cash_reserve') {
-    if (profile.role !== 'rider' || !isRider) {
-      throw new HttpError(403, 'Only the booking rider can reserve the cash-ride MatMove fee.');
+    if (!['rider','merchant'].includes(profile.role) || !isRider) {
+      throw new HttpError(403, 'Only the booking customer can reserve the cash-ride MatMove fee.');
     }
     assertAllowed(profile, wallets, 'purchase');
     const sleWallets = wallets.filter(wallet => wallet.currency === 'SLE');
@@ -497,13 +496,13 @@ export async function cashRideAction(
 
   if (action === 'complete' || action === 'cash_confirm') {
     const actorType = action === 'complete' ? 'rider' : profile.role;
-    if (actorType === 'rider' && (!isRider || profile.role !== 'rider')) {
-      throw new HttpError(403, 'Only the booking rider can confirm cash handed to the driver.');
+    if (['rider','merchant'].includes(actorType) && (!isRider || profile.role !== actorType)) {
+      throw new HttpError(403, 'Only the booking customer can confirm cash handed to the driver.');
     }
     if (actorType === 'driver' && (!isDriver || profile.role !== 'driver')) {
       throw new HttpError(403, 'Only the assigned driver can confirm cash received.');
     }
-    if (!['rider','driver'].includes(actorType)) {
+    if (!['rider','merchant','driver'].includes(actorType)) {
       throw new HttpError(403, 'Rider or assigned driver confirmation is required.');
     }
 
@@ -541,8 +540,8 @@ export async function cashRideAction(
   }
 
   if (action === 'cancel') {
-    const actorType = profile.role === 'driver' ? 'driver' : profile.role === 'rider' ? 'rider' : null;
-    if (!actorType || (actorType === 'rider' && !isRider) || (actorType === 'driver' && !isDriver)) {
+    const actorType = profile.role === 'driver' ? 'driver' : ['rider','merchant'].includes(profile.role) ? profile.role : null;
+    if (!actorType || (['rider','merchant'].includes(actorType) && !isRider) || (actorType === 'driver' && !isDriver)) {
       throw new HttpError(403, 'Only the rider or assigned driver can cancel this cash ride.');
     }
 
