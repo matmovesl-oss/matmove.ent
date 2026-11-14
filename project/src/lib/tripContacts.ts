@@ -17,8 +17,8 @@ function mergeParticipant(previous: any, incoming: Participant | null | undefine
 
 /**
  * Profile RLS intentionally prevents one customer/driver from reading another
- * profile directly. This RPC returns only the two participant contact cards
- * for bookings the signed-in customer or driver is allowed to see.
+ * profile directly. This RPC returns only participant contact cards for
+ * bookings the signed-in customer or driver is allowed to see.
  */
 export async function attachTripContacts<T extends { id: string; rider?: any; driver?: any }>(rows: T[]): Promise<T[]> {
   if (!Array.isArray(rows) || rows.length === 0) return rows;
@@ -40,7 +40,7 @@ export async function attachTripContacts<T extends { id: string; rider?: any; dr
       };
     });
   } catch {
-    // A contact-card outage must never hide the booking or block status sync.
+    // A contact-card outage must never hide a booking or block status sync.
     return rows;
   }
 }

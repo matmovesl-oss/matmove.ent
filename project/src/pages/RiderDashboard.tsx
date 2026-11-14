@@ -520,9 +520,9 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
         </div>
       </header>
 
-      {(rideNotice || walletNotice) && (
+      {((rideNotice&&!tripRequest.retained) || walletNotice) && (
         <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
-          {rideNotice && <p>{rideNotice}</p>}
+          {rideNotice&&!tripRequest.retained && <p>{rideNotice}</p>}
           {walletNotice && <p>{walletNotice}</p>}
         </div>
       )}
@@ -539,16 +539,19 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                 <button onClick={() => setViewMode('new')} className={`font-bold ${viewMode === 'new' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Create New</button>
               </div>
 
-              {(tripError || tripRequest.error || rideNotice) && (
+              {(tripError || tripRequest.error || (rideNotice && !tripRequest.retained)) && (
                 <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">
-                  {tripRequest.error || rideNotice || tripError}
+                  {tripRequest.error || (rideNotice && !tripRequest.retained) || tripError}
                   {tripError && <button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry trip</button>}
                 </p>
               )}
               {tripRequest.retained && (
-                <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                  A previous trip request is awaiting confirmation. Check that original request before creating another.
-                </p>
+                <section role="status" className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
+                  <p className="font-extrabold text-amber-950">Reconnect to your original request</p>
+                  <p className="mt-1 text-sm text-amber-900">MatMove saved this exact booking reference. Check it again to restore the latest driver and trip status. No second request will be created.</p>
+                  {rideNotice&&<p role="alert" className="mt-2 rounded-lg bg-white/80 p-2 text-sm text-amber-900">{rideNotice}</p>}
+                  <button type="button" disabled={tripRequest.working||isRequesting||!tripRequest.ready} onClick={async()=>{try{const row=await tripRequest.submit();setActiveBooking(row);setViewMode('active');setRideNotice('Original request restored. Live driver updates are active.');}catch(e){setRideNotice(e instanceof Error?e.message:'Original request could not be confirmed. Retry this same request.');}}} className="mt-3 min-h-11 rounded-xl bg-amber-900 px-4 font-bold text-white disabled:opacity-50">{tripRequest.working?'Checking original request…':'Check original request'}</button>
+                </section>
               )}
 
               {tripLoading && !activeBooking && viewMode === 'active' ? (
@@ -712,7 +715,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                     <>
                       <Car size={44} className="text-emerald-600 mx-auto mb-3" />
                       <h4 className="font-bold text-lg text-slate-900">
-                        {activeBooking.status === 'in_progress' ? 'Trip in Progress!' : 'Driver is on the way!'}
+                        {activeBooking.status === 'in_progress' ? 'Your trip is in progress' : 'Driver accepted · on the way'}
                       </h4>
                       <p className="text-xs text-slate-500 mt-1">
                         {activeBooking.payment_method === 'cash'
@@ -720,13 +723,13 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                           : 'Fare (SLE ' + Number(activeBooking.fare_amount || 0).toLocaleString() + ') held securely in Escrow.'}
                       </p>
 
-                      {activeBooking.driver && (
-                        <div className="mt-4 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-left mb-4">
-                          <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Assigned Driver</span>
-                          <span className="font-bold text-slate-900 block text-sm">{activeBooking.driver.full_name}</span>
-                          <span className="text-xs text-slate-600 flex items-center gap-1 mt-0.5"><Smartphone size={13} /> {activeBooking.driver.phone}</span>
-                        </div>
-                      )}
+                      <div className="mt-4 mb-4 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-left">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-700">{activeBooking.status==='in_progress'?'Your driver':'Your driver is arriving'}</span>
+                        <span className="mt-1 block text-sm font-bold text-slate-900">{activeBooking.driver?.full_name||'Driver details syncing…'}</span>
+                        {String(activeBooking.driver?.phone||activeBooking.driver?.phone_number||'').trim()
+                          ? <a href={`tel:${String(activeBooking.driver.phone||activeBooking.driver.phone_number).replace(/[^+0-9]/g,'')}`} className="mt-2 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-emerald-800 underline"><Smartphone size={13}/>{activeBooking.driver.phone||activeBooking.driver.phone_number}</a>
+                          : <span className="mt-1 block text-xs text-amber-800">Driver phone is syncing. Rechecking live trip details…</span>}
+                      </div>
 
                       {activeBooking.status === 'accepted' && activeBooking.payment_method !== 'cash' && (
                         <div className={`p-3 rounded-2xl border text-xs mb-3 space-y-1 ${elapsedSeconds <= 300 ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>

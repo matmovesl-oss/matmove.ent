@@ -62,7 +62,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
 
-  const [serviceType,setServiceType] = useState<ServiceType>('delivery');
+  const [serviceType,setServiceType] = useState<ServiceType>('ride');
   const [vehicleType, setVehicleType] = useState<VehicleType>('car');
   const [offerAmount, setOfferAmount] = useState('');
   const [tripDistanceKm, setTripDistanceKm] = useState<number | null>(null);
@@ -71,6 +71,12 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   const tripRequest=useTripRequest(profile.id);
   const [passengerCount,setPassengerCount]=useState(1);
   const [passengerName,setPassengerName]=useState('');
+  const [bookingSheetExpanded,setBookingSheetExpanded]=useState(true);
+  const [bookingSheetDragDelta,setBookingSheetDragDelta]=useState(0);
+  const [bookingSheetDragging,setBookingSheetDragging]=useState(false);
+  const sheetPointerStart=useRef<number|null>(null);
+  const sheetDragStartHeight=useRef(148);
+  const sheetDragged=useRef(false);
   const { booking: activeBooking, setBooking: setActiveBooking, loading: tripLoading, error: tripError, retry: retryTrip, applySnapshot: applyFareSnapshot,bookings:activeTrips,creating:creatingTrip,canCreate:canCreateTrip,selectBooking:selectTrip,startNewBooking } = useCustomerActiveRide(profile.id);
 
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
@@ -292,57 +298,76 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
         </div>
       </header>
       {walletSetupPanel}
-      {(rideNotice || walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice && <p>{rideNotice}</p>}{walletNotice && <p>{walletNotice}</p>}</div>}
-
-      {activeSection==='home'&&(tripRequest.retained||tripRequest.error)&&<div role="alert" className="m-3 rounded-xl border border-amber-300 bg-amber-50 p-3"><p>{tripRequest.error||'A trip request needs confirmation. Check the original request before creating another.'}</p>{tripRequest.retained&&<button type="button" disabled={tripRequest.working||isRequesting} onClick={async()=>{try{const row=await tripRequest.submit();setActiveBooking(row);setRideNotice('Original trip request confirmed.');}catch(e){setRideNotice(e instanceof Error?e.message:'Original request unavailable.');}}} className="min-h-11 font-bold underline">Check original request</button>}</div>}
+      {((rideNotice&&!tripRequest.retained)||walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice&&!tripRequest.retained&&<p>{rideNotice}</p>}{walletNotice&&<p>{walletNotice}</p>}</div>}
+      {activeSection==='home'&&tripRequest.retained&&<section role="status" className="m-3 space-y-2 rounded-2xl border border-amber-300 bg-amber-50 p-4"><div><p className="font-extrabold text-amber-950">Reconnect to your original request</p><p className="mt-1 text-sm text-amber-900">MatMove saved this exact booking reference. Check it again to restore the current driver and trip status. This will not create a second request.</p></div>{rideNotice&&<p role="alert" className="rounded-lg bg-white/80 p-2 text-sm text-amber-900">{rideNotice}</p>}<button type="button" disabled={tripRequest.working||isRequesting||!tripRequest.ready} onClick={async()=>{try{const row=await tripRequest.submit();setActiveBooking(row);setRideNotice('Original request restored. Live driver updates are active.');}catch(e){setRideNotice(e instanceof Error?e.message:'Original request could not be confirmed. Try again using this same request.');}}} className="min-h-11 rounded-xl bg-amber-900 px-4 font-bold text-white disabled:opacity-50">{tripRequest.working?'Checking original request…':'Check original request'}</button></section>}
+      {activeSection==='home'&&tripRequest.error&&!tripRequest.retained&&<p role="alert" className="m-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{tripRequest.error}</p>}
       {activeSection==='home'&&<CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} onSelect={selectTrip} onNew={()=>{startNewBooking();setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerName('');setPassengerCount(1);setRideNotice('Your previous trip remains active. Review the new pickup, destination and fare.');}}/>}
       {activeSection === 'home' && (
-        <div className="mx-auto flex max-w-6xl flex-col gap-0 p-0">
-          <div className="order-2 relative z-20 -mt-5 max-h-[58dvh] w-full overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl space-y-4">
-            <p className="text-xs text-slate-500">Your balance and wallet actions are in Home and Wallet.</p>
-            <h3 className="text-lg font-bold">Dispatch Request</h3>
+        <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
+          <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[min(66dvh,700px)] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6"
+            style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(66dvh,700px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
+            <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded}
+              onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;sheetDragStartHeight.current=bookingSheetExpanded?Math.min(window.innerHeight*.66,700):148;setBookingSheetDragging(true);setBookingSheetDragDelta(0);event.currentTarget.setPointerCapture(event.pointerId);}}
+              onPointerMove={event=>{if(sheetPointerStart.current!==null){const maxHeight=Math.min(window.innerHeight*.66,700),base=sheetDragStartHeight.current,delta=event.clientY-sheetPointerStart.current;setBookingSheetDragDelta(Math.max(base-maxHeight,Math.min(base-148,delta)));}}}
+              onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start,base=sheetDragStartHeight.current,maxHeight=Math.min(window.innerHeight*.66,700),nextHeight=Math.max(148,Math.min(maxHeight,base-delta));if(Math.abs(delta)>6){sheetDragged.current=true;setBookingSheetExpanded(nextHeight>=maxHeight*.55);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}}
+              onPointerCancel={()=>{sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}}
+              onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}}
+              className="mx-auto flex h-6 w-16 touch-none select-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button>
+            <div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><h3 className="mt-1 text-lg font-black text-slate-950">{activeBooking ? (activeBooking.status==='accepted'?'Driver accepted · arriving':activeBooking.status==='in_progress'?'Trip in progress':'Your active request') : serviceType==='ride'?'Plan your ride':serviceType==='scheduled'?'Schedule your ride':'Plan your delivery'}</h3><p className="mt-1 text-sm text-slate-500">Choose your service, set your route and review your fare.</p></div>
             {tripError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{tripError}<button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry active trip</button></p>}
               {tripLoading && !activeBooking ? <div role="status" aria-label="Loading active trip" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4"><SkeletonBlock className="h-4 w-2/5" rounded="rounded-md"/><SkeletonBlock className="h-3 w-4/5" rounded="rounded-md"/><SkeletonBlock className="h-24 w-full" rounded="rounded-lg"/></div> : tripError && !activeBooking ? null : !activeBooking ? (
               <>
-                <div className="flex gap-2 rounded-xl bg-slate-100 p-1">
-                  <button onClick={() => setServiceType('delivery')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'delivery' ? 'bg-white text-orange-600 shadow-sm' :'text-slate-500'}`}><Package size={16} /> Delivery</button>
-                  <button onClick={() => setServiceType('ride')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'ride' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Car size={16} /> Ride</button>
-                  <button onClick={() => setServiceType('scheduled')} className={`flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-xs font-bold ${serviceType === 'scheduled' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}><CalendarClock size={16} /> Schedule</button>
+                <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1.5" aria-label="Choose a booking service">
+                  <button type="button" onClick={() => setServiceType('ride')} aria-pressed={serviceType==='ride'} className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-xs font-extrabold transition ${serviceType==='ride'?'bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-100':'text-slate-500 hover:bg-white/70'}`}><Car size={16}/>Ride</button>
+                  <button type="button" onClick={() => setServiceType('delivery')} aria-pressed={serviceType==='delivery'} className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-xs font-extrabold transition ${serviceType==='delivery'?'bg-white text-orange-700 shadow-sm ring-1 ring-orange-100':'text-slate-500 hover:bg-white/70'}`}><Package size={16}/>Delivery</button>
+                  <button type="button" onClick={() => setServiceType('scheduled')} aria-pressed={serviceType==='scheduled'} className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-xs font-extrabold transition ${serviceType==='scheduled'?'bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-100':'text-slate-500 hover:bg-white/70'}`}><CalendarClock size={16}/>Schedule</button>
                 </div>
-                {['ride','delivery','scheduled'].includes(serviceType) && (
-                  <div className="grid grid-cols-4 gap-2">{(['keke', 'bike', 'car', 'van'] as VehicleType[]).map(v => <button key={v} onClick={() => setVehicleType(v)} className={`rounded-xl py-2 text-xs font-bold uppercase ${vehicleType === v ? 'bg-orange-100 text-orange-700 ring-2 ring-orange-600' : 'bg-slate-100 text-slate-500'}`}>{v}</button>)}</div>
-                )}
-                <p className="text-sm text-slate-600">Choose pickup and destination in the map panel, then preview your route.</p>
-                {['ride','delivery','scheduled'].includes(serviceType) && (
-                  <div className="rounded-xl border bg-slate-50 p-3">
-                    <label className="text-sm font-bold text-slate-600">Total Fare (SLE)</label>
-                    <div className="mt-2 flex items-center gap-2">
-                      <input type="number" min="0" step="0.01" value={offerAmount} onChange={e => setOfferAmount(e.target.value)} className="min-w-0 flex-1 rounded-lg border bg-white p-2 text-lg font-bold" placeholder="Amount" />
-                      <button onClick={() => setOfferAmount(previous => Math.max(pricingRates[vehicleType]?.min || 1, Number(previous || 0) - 5).toString())} className="rounded-lg border bg-white p-2"><Minus size={16} /></button>
-                      <button onClick={() => setOfferAmount(previous => (Number(previous || 0) + 5).toString())} className="rounded-lg border bg-white p-2"><Plus size={16} /></button>
-                    </div>
-                    {Number(offerAmount) > 0 && (
-                      <div className="mt-3 flex justify-between gap-2 text-xs font-bold"><span className="text-emerald-600">Driver: SLE {(Number(offerAmount) * 0.85).toFixed(2)}</span><span className="text-rose-600">Platform: SLE {(Number(offerAmount) * 0.15).toFixed(2)}</span></div>
-                    )}
-                  </div>
-                )}
-                <div className="space-y-2 rounded-xl border p-3"><label className="block text-sm font-bold">Passengers<select aria-label="Passenger count" value={passengerCount} onChange={e=>setPassengerCount(Number(e.target.value))} className="ml-3 rounded-lg border p-2"><option value={1}>1 passenger</option><option value={2}>2 passengers</option><option value={3}>3 passengers</option></select></label><p className="text-xs text-slate-600">Maximum three passengers. Contact support for larger groups. The reviewed fare is the total trip fare.</p><label className="block text-sm">Optional passenger name<input aria-label="Passenger name" maxLength={120} value={passengerName} onChange={e=>setPassengerName(e.target.value)} className="mt-1 w-full rounded-lg border p-2"/></label></div>
-                {serviceType === 'scheduled' && <label className="block text-sm font-bold">Schedule delivery<input type="datetime-local" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="mt-2 w-full rounded-xl border p-3" /></label>}
-                <button onClick={() => void handleDispatchDelivery()} disabled={isRequesting} className="w-full rounded-xl bg-slate-900 py-4 font-bold text-white disabled:opacity-50">{isRequesting ? <Loader2 size={20} className="mx-auto animate-spin" /> : 'Request Dispatch'}</button>
+                <div className="space-y-3">
+                  <div><div className="mb-2 flex items-center justify-between"><span className="text-xs font-extrabold text-slate-800">Choose your vehicle</span><span className="text-[10px] font-semibold text-slate-400">Tap to select</span></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {(['keke','bike','car','van'] as const).map(v=>{
+                      const label=v==='bike'?'Bike':v==='keke'?'Keke':v==='car'?'Car':'Van';
+                      const art=v==='keke'?'/matmove-keke.svg':v==='bike'?'/matmove-bike.svg':v==='car'?'/matmove-car.svg':'/matmove-van.svg';
+                      const selected=vehicleType===v;
+                      const detail=v==='keke'?'City three-wheeler':v==='bike'?'Quick solo ride':v==='car'?'Comfort ride':'Extra space';
+                      return <button key={v} type="button" onClick={()=>setVehicleType(v)} aria-label={`Choose ${label}`} aria-pressed={selected}
+                        className={`group relative flex min-h-[132px] flex-col items-center justify-between overflow-hidden rounded-2xl border px-2 py-2.5 text-center transition duration-200 ${selected?'border-emerald-400 bg-gradient-to-br from-emerald-50 via-white to-sky-50 shadow-[0_8px_24px_rgba(5,150,105,.12)] ring-1 ring-emerald-200':'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md'}`}>
+                        <span className="relative flex h-[76px] w-full items-center justify-center rounded-xl bg-gradient-to-br from-slate-50 to-white"><img src={art} alt="" className="h-[72px] w-full object-contain transition duration-300 group-hover:scale-[1.04]"/>{selected&&<span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white"><Check size={12} strokeWidth={3}/></span>}</span>
+                        <span className="mt-1 block text-xs font-black text-slate-900">{label}</span><span className="block text-[9px] font-medium text-slate-400">{detail}</span>
+                      </button>;
+                    })}
+                  </div></div>
+                </div>
+                <p className="text-xs leading-5 text-slate-500">Choose pickup and destination on the map. MatMove will preview the route and estimate the fare.</p>
+                <div className="mb-2">
+                  <div className="mb-2 flex items-end justify-between gap-3"><div><label className="block text-xs font-extrabold text-slate-800">Who is travelling?</label><p className="mt-1 text-[10px] text-slate-500">Choose up to three passengers</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500">Max 3</span></div>
+                  <div className="grid grid-cols-3 gap-2">{[1,2,3].map(count=><button key={count} type="button" onClick={()=>setPassengerCount(count)} aria-pressed={passengerCount===count}
+                    className={`flex min-h-[94px] flex-col items-center justify-center gap-2 rounded-2xl border p-2 transition duration-200 ${passengerCount===count?'border-emerald-400 bg-gradient-to-br from-emerald-50 to-white text-emerald-900 shadow-[0_8px_20px_rgba(5,150,105,.1)] ring-1 ring-emerald-200':'border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:shadow-sm'}`}>
+                    <span className="flex h-8 items-end justify-center gap-0.5" aria-hidden="true">{Array.from({length:count},(_,index)=><svg key={index} viewBox="0 0 22 30" className="h-7 w-5" fill="none"><circle cx="11" cy="6" r="4" fill={passengerCount===count?'#07865f':'#8193a3'}/><path d="M5 27v-7c0-4 2-7 6-7s6 3 6 7v7M3 21h16M8 15l-3 6m9-6 3 6" stroke={passengerCount===count?'#07865f':'#8193a3'} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>)}</span>
+                    <span className="text-xs font-black">{count} {count===1?'passenger':'passengers'}</span><span className="text-[9px] font-semibold text-slate-400">{count===1?'Solo trip':count===2?'Two travelling':'Small group'}</span>
+                  </button>)}</div>
+                  <label className="mt-3 block text-xs font-bold text-slate-700">Passenger name (optional)<input aria-label="Passenger name" maxLength={120} value={passengerName} onChange={e=>setPassengerName(e.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm"/></label>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
+                  <div className="mb-2 flex items-center gap-2"><label className="text-xs font-extrabold text-slate-700">Total Fare (SLE)</label><input aria-label="Total fare in SLE" type="number" min="0" step="0.01" value={offerAmount} onChange={e=>setOfferAmount(e.target.value)} className="w-full bg-transparent pr-2 text-right text-lg font-bold text-slate-900 outline-none" placeholder="Amount"/></div>
+                  <div className="flex gap-1 justify-end"><button type="button" onClick={()=>setOfferAmount(previous=>Math.max(pricingRates[vehicleType]?.min||1,Number(previous||0)-5).toString())} className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-600"><Minus size={16}/></button><button type="button" onClick={()=>setOfferAmount(previous=>(Number(previous||0)+5).toString())} className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-600"><Plus size={16}/></button></div>
+                  {Number(offerAmount)>0&&<div className="mt-3 flex justify-between rounded-xl border border-slate-100 bg-white p-2 text-[11px] font-bold shadow-sm"><span className="text-emerald-700">Driver earns: SLE {(Number(offerAmount)*.85).toFixed(2)}</span><span className="text-rose-600">Platform fee: SLE {(Number(offerAmount)*.15).toFixed(2)}</span></div>}
+                </div>
+                {serviceType==='scheduled'&&<label className="block text-xs font-bold text-slate-700">Schedule your trip<input type="datetime-local" value={scheduledTime} onChange={e=>setScheduledTime(e.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm"/></label>}
+                <button type="button" onClick={()=>void handleDispatchDelivery()} disabled={isRequesting||tripLoading||!!tripError||!canCreateTrip||!!tripRequest.retained||!!tripRequest.error||!pickupCoords||!destinationCoords} className="w-full rounded-2xl bg-slate-900 py-4 font-bold text-white shadow-lg transition hover:bg-slate-800 disabled:opacity-50">{isRequesting?<Loader2 size={20} className="mx-auto animate-spin"/>:serviceType==='delivery'?'Confirm Delivery Request':'Confirm Request'}</button>
               </>
             ) : (
               <div className="py-6 text-center">
                 {['accepted', 'in_progress'].includes(activeBooking.status) ? (
                   <>
                     <Car size={48} className="mx-auto mb-4 text-emerald-600" />
-                    <h4 className="text-xl font-bold">{activeBooking.status === 'in_progress' ? 'Trip in progress' : 'Driver is on the way'}</h4>
-                    {activeBooking.driver && (
-                      <div className="my-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-left">
-                        <p className="text-xs font-bold uppercase text-emerald-600">Your Driver</p>
-                        <p className="mt-1 font-bold">{activeBooking.driver.full_name}</p>
-                        <p className="mt-1 flex items-center gap-2 text-sm"><Smartphone size={14} />{activeBooking.driver.phone}</p>
-                      </div>
-                    )}
+                    <h4 className="text-xl font-bold">{activeBooking.status === 'in_progress' ? 'Your trip is in progress' : 'Driver accepted · on the way'}</h4>
+                    <div className="my-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-left">
+                      <p className="text-xs font-bold uppercase text-emerald-700">{activeBooking.status==='in_progress'?'Your driver':'Your driver is arriving'}</p>
+                      <p className="mt-1 font-bold">{activeBooking.driver?.full_name || 'Driver details syncing…'}</p>
+                      {String(activeBooking.driver?.phone||activeBooking.driver?.phone_number||'').trim()
+                        ? <a href={`tel:${String(activeBooking.driver.phone||activeBooking.driver.phone_number).replace(/[^+0-9]/g,'')}`} className="mt-2 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-bold text-emerald-800 underline"><Smartphone size={14}/>{activeBooking.driver.phone||activeBooking.driver.phone_number}</a>
+                        : <p className="mt-2 text-xs text-amber-800">Driver phone is syncing. Pull to refresh in a moment.</p>}
+                    </div>
                     {activeBooking.status === 'accepted' && <button onClick={cancelTrip} disabled={isRequesting} className="mb-4 text-red-600 font-bold">Cancel & Refund Held Fare</button>}
                     {activeBooking.status === 'in_progress' && (
                       <div className="mt-4 mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm text-left">
