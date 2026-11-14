@@ -59,7 +59,7 @@ test('Merchant can book cash rides, reserve only the fee, and confirm the same t
  assert.match(api,/cash_status/);
  assert.match(server,/!\['rider','merchant'\]\.includes\(profile\.role\)/);
  assert.match(server,/\['rider','merchant'\]\.includes\(actorType\)/);
- assert.match(migration,/role not in \('rider','merchant'\)/);
+ assert.match(migration,/role_name not in \('rider','merchant'\)/);
  assert.match(migration,/rider\.role in \('rider','merchant'\)/);
  assert.match(migration,/p_actor_type not in \('rider','merchant','driver'\)/);
  assert.match(migration,/actor_type = any \(array\['system','rider','merchant','driver','admin'\]/);
@@ -74,7 +74,7 @@ test('cash capture still requires both customer and driver confirmation and dist
  assert.match(cashServer,/finishCashLeg\(db, bookingId, 'capture'/);
  assert.match(migration,/p\.driver_cash_confirmed_at is not null/);
  assert.match(migration,/p\.rider_cash_confirmed_at is not null/);
- assert.match(migration,/reserve\.status <> 'completed'/);
+ assert.match(migration,/reserve_leg\.status <> 'completed'/);
  assert.match(migration,/capture_leg\.source_account_ref <> cfg\.fee_hold_account_id/);
  assert.match(cashServer,/data\.fee_hold_account_id !== escrowAccountId/);
  assert.match(cashServer,/data\.fee_revenue_account_id !== platformFeeAccountId/);
