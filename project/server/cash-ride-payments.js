@@ -145,10 +145,11 @@ async function readSettings(db, { requireEnabled = true } = {}) {
       !validAccountId(platformFeeAccountId) ||
       !validAccountId(data.fee_hold_account_id) ||
       data.fee_hold_account_id !== escrowAccountId ||
+      data.fee_hold_account_id === platformFeeAccountId ||
       data.fee_revenue_account_id !== platformFeeAccountId) {
     throw new HttpError(
       503,
-      'Cash collection is disabled until the configured SLE escrow and platform-fee accounts match this deployment's production settings.',
+      'Cash collection is disabled until the configured SLE escrow and platform-fee accounts match this deployment's production settings and remain separate.',
       'CASH_NOT_CONFIGURED'
     );
   }
