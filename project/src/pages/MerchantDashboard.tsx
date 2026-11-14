@@ -360,14 +360,14 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                 {['accepted', 'in_progress'].includes(activeBooking.status) ? (
                   <>
                     <Car size={48} className="mx-auto mb-4 text-emerald-600" />
-                    <h4 className="text-xl font-bold">{activeBooking.status === 'in_progress' ? 'Trip in progress' : 'Driver is on the way'}</h4>
-                    {activeBooking.driver && (
-                      <div className="my-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-left">
-                        <p className="text-xs font-bold uppercase text-emerald-600">Your Driver</p>
-                        <p className="mt-1 font-bold">{activeBooking.driver.full_name}</p>
-                        <p className="mt-1 flex items-center gap-2 text-sm"><Smartphone size={14} />{activeBooking.driver.phone}</p>
-                      </div>
-                    )}
+                    <h4 className="text-xl font-bold">{activeBooking.status === 'in_progress' ? 'Your trip is in progress' : 'Driver accepted · on the way'}</h4>
+                    <div className="my-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-left">
+                      <p className="text-xs font-bold uppercase text-emerald-700">{activeBooking.status==='in_progress'?'Your driver':'Your driver is arriving'}</p>
+                      <p className="mt-1 font-bold">{activeBooking.driver?.full_name || 'Driver details syncing…'}</p>
+                      {String(activeBooking.driver?.phone||activeBooking.driver?.phone_number||'').trim()
+                        ? <a href={`tel:${String(activeBooking.driver.phone||activeBooking.driver.phone_number).replace(/[^+0-9]/g,'')}`} className="mt-2 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-bold text-emerald-800 underline"><Smartphone size={14}/>{activeBooking.driver.phone||activeBooking.driver.phone_number}</a>
+                        : <p className="mt-2 text-xs text-amber-800">Driver phone is syncing. Pull to refresh in a moment.</p>}
+                    </div>
                     {activeBooking.status === 'accepted' && <button onClick={cancelTrip} disabled={isRequesting} className="mb-4 text-red-600 font-bold">Cancel & Refund Held Fare</button>}
                     {activeBooking.status === 'in_progress' && (
                       <div className="mt-4 mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm text-left">
