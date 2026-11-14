@@ -4,6 +4,7 @@ import { SkeletonBlock, SkeletonList } from '@/components/Skeleton';
 import FareNegotiation from '@/components/FareNegotiation';
 import { readRideFares, type FareSnapshot } from '@/services/fareNegotiationService';
 import { applyRideFare, assertDriverFare, mergeRideRow } from '@/lib/useRideNegotiation';
+import { attachTripContacts } from '@/lib/tripContacts';
 import { loadGoogleMaps } from '@/components/RideLocationPicker';
 
 
@@ -250,10 +251,11 @@ function DriverMain({ profile, wallet, activeSection }: any) {
           .order('created_at', { ascending: false });
         if (error) throw error;
         if (!Array.isArray(data)) throw new Error('Invalid radar response.');
+        const visible=data.filter(item=>item.driver_id===profile.id||(!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)));
+        const enriched=await attachTripContacts(visible);
         if (!disposed && readVersion === radarMutation.current) {
-          const visible=data.filter(item=>item.driver_id===profile.id||(!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)));
-          setActiveRequests(previous => visible.map(item => mergeRideRow(previous.find(old => old.id === item.id), item)));
-          setNegotiatingId(previous => visible.some(item => !item.driver_id && item.id === previous && ['pending', 'pending_admin'].includes(item.status)) ? previous : null);
+          setActiveRequests(previous => enriched.map(item => mergeRideRow(previous.find(old => old.id === item.id), item)));
+          setNegotiatingId(previous => enriched.some(item => !item.driver_id && item.id === previous && ['pending', 'pending_admin'].includes(item.status)) ? previous : null);
           setRequestsError('');
         }
       } catch { if (!disposed) setRequestsError('Could not load ride requests. Check your connection and retry.'); }
@@ -266,10 +268,23 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       }
     };
     void fetchInitialRequests();
+    const refreshOnResume=()=>{if(document.visibilityState!=='hidden'){void fetchInitialRequests();void fetchLiveBalance();}};
+    const onVisibility=()=>{if(document.visibilityState==='visible')refreshOnResume();};
     const channel = supabase.channel(`driver-radar-${profile.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => { void fetchInitialRequests(); void fetchLiveBalance(); }).subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => { void fetchInitialRequests(); void fetchLiveBalance(); })
+      .subscribe(status=>{if(status==='SUBSCRIBED')void fetchInitialRequests();});
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void fetchInitialRequests(); }, 5000);
-    return () => { disposed = true; void supabase.removeChannel(channel); window.clearInterval(timer); };
+    document.addEventListener('visibilitychange',onVisibility);
+    window.addEventListener('focus',refreshOnResume);
+    window.addEventListener('pageshow',refreshOnResume);
+    window.addEventListener('online',refreshOnResume);
+    return () => {
+      disposed = true; void supabase.removeChannel(channel); window.clearInterval(timer);
+      document.removeEventListener('visibilitychange',onVisibility);
+      window.removeEventListener('focus',refreshOnResume);
+      window.removeEventListener('pageshow',refreshOnResume);
+      window.removeEventListener('online',refreshOnResume);
+    };
   }, [isOnline, activeSection, profile?.id, requestsRetry]);
 
   const handleAcceptBooking = async (booking: any) => {
@@ -459,8 +474,10 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                     </div>
 
                     <div className="flex items-center justify-between text-xs font-bold text-slate-600 pt-1 border-t border-slate-100">
-                      <span className="flex items-center gap-1.5"><User size={14} className="text-slate-400" /> {r.rider?.full_name || 'Rider Customer'}</span>
-                      <span className="flex items-center gap-1.5"><Phone size={14} className="text-slate-400" /> {r.rider?.phone || r.rider?.phone_number || 'No Phone'}</span>
+                      <span className="flex min-w-0 items-center gap-1.5"><User size={14} className="shrink-0 text-slate-400" /> <span className="truncate">{r.rider?.full_name || 'Customer'}</span></span>
+                      {String(r.rider?.phone||r.rider?.phone_number||'').trim()
+                        ? <a href={`tel:${String(r.rider.phone||r.rider.phone_number).replace(/[^+0-9]/g,'')}`} className="flex shrink-0 items-center gap-1.5 text-emerald-700 underline"><Phone size={14}/> {r.rider.phone||r.rider.phone_number}</a>
+                        : <span className="flex shrink-0 items-center gap-1.5 text-amber-700"><Phone size={14}/> Number unavailable</span>}
                     </div>
 
                     {r.scheduled_time&&<p className="text-xs text-slate-600">Scheduled for: {Number.isFinite(Date.parse(r.scheduled_time))?new Date(r.scheduled_time).toLocaleString():'Time needs confirmation'}</p>}
