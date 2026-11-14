@@ -433,9 +433,14 @@ export async function cashRideAction(
 
   if (action === 'status' || action === 'cash_status') {
     if (!isRider && !isDriver) throw new HttpError(403, 'This is another customer’s cash booking.');
-    const snapshot = await cashStatus(db, bookingId);
+    let snapshot = await cashStatus(db, bookingId);
+    // Recover provider status for an already-attempted leg. reconcileCashRide
+    // only looks up existing provider references; it never creates a new POST.
+    if (['reserve_pending','capture_pending','refund_pending'].includes(snapshot?.status)) {
+      snapshot = await reconcileCashRide(db, bookingId, provider);
+    }
     return res.status(200).json({
-      success: true, pending: false, booking, payment: snapshot
+      success: true, pending: false, booking: await readBooking(db, bookingId), payment: snapshot
     });
   }
 
