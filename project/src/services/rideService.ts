@@ -15,38 +15,50 @@ export async function updateRide(action: RideAction, bookingId: string) {
   // with the read-only cash status endpoint, never by repeating the confirmation.
   if (action === 'cash_confirm') {
     const { response, data, finish } = await walletFetch(urls[action], { bookingId });
-    if (!response.ok) throw new Error(data.error || 'Cash handover confirmation could not be verified.');
-    if (![200, 202].includes(response.status) || typeof data.success !== 'boolean' || typeof data.pending !== 'boolean') {
-      throw new Error('The backend did not return a verified cash confirmation state. Refresh the trip; do not repeat the cash collection.');
+    try {
+      if (!response.ok) throw new Error(data.error || 'Cash handover confirmation could not be verified.');
+      if (![200, 202].includes(response.status) || typeof data.success !== 'boolean' || typeof data.pending !== 'boolean') {
+        throw new Error('The backend did not return a verified cash confirmation state. Refresh the trip; do not repeat the cash collection.');
+      }
+      return data;
+    } finally {
+      finish();
     }
-    finish();
-    return data;
   }
   for (let attempt = 0; attempt < 5; attempt++) {
     const { response, data, finish } = await walletFetch(urls[action], { bookingId });
-    if (!response.ok) throw new Error(data.error || 'Unable to update this trip.');
-    if (response.status === 200 && data.success === true && data.pending === false) {
+    let pending = false;
+    try {
+      if (!response.ok) throw new Error(data.error || 'Unable to update this trip.');
+      if (response.status === 200 && data.success === true && data.pending === false) return data;
+      if (response.status !== 202 || data.pending !== true) throw new Error('The backend did not verify settlement. Refresh the trip; do not make a new payment.');
+      pending = true;
+      if (attempt === 4) return data;
+    } finally {
       finish();
-      return data;
     }
-    if (response.status !== 202 || data.pending !== true) throw new Error('The backend did not verify settlement. Refresh the trip; do not make a new payment.');
-    if (attempt === 4) return data;
-    await new Promise(resolve => window.setTimeout(resolve, 2000));
+    if (pending) await new Promise(resolve => window.setTimeout(resolve, 2000));
   }
   throw new Error('Unable to read trip status.');
 }
 
 export async function readCashRideStatus(bookingId: string) {
   const { response, data, finish } = await walletFetch('/api/accept-ride-escrow?action=cash_status', { bookingId });
-  if (!response.ok) throw new Error(data.error || 'Unable to refresh cash handover status.');
-  if (data?.success !== true || !data.payment) throw new Error('The cash handover status could not be verified.');
-  finish();
-  return data;
+  try {
+    if (!response.ok) throw new Error(data.error || 'Unable to refresh cash handover status.');
+    if (data?.success !== true || !data.payment) throw new Error('The cash handover status could not be verified.');
+    return data;
+  } finally {
+    finish();
+  }
 }
 
 export async function readRidePayment(bookingId: string) {
   const { response, data, finish } = await walletFetch('/api/accept-ride-escrow?action=status', { bookingId });
-  if (!response.ok) throw new Error(data.error || 'Unable to read ride payment details.');
-  finish();
-  return data;
+  try {
+    if (!response.ok) throw new Error(data.error || 'Unable to read ride payment details.');
+    return data;
+  } finally {
+    finish();
+  }
 }
