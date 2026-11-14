@@ -60,3 +60,11 @@ test('automatic abandonment never cancels a request with any payment ledger or a
   assert.match(migration, /not exists\(select 1 from public\.matmove_cash_ride_payments/);
   assert.match(migration, /matmove_ride_investigation_tickets/);
 });
+
+test('Admin can cancel an in-progress digital ride through full refund, but cannot auto-cancel an uncertain cash handover', async () => {
+  const migration = await read('../supabase/migrations/20261114152000_matmove_admin_cancel_in_progress_digital_v2.sql');
+  assert.match(migration, /'in_progress'/);
+  assert.match(migration, /b\.status='in_progress' and b\.payment_method='cash'/);
+  assert.match(migration, /PAYMENT_LEDGER_MISSING/);
+  assert.match(migration, /paymentMethod/);
+});
