@@ -376,24 +376,19 @@ async function finishCashLeg(db, bookingId, kind, actorId, provider) {
 // Recover only a leg that is authorized and has not been attempted yet.
 // The database claim records attempted_at before the single provider POST;
 // later refreshes can only look up the recorded provider transfer ID.
-async function recoverCashRide(db, bookingId, actorId, isRider, provider = monime) {
+async function recoverCashRide(db, bookingId, actorId, provider = monime) {
   let snapshot = await cashStatus(db, bookingId);
-  let legs = await readLegs(db, bookingId);
+  const legs = await readLegs(db, bookingId);
   const readyToStart = leg => !leg || (leg.status === 'ready' && !leg.attempted_at);
 
-  const reserve = legs.find(leg => leg.leg_kind === 'reserve');
-  if (isRider && ['reserve_ready','reserve_pending'].includes(snapshot?.status) && readyToStart(reserve)) {
-    snapshot = await finishCashLeg(db, bookingId, 'reserve', actorId, provider);
-    legs = await readLegs(db, bookingId);
-  }
-
+  // Reserve retries remain an explicit customer action so wallet/KYC/frozen
+  // checks are never bypassed by a background status refresh.
   const capture = legs.find(leg => leg.leg_kind === 'capture');
   if (snapshot?.status === 'capture_pending' &&
       snapshot.driverCashConfirmed === true &&
       snapshot.riderCashConfirmed === true &&
       readyToStart(capture)) {
     snapshot = await finishCashLeg(db, bookingId, 'capture', actorId, provider);
-    legs = await readLegs(db, bookingId);
   }
 
   const refund = legs.find(leg => leg.leg_kind === 'refund');
@@ -467,7 +462,7 @@ export async function cashRideAction(
     // Safe recovery may start a leg only when the customer authorized the
     // reserve or both parties confirmed collection, and no POST was attempted.
     // The database claim makes the first POST single-use; later reads use GET.
-    const snapshot = await recoverCashRide(db, bookingId, user.id, isRider, provider);
+    const snapshot = await recoverCashRide(db, bookingId, user.id, provider);
     return res.status(200).json({
       success: true, pending: false, booking: await readBooking(db, bookingId), payment: snapshot
     });
