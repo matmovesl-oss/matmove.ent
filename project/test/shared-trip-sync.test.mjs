@@ -80,5 +80,5 @@ test('Rider and Merchant can manually refresh and select an older active request
  }
  assert.match(switcher,/Refresh status/);
  assert.match(switcher,/Driver confirmed · your cash confirmation needed/);
- assert.match(switcher,/onRefresh\?\(/);
+ assert.match(switcher,/\{onRefresh&&<button/);
 });
