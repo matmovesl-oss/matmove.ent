@@ -98,6 +98,9 @@ test('Merchant location selection and Ride booking form are sequential with one 
  assert.match(picker,/sticky top-0 z-20/);
  assert.match(merchant,/sticky top-0 z-20/);
  assert.match(rider,/sticky top-0 z-20/);
+ assert.match(picker,/delta < -6 \? true : delta > 80 \? false : locationPanelExpanded/);
+ assert.match(merchant,/delta < -6 \? true : delta > 80 \? false : bookingSheetExpanded/);
+ assert.match(rider,/delta < -6 \? true : delta > 80 \? false : bookingSheetExpanded/);
 });
 
 test('Services back arrow is left of the Wi dey move brand',async()=>{
@@ -115,6 +118,7 @@ test('passcode uses a custom visible 0–9 keypad without a native numeric or pa
  assert.match(passcode,/Delete last digit/);
  assert.match(passcode,/pinField\('New passcode/);
  assert.match(passcode,/Confirm new passcode/);
+ assert.match(passcode,/setActivePinField\(creating\|\|upgrade\?'next':'pin'\)/);
  assert.doesNotMatch(passcode,/inputMode="numeric"/);
  assert.doesNotMatch(passcode,/type="password"/);
 });
