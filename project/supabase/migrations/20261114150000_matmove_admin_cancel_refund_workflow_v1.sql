@@ -169,6 +169,26 @@ $function$;
 revoke all on function public.matmove_admin_cancel_booking(uuid,bigint,uuid,text,uuid) from public, anon;
 grant execute on function public.matmove_admin_cancel_booking(uuid,bigint,uuid,text,uuid) to authenticated;
 
+-- Dispatch must recognise both digital and physical-cash ledgers as payment-started.
+do $migration$
+declare
+  v_definition text;
+  v_updated text;
+begin
+  v_definition := pg_get_functiondef('public.matmove_admin_dispatch_feed()'::regprocedure);
+  v_updated := replace(
+    v_definition,
+    '''paymentStarted'',exists(select 1 from public.ride_payments where booking_id=b.id),',
+    '''paymentStarted'',(exists(select 1 from public.ride_payments where booking_id=b.id) or exists(select 1 from public.matmove_cash_ride_payments where booking_id=b.id)),'
+  );
+  if v_updated = v_definition
+     and position('public.matmove_cash_ride_payments where booking_id=b.id' in v_definition)=0 then
+    raise exception 'Dispatch feed could not be updated to detect cash payment ledgers.';
+  end if;
+  execute v_updated;
+end;
+$migration$;
+
 comment on function public.matmove_admin_cancel_booking(uuid,bigint,uuid,text,uuid) is
   'Dispatch-authorized cancellation of unstarted bookings. Refunds are idempotently queued and bookings are not marked cancelled until the provider receipt is verified.';
 
