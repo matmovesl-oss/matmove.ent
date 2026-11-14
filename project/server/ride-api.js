@@ -12,6 +12,8 @@ import {
 } from './ride-payments.js';
 import { cashRideAction, reconcileCashRide } from './cash-ride-payments.js';
 
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const actions = Object.fromEntries(
   ['accept', 'start', 'complete', 'cancel', 'status']
     .map(action => [
