@@ -758,7 +758,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                       {activeBooking.status === 'in_progress' && (
                         <button
                           onClick={executeRidePayment}
-                          disabled={isRequesting}
+                          disabled={isRequesting || (activeBooking.payment_method === 'cash' && activeBooking.cashPayment?.riderCashConfirmed)}
                           className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl text-xs hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2"
                         >
                           {isRequesting ? <Loader2 size={18} className="animate-spin" /> : activeBooking.payment_method === 'cash' ? (activeBooking.cashPayment?.riderCashConfirmed ? 'Cash handover confirmed' : 'Confirm Cash Handed to Driver') : 'Confirm Arrival & Release Driver Payment'}
