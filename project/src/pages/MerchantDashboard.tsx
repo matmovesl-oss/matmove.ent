@@ -217,11 +217,11 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     const finalAmount = Number(offerAmount);
     if (!/^\d+(\.\d{1,2})?$/.test(offerAmount.trim()) || !Number.isFinite(finalAmount) || finalAmount <= 0 || finalAmount > 1000000) return alert('Enter and review a positive fare with at most two decimal places, up to SLE 1,000,000.');
     const minimumFare = pricingRates[vehicleType]?.min || 1;
-    if (finalAmount < minimumFare) return alert(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minimumFare}.`);
+    if (finalAmount < minimumFare) { setRideNotice(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minimumFare}.`); return; }
     if (serviceType === 'scheduled' && (!Number.isFinite(Date.parse(scheduledTime)) || Date.parse(scheduledTime) <= Date.now())) return alert('Choose a future scheduled time.');
 
     if (serviceType === 'ride' && paymentMethod === 'cash' && !cashEnabled) { setRideNotice('Physical cash rides are unavailable until MatMove verifies both dedicated Monime fee accounts and enables cash collection.'); return; }
-    if (paymentMethod !== 'cash' && Number(sleWallet?.balance || 0) < finalAmount) return alert(`Insufficient balance. You need SLE ${finalAmount} for this request.`);
+    if (paymentMethod !== 'cash' && Number(sleWallet?.balance || 0) < finalAmount) { setRideNotice(`Insufficient balance. You need SLE ${finalAmount} for this request.`); return; }
 
     setIsRequesting(true);
     try {
