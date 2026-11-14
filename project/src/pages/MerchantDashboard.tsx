@@ -62,7 +62,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
 
-  const [serviceType,setServiceType] = useState<ServiceType>('delivery');
+  const [serviceType,setServiceType] = useState<ServiceType>('ride');
   const [vehicleType, setVehicleType] = useState<VehicleType>('car');
   const [offerAmount, setOfferAmount] = useState('');
   const [tripDistanceKm, setTripDistanceKm] = useState<number | null>(null);
@@ -71,6 +71,12 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   const tripRequest=useTripRequest(profile.id);
   const [passengerCount,setPassengerCount]=useState(1);
   const [passengerName,setPassengerName]=useState('');
+  const [bookingSheetExpanded,setBookingSheetExpanded]=useState(true);
+  const [bookingSheetDragDelta,setBookingSheetDragDelta]=useState(0);
+  const [bookingSheetDragging,setBookingSheetDragging]=useState(false);
+  const sheetPointerStart=useRef<number|null>(null);
+  const sheetDragStartHeight=useRef(148);
+  const sheetDragged=useRef(false);
   const { booking: activeBooking, setBooking: setActiveBooking, loading: tripLoading, error: tripError, retry: retryTrip, applySnapshot: applyFareSnapshot,bookings:activeTrips,creating:creatingTrip,canCreate:canCreateTrip,selectBooking:selectTrip,startNewBooking } = useCustomerActiveRide(profile.id);
 
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
@@ -297,10 +303,17 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       {activeSection==='home'&&(tripRequest.retained||tripRequest.error)&&<div role="alert" className="m-3 rounded-xl border border-amber-300 bg-amber-50 p-3"><p>{tripRequest.error||'A trip request needs confirmation. Check the original request before creating another.'}</p>{tripRequest.retained&&<button type="button" disabled={tripRequest.working||isRequesting} onClick={async()=>{try{const row=await tripRequest.submit();setActiveBooking(row);setRideNotice('Original trip request confirmed.');}catch(e){setRideNotice(e instanceof Error?e.message:'Original request unavailable.');}}} className="min-h-11 font-bold underline">Check original request</button>}</div>}
       {activeSection==='home'&&<CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} onSelect={selectTrip} onNew={()=>{startNewBooking();setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerName('');setPassengerCount(1);setRideNotice('Your previous trip remains active. Review the new pickup, destination and fare.');}}/>}
       {activeSection === 'home' && (
-        <div className="mx-auto flex max-w-6xl flex-col gap-0 p-0">
-          <div className="order-2 relative z-20 -mt-5 max-h-[58dvh] w-full overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl space-y-4">
-            <p className="text-xs text-slate-500">Your balance and wallet actions are in Home and Wallet.</p>
-            <h3 className="text-lg font-bold">Dispatch Request</h3>
+        <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
+          <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[min(66dvh,700px)] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6"
+            style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(66dvh,700px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
+            <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded}
+              onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;sheetDragStartHeight.current=bookingSheetExpanded?Math.min(window.innerHeight*.66,700):148;setBookingSheetDragging(true);setBookingSheetDragDelta(0);event.currentTarget.setPointerCapture(event.pointerId);}}
+              onPointerMove={event=>{if(sheetPointerStart.current!==null){const maxHeight=Math.min(window.innerHeight*.66,700),base=sheetDragStartHeight.current,delta=event.clientY-sheetPointerStart.current;setBookingSheetDragDelta(Math.max(base-maxHeight,Math.min(base-148,delta)));}}}
+              onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start,base=sheetDragStartHeight.current,maxHeight=Math.min(window.innerHeight*.66,700),nextHeight=Math.max(148,Math.min(maxHeight,base-delta));if(Math.abs(delta)>6){sheetDragged.current=true;setBookingSheetExpanded(nextHeight>=maxHeight*.55);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}}
+              onPointerCancel={()=>{sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}}
+              onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}}
+              className="mx-auto flex h-6 w-16 touch-none select-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button>
+            <div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><h3 className="mt-1 text-lg font-black text-slate-950">{activeBooking ? (activeBooking.status==='accepted'?'Driver accepted · arriving':activeBooking.status==='in_progress'?'Trip in progress':'Your active request') : serviceType==='ride'?'Plan your ride':serviceType==='scheduled'?'Schedule your ride':'Plan your delivery'}</h3><p className="mt-1 text-sm text-slate-500">Choose your service, set your route and review your fare.</p></div>
             {tripError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{tripError}<button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry active trip</button></p>}
               {tripLoading && !activeBooking ? <div role="status" aria-label="Loading active trip" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4"><SkeletonBlock className="h-4 w-2/5" rounded="rounded-md"/><SkeletonBlock className="h-3 w-4/5" rounded="rounded-md"/><SkeletonBlock className="h-24 w-full" rounded="rounded-lg"/></div> : tripError && !activeBooking ? null : !activeBooking ? (
               <>
