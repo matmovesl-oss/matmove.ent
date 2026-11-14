@@ -19,7 +19,7 @@ const actions = Object.fromEntries(
     ])
 );
 
-for (const action of ['cash_reserve', 'cash_confirm', 'cash_config']) {
+for (const action of ['cash_reserve', 'cash_confirm', 'cash_status', 'cash_config']) {
   actions[action] = protectedWallet(
     'read',
     (req, res) => cashRideAction(req, res, action)
@@ -157,6 +157,7 @@ export function createRidePaymentsHandler({
         'status',
         'cash_reserve',
         'cash_confirm',
+        'cash_status',
         'cash_config',
         'reconcile'
       ].includes(action)
