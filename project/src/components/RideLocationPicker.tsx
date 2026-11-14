@@ -226,7 +226,7 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
           if (!isCurrent()) return;
           report(fallbackError.code === 3
             ? 'Your phone GPS timed out. Check that Location Services are on, then tap Use live location again or choose a map pin.'
-            : 'Your phone could not provide a usable location. Check Location Services, move near a window or outdoors, then retry or place a map pin.'),
+            : 'Your phone could not provide a usable location. Check Location Services, move near a window or outdoors, then retry or place a map pin.');
         },
         { enableHighAccuracy: false, timeout: 12000, maximumAge: 30000 }
       );
