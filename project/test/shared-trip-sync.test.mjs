@@ -6,7 +6,7 @@ const read=path=>readFile(new URL(path,import.meta.url),'utf8');
 
 test('Rider and Merchant active trip state restores on foreground, focus, pageshow and network reconnect',async()=>{
  const hook=await read('../src/lib/useRideNegotiation.ts');
- assert.match(hook,/attachTripContacts\(owned\)/);
+ assert.match(hook,/attachTripContacts\(withCash\)/);
  assert.match(hook,/document\.addEventListener\('visibilitychange'/);
  assert.match(hook,/window\.addEventListener\('focus'/);
  assert.match(hook,/window\.addEventListener\('pageshow'/);
