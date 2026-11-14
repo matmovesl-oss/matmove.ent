@@ -44,5 +44,11 @@
       "src": "/.*",
       "dest": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/reconcile-ride-payments",
+      "schedule": "0 0 * * *"
+    }
   ]
 }
