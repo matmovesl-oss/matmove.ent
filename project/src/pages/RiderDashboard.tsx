@@ -12,7 +12,7 @@ import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
-import { updateRide } from '@/services/rideService';
+import { updateRide, readCashRideStatus } from '@/services/rideService';
 import { useTripRequest } from '@/lib/useTripRequest';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -415,7 +415,9 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
     try {
       const result = await updateRide(activeBooking.payment_method === 'cash' ? 'cash_confirm' : 'complete', activeBooking.id);
       if (activeBooking.payment_method === 'cash') {
-        const payment = result.payment;
+        let payment = result.payment || activeBooking.cashPayment || null;
+        try { payment = (await readCashRideStatus(activeBooking.id)).payment; }
+        catch { /* Active-trip refresh retries this read-only status check. */ }
         if (payment?.status === 'settled' && result.success === true && result.pending === false) {
           setRideNotice('Both cash confirmations are verified and MatMove has captured its reserved fee. Cash collection is settled.');
           setActiveBooking(null);
@@ -423,7 +425,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
           setRideNotice(payment?.driverCashConfirmed && payment?.riderCashConfirmed
             ? 'Both cash confirmations are recorded. MatMove fee capture is still being verified; do not repeat the cash handover.'
             : 'Your cash-handover confirmation is recorded. The assigned driver must also confirm receipt before MatMove captures its fee.');
-          setActiveBooking({ ...activeBooking, ...(result.booking || {}) });
+          setActiveBooking({ ...activeBooking, ...(result.booking || {}), cashPayment: payment || activeBooking.cashPayment });
         }
         await fetchLiveBalance();
         return;
@@ -755,13 +757,27 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                       )}
 
                       {activeBooking.status === 'in_progress' && (
-                        <button
-                          onClick={executeRidePayment}
-                          disabled={isRequesting}
-                          className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl text-xs hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2"
-                        >
-                          {isRequesting ? <Loader2 size={18} className="animate-spin" /> : activeBooking.payment_method === 'cash' ? 'Confirm Cash Handed to Driver' : 'Confirm Arrival & Release Driver Payment'}
-                        </button>
+                        activeBooking.payment_method === 'cash' ? (
+                          <div className="space-y-2">
+                            {activeBooking.cashPayment?.status === 'settled' ? (
+                              <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-900">Both parties confirmed. MatMove fee capture is verified.</p>
+                            ) : activeBooking.cashPayment?.riderCashConfirmed ? (
+                              <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">Your cash handover is confirmed. Waiting for the assigned driver to confirm receipt.</p>
+                            ) : (
+                              <>
+                                {activeBooking.cashPayment?.driverCashConfirmed && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">The driver has confirmed receiving cash. Confirm only if you handed over the agreed amount.</p>}
+                                {activeBooking.cashPayment?.driverCashConfirmed && activeBooking.cashPayment?.riderCashConfirmed && <p role="status" className="rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-900">MatMove's fee capture is being verified. Do not repeat the cash handover.</p>}
+                                <button onClick={executeRidePayment} disabled={isRequesting} className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl text-xs hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2">
+                                  {isRequesting ? <Loader2 size={18} className="animate-spin" /> : 'Confirm Cash Handed to Driver'}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <button onClick={executeRidePayment} disabled={isRequesting} className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl text-xs hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2">
+                            {isRequesting ? <Loader2 size={18} className="animate-spin" /> : 'Confirm Arrival & Release Driver Payment'}
+                          </button>
+                        )
                       )}
                     </>
                   ) : activeBooking ? (
