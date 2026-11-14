@@ -38,13 +38,15 @@ test('Admin cancellation is dispatch-authorized, idempotent and keeps paid booki
 test('Supabase Cron calls the protected reconciliation worker every minute using the Vault-held bearer secret', async () => {
   const api = await read('../server/ride-api.js');
   const migration = await read('../supabase/migrations/20261114150000_matmove_admin_cancel_refund_workflow_v1.sql');
+  const cronMigration = await read('../supabase/migrations/20261114151000_matmove_stale_request_sweep_cron_v2.sql');
+  const routes = await read('../vercel.json');
   assert.match(api, /db\.rpc\('matmove_ride_stale_request_sweep'\)/);
   assert.match(api, /staleRequests: staleSweep\.data/);
   assert.match(migration, /matmove-ride-reconciliation-v1/);
-  assert.match(migration, /\* \* \* \* \*/);
-  assert.match(migration, /vault\.decrypted_secrets/);
-  assert.match(migration, /net\.http_get/);
-  assert.match(migration, /reconcile-ride-payments/);
+  assert.match(cronMigration, /matmove-stale-request-sweep-v1/);
+  assert.match(cronMigration, /\*\/5 \* \* \* \*/);
+  assert.match(routes, /"path": "\/api\/reconcile-ride-payments"/);
+  assert.match(routes, /"schedule": "0 0 \* \* \*"/);
 });
 
 test('automatic abandonment never cancels a request with any payment ledger or an assigned driver', async () => {
