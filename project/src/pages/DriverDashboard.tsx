@@ -320,7 +320,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   };
 
   const handleConfirmCashReceived = async (booking: any) => {
-    if (!canTransact || tripMutex.current || booking.payment_method !== 'cash') return;
+    if (tripMutex.current || booking.payment_method !== 'cash') return;
     tripMutex.current = true;
     const userId = profile.id;
     setAcceptingId(booking.id);
@@ -533,7 +533,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">
                                 Collect SLE {Number(r.cashPayment?.driverCash || Number(r.fare_amount || 0) * .85).toFixed(2)} in physical cash. Confirm only after you have actually received it.
                               </div>
-                              <button type="button" onClick={() => void handleConfirmCashReceived(r)} disabled={acceptingId === r.id || !canTransact} className="w-full rounded-xl bg-emerald-700 py-3.5 font-bold text-white disabled:opacity-50">
+                              <button type="button" onClick={() => void handleConfirmCashReceived(r)} disabled={acceptingId === r.id} className="w-full rounded-xl bg-emerald-700 py-3.5 font-bold text-white disabled:opacity-50">
                                 {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Confirm Cash Received'}
                               </button>
                             </>
