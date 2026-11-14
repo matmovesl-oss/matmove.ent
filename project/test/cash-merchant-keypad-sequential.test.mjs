@@ -48,7 +48,7 @@ test('Merchant can book cash rides, reserve only the fee, and confirm the same t
   read('../src/lib/useTripRequest.ts'),
   read('../server/ride-api.js'),
   read('../server/cash-ride-payments.js'),
-  read('../supabase/migrations/20261114101500_matmove_cash_ride_merchant_audit_identity_v2.sql')
+  read('../supabase/migrations/20261114101606_matmove_cash_ride_merchant_audit_identity_v2.sql')
  ]);
  assert.match(merchant,/payment_method:serviceType==='ride'\?paymentMethod:'digital'/);
  assert.match(merchant,/serviceType === 'ride' && paymentMethod === 'cash'/);
