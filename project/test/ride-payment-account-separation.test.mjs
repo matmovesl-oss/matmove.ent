@@ -7,7 +7,7 @@ const read=path=>readFile(new URL(path,import.meta.url),'utf8');
 test('new digital rides fail closed when escrow and fee destinations are not distinct',async()=>{
  const [server,migration]=await Promise.all([
   read('../server/ride-payments.js'),
-  read('../supabase/migrations/20261114095000_matmove_ride_payment_distinct_financial_accounts.sql')
+  read('../supabase/migrations/20261114101448_matmove_ride_payment_distinct_financial_accounts.sql')
  ]);
  assert.match(server,/if \(escrow === revenue\)/);
  assert.match(server,/The SLE escrow and platform fee accounts must be separate/);
