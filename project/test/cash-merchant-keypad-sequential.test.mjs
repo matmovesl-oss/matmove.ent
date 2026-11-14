@@ -47,8 +47,8 @@ test('Rider cash confirmation shows the assigned-driver and fee-capture states',
  assert.match(rider,/MatMove's fee capture is being verified/);
  const handler=rider.slice(rider.indexOf('const executeRidePayment'),rider.indexOf('const closeModals'));
  const cashPath=handler.slice(handler.indexOf("if (activeBooking.payment_method === 'cash')"),handler.indexOf("if (!result.pending && result.payment?.settled !== true)"));
- assert.match(cashPath,/void fetchLiveBalance\\(\\)/);
- assert.doesNotMatch(cashPath,/await fetchLiveBalance\\(\\)/);
+ assert.match(cashPath,/void fetchLiveBalance\(\)/);
+ assert.doesNotMatch(cashPath,/await fetchLiveBalance\(\)/);
 });
 
 test('Merchant can book cash rides, reserve only the fee, and confirm the same two-party handover',async()=>{
@@ -65,8 +65,8 @@ test('Merchant can book cash rides, reserve only the fee, and confirm the same t
  assert.match(merchant,/cashPayment\?\.driverCashConfirmed/);
  assert.match(merchant,/cashPayment\?\.riderCashConfirmed/);
  const cashHandler=merchant.slice(merchant.indexOf('const handleCashRideConfirmation'),merchant.indexOf('const handleOpenPaymentModal'));
- assert.match(cashHandler,/void fetchLiveBalance\\(\\)/);
- assert.doesNotMatch(cashHandler,/await fetchLiveBalance\\(\\)/);
+ assert.match(cashHandler,/void fetchLiveBalance\(\)/);
+ assert.doesNotMatch(cashHandler,/await fetchLiveBalance\(\)/);
  assert.match(requestHook,/reserveCashRide\(body\.id/);
  assert.match(api,/cash_status/);
  assert.match(server,/!\['rider','merchant'\]\.includes\(profile\.role\)/);
