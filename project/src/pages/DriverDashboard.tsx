@@ -348,6 +348,24 @@ function DriverMain({ profile, wallet, activeSection }: any) {
     }
   };
 
+  const handleRefreshCashStatus = async (booking:any) => {
+    if (tripMutex.current || booking.payment_method !== 'cash') return;
+    tripMutex.current = true; setAcceptingId(booking.id);
+    try {
+      const status = await readCashRideStatus(booking.id);
+      if (!mounted.current || currentDriver.current !== profile.id || status.booking?.id !== booking.id) return;
+      radarMutation.current++;
+      if (status.payment?.status === 'settled') {
+        setActiveRequests(previous=>previous.filter(item=>item.id!==booking.id));
+        setRideNotice('This older cash request is fully settled. Both confirmations and MatMove fee capture are verified.');
+      } else {
+        setActiveRequests(previous=>previous.map(item=>item.id===booking.id?mergeRideRow(item,{...item,...status.booking,cashPayment:status.payment}):item));
+        setRideNotice(status.payment?.riderCashConfirmed?'Customer handover confirmation is recorded. MatMove fee settlement is still being verified.':'Latest server status checked. The customer has not yet confirmed the cash handover. Keep this request open and do not collect again.');
+      }
+    } catch(err:any) { if (mounted.current) setRideNotice(err?.message||'Could not refresh the cash handover status.'); }
+    finally { tripMutex.current=false; if (mounted.current) setAcceptingId(null); }
+  };
+
   const handleCancelRide = async (booking: any) => {
     if (!canTransact || tripMutex.current) return;
     tripMutex.current = true;
@@ -490,6 +508,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                     </div>
 
                     {r.scheduled_time&&<p className="text-xs text-slate-600">Scheduled for: {Number.isFinite(Date.parse(r.scheduled_time))?new Date(r.scheduled_time).toLocaleString():'Time needs confirmation'}</p>}
+                    {Number.isFinite(Date.parse(r.created_at))&&Date.now()-Date.parse(r.created_at)>24*60*60*1000&&<div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950"><b>Older request · over 24 hours</b><p className="mt-1">This request remains visible for reconciliation. Do not collect cash again or assume it is settled. Refresh the verified status or flag the booking for MatMove Support review.</p><a className="mt-2 inline-flex min-h-10 items-center font-bold underline" href={'https://wa.me/23290330362?text='+encodeURIComponent('Please review old MatMove booking '+r.id+'. Current status: '+r.status+'. Cash handover needs reconciliation.')} target="_blank" rel="noreferrer">Flag this old request with support</a></div>}
                     {r.driver_id===profile.id&&['pending','pending_admin'].includes(r.status)&&<p className="rounded-xl bg-indigo-50 p-3 text-xs text-indigo-800">Assigned to you. Review the fare and use Accept to continue the verified payment flow.</p>}
                     {['pending', 'pending_admin'].includes(r.status) && (
                       <>
@@ -515,7 +534,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 
                     {r.status === 'in_progress' && r.driver_id === profile.id && (
                       r.payment_method === 'cash' ? (
-                        r.cashPayment?.driverCashConfirmed ? <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-xs font-semibold text-emerald-900">{r.cashPayment?.riderCashConfirmed ? 'Both parties confirmed. MatMove fee capture is being verified.' : 'Waiting for the customer to confirm the handover.'}</div> : <div className="space-y-2">
+                        r.cashPayment?.driverCashConfirmed ? <div className="space-y-2"><div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-xs font-semibold text-emerald-900">{r.cashPayment?.riderCashConfirmed ? 'Both parties confirmed. MatMove fee capture is being verified.' : 'Waiting for the customer to confirm the handover. The customer can reopen this same request from Active Requests.'}</div><button type="button" onClick={()=>void handleRefreshCashStatus(r)} disabled={acceptingId===r.id} className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:opacity-50">{acceptingId===r.id?<Loader2 size={16} className="mx-auto animate-spin"/>:'Refresh verified handover status'}</button></div> : <div className="space-y-2">
                           <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">
                             Collect the agreed physical cash from the customer. Confirm only after you have actually received it.
                           </div>
