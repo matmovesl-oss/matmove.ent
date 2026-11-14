@@ -1,6 +1,7 @@
 begin;
 
 -- Merchant ride bookings use the same private cash-ride ledger as Rider bookings.
+-- Customer role validation must reject every role not in ('rider','merchant').
 -- The booking's rider_id column is the customer-party reference for both roles.
 -- Keep the financial reserve, dual-confirmation gate and verified provider receipt
 -- unchanged; only broaden the authorized customer role and preserve its audit identity.
