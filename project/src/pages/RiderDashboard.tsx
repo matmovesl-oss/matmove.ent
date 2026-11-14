@@ -421,9 +421,9 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
           setActiveBooking(null);
         } else {
           setRideNotice(payment?.driverCashConfirmed && payment?.riderCashConfirmed
-            ? 'Both cash confirmations are recorded. MatMove fee capture is still being verified; do not repeat the cash handover.'
-            : 'Your cash-handover confirmation is recorded. The assigned driver must also confirm receipt before MatMove captures its fee.');
-          setActiveBooking({ ...activeBooking, ...(result.booking || {}) });
+            ? "Both cash confirmations are recorded. MatMove's fee capture is being verified; do not repeat the cash handover."
+            : 'Waiting for the assigned driver to confirm receipt. Your cash handover is recorded.');
+          setActiveBooking({ ...activeBooking, ...(result.booking || {}), cashPayment: payment || activeBooking.cashPayment });
         }
         await fetchLiveBalance();
         return;
@@ -760,7 +760,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
                           disabled={isRequesting}
                           className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl text-xs hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2"
                         >
-                          {isRequesting ? <Loader2 size={18} className="animate-spin" /> : activeBooking.payment_method === 'cash' ? 'Confirm Cash Handed to Driver' : 'Confirm Arrival & Release Driver Payment'}
+                          {isRequesting ? <Loader2 size={18} className="animate-spin" /> : activeBooking.payment_method === 'cash' ? (activeBooking.cashPayment?.riderCashConfirmed ? 'Cash handover confirmed' : 'Confirm Cash Handed to Driver') : 'Confirm Arrival & Release Driver Payment'}
                         </button>
                       )}
                     </>
