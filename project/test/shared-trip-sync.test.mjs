@@ -70,3 +70,15 @@ test('participant contact RPC is privacy-scoped and Merchant ride requests enter
  assert.match(sql,/new\.status:='pending'/);
  assert.match(sql,/grant execute on function public\.matmove_trip_contact_cards\(uuid\[\]\) to authenticated/);
 });
+
+test('Rider and Merchant can manually refresh and select an older active request without creating a duplicate',async()=>{
+ const [rider,merchant,switcher]=await Promise.all([read('../src/pages/RiderDashboard.tsx'),read('../src/pages/MerchantDashboard.tsx'),read('../src/components/CustomerTripSwitcher.tsx')]);
+ for(const source of [rider,merchant]){
+  assert.match(source,/CustomerTripSwitcher bookings=\{activeTrips\}/);
+  assert.match(source,/onRefresh=\{retryTrip\}/);
+  assert.match(source,/onSelect=\{selectTrip\}/);
+ }
+ assert.match(switcher,/Refresh status/);
+ assert.match(switcher,/Driver confirmed · your cash confirmation needed/);
+ assert.match(switcher,/onRefresh\?\(/);
+});
