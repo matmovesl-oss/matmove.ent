@@ -250,13 +250,21 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     try {
       const result=await updateRide('cash_confirm',activeBooking.id);
       let payment=result.payment||activeBooking.cashPayment||null;
-      try { payment=(await readCashRideStatus(activeBooking.id)).payment; } catch { /* Active-trip refresh retries the read-only status check. */ }
-      setActiveBooking({...activeBooking,...result.booking,cashPayment:payment});
+      let verifiedBooking=result.booking||{};
+      try {
+        const status=await readCashRideStatus(activeBooking.id);
+        payment=status.payment;
+        verifiedBooking=status.booking||verifiedBooking;
+      } catch { /* Active-trip refresh retries this safe status recovery. */ }
+      if(payment?.status==='settled') setActiveBooking(null);
+      else setActiveBooking({...activeBooking,...verifiedBooking,cashPayment:payment});
       setRideNotice(payment?.status==='settled'
         ? 'Cash handover and MatMove fee capture are verified. The ride is settled.'
-        : payment?.riderCashConfirmed
-          ? 'Cash handover confirmation is recorded. Waiting for the driver to confirm receipt.'
-          : 'Cash handover confirmation could not be verified. Refresh the trip before trying again.');
+        : payment?.driverCashConfirmed&&payment?.riderCashConfirmed
+          ? 'Both parties confirmed. MatMove fee capture is being verified.'
+          : payment?.riderCashConfirmed
+            ? 'Cash handover confirmation is recorded. Waiting for the driver to confirm receipt.'
+            : 'Cash handover confirmation could not be verified. Refresh the trip before trying again.');
       await fetchLiveBalance();
     } catch(err:any) { setRideNotice(err.message||'Cash handover confirmation could not be verified.'); }
     finally { setIsRequesting(false); }
