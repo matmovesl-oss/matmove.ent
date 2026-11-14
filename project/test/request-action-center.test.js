@@ -35,13 +35,16 @@ test('Admin cancellation is dispatch-authorized, idempotent and keeps paid booki
   assert.match(migration, /matmove_cash_ride_payments where booking_id=b\.id/);
 });
 
-test('protected scheduled reconciliation runs the stale-ticket sweep and is configured as a Vercel cron', async () => {
+test('Supabase Cron calls the protected reconciliation worker every minute using the Vault-held bearer secret', async () => {
   const api = await read('../server/ride-api.js');
-  const routes = await read('../vercel.json');
+  const migration = await read('../supabase/migrations/20261114150000_matmove_admin_cancel_refund_workflow_v1.sql');
   assert.match(api, /db\.rpc\('matmove_ride_stale_request_sweep'\)/);
   assert.match(api, /staleRequests: staleSweep\.data/);
-  assert.match(routes, /"path": "\/api\/reconcile-ride-payments"/);
-  assert.match(routes, /"schedule": "\* \* \* \* \*"/);
+  assert.match(migration, /matmove-ride-reconciliation-v1/);
+  assert.match(migration, /\* \* \* \* \*/);
+  assert.match(migration, /vault\.decrypted_secrets/);
+  assert.match(migration, /net\.http_get/);
+  assert.match(migration, /reconcile-ride-payments/);
 });
 
 test('automatic abandonment never cancels a request with any payment ledger or an assigned driver', async () => {
