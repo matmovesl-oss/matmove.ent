@@ -334,7 +334,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
         setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
         setRideNotice('Your cash receipt and the rider handover are both confirmed. MatMove fee capture is verified and the cash ride is settled.');
       } else {
-        setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
+        setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking, cashPayment: result.payment || item.cashPayment }) : item));
         setRideNotice(result.pending
           ? 'Your cash receipt is recorded. MatMove fee capture is still being verified; do not repeat the cash collection.'
           : 'Your confirmation that you received the physical cash is recorded. The rider must also confirm the handover.');
@@ -517,8 +517,9 @@ function DriverMain({ profile, wallet, activeSection }: any) {
                       r.payment_method === 'cash' ? (
                         r.cashPayment?.driverCashConfirmed ? <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-xs font-semibold text-emerald-900">{r.cashPayment?.riderCashConfirmed ? 'Both parties confirmed. MatMove fee capture is being verified.' : 'Waiting for the customer to confirm the handover.'}</div> : <div className="space-y-2">
                           <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">
-                            Collect the agreed physical cash from the rider. Confirm only after you have actually received it.
+                            Collect the agreed physical cash from the customer. Confirm only after you have actually received it.
                           </div>
+                          {!canTransact && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800">Cash confirmation is locked because your driver wallet is frozen or awaiting approval. Contact MatMove support before continuing.</p>}
                           <button type="button" onClick={() => void handleConfirmCashReceived(r)} disabled={acceptingId === r.id || !canTransact} className="w-full rounded-xl bg-emerald-700 py-3.5 font-bold text-white disabled:opacity-50">
                             {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Confirm Cash Received'}
                           </button>
