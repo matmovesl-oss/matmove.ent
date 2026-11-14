@@ -56,3 +56,22 @@ test('cash trip submission uses the same booking ID for fee reservation recovery
   assert.match(service, /cash_confirm: '\/api\/accept-ride-escrow\?action=cash_confirm'/);
   assert.match(service, /cash_reserve: '\/api\/accept-ride-escrow\?action=cash_reserve'/);
 });
+
+test('Rider can reopen any active or old request instead of seeing only the newest booking',async()=>{
+  const code=await readFile(riderFile,'utf8');
+  assert.match(code,/import CustomerTripSwitcher from '@\/components\/CustomerTripSwitcher'/);
+  assert.match(code,/bookings: activeTrips/);
+  assert.match(code,/selectBooking: selectTrip/);
+  assert.match(code,/CustomerTripSwitcher bookings=\{activeTrips\}/);
+  assert.match(code,/An older request is still open/);
+  assert.match(code,/selectTrip/);
+});
+
+test('Driver can refresh the server-verified cash handover and old requests are flagged for support',async()=>{
+  const code=await readFile(driverFile,'utf8');
+  assert.match(code,/handleRefreshCashStatus/);
+  assert.match(code,/readCashRideStatus\(booking\.id\)/);
+  assert.match(code,/Refresh verified handover status/);
+  assert.match(code,/Older request · over 24 hours/);
+  assert.match(code,/Flag this old request with support/);
+});
