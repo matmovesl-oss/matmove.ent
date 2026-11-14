@@ -503,7 +503,7 @@ export async function cashRideAction(
     if (actorType === 'driver' && (!isDriver || profile.role !== 'driver')) {
       throw new HttpError(403, 'Only the assigned driver can confirm cash received.');
     }
-    if (!['rider','merchant','driver'].includes(actorType)) {
+    if (!['rider','merchant'].includes(actorType) && actorType !== 'driver') {
       throw new HttpError(403, 'Rider or assigned driver confirmation is required.');
     }
 
