@@ -117,12 +117,14 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     let live=true;
     setCashConfigLoading(true);
     void (async()=>{
+      let finish=()=>{};
       try {
-        const {response,data,finish}=await walletFetch('/api/accept-ride-escrow?action=cash_config',{});
-        if(!response.ok)throw new Error('Cash configuration unavailable.');
-        if(live){setCashEnabled(data?.enabled===true);setCashAccountsVerified(data?.accountsVerified===true);finish();}
+        const result=await walletFetch('/api/accept-ride-escrow?action=cash_config',{});
+        finish=result.finish;
+        if(!result.response.ok)throw new Error('Cash configuration unavailable.');
+        if(live){setCashEnabled(result.data?.enabled===true);setCashAccountsVerified(result.data?.accountsVerified===true);}
       } catch { if(live){setCashEnabled(false);setCashAccountsVerified(false);} }
-      finally { if(live)setCashConfigLoading(false); }
+      finally { finish(); if(live)setCashConfigLoading(false); }
     })();
     supabase.from('pricing_settings').select('*').then(({ data }) => {
       if (data?.length) {
