@@ -11,9 +11,10 @@ export function mergeRideRow(previous: any, incoming: any) {
   if (!incoming || previous?.id !== incoming.id) return incoming;
   const oldVersion = Number(previous.matmove_fare_version || 1);
   const newVersion = Number(incoming.matmove_fare_version || 1);
+  const cashPayment=incoming.cashPayment??previous.cashPayment;
   return newVersion < oldVersion
-    ? { ...incoming, fare_amount: previous.fare_amount, matmove_fare_version: oldVersion }
-    : incoming;
+    ? { ...incoming, fare_amount: previous.fare_amount, matmove_fare_version: oldVersion, cashPayment }
+    : { ...incoming, cashPayment };
 }
 
 export function applyRideFare(previous: any, snapshot: FareSnapshot, userId: string) {
