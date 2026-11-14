@@ -94,7 +94,7 @@ export async function reconcileRidePayments(req, res) {
     const cashQueue = await db
       .from('matmove_cash_ride_legs')
       .select('booking_id')
-      .in('status', ['pending','processing'])
+      .or('status.in.(pending,processing),and(leg_kind.eq.refund,status.eq.ready)')
       .order('updated_at')
       .limit(5);
 
