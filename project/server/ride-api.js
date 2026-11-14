@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import { createClient } from '@supabase/supabase-js';
 
 import {
   dbClient,
@@ -140,6 +141,64 @@ export async function reconcileRidePayments(req, res) {
   }
 }
 
+async function adminReconcileBooking(req,res){
+  const allowedOrigin='https://matmove-admin.vercel.app';
+  const origin=String(req.headers.origin||'');
+  res.setHeader('Vary','Origin');
+  res.setHeader('Access-Control-Allow-Methods','POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type');
+  if(origin!==allowedOrigin)return res.status(403).json({error:'Dispatch origin is not allowed.'});
+  res.setHeader('Access-Control-Allow-Origin',allowedOrigin);
+  if(req.method==='OPTIONS')return res.status(204).end();
+
+  const token=/^Bearer\s+(.+)$/i.exec(String(req.headers.authorization||''))?.[1];
+  const bookingId=req.body?.bookingId;
+  if(!token||typeof bookingId!=='string'||!uuid.test(bookingId)){
+    return res.status(400).json({error:'A valid Dispatch session and booking reference are required.'});
+  }
+  try{
+    const url=process.env.SUPABASE_URL||process.env.VITE_SUPABASE_URL;
+    const anon=process.env.VITE_SUPABASE_ANON_KEY;
+    if(!url||!anon)throw new Error('Supabase auth is not configured.');
+    const authClient=createClient(url,anon,{
+      auth:{persistSession:false,autoRefreshToken:false},
+      global:{headers:{Authorization:`Bearer ${token}`}}
+    });
+    const {data:actor,error:authError}=await authClient.rpc('matmove_dispatch_actor');
+    if(authError||!actor)return res.status(403).json({error:'Active Dispatch permission is required.'});
+
+    const db=dbClient();
+    const {data:booking,error:bookingError}=await db.from('bookings')
+      .select('id,payment_method,status')
+      .eq('id',bookingId).maybeSingle();
+    if(bookingError||!booking)return res.status(404).json({error:'Booking not found.'});
+
+    if(booking.payment_method==='cash')await reconcileCashRide(db,bookingId);
+    else await reconcileRide(db,bookingId);
+
+    const [cash,digital,latest]=await Promise.all([
+      db.from('matmove_cash_ride_payments').select('status').eq('booking_id',bookingId).maybeSingle(),
+      db.from('ride_payments').select('state').eq('booking_id',bookingId).maybeSingle(),
+      db.from('bookings').select('status').eq('id',bookingId).maybeSingle()
+    ]);
+    if(cash.error||digital.error||latest.error)throw new Error('Unable to verify the final payment state.');
+    const paymentStatus=cash.data?.status||digital.data?.state||'not_required';
+    return res.status(200).json({
+      success:true,
+      bookingId,
+      bookingStatus:latest.data?.status||booking.status,
+      paymentStatus,
+      refundVerified:paymentStatus==='refunded'
+    });
+  }catch(error){
+    console.error('MatMove Admin refund reconciliation failed',{
+      code:typeof error?.code==='string'?error.code:null,
+      status:Number.isInteger(error?.status)?error.status:null
+    });
+    return res.status(503).json({error:'Refund remains pending provider verification. The scheduled reconciliation worker will retry.'});
+  }
+}
+
 export function createRidePaymentsHandler({
   rideHandlers = actions,
   reconciliation = reconcileRidePayments,
@@ -165,6 +224,7 @@ export function createRidePaymentsHandler({
         'cash_confirm',
         'cash_status',
         'cash_config',
+        'admin_reconcile',
         'reconcile'
       ].includes(action)
     ) {
@@ -172,6 +232,8 @@ export function createRidePaymentsHandler({
         error: 'Choose a valid ride action.'
       });
     }
+
+    if(action==='admin_reconcile')return adminReconcileBooking(req,res);
 
     const method =
       action === 'reconcile' ? 'GET' : 'POST';
