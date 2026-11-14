@@ -6,6 +6,8 @@ const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 
 test('Rider and Merchant Trips expose unfinished requests and a real cancellation action', async () => {
   const source = await read('../src/components/TripHistory.tsx');
+  const switcher = await read('../src/components/CustomerTripSwitcher.tsx');
+  assert.match(switcher, /onSelect\(b\.id\);onRefresh\?\.\(\)/);
   assert.match(source, /aria-label="Unfinished requests"/);
   assert.match(source, /activeRequests = ownedTrips\.filter/);
   assert.match(source, /updateRide\('cancel',t\.id\)/);
