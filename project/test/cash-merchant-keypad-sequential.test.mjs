@@ -75,7 +75,7 @@ test('cash capture still requires both customer and driver confirmation and the 
  assert.match(cashServer,/finishCashLeg\(db, bookingId, 'capture'/);
  assert.match(migration,/p\.driver_cash_confirmed_at is not null/);
  assert.match(migration,/p\.rider_cash_confirmed_at is not null/);
- assert.match(migration,/reserve\.status <> 'completed'/);
+ assert.match(migration,/reserve_leg\.status <> 'completed'/);
  assert.match(migration,/capture_leg\.source_account_ref <> cfg\.fee_hold_account_id/);
  assert.match(cashServer,/data\.fee_hold_account_id !== escrowAccountId/);
  assert.match(cashServer,/data\.fee_revenue_account_id !== platformFeeAccountId/);
