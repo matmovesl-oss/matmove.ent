@@ -29,6 +29,11 @@ begin
     'service <> ''ride'' or role_name <> ''rider''',
     'service <> ''ride'' or role_name not in (''rider'',''merchant'')'
   );
+  v_updated := replace(
+    v_updated,
+    'b.id,''cash_payment_created'',''rider'',u,',
+    'b.id,''cash_payment_created'',role_name,u,'
+  );
   if v_updated = v_definition then
     raise exception 'Merchant cash ride migration could not update customer trip role guard.';
   end if;
