@@ -98,6 +98,8 @@ test('Merchant location selection and Ride booking form are sequential with one 
  assert.match(merchant,/onRouteEditingChange=\{setRouteEditing\}/);
  assert.match(merchant,/setRouteEditing\(!ready\)/);
  assert.match(rider,/routeEditing/);
+ assert.match(rider,/activeBooking && \(!routeEditing \|\| \['accepted','in_progress'\]\.includes\(activeBooking\.status\)\)/);
+ assert.match(rider,/!activeBooking && pickupCoords && destinationCoords && !routeEditing/);
  assert.match(picker,/bookingReady&&!editingRoute/);
  assert.match(picker,/sticky top-0 z-20/);
  assert.match(merchant,/sticky top-0 z-20/);
