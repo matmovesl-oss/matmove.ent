@@ -79,3 +79,9 @@ test('Admin can trigger immediate server-side refund reconciliation using a disp
   assert.match(api, /'admin_reconcile'/);
   assert.match(api, /refundVerified:paymentStatus==='refunded'/);
 });
+
+test('Admin cannot auto-cancel a cash ride once a driver is linked to the cash ledger', async () => {
+  const migration = await read('../supabase/migrations/20261114153000_matmove_cash_admin_cancel_handover_guard_v1.sql');
+  assert.match(migration, /cp\.driver_id is not null/);
+  assert.match(migration, /CASH_HANDOVER_REVIEW_REQUIRED/);
+});
