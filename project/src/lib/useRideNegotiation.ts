@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { FareSnapshot } from '@/services/fareNegotiationService';
 import { attachTripContacts } from '@/lib/tripContacts';
+import { readCashRideStatus } from '@/services/rideService';
 
 // A booking poll may have started before a customer confirmed a newer fare.
 // Keep that fare while still accepting fresh trip status/driver details.
@@ -84,9 +85,17 @@ export function useCustomerActiveRide(userId: string) {
         if(!Array.isArray(rows)||rows.length>100||rows.some(row=>typeof row?.id!=='string'||row.rider_id!==userId||!['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(row.status))||new Set(rows.map(row=>row.id)).size!==rows.length)throw new Error('Active requests could not be verified.');
         const owned=rows.filter(row=>!terminal.current[`${userId}:${row.id}`]);
         const enriched=await attachTripContacts(owned);
-        const data=enriched.find(row=>row.id===selection.current)||enriched[0]||null;
+        const cashById = new Map<string, any>();
+        await Promise.all(enriched.filter(row => row.payment_method === 'cash').map(async row => {
+          try {
+            const status = await readCashRideStatus(row.id);
+            if (status.booking?.id === row.id && status.payment) cashById.set(row.id, status.payment);
+          } catch { /* Keep the last verified handover state on transient read failures. */ }
+        }));
+        const withCash = enriched.map(row => ({ ...row, cashPayment:cashById.get(row.id) || row.cashPayment || null }));
+        const data=withCash.find(row=>row.id===selection.current)||withCash[0]||null;
         if (!disposed && identity.current === userId && version === mutation.current) {
-          setBookings(previous=>enriched.map(row=>mergeRideRow(previous.find(old=>old.id===row.id),row)));
+          setBookings(previous=>withCash.map(row=>mergeRideRow(previous.find(old=>old.id===row.id),row)));
           setState(previous => ({ userId, booking: mergeRideRow(previous.userId === userId ? previous.booking : null, data&&terminal.current[`${userId}:${data.id}`]?null:data || null), loading: false, error: '' }));
         }
       } catch {

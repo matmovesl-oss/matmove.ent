@@ -72,6 +72,11 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   const [passengerCount,setPassengerCount]=useState(1);
   const [passengerName,setPassengerName]=useState('');
   const [bookingSheetExpanded,setBookingSheetExpanded]=useState(true);
+  const [routeEditing,setRouteEditing]=useState(true);
+  const [paymentMethod,setPaymentMethod]=useState<'digital'|'cash'>('digital');
+  const [cashConfigLoading,setCashConfigLoading]=useState(true);
+  const [cashEnabled,setCashEnabled]=useState(false);
+  const [cashAccountsVerified,setCashAccountsVerified]=useState(false);
   const [bookingSheetDragDelta,setBookingSheetDragDelta]=useState(0);
   const [bookingSheetDragging,setBookingSheetDragging]=useState(false);
   const sheetPointerStart=useRef<number|null>(null);
@@ -109,6 +114,13 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   }, [tripDistanceKm, vehicleType, pricingRates]);
 
   useEffect(() => {
+    let live=true;
+    setCashConfigLoading(true);
+    void walletFetch('/api/accept-ride-escrow?action=cash_config', {}).then(({response,data,finish})=>{
+      if(!response.ok)throw new Error('Cash configuration unavailable.');
+      finish();
+      if(live){setCashEnabled(data?.enabled===true&&data?.accountsVerified===true);setCashAccountsVerified(data?.accountsVerified===true);}
+    }).catch(()=>{if(live){setCashEnabled(false);setCashAccountsVerified(false);}}).finally(()=>{if(live)setCashConfigLoading(false);});
     supabase.from('pricing_settings').select('*').then(({ data }) => {
       if (data?.length) {
         const rates: any = {};
@@ -117,6 +129,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       }
     });
     if (profile?.id && !localStorage.getItem(`matmove_policy_${profile.id}`)) setShowPolicy(true);
+    return ()=>{live=false;};
   }, [profile?.id]);
 
   const handleAcceptPolicy = () => { localStorage.setItem(`matmove_policy_${profile.id}`, 'true'); setShowPolicy(false); };
@@ -204,14 +217,15 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     const finalAmount = Number(offerAmount);
     if (!/^\d+(\.\d{1,2})?$/.test(offerAmount.trim()) || !Number.isFinite(finalAmount) || finalAmount <= 0 || finalAmount > 1000000) return alert('Enter and review a positive fare with at most two decimal places, up to SLE 1,000,000.');
     const minimumFare = pricingRates[vehicleType]?.min || 1;
-    if (finalAmount < minimumFare) return alert(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minimumFare}.`);
+    if (finalAmount < minimumFare) { setRideNotice(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minimumFare}.`); return; }
     if (serviceType === 'scheduled' && (!Number.isFinite(Date.parse(scheduledTime)) || Date.parse(scheduledTime) <= Date.now())) return alert('Choose a future scheduled time.');
 
-    if (Number(sleWallet?.balance || 0) < finalAmount) return alert(`Insufficient balance. You need SLE ${finalAmount} for this request.`);
+    if (serviceType === 'ride' && paymentMethod === 'cash' && !cashEnabled) { setRideNotice('Physical cash rides are unavailable until MatMove verifies both dedicated Monime fee accounts and enables cash collection.'); return; }
+    if (paymentMethod !== 'cash' && Number(sleWallet?.balance || 0) < finalAmount) { setRideNotice(`Insufficient balance. You need SLE ${finalAmount} for this request.`); return; }
 
     setIsRequesting(true);
     try {
-      const data=await tripRequest.submit({client_version:1,service_type:serviceType,vehicle_type:vehicleType,pickup_location:pickup,destination_location:destination,fare_amount:finalAmount.toFixed(2),scheduled_time:serviceType==='scheduled'?new Date(scheduledTime).toISOString():null,passenger_count:passengerCount,passenger_name:passengerName.trim()||null,pickup_pin:{lat:pickupCoords[1],lng:pickupCoords[0]},destination_pin:{lat:destinationCoords[1],lng:destinationCoords[0]}});
+      const data=await tripRequest.submit({client_version:1,payment_method:serviceType==='ride'?paymentMethod:'digital',service_type:serviceType,vehicle_type:vehicleType,pickup_location:pickup,destination_location:destination,fare_amount:finalAmount.toFixed(2),scheduled_time:serviceType==='scheduled'?new Date(scheduledTime).toISOString():null,passenger_count:passengerCount,passenger_name:passengerName.trim()||null,pickup_pin:{lat:pickupCoords[1],lng:pickupCoords[0]},destination_pin:{lat:destinationCoords[1],lng:destinationCoords[0]}});
       setActiveBooking(data);
     } catch (err: any) { alert(err.message); } finally { setIsRequesting(false); }
   };
@@ -226,6 +240,24 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       if (!result.pending) setPaymentModalData(null);
       await fetchLiveBalance();
     } catch (err: any) { setRideNotice(err.message); }
+    finally { setIsRequesting(false); }
+  };
+
+  const handleCashRideConfirmation = async () => {
+    if (!activeBooking || activeBooking.payment_method !== 'cash' || isRequesting) return;
+    setIsRequesting(true); setRideNotice('');
+    try {
+      const result = await updateRide('cash_confirm', activeBooking.id);
+      const payment = result.payment || activeBooking.cashPayment;
+      if (payment?.status === 'settled' && result.success === true && result.pending === false) {
+        setRideNotice('Cash handover confirmed by both parties. MatMove fee capture is verified and the cash ride is settled.');
+        setActiveBooking(null);
+      } else {
+        setRideNotice(payment?.driverCashConfirmed && payment?.riderCashConfirmed ? 'Both cash handover confirmations are recorded. MatMove fee capture is being verified.' : 'Cash handover confirmation is recorded. The assigned driver must also confirm receipt before MatMove captures its reserved fee.');
+        setActiveBooking({ ...activeBooking, ...(result.booking || {}), cashPayment:payment });
+      }
+      await fetchLiveBalance();
+    } catch (err: any) { setRideNotice(err.message || 'Cash handover confirmation could not be verified.'); }
     finally { setIsRequesting(false); }
   };
 
@@ -301,15 +333,15 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       {((rideNotice&&!tripRequest.retained)||walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice&&!tripRequest.retained&&<p>{rideNotice}</p>}{walletNotice&&<p>{walletNotice}</p>}</div>}
       {activeSection==='home'&&tripRequest.retained&&<section role="status" className="m-3 space-y-2 rounded-2xl border border-amber-300 bg-amber-50 p-4"><div><p className="font-extrabold text-amber-950">Reconnect to your original request</p><p className="mt-1 text-sm text-amber-900">MatMove saved this exact booking reference. Check it again to restore the current driver and trip status. This will not create a second request.</p></div>{rideNotice&&<p role="alert" className="rounded-lg bg-white/80 p-2 text-sm text-amber-900">{rideNotice}</p>}<button type="button" disabled={tripRequest.working||isRequesting||!tripRequest.ready} onClick={async()=>{try{const row=await tripRequest.submit();setActiveBooking(row);setRideNotice('Original request restored. Live driver updates are active.');}catch(e){setRideNotice(e instanceof Error?e.message:'Original request could not be confirmed. Try again using this same request.');}}} className="min-h-11 rounded-xl bg-amber-900 px-4 font-bold text-white disabled:opacity-50">{tripRequest.working?'Checking original request…':'Check original request'}</button></section>}
       {activeSection==='home'&&tripRequest.error&&!tripRequest.retained&&<p role="alert" className="m-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{tripRequest.error}</p>}
-      {activeSection==='home'&&<CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} onSelect={selectTrip} onNew={()=>{startNewBooking();setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerName('');setPassengerCount(1);setRideNotice('Your previous trip remains active. Review the new pickup, destination and fare.');}}/>}
-      {activeSection === 'home' && (
+      {activeSection==='home'&&<CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} onSelect={selectTrip} onNew={()=>{startNewBooking();setRouteEditing(true);setBookingSheetExpanded(true);setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerName('');setPassengerCount(1);setPaymentMethod('digital');setRideNotice('Your previous trip remains active. Review the new pickup, destination and fare.');}}/>}
+      {activeSection === 'home' && (activeBooking || (pickupCoords && destinationCoords && !routeEditing)) && (
         <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
-          <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[min(66dvh,700px)] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6"
-            style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(66dvh,700px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
+          <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[58dvh] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6"
+            style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(58dvh,640px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
             <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded}
-              onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;sheetDragStartHeight.current=bookingSheetExpanded?Math.min(window.innerHeight*.66,700):148;setBookingSheetDragging(true);setBookingSheetDragDelta(0);event.currentTarget.setPointerCapture(event.pointerId);}}
+              onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;sheetDragStartHeight.current=bookingSheetExpanded?Math.min(window.innerHeight*.58,640):148;setBookingSheetDragging(true);setBookingSheetDragDelta(0);event.currentTarget.setPointerCapture(event.pointerId);}}
               onPointerMove={event=>{if(sheetPointerStart.current!==null){const maxHeight=Math.min(window.innerHeight*.66,700),base=sheetDragStartHeight.current,delta=event.clientY-sheetPointerStart.current;setBookingSheetDragDelta(Math.max(base-maxHeight,Math.min(base-148,delta)));}}}
-              onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start,base=sheetDragStartHeight.current,maxHeight=Math.min(window.innerHeight*.66,700),nextHeight=Math.max(148,Math.min(maxHeight,base-delta));if(Math.abs(delta)>6){sheetDragged.current=true;setBookingSheetExpanded(nextHeight>=maxHeight*.55);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}}
+              onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start,base=sheetDragStartHeight.current,maxHeight=Math.min(window.innerHeight*.66,700),nextHeight=Math.max(148,Math.min(maxHeight,base-delta));if(Math.abs(delta)>6){sheetDragged.current=true;setBookingSheetExpanded(delta < -6 ? true : delta > 80 ? false : bookingSheetExpanded);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}}
               onPointerCancel={()=>{sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}}
               onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}}
               className="mx-auto flex h-6 w-16 touch-none select-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button>
@@ -347,6 +379,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                   </button>)}</div>
                   <label className="mt-3 block text-xs font-bold text-slate-700">Passenger name (optional)<input aria-label="Passenger name" maxLength={120} value={passengerName} onChange={e=>setPassengerName(e.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm"/></label>
                 </div>
+                {serviceType==='ride'&&<div className="rounded-2xl border border-slate-200 bg-white p-3"><p className="mb-2 text-xs font-extrabold text-slate-800">Payment method</p><div className="grid grid-cols-2 gap-2"><button type="button" aria-pressed={paymentMethod==='digital'} onClick={()=>setPaymentMethod('digital')} className={`min-h-11 rounded-xl border text-sm font-bold ${paymentMethod==='digital'?'border-emerald-500 bg-emerald-50 text-emerald-800':'border-slate-200 text-slate-600'}`}>Wallet / digital</button><button type="button" aria-pressed={paymentMethod==='cash'} disabled={cashConfigLoading||!cashEnabled} onClick={()=>setPaymentMethod('cash')} className={`min-h-11 rounded-xl border text-sm font-bold disabled:opacity-40 ${paymentMethod==='cash'?'border-emerald-500 bg-emerald-50 text-emerald-800':'border-slate-200 text-slate-600'}`}>Cash</button></div>{cashConfigLoading ? <p className="mt-2 text-xs text-slate-500">Checking cash collection readiness…</p> : !cashEnabled ? <p className="mt-2 text-xs text-amber-800">{cashAccountsVerified?'Monime accounts are verified, but cash collection is not enabled yet.':'Physical cash rides remain disabled until both dedicated Monime fee accounts are verified.'}</p> : null}{serviceType === 'ride' && paymentMethod === 'cash' && <p className="mt-2 text-xs text-slate-500">The 15% MatMove fee is reserved digitally. The driver and merchant must both confirm the physical cash handover.</p>}</div>}
                 <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
                   <div className="mb-2 flex items-center gap-2"><label className="text-xs font-extrabold text-slate-700">Total Fare (SLE)</label><input aria-label="Total fare in SLE" type="number" min="0" step="0.01" value={offerAmount} onChange={e=>setOfferAmount(e.target.value)} className="w-full bg-transparent pr-2 text-right text-lg font-bold text-slate-900 outline-none" placeholder="Amount"/></div>
                   <div className="flex gap-1 justify-end"><button type="button" onClick={()=>setOfferAmount(previous=>Math.max(pricingRates[vehicleType]?.min||1,Number(previous||0)-5).toString())} className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-600"><Minus size={16}/></button><button type="button" onClick={()=>setOfferAmount(previous=>(Number(previous||0)+5).toString())} className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-600"><Plus size={16}/></button></div>
@@ -378,8 +411,9 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
                         <div className="mt-3 pt-3 border-t text-xs text-slate-400">Funds will be transferred directly to the driver's Monime wallet upon completion.</div>
                       </div>
                     )}
+                    {activeBooking.status === 'in_progress' && activeBooking.payment_method === 'cash' && <p role="status" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{activeBooking.cashPayment?.driverCashConfirmed ? 'The assigned driver has confirmed cash received.' : 'Waiting for the assigned driver to confirm receipt.'} {activeBooking.cashPayment?.riderCashConfirmed ? 'Your handover is recorded.' : 'Confirm only after handing over the physical cash.'} MatMove's fee capture is verified only after both confirmations.</p>}
                     {activeBooking.status === 'in_progress' && (
-                      <button onClick={handleOpenPaymentModal} disabled={isRequesting} className="w-full rounded-xl bg-emerald-600 py-4 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2">
+                      activeBooking.payment_method === 'cash' ? <button type="button" onClick={handleCashRideConfirmation} disabled={isRequesting || activeBooking.cashPayment?.riderCashConfirmed} className="w-full rounded-xl bg-emerald-700 py-4 font-bold text-white disabled:opacity-50">{isRequesting?<Loader2 size={20} className="mx-auto animate-spin"/>:activeBooking.cashPayment?.riderCashConfirmed?'Cash handover confirmed':'Confirm Cash Handed to Driver'}</button> : <button onClick={handleOpenPaymentModal} disabled={isRequesting} className="w-full rounded-xl bg-emerald-600 py-4 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2">
                         {isRequesting ? <Loader2 size={20} className="animate-spin" /> : <><Banknote size={20}/> Confirm Arrival & Release Payment</>}
                       </button>
                     )}
@@ -397,9 +431,11 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
               </div>
             )}
           </div>
-          <div className="order-1 min-w-0 flex-1">{activeBooking&&['accepted','in_progress'].includes(activeBooking.status)?<ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/>:<RideLocationPicker layout="map-first" key={profile.id} userId={profile.id} onChange={(selection: TripLocations) => { setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />}</div>
+
         </div>
       )}
+
+      {activeSection === 'home' && (activeBooking && ['accepted','in_progress'].includes(activeBooking.status) ? <ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/> : <RideLocationPicker layout="map-first" key={profile.id} userId={profile.id} onBack={() => { setRouteEditing(true); setPickup(''); setDestination(''); setPickupCoords(null); setDestinationCoords(null); setTripDistanceKm(null); setOfferAmount(''); }} bookingReady={Boolean(pickupCoords && destinationCoords)} bookingSheetExpanded={bookingSheetExpanded} onRouteEditingChange={setRouteEditing} onChange={(selection: TripLocations) => { const ready=Boolean(selection.pickup&&selection.destination);setRouteEditing(!ready);if(ready)setBookingSheetExpanded(true);setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />)}
 
       {activeSection === 'wallet' && (
         <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">

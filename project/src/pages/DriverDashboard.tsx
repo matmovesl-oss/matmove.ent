@@ -20,7 +20,7 @@ import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
-import { updateRide, readRidePayment } from '@/services/rideService';
+import { updateRide, readRidePayment, readCashRideStatus } from '@/services/rideService';
 import {
   Car, MapPin, Navigation, Power, User, Phone,
   Loader2, X, Smartphone, ArrowUpRight, ArrowDownLeft,
@@ -253,8 +253,16 @@ function DriverMain({ profile, wallet, activeSection }: any) {
         if (!Array.isArray(data)) throw new Error('Invalid radar response.');
         const visible=data.filter(item=>item.driver_id===profile.id||(!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)));
         const enriched=await attachTripContacts(visible);
+        const cashById = new Map<string, any>();
+        await Promise.all(enriched.filter(item => item.payment_method === 'cash' && item.driver_id === profile.id).map(async item => {
+          try {
+            const status = await readCashRideStatus(item.id);
+            if (status.booking?.id === item.id && status.payment) cashById.set(item.id, status.payment);
+          } catch { /* Retain the last verified handover state if a read temporarily fails. */ }
+        }));
+        const withCash = enriched.map(item => ({ ...item, cashPayment:cashById.get(item.id) || item.cashPayment || null }));
         if (!disposed && readVersion === radarMutation.current) {
-          setActiveRequests(previous => enriched.map(item => mergeRideRow(previous.find(old => old.id === item.id), item)));
+          setActiveRequests(previous => withCash.map(item => mergeRideRow(previous.find(old => old.id === item.id), item)));
           setNegotiatingId(previous => enriched.some(item => !item.driver_id && item.id === previous && ['pending', 'pending_admin'].includes(item.status)) ? previous : null);
           setRequestsError('');
         }
@@ -302,7 +310,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       const result = await updateRide('accept', booking.id);
       if (!mounted.current || currentDriver.current !== userId) return;
       radarMutation.current++;
-      setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
+      setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking, cashPayment: result.payment || item.cashPayment }) : item));
       setNegotiatingId(null);
       setRideNotice(result.pending ? 'Escrow funding is processing. This trip has not been accepted yet; check again using this same request.' : 'Customer debit and escrow funding are confirmed. You can start the trip.');
       await fetchLiveBalance();
@@ -321,11 +329,12 @@ function DriverMain({ profile, wallet, activeSection }: any) {
       const result = await updateRide('cash_confirm', booking.id);
       if (!mounted.current || currentDriver.current !== userId) return;
       radarMutation.current++;
-      if (result.payment?.status === 'settled' && result.success === true && result.pending === false) {
+      const payment = result.payment || booking.cashPayment;
+      if (payment?.status === 'settled' && result.success === true && result.pending === false) {
         setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
         setRideNotice('Your cash receipt and the rider handover are both confirmed. MatMove fee capture is verified and the cash ride is settled.');
       } else {
-        setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
+        setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking, cashPayment: result.payment || item.cashPayment }) : item));
         setRideNotice(result.pending
           ? 'Your cash receipt is recorded. MatMove fee capture is still being verified; do not repeat the cash collection.'
           : 'Your confirmation that you received the physical cash is recorded. The rider must also confirm the handover.');
@@ -506,10 +515,11 @@ function DriverMain({ profile, wallet, activeSection }: any) {
 
                     {r.status === 'in_progress' && r.driver_id === profile.id && (
                       r.payment_method === 'cash' ? (
-                        <div className="space-y-2">
+                        r.cashPayment?.driverCashConfirmed ? <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-xs font-semibold text-emerald-900">{r.cashPayment?.riderCashConfirmed ? 'Both parties confirmed. MatMove fee capture is being verified.' : 'Waiting for the customer to confirm the handover.'}</div> : <div className="space-y-2">
                           <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">
-                            Collect the agreed physical cash from the rider. Confirm only after you have actually received it.
+                            Collect the agreed physical cash from the customer. Confirm only after you have actually received it.
                           </div>
+                          {!canTransact && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800">Cash confirmation is locked because your driver wallet is frozen or awaiting approval. Contact MatMove support before continuing.</p>}
                           <button type="button" onClick={() => void handleConfirmCashReceived(r)} disabled={acceptingId === r.id || !canTransact} className="w-full rounded-xl bg-emerald-700 py-3.5 font-bold text-white disabled:opacity-50">
                             {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Confirm Cash Received'}
                           </button>

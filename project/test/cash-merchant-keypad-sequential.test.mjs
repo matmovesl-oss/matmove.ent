@@ -48,7 +48,7 @@ test('Merchant can book cash rides, reserve only the fee, and confirm the same t
   read('../src/lib/useTripRequest.ts'),
   read('../server/ride-api.js'),
   read('../server/cash-ride-payments.js'),
-  read('../supabase/migrations/20261114090000_matmove_cash_ride_merchant_role_and_audit_support_v1.sql')
+  read('../supabase/migrations/20261114101500_matmove_cash_ride_merchant_audit_identity_v2.sql')
  ]);
  assert.match(merchant,/payment_method:serviceType==='ride'\?paymentMethod:'digital'/);
  assert.match(merchant,/serviceType === 'ride' && paymentMethod === 'cash'/);
@@ -75,11 +75,11 @@ test('cash capture still requires both customer and driver confirmation and the 
  assert.match(cashServer,/finishCashLeg\(db, bookingId, 'capture'/);
  assert.match(migration,/p\.driver_cash_confirmed_at is not null/);
  assert.match(migration,/p\.rider_cash_confirmed_at is not null/);
- assert.match(migration,/reserve\.status <> 'completed'/);
+ assert.match(migration,/reserve_leg\.status <> 'completed'/);
  assert.match(migration,/capture_leg\.source_account_ref <> cfg\.fee_hold_account_id/);
  assert.match(cashServer,/data\.fee_hold_account_id !== escrowAccountId/);
  assert.match(cashServer,/data\.fee_revenue_account_id !== platformFeeAccountId/);
- assert.doesNotMatch(cashServer,/data\.fee_hold_account_id === platformFeeAccountId/);
+ assert.match(cashServer,/data\.fee_hold_account_id === platformFeeAccountId/);
 });
 
 test('Merchant location selection and Ride booking form are sequential with one bottom sheet at a time',async()=>{
@@ -98,6 +98,9 @@ test('Merchant location selection and Ride booking form are sequential with one 
  assert.match(picker,/sticky top-0 z-20/);
  assert.match(merchant,/sticky top-0 z-20/);
  assert.match(rider,/sticky top-0 z-20/);
+ assert.match(picker,/delta < -6 \? true : delta > 80 \? false : locationPanelExpanded/);
+ assert.match(merchant,/delta < -6 \? true : delta > 80 \? false : bookingSheetExpanded/);
+ assert.match(rider,/delta < -6 \? true : delta > 80 \? false : bookingSheetExpanded/);
 });
 
 test('Services back arrow is left of the Wi dey move brand',async()=>{
@@ -114,7 +117,8 @@ test('passcode uses a custom visible 0–9 keypad without a native numeric or pa
  assert.match(passcode,/appendDigit\('0'\)/);
  assert.match(passcode,/Delete last digit/);
  assert.match(passcode,/pinField\('New passcode/);
- assert.match(passcode,/Confirm new passcode/);
+ assert.match(passcode,/Confirm passcode/);
+ assert.match(passcode,/setActivePinField\(creating\|\|upgrade\?'next':'pin'\)/);
  assert.doesNotMatch(passcode,/inputMode="numeric"/);
  assert.doesNotMatch(passcode,/type="password"/);
 });

@@ -49,13 +49,14 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const [status,setStatus]=useState<Receipt|null>(null),[unlocked,setUnlocked]=useState(false),[upgrade,setUpgrade]=useState(false);
  const [workspaceVersion,setWorkspaceVersion]=useState(0);
  const [pin,setPin]=useState(''),[next,setNext]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [activePinField,setActivePinField]=useState<'pin'|'next'|'confirm'>('pin');
  const [forgotMode, setForgotMode] = useState(false);
  const [resetEmail, setResetEmail] = useState('');
  const [resetSent,setResetSent]=useState(false);
 
  const unlockedNow=useRef(false),statusNow=useRef<Receipt|null>(null);statusNow.current=status;
  const current=useRef(userId);current.current=userId;const mounted=useRef(false),revision=useRef(0),mutex=useRef(false);
- const clear=()=>{setPin('');setNext('');setConfirm('');};
+ const clear=()=>{setPin('');setNext('');setConfirm('');setActivePinField('pin');};
  const valid=(id:string,n:number)=>mounted.current&&current.current===id&&revision.current===n;
  
  function lock(){setPortalUnlocked(userId,false);unlockedNow.current=false;clearProfilePhotoPicker(userId);revision.current++;mutex.current=false;setBusy(false);setUnlocked(false);setUpgrade(false);setForgotMode(false);setResetEmail('');setResetSent(false);clear();setError('');}
@@ -110,7 +111,12 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  },[allowed,enteredUser,userId]);
  
  const creating=status&&!status.configured;
- const field=(label:string,value:string,set:(v:string)=>void,length:number)=><label className="block text-xs font-semibold text-slate-600">{label}<input aria-label={label} type="password" inputMode="numeric" autoComplete="off" maxLength={length} value={value} disabled={busy} onChange={e=>set(e.target.value.replace(/\D/g,'').slice(0,length))} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-center text-xl tracking-[.45em] text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"/></label>;
+ useEffect(()=>{setActivePinField(creating||upgrade?'next':'pin');},[creating,upgrade]);
+ const pinField=(label:string,value:string,key:'pin'|'next'|'confirm',length:number)=><button type="button" aria-label={label} aria-pressed={activePinField===key} disabled={busy} onClick={()=>setActivePinField(key)} className={`block w-full rounded-xl border p-3 text-left transition ${activePinField===key?'border-emerald-500 bg-emerald-50':'border-slate-200 bg-slate-50'}`}><span className="block text-xs font-semibold text-slate-600">{label}:</span><span className="mt-2 flex min-h-8 items-center justify-center gap-3" aria-label={`${value.length} of ${length} digits entered`}>{Array.from({length},(_,i)=><span key={i} className={`h-2.5 w-2.5 rounded-full ${i<value.length?'bg-emerald-700':'bg-slate-300'}`}/>)}</span></button>;
+ const pinMirror=(label:string,value:string,set:(v:string)=>void)=><input type="text" inputMode="none" autoComplete="off" tabIndex={-1} aria-label={label} aria-valuetext={`${value.length} digits entered`} value="" readOnly onChange={e=>set(e.target.value.replace(/\\D/g,'').slice(0,9))} className="sr-only"/>;
+ const appendDigit=(digit:string)=>{if(busy||!/^\\d$/.test(digit))return;const value=activePinField==='pin'?pin:activePinField==='next'?next:confirm;const setter=activePinField==='pin'?setPin:activePinField==='next'?setNext:setConfirm;const limit=activePinField==='pin'?(status?.digits||9):9;if(value.length<limit)setter(value+digit);};
+ const deleteLastDigit=()=>{if(busy)return;const setter=activePinField==='pin'?setPin:activePinField==='next'?setNext:setConfirm;const value=activePinField==='pin'?pin:activePinField==='next'?next:confirm;setter(value.slice(0,-1));};
+ const keypad=<div aria-label="Passcode keypad" className="grid grid-cols-3 gap-2">{['1','2','3','4','5','6','7','8','9'].map(digit=><button key={digit} type="button" disabled={busy} onClick={()=>appendDigit(digit)} className="h-12 rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-sm active:bg-emerald-50 disabled:opacity-50">{digit}</button>)}<button type="button" aria-label="Delete last digit" disabled={busy} onClick={deleteLastDigit} className="h-12 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 disabled:opacity-50">Delete</button><button type="button" disabled={busy} onClick={()=>appendDigit('0')} className="h-12 rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-sm active:bg-emerald-50 disabled:opacity-50">0</button><button type="button" disabled={busy} onClick={()=>{if(activePinField==='pin')setPin('');else if(activePinField==='next')setNext('');else setConfirm('');}} className="h-12 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 disabled:opacity-50">Clear</button></div>;
 
  return (
    <>
@@ -151,8 +157,9 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
              <>
                {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose a new 6–9 digit passcode.</p>}
                {!status?<p role="status" className="text-center text-sm text-slate-600">{busy?'Checking passcode…':'Passcode setup unavailable.'}</p>:<>
-                {!creating&&!upgrade&&field(`Current ${status.digits}-digit passcode`,pin,setPin,status.digits)}
-                {(creating||upgrade)&&<>{field('New passcode (6–9 digits)',next,setNext,9)}{field('Confirm passcode',confirm,setConfirm,9)}</>}
+                {!creating&&!upgrade&&<>{pinField(`Current ${status.digits}-digit passcode`,pin,'pin',status.digits)}{pinMirror(`Current ${status.digits}-digit passcode`,pin,setPin)}</>}
+                {(creating||upgrade)&&<>{pinField('New passcode (6–9 digits)',next,'next',9)}{pinMirror('New passcode (6–9 digits)',next,setNext)}{pinField('Confirm passcode',confirm,'confirm',9)}{pinMirror('Confirm passcode',confirm,setConfirm)}</>}
+                {keypad}
                 <button type="submit" disabled={busy} className="h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">{busy?'Checking…':creating||upgrade?'Save passcode':'Unlock'}</button>
                </>}
                
