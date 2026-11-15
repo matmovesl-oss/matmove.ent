@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 
 type Participant = { id?: string; full_name?: string; phone?: string; phone_number?: string };
-type TripContactCard = { bookingId: string; status?: string; rider?: Participant | null; driver?: Participant | null };
+type TripContactCard = { bookingId: string; status?: string; rider?: Participant | null; driver?: Participant | null; payment?: any; investigation?: any };
 
 function mergeParticipant(previous: any, incoming: Participant | null | undefined) {
   if (!incoming) return previous ?? null;
@@ -22,13 +22,21 @@ function mergeParticipant(previous: any, incoming: Participant | null | undefine
  */
 export async function attachTripContacts<T extends { id: string; rider?: any; driver?: any }>(rows: T[]): Promise<T[]> {
   if (!Array.isArray(rows) || rows.length === 0) return rows;
-  const ids = [...new Set(rows.map(row => row.id).filter(id => typeof id === 'string' && id.length > 0))].slice(0, 100);
+  const ids = [...new Set(rows.map(row => row.id).filter(id => typeof id === 'string' && id.length > 0))];
   if (!ids.length) return rows;
   try {
-    const { data, error } = await supabase.rpc('matmove_trip_contact_cards', { p_booking_ids: ids });
-    if (error || !Array.isArray(data)) return rows;
+    const chunks: string[][] = [];
+    for (let index = 0; index < ids.length; index += 100) chunks.push(ids.slice(index, index + 100));
+    const batches = await Promise.all(chunks.map(async chunk => {
+      try {
+        const { data, error } = await supabase.rpc('matmove_trip_contact_cards', { p_booking_ids: chunk });
+        return error || !Array.isArray(data) ? [] : data.filter((item: any) => item && chunk.includes(item.bookingId));
+      } catch {
+        return [];
+      }
+    }));
     const cards = new Map<string, TripContactCard>(
-      data.filter((item: any) => item && ids.includes(item.bookingId)).map((item: TripContactCard) => [item.bookingId, item])
+      batches.flat().map((item: TripContactCard) => [item.bookingId, item])
     );
     return rows.map(row => {
       const card = cards.get(row.id);
@@ -37,10 +45,12 @@ export async function attachTripContacts<T extends { id: string; rider?: any; dr
         ...row,
         rider: mergeParticipant(row.rider, card.rider),
         driver: mergeParticipant(row.driver, card.driver),
+        paymentInfo: card.payment ?? (row as any).paymentInfo ?? null,
+        paymentIssue: card.investigation ?? (row as any).paymentIssue ?? null,
       };
     });
   } catch {
-    // A contact-card outage must never hide a booking or block status sync.
+    // A contact/payment-card outage must never hide a booking or block status sync.
     return rows;
   }
 }
