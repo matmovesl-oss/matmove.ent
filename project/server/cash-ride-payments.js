@@ -74,7 +74,7 @@ async function readPayment(db, bookingId) {
       'booking_id','rider_id','driver_id','fare_minor',
       'driver_cash_minor','matmove_fee_minor','currency','status',
       'driver_cash_confirmed_at','rider_cash_confirmed_at',
-      'manual_resolution_at','version','created_at','updated_at'
+      'manual_resolution_at','cash_return_status','cash_return_requested_at','cash_return_note','cash_return_driver_confirmed_at','cash_return_rider_confirmed_at','version','created_at','updated_at'
     ].join(','))
     .eq('booking_id', bookingId)
     .maybeSingle();
@@ -125,6 +125,13 @@ function publicSnapshot(payment, legs) {
       settlementMode: byKind.refund.settlement_mode,
       verifiedAt: byKind.refund.verified_at
     } : null,
+    cashReturnStatus: payment.cash_return_status || 'not_requested',
+    cashReturnRequestedAt: payment.cash_return_requested_at || null,
+    cashReturnNote: payment.cash_return_note || null,
+    cashReturnDriverConfirmed: Boolean(payment.cash_return_driver_confirmed_at),
+    cashReturnRiderConfirmed: Boolean(payment.cash_return_rider_confirmed_at),
+    cashReturnDriverConfirmedAt: payment.cash_return_driver_confirmed_at || null,
+    cashReturnRiderConfirmedAt: payment.cash_return_rider_confirmed_at || null,
     needsReview: payment.status === 'review_required' || legs.some(leg => leg.status === 'review_required')
   };
 }

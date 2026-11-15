@@ -79,11 +79,16 @@ export default function TripHistory({ userId, role }: Props) {
       if(!Array.isArray(result.data)||result.data.some(t=>t[role==='driver'?'driver_id':'rider_id']!==id))throw Error('Trip ownership could not be verified.');
       const withContacts=await attachTripContacts(result.data);
       const unfinished=withContacts.filter(t=>['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(t.status));
-      const cashStatuses=new Map<string,any>();
+      const cashStatuses=new Map<string,any>(),cashReturns=new Map<string,any>();
       await Promise.all(unfinished.filter(t=>t.payment_method==='cash').map(async t=>{
-        try{const status=await readCashRideStatus(t.id);if(status?.booking?.id===t.id&&status?.payment)cashStatuses.set(t.id,status.payment);}catch{/* A status-read outage must not hide or drop the trip. */}
+        const [status,returnData]=await Promise.all([
+          readCashRideStatus(t.id).catch(()=>null),
+          Promise.resolve(supabase.rpc('matmove_cash_ride_return_status',{p_booking_id:t.id})).then(result=>result.error?null:result.data).catch(()=>null)
+        ]);
+        if(status?.booking?.id===t.id&&status?.payment)cashStatuses.set(t.id,status.payment);
+        if(returnData?.bookingId===t.id)cashReturns.set(t.id,returnData);
       }));
-      const enriched=withContacts.map(t=>({...t,cashPayment:cashStatuses.get(t.id)||t.cashPayment||null}));
+      const enriched=withContacts.map(t=>({...t,cashPayment:cashStatuses.get(t.id)||t.cashPayment||null,cashReturn:cashReturns.get(t.id)||t.cashReturn||null}));
       const after=await supabase.auth.getSession();if(after.error||after.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
       if(live()){setTrips(enriched);setLoadedOwner(id);setError('');}
     }catch(e){if(live()){setTrips([]);setError(e instanceof Error?e.message:'Trip history unavailable.');}}
@@ -128,6 +133,18 @@ export default function TripHistory({ userId, role }: Props) {
   const [cancellingId,setCancellingId]=useState<string|null>(null);
   const [actionError,setActionError]=useState('');
   const [actionNotice,setActionNotice]=useState('');
+  async function confirmCashReturn(t:any){
+    if(!t?.id||!t.cashReturn||!['requested','driver_confirmed','rider_confirmed'].includes(t.cashReturn.returnStatus))return;
+    setCancellingId(t.id);setActionError('');setActionNotice('');
+    try{
+      const {data,error}=await supabase.rpc('matmove_cash_ride_confirm_return',{p_booking_id:t.id});
+      if(error)throw error;
+      if(data?.bookingId!==t.id||!['driver_confirmed','rider_confirmed','both_confirmed'].includes(data?.returnStatus))throw new Error('Cash return confirmation was not recorded.');
+      await refresh();
+      setActionNotice(data.returnStatus==='both_confirmed'?'Both parties have confirmed the physical cash return. Admin can now process the fee-reserve refund and cancellation.':'Your physical cash return confirmation has been recorded. The other party must also confirm.');
+    }catch(error:any){setActionError(error?.message||'Cash return confirmation could not be recorded.');}
+    finally{setCancellingId(null);}
+  }
   async function cancelRequest(t:any){
     if(cancellingId||!['pending','pending_admin','cash_reserve_pending'].includes(t.status))return;
     const confirmed=window.confirm('Cancel this request? If a payment has already been taken, MatMove will verify the refund before showing the request as cancelled.');
@@ -166,7 +183,7 @@ export default function TripHistory({ userId, role }: Props) {
     ['Requested', date(selected.created_at)], ['Scheduled', selected.scheduled_time?date(selected.scheduled_time):selected.service_type==='scheduled'?'Not recorded':'Not scheduled'],
     ['Accepted', date(selected.accepted_at)], ['Started', date(selected.started_at)],
     ['Completed', date(selected.completed_at)], ['Vehicle', selected.vehicle_type],
-    ['Fare', `SLE ${Number(selected.fare_amount || 0).toFixed(2)}`], ['Payment method',selected.payment_method], ['Cash handover status',selected.cashPayment?.status], ['Driver cash confirmed',selected.cashPayment?.driverCashConfirmed?'Yes':'No'], ['Customer cash confirmed',selected.cashPayment?.riderCashConfirmed?'Yes':'No'],
+    ['Fare', `SLE ${Number(selected.fare_amount || 0).toFixed(2)}`], ['Payment method',selected.payment_method], ['Cash handover status',selected.cashPayment?.status], ['Physical cash return',selected.cashReturn?.returnStatus], ['Driver cash confirmed',selected.cashPayment?.driverCashConfirmed?'Yes':'No'], ['Customer cash confirmed',selected.cashPayment?.riderCashConfirmed?'Yes':'No'],
     ...(role === 'driver' ? [['Expected driver share (85%)', `SLE ${(Number(selected.fare_amount || 0) * 0.85).toFixed(2)}`]] : []),
     ...(selected.distance_km != null ? [['Distance', `${selected.distance_km} km`]] : []),
     ...(selected.payment_status ? [['Payment status', selected.payment_status]] : []),
@@ -204,8 +221,10 @@ export default function TripHistory({ userId, role }: Props) {
         <p className="mt-2 text-sm">{t.pickup_location||'Pickup not recorded'} → {t.destination_location||'Destination not recorded'}</p>
         <p className="mt-1 text-xs text-slate-500">Reference: {t.id}</p>
         <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={()=>setSelectedId(t.id)} className="min-h-10 rounded-lg border px-3 text-sm font-semibold">Open request details</button>
+        {t.cashReturn&&['requested','driver_confirmed','rider_confirmed'].includes(t.cashReturn.returnStatus)&&<button type="button" disabled={!!cancellingId||((role==='driver'&&t.cashReturn.driverConfirmed)||(role!=='driver'&&t.cashReturn.riderConfirmed))} onClick={()=>void confirmCashReturn(t)} className="min-h-10 rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 disabled:opacity-50">{cancellingId===t.id?'Recording…':role==='driver'?(t.cashReturn.driverConfirmed?'You confirmed return':'Confirm cash returned to customer'):(t.cashReturn.riderConfirmed?'You confirmed receipt':'Confirm cash returned to you')}</button>}
         {['pending','pending_admin','cash_reserve_pending'].includes(t.status)&&<button type="button" disabled={!!cancellingId} onClick={()=>void cancelRequest(t)} className="min-h-10 rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-700 disabled:opacity-50">{cancellingId===t.id?'Cancelling…':'Cancel request'}</button>}
         </div>
+        {t.cashReturn&&t.cashReturn.returnStatus!=='not_requested'&&<p className="mt-2 text-xs text-emerald-800">Physical cash return: {t.cashReturn.returnStatus.replace(/_/g,' ')} · Driver confirmed: {t.cashReturn.driverConfirmed?'Yes':'No'} · Customer confirmed: {t.cashReturn.riderConfirmed?'Yes':'No'}</p>}
         {['accepted','in_progress','cash_review_required'].includes(t.status)&&<p className="mt-2 text-xs text-slate-600">This request has progressed beyond the self-cancellation stage. Contact MatMove support or ask Admin to review it; any cancellation must pass the refund checks.</p>}
       </article>)}
     </section>
