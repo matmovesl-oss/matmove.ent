@@ -83,7 +83,7 @@ export default function TripHistory({ userId, role }: Props) {
       await Promise.all(unfinished.filter(t=>t.payment_method==='cash').map(async t=>{
         const [status,returnData]=await Promise.all([
           readCashRideStatus(t.id).catch(()=>null),
-          supabase.rpc('matmove_cash_ride_return_status',{p_booking_id:t.id}).then(result=>result.error?null:result.data).catch(()=>null)
+          Promise.resolve(supabase.rpc('matmove_cash_ride_return_status',{p_booking_id:t.id})).then(result=>result.error?null:result.data).catch(()=>null)
         ]);
         if(status?.booking?.id===t.id&&status?.payment)cashStatuses.set(t.id,status.payment);
         if(returnData?.bookingId===t.id)cashReturns.set(t.id,returnData);
