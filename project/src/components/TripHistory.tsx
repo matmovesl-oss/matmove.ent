@@ -7,7 +7,7 @@ import { filterTripHistory } from '@/lib/tripHistory';
 import { updateRide, readCashRideStatus } from '@/services/rideService';
 import { attachTripContacts } from '@/lib/tripContacts';
 
-type Props = { userId: string; role: 'rider' | 'driver' | 'merchant'; onResume?: (bookingId: string) => void };
+type Props = { userId: string; role: 'rider' | 'driver' | 'merchant'; onResume?: (bookingId: string) => void; accountLabel?: string };
 const date = (value: unknown) => {
   if (!value) return 'Not recorded';
   const d = new Date(String(value));
@@ -55,7 +55,7 @@ function tripReceiptFields(t: any, role: Props['role']) {
     ...(t.paymentIssue ? [{ label: 'Admin review', value: t.paymentIssue.reasonCode === 'admin_unpaid_payment_review' ? 'Unpaid payment review' : t.paymentIssue.reasonCode === 'admin_unpaid_cash_fare_review' ? 'Unpaid cash fare review' : 'Investigation open' }] : []),
   ];
 }
-export default function TripHistory({ userId, role, onResume }: Props) {
+export default function TripHistory({ userId, role, onResume, accountLabel }: Props) {
   const [trips, setTrips] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -223,7 +223,7 @@ export default function TripHistory({ userId, role, onResume }: Props) {
     {actionNotice&&<p role="status" className="rounded-xl bg-blue-50 p-3 text-blue-900">{actionNotice}</p>}
     <section aria-label="Unfinished requests" className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
       <div><h2 className="text-lg font-bold">Unfinished requests</h2><p className="text-sm text-slate-600">Requests still awaiting a driver, confirmation, completion or payment verification.</p></div>
-      {loading?<p className="text-sm text-slate-500">Checking unfinished requests…</p>:activeRequests.length===0?<p className="rounded-xl bg-white p-4 text-sm text-slate-600">You have no unfinished requests.</p>:activeRequests.map(t=><article key={`active-${t.id}`} className="rounded-xl border bg-white p-3">
+      {loading?<p className="text-sm text-slate-500">Checking unfinished requests…</p>:activeRequests.length===0?<p className="rounded-xl bg-white p-4 text-sm text-slate-600">No unfinished requests are linked to {accountLabel || 'this signed-in account'}. Make sure you are using the same Rider or Merchant account that originally submitted the request. Trips are kept with their original account for privacy.</p>:activeRequests.map(t=><article key={`active-${t.id}`} className="rounded-xl border bg-white p-3">
         <div className="flex flex-wrap items-center justify-between gap-2"><strong className="capitalize">{t.service_type||'Ride'} request</strong><span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{t.status.replace(/_/g,' ')}</span></div>
         <p className="mt-2 text-sm">{t.pickup_location||'Pickup not recorded'} → {t.destination_location||'Destination not recorded'}</p>
         <p className="mt-1 text-xs text-slate-500">Reference: {t.id}</p>
