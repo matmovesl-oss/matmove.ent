@@ -1071,7 +1071,7 @@ function RiderShop({ profile, wallet }: any) {
 }
 
 function RiderTrips({ profile }: any) {
-  return <TripHistory userId={profile?.id} role="rider" />;
+  return <TripHistory userId={profile?.id} role="rider" accountLabel={profile?.full_name || profile?.email} />;
 }
 
 function PolicyModal({ onAccept }: { onAccept: () => void }) {
