@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const trips=readFileSync(new URL('../src/components/TripHistory.tsx',import.meta.url),'utf8');
+const contacts=readFileSync(new URL('../src/lib/tripContacts.ts',import.meta.url),'utf8');
+const tripCardsMigration=readFileSync(new URL('../supabase/migrations/20261115114900_matmove_trip_payment_and_investigation_cards_v1.sql',import.meta.url),'utf8');
 test('Trips centre has persistent Live, Pending and History views',()=>{
  assert.match(trips,/Live \/ Active/);
  assert.match(trips,/Pending/);
@@ -27,4 +29,14 @@ test('Trips loads bookings without invalid profile embeds and keeps last success
  assert.doesNotMatch(trips,/driver:driver_id|rider:rider_id/);
  assert.doesNotMatch(trips,/setTrips\(\[\]\);setError/);
  assert.match(trips,/attachTripContacts/);
+});
+
+test('Drivers can see Admin payment flags and verified cash/digital settlement status on their own trips',()=>{
+ assert.match(contacts,/index \+= 100/);
+ assert.match(contacts,/paymentInfo: card\.payment/);
+ assert.match(contacts,/paymentIssue: card\.investigation/);
+ assert.match(trips,/Driver payout status/);
+ assert.match(trips,/Unpaid payment flagged for review/);
+ assert.match(tripCardsMigration,/driverPayoutStatus/);
+ assert.match(tripCardsMigration,/investigation/);
 });
