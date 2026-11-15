@@ -640,7 +640,7 @@ function MerchantInventory({ profile }: any) {
 }
 
 function MerchantTrips({ profile }: any) {
-  return <TripHistory userId={profile.id} role="merchant" />;
+  return <TripHistory userId={profile.id} role="merchant" accountLabel={profile.full_name || profile.email} />;
 }
 
 function PolicyModal({ onAccept }: { onAccept: () => void }) {
