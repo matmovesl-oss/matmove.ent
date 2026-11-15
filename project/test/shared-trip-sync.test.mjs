@@ -82,3 +82,10 @@ test('Rider and Merchant can manually refresh and select an older active request
  assert.match(switcher,/Driver confirmed · your cash confirmation needed/);
  assert.match(switcher,/\{onRefresh&&<button/);
 });
+
+test('Driver keeps assigned unfinished rides recoverable while offline but hides unassigned radar requests',async()=>{
+ const driver=await read('../src/pages/DriverDashboard.tsx');
+ assert.match(driver,/if \(activeSection !== 'home'\) \{ setRequestsLoading\(false\); setRequestsError\(''\); return; \}/);
+ assert.match(driver,/item\.driver_id===profile\.id\|\|\(isOnline&&!item\.driver_id/);
+ assert.doesNotMatch(driver,/if \(!isOnline \|\| activeSection !== 'home'\) \{ setActiveRequests\(\[\]\)/);
+});
