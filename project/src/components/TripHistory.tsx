@@ -73,7 +73,7 @@ export default function TripHistory({ userId, role }: Props) {
     try{
       const before=await supabase.auth.getSession();if(before.error||before.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
       if(!live())return;
-      const result = await supabase.from('bookings').select('*, driver:driver_id(full_name), rider:rider_id(full_name)')
+      const result = await supabase.from('bookings').select('*')
         .eq(role === 'driver' ? 'driver_id' : 'rider_id', id).order('created_at', { ascending: false }).abortSignal(controller.signal);
       if(result.error)throw Error('Trip history could not be loaded. Retry; no records have been deleted.');
       if(!Array.isArray(result.data)||result.data.some(t=>t[role==='driver'?'driver_id':'rider_id']!==id))throw Error('Trip ownership could not be verified.');
@@ -91,7 +91,7 @@ export default function TripHistory({ userId, role }: Props) {
       const enriched=withContacts.map(t=>({...t,cashPayment:cashStatuses.get(t.id)||t.cashPayment||null,cashReturn:cashReturns.get(t.id)||t.cashReturn||null}));
       const after=await supabase.auth.getSession();if(after.error||after.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
       if(live()){setTrips(enriched);setLoadedOwner(id);setError('');}
-    }catch(e){if(live()){setTrips([]);setError(e instanceof Error?e.message:'Trip history unavailable.');}}
+    }catch(e){if(live()){setError(e instanceof Error?e.message:'Trip history could not be refreshed. Showing the last successfully loaded records if available.');}}
     finally{clearTimeout(timeout);if(live()){inFlight.current=false;setLoading(false);}}
   }, [userId, role]);
   useEffect(() => {
