@@ -206,7 +206,21 @@ export default function TripHistory({ userId, role, onOpenHome }: Props) {
     ['Requested', date(selected.created_at)], ['Scheduled', selected.scheduled_time?date(selected.scheduled_time):selected.service_type==='scheduled'?'Not recorded':'Not scheduled'],
     ['Accepted', date(selected.accepted_at)], ['Started', date(selected.started_at)],
     ['Completed', date(selected.completed_at)], ['Vehicle', selected.vehicle_type],
+    ['Payment method', selected.payment_method || 'Not recorded'],
     ['Fare', `SLE ${Number(selected.fare_amount || 0).toFixed(2)}`],
+    ...(selected.payment_method==='cash'&&selected.cashPayment ? [
+      ['Cash ledger',selected.cashPayment.status],
+      ['Physical cash to driver',`SLE ${Number(selected.cashPayment.driverCash||0).toFixed(2)}`],
+      ['MatMove fee reserve',`SLE ${Number(selected.cashPayment.matmoveFee||0).toFixed(2)}`],
+      ['Driver confirmed cash received',selected.cashPayment.driverCashConfirmed?'Yes':'No'],
+      ['Customer confirmed handover',selected.cashPayment.riderCashConfirmed?'Yes':'No'],
+      ...(selected.cashPayment.adminReturnRequested?[
+        ['Admin physical-return request',selected.cashPayment.adminReturnNote||'Requested'],
+        ['Driver confirmed returned cash',selected.cashPayment.driverReturnConfirmed?'Yes':'No'],
+        ['Customer confirmed cash received back',selected.cashPayment.riderReturnConfirmed?'Yes':'No'],
+        ['Fee reserve refund transfer',selected.cashPayment.refund?.status||'Not queued'],
+      ]:[]),
+    ]:[]),
     ...(role === 'driver' ? [['Expected driver share (85%)', `SLE ${(Number(selected.fare_amount || 0) * 0.85).toFixed(2)}`]] : []),
     ...(selected.distance_km != null ? [['Distance', `${selected.distance_km} km`]] : []),
     ...(selected.payment_status ? [['Payment status', selected.payment_status]] : []),
@@ -214,7 +228,7 @@ export default function TripHistory({ userId, role, onOpenHome }: Props) {
   return <section className="mx-auto max-w-4xl space-y-4 p-4 pb-24 sm:p-6">
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h1 className="text-3xl font-bold">Trips & Deliveries</h1><p className="mt-1 text-sm text-slate-500">Review recent activity or open your full trip history.</p></div>
+        <div><h1 className="text-3xl font-bold">Trips & Deliveries</h1><p className="mt-1 text-sm text-slate-500">Your current requests, live sessions and completed trip history.</p></div>
         <button className="min-h-11 rounded-xl border bg-white px-4 py-2 font-semibold" onClick={() => void refresh()}>Refresh</button>
       </div>
       <div className="grid gap-3 rounded-2xl border bg-white p-3 sm:grid-cols-2">
@@ -234,18 +248,59 @@ export default function TripHistory({ userId, role, onOpenHome }: Props) {
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
     {actionError&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{actionError}</p>}
     {actionNotice&&<p role="status" className="rounded-xl bg-blue-50 p-3 text-blue-900">{actionNotice}</p>}
-    <section aria-label="Unfinished requests" className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
-      <div><h2 className="text-lg font-bold">Unfinished requests</h2><p className="text-sm text-slate-600">Requests still awaiting a driver, confirmation, completion or payment verification.</p></div>
-      {loading?<p className="text-sm text-slate-500">Checking unfinished requests…</p>:activeRequests.length===0?<p className="rounded-xl bg-white p-4 text-sm text-slate-600">You have no unfinished requests.</p>:activeRequests.map(t=><article key={`active-${t.id}`} className="rounded-xl border bg-white p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2"><strong className="capitalize">{t.service_type||'Ride'} request</strong><span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{t.status.replace(/_/g,' ')}</span></div>
-        <p className="mt-2 text-sm">{t.pickup_location||'Pickup not recorded'} → {t.destination_location||'Destination not recorded'}</p>
-        <p className="mt-1 text-xs text-slate-500">Reference: {t.id}</p>
-        <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={()=>setSelectedId(t.id)} className="min-h-10 rounded-lg border px-3 text-sm font-semibold">Open request details</button>
-        {['pending','pending_admin','cash_reserve_pending'].includes(t.status)&&<button type="button" disabled={!!cancellingId} onClick={()=>void cancelRequest(t)} className="min-h-10 rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-700 disabled:opacity-50">{cancellingId===t.id?'Cancelling…':'Cancel request'}</button>}
+
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-3">
+      <div><h2 className="font-bold">Your trip inbox</h2><p className="text-xs text-slate-500">Current requests stay linked to your account when you leave and return to MatMove.</p></div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" aria-pressed={tripTab==='active'} onClick={()=>setTripTab('active')} className={`min-h-10 rounded-xl px-4 text-sm font-bold ${tripTab==='active'?'bg-slate-900 text-white':'border bg-white'}`}>Active & requests ({role==='driver'?availableRequests.length+myActiveTrips.length:activeRequests.length})</button>
+        <button type="button" aria-pressed={tripTab==='history'} onClick={()=>setTripTab('history')} className={`min-h-10 rounded-xl px-4 text-sm font-bold ${tripTab==='history'?'bg-slate-900 text-white':'border bg-white'}`}>History ({historyTrips.length})</button>
+      </div>
+    </div>
+    {tripTab==='active' ? <>
+      {role==='driver' ? <>
+        <section aria-label="Available ride requests" className="space-y-3 rounded-2xl border border-indigo-200 bg-indigo-50/40 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-bold">Available requests</h2><p className="text-sm text-slate-600">Unassigned requests appear here as well as on Driver Radar.</p></div><span className="rounded-full bg-white px-3 py-1 text-xs font-bold">{availableRequests.length} waiting</span></div>
+          {!driverOnline&&availableRequests.length>0&&<p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">You are offline. Requests remain visible, but you must go online to accept one. <button type="button" onClick={()=>onOpenHome?.()} className="font-bold underline">Open Driver Home</button></p>}
+          {loading?<p className="text-sm text-slate-500">Checking available requests…</p>:availableRequests.length===0?<p className="rounded-xl bg-white p-4 text-sm text-slate-600">There are no unassigned requests available right now. New eligible requests will appear here.</p>:availableRequests.map(t=><article key={`available-${t.id}`} className="rounded-xl border bg-white p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2"><div><strong>{t.rider?.full_name||'MatMove customer'}</strong><p className="text-xs text-slate-500">{t.service_type||'Ride'} · {t.vehicle_type||'Vehicle not specified'} · {date(t.created_at)}</p></div><strong className="text-sm">SLE {Number(t.fare_amount||0).toFixed(2)}</strong></div>
+            <p className="mt-2 text-sm">{t.pickup_location||'Pickup not recorded'} → {t.destination_location||'Destination not recorded'}</p><p className="mt-1 break-all font-mono text-[11px] text-slate-500">{t.id}</p>
+            <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={()=>setSelectedId(t.id)} className="min-h-10 rounded-lg border px-3 text-sm font-semibold">Review request</button><button type="button" disabled={!driverOnline||!!acceptingId} onClick={()=>void acceptAvailableRequest(t)} className="min-h-10 rounded-lg bg-indigo-600 px-3 text-sm font-bold text-white disabled:opacity-50">{acceptingId===t.id?'Accepting…':driverOnline?'Accept request':'Go online to accept'}</button></div>
+          </article>)}
+        </section>
+        <section aria-label="My active trips" className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-bold">My active trips</h2><p className="text-sm text-slate-600">Trips accepted by you, including trips currently in progress.</p></div><span className="rounded-full bg-white px-3 py-1 text-xs font-bold">{myActiveTrips.length} active</span></div>
+          {loading?<p className="text-sm text-slate-500">Restoring your assigned trips…</p>:myActiveTrips.length===0?<p className="rounded-xl bg-white p-4 text-sm text-slate-600">You have no accepted or in-progress trips. An accepted trip remains here until completion or a verified cancellation.</p>:myActiveTrips.map(t=><article key={`driver-active-${t.id}`} className="rounded-xl border bg-white p-3">
+            <div className="flex flex-wrap justify-between gap-2"><strong>{t.rider?.full_name||'Customer'}</strong><span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold capitalize text-emerald-800">{t.status.replace(/_/g,' ')}</span></div>
+            <p className="mt-2 text-sm">{t.pickup_location||'Pickup not recorded'} → {t.destination_location||'Destination not recorded'}</p><p className="mt-1 text-xs text-slate-500">Fare SLE {Number(t.fare_amount||0).toFixed(2)} · {t.payment_method==='cash'?'Cash':'Digital'} · {date(t.created_at)}</p>
+            <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={()=>setSelectedId(t.id)} className="min-h-10 rounded-lg border px-3 text-sm font-semibold">Open trip details</button><button type="button" onClick={()=>onOpenHome?.()} className="min-h-10 rounded-lg bg-emerald-700 px-3 text-sm font-bold text-white">Resume live trip</button></div>
+            {t.cashPayment?.adminReturnRequested&&<div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><strong>Admin requested return of physical cash</strong><p className="mt-1 text-xs">Return SLE {Number(t.cashPayment.driverCash||0).toFixed(2)} to the customer in person. The customer must independently confirm receipt. The MatMove fee reserve refund is separate.</p><p className="mt-1 text-xs">Driver return: {t.cashPayment.driverReturnConfirmed?'Confirmed':'Waiting'} · Customer receipt: {t.cashPayment.riderReturnConfirmed?'Confirmed':'Waiting'}</p>{!t.cashPayment.driverReturnConfirmed&&<button type="button" disabled={!!cancellingId} onClick={()=>void confirmReturnedCash(t)} className="mt-2 min-h-10 rounded-lg bg-amber-700 px-3 text-xs font-bold text-white disabled:opacity-50">{cancellingId===t.id?'Recording…':'Confirm I returned the physical cash'}</button>}</div>}
+          </article>)}
+        </section>
+      </> : <>
+        <section aria-label="Your unfinished requests" className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50/40 p-4">
+          <div className="flex flex-wrap justify-between gap-3"><div><h2 className="text-lg font-bold">Current requests & live trips</h2><p className="text-sm text-slate-600">Pending, accepted and in-progress rides stay here until resolved.</p></div><span className="rounded-full bg-white px-3 py-1 text-xs font-bold">{activeRequests.length} unfinished</span></div>
+          {loading?<p className="text-sm text-slate-500">Restoring your unfinished requests…</p>:activeRequests.length===0?<p className="rounded-xl bg-white p-4 text-sm text-slate-600">You have no unfinished requests.</p>:activeRequests.map(t=><article key={`customer-active-${t.id}`} className="rounded-xl border bg-white p-3">
+            <div className="flex flex-wrap justify-between gap-2"><strong className="capitalize">{t.service_type||'Ride'} request</strong><span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold capitalize text-amber-900">{t.status.replace(/_/g,' ')}</span></div>
+            <p className="mt-2 text-sm">{t.pickup_location||'Pickup not recorded'} → {t.destination_location||'Destination not recorded'}</p><p className="mt-1 text-xs text-slate-500">{t.driver?.full_name?`Driver: ${t.driver.full_name}`:'Waiting for a driver'} · SLE {Number(t.fare_amount||0).toFixed(2)}</p><p className="mt-1 break-all font-mono text-[11px] text-slate-500">{t.id}</p>
+            <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={()=>setSelectedId(t.id)} className="min-h-10 rounded-lg border px-3 text-sm font-semibold">Open original request</button>{['accepted','in_progress'].includes(t.status)&&<button type="button" onClick={()=>onOpenHome?.()} className="min-h-10 rounded-lg bg-blue-700 px-3 text-sm font-bold text-white">Resume live trip</button>}{['pending','pending_admin','cash_reserve_pending'].includes(t.status)&&<button type="button" disabled={!!cancellingId} onClick={()=>void cancelRequest(t)} className="min-h-10 rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-700 disabled:opacity-50">{cancellingId===t.id?'Cancelling…':'Cancel request'}</button>}</div>
+            {t.cashPayment?.adminReturnRequested&&<div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><strong>Admin requested physical cash return</strong><p className="mt-1 text-xs">The driver should return SLE {Number(t.cashPayment.driverCash||0).toFixed(2)} physically. Confirm only after you receive it. MatMove separately verifies the SLE {Number(t.cashPayment.matmoveFee||0).toFixed(2)} fee reserve refund.</p><p className="mt-1 text-xs">Driver return: {t.cashPayment.driverReturnConfirmed?'Confirmed':'Waiting'} · Your receipt: {t.cashPayment.riderReturnConfirmed?'Confirmed':'Waiting'}</p>{!t.cashPayment.riderReturnConfirmed&&<button type="button" disabled={!!cancellingId} onClick={()=>void confirmReturnedCash(t)} className="mt-2 min-h-10 rounded-lg bg-amber-700 px-3 text-xs font-bold text-white disabled:opacity-50">Confirm I received the physical cash back</button>}</div>}
+          </article>)}
+        </section>
+      </>}
+    </> : <>
+      <section aria-label="Trip history" className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-bold">Completed & cancelled trips</h2><p className="text-sm text-slate-600">Closed trips only. Current requests are kept in the Active tab.</p></div><span className="text-xs text-slate-500">{historyTrips.length} records</span></div>
+        <div className="grid gap-3 rounded-2xl border bg-white p-3 sm:grid-cols-2">
+          <label className="block text-sm font-semibold text-slate-700">Time period
+            <select aria-label="Filter trips by time period" value={period} onChange={e=>setPeriod(e.target.value as '30'|'90'|'all')} className="mt-1 min-h-11 w-full rounded-xl border p-3"><option value="30">Recent — last 30 days</option><option value="90">Last 90 days</option><option value="all">All history</option></select>
+          </label>
+          <label className="block text-sm font-semibold text-slate-700">Status
+            <select aria-label="Filter trips by status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value as typeof statusFilter)} className="mt-1 min-h-11 w-full rounded-xl border p-3"><option value="all">Completed and cancelled</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select>
+          </label>
         </div>
-        {['accepted','in_progress','cash_review_required'].includes(t.status)&&<p className="mt-2 text-xs text-slate-600">This request has progressed beyond the self-cancellation stage. Contact MatMove support or ask Admin to review it; any cancellation must pass the refund checks.</p>}
-      </article>)}
-    </section>
+        {loading?<SkeletonList count={3}/>:historyTrips.length===0?<p className="rounded-xl border bg-white p-6 text-center text-sm text-slate-600">No completed or cancelled trips match these filters.</p>:historyTrips.map(t=><article key={`history-${t.id}`} className="rounded-2xl border bg-white p-4 shadow-sm"><button type="button" onClick={()=>{setNotice('');setSelectedId(t.id);}} className="w-full text-left"><div className="flex justify-between gap-3"><strong className="capitalize">{t.service_type||'Ride'}</strong><span className="capitalize">{t.status}</span></div><p className="mt-2 text-sm text-slate-500">{date(t.created_at)}</p><p className="mt-2">{t.pickup_location} → {t.destination_location}</p><p className="mt-2 font-bold">SLE {Number(t.fare_amount||0).toFixed(2)}</p><p className="mt-2 text-sm text-blue-700">View full trip details</p></button><button className="mt-3 rounded-lg border px-3 py-2 text-sm" onClick={()=>void share(t)}>Share PDF receipt</button></article>)}
+      </section>
+    </>}
     {!selectedId && notice && <p role="status" className="rounded-xl bg-emerald-50 p-3">{notice}</p>}
     {loading ? <SkeletonList count={4} /> : !ownedTrips.length && !error ? <p className="rounded-2xl border bg-white py-10 text-center text-slate-500">No trips or deliveries yet.</p> : null}
     {!loading&&ownedTrips.length>0&&filteredTrips.length===0&&<p className="rounded-2xl border bg-white p-6 text-center text-sm text-slate-600">No trips match these filters. Try a wider time period or another status.</p>}
@@ -264,8 +319,13 @@ export default function TripHistory({ userId, role, onOpenHome }: Props) {
       {selected && <><div className="flex justify-between gap-3"><h2 className="text-xl font-bold">Trip details</h2><button autoFocus onClick={() => dialog.current?.close()} className="rounded-lg border px-3 py-2">Close</button></div>
         <dl className="my-4 space-y-3">{fields.map(([label, value]) => <div key={label} className="border-b pb-2"><dt className="text-sm text-slate-500">{label}</dt><dd className="break-words font-medium">{value || 'Not recorded'}</dd></div>)}</dl>
         {notice && <p role="status" className="mb-3 rounded-lg bg-emerald-50 p-3">{notice}</p>}
-        <button onClick={() => void share(selected)} className="rounded-xl bg-blue-600 px-4 py-3 font-bold text-white">Share PDF receipt</button>
-        <p className="mt-3 text-xs text-slate-500">Sharing includes your trip areas, fare and times. Only recorded times are shown.</p>
+        <div className="flex flex-wrap gap-2">
+          {['accepted','in_progress'].includes(selected.status)&&<button type="button" onClick={()=>{dialog.current?.close();onOpenHome?.();}} className="min-h-11 rounded-xl bg-emerald-700 px-4 py-3 font-bold text-white">Resume live trip</button>}
+          {role==='driver'&&!selected.driver_id&&['pending','pending_admin'].includes(selected.status)&&<button type="button" disabled={!driverOnline||!!acceptingId} onClick={()=>void acceptAvailableRequest(selected)} className="min-h-11 rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white disabled:opacity-50">{!driverOnline?'Go online to accept':acceptingId===selected.id?'Accepting…':'Accept request'}</button>}
+          {selected.cashPayment?.adminReturnRequested&&!selected.cashPayment?.[role==='driver'?'driverReturnConfirmed':'riderReturnConfirmed']&&<button type="button" disabled={!!cancellingId} onClick={()=>void confirmReturnedCash(selected)} className="min-h-11 rounded-xl bg-amber-700 px-4 py-3 font-bold text-white disabled:opacity-50">{role==='driver'?'Confirm physical cash returned':'Confirm physical cash received back'}</button>}
+          <button onClick={() => void share(selected)} className="min-h-11 rounded-xl border px-4 py-3 font-bold">Share PDF receipt</button>
+        </div>
+        <p className="mt-3 text-xs text-slate-500">Your trip remains linked to your account. Physical cash return confirmation is separate from the provider-verified MatMove fee refund.</p>
       </>}
     </dialog>
   </section>;
