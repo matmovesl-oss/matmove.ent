@@ -67,3 +67,10 @@ test('Driver and merchant request lists use valid booking/profile retrieval path
  assert.doesNotMatch(driverDashboard,/profiles!rider_id/);
  assert.doesNotMatch(merchantDashboard,/rider:rider_id/);
 });
+
+test('Trips status filter includes cash reserve and cash review states',()=>{
+ assert.match(trips,/cash_reserve_pending/);
+ assert.match(trips,/cash_review_required/);
+ assert.match(trips,/Cash reserve pending/);
+ assert.match(trips,/Cash review required/);
+});
