@@ -74,3 +74,10 @@ test('Trips status filter includes cash reserve and cash review states',()=>{
  assert.match(trips,/Cash reserve pending/);
  assert.match(trips,/Cash review required/);
 });
+
+test('Trips identifies the signed-in Rider or Merchant account and explains account-private histories',()=>{
+ assert.match(trips,/Signed in as:/);
+ assert.match(trips,/Account reference:/);
+ assert.match(trips,/matching names or phone contacts do not merge account histories/);
+ assert.match(trips,/Customer product orders are shown separately under Inventory & Orders/);
+});
