@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 const trips=readFileSync(new URL('../src/components/TripHistory.tsx',import.meta.url),'utf8');
 const driverDashboard=readFileSync(new URL('../src/pages/DriverDashboard.tsx',import.meta.url),'utf8');
 const portal=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
+const merchantDashboard=readFileSync(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
 const contacts=readFileSync(new URL('../src/lib/tripContacts.ts',import.meta.url),'utf8');
 const tripCardsMigration=readFileSync(new URL('../supabase/migrations/20261115114900_matmove_trip_payment_and_investigation_cards_v1.sql',import.meta.url),'utf8');
 const unpaidCashMigration=readFileSync(new URL('../supabase/migrations/20261115115100_matmove_admin_flag_unpaid_cash_fare_v1.sql',import.meta.url),'utf8');
@@ -57,4 +58,12 @@ test('Driver can resume the exact accepted ride from Trips into the live driver 
  assert.match(driverDashboard,/DriverTrips profile=\{props\.profile\} onResume=\{props\.onResumeTrip\}/);
  assert.match(driverDashboard,/r\.id===resumeTripId/);
  assert.match(portal,/setResumeTripId\(bookingId\);setActiveSection\('ride'\)/);
+});
+
+test('Driver and merchant request lists use valid booking/profile retrieval paths',()=>{
+ assert.match(driverDashboard,/\.select\('\*'\)/);
+ assert.match(driverDashboard,/attachTripContacts\(visible\)/);
+ assert.match(merchantDashboard,/profiles!app_orders_rider_id_fkey/);
+ assert.doesNotMatch(driverDashboard,/profiles!rider_id/);
+ assert.doesNotMatch(merchantDashboard,/rider:rider_id/);
 });
