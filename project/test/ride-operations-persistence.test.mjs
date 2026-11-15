@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 const trips=readFileSync(new URL('../src/components/TripHistory.tsx',import.meta.url),'utf8');
 const contacts=readFileSync(new URL('../src/lib/tripContacts.ts',import.meta.url),'utf8');
 const tripCardsMigration=readFileSync(new URL('../supabase/migrations/20261115114900_matmove_trip_payment_and_investigation_cards_v1.sql',import.meta.url),'utf8');
+const unpaidCashMigration=readFileSync(new URL('../supabase/migrations/20261115115100_matmove_admin_flag_unpaid_cash_fare_v1.sql',import.meta.url),'utf8');
 test('Trips centre has persistent Live, Pending and History views',()=>{
  assert.match(trips,/Live \/ Active/);
  assert.match(trips,/Pending/);
@@ -39,4 +40,11 @@ test('Drivers can see Admin payment flags and verified cash/digital settlement s
  assert.match(trips,/Unpaid payment flagged for review/);
  assert.match(tripCardsMigration,/driverPayoutStatus/);
  assert.match(tripCardsMigration,/investigation/);
+});
+
+test('Admin unpaid cash-fare flag distinguishes the physical driver fare from the fee reserve',()=>{
+ assert.match(unpaidCashMigration,/cp\.status <> 'collection_pending'/);
+ assert.match(unpaidCashMigration,/cp\.driver_cash_confirmed_at is not null/);
+ assert.match(unpaidCashMigration,/admin_unpaid_cash_fare_review/);
+ assert.match(trips,/Unpaid cash fare flagged for review/);
 });
