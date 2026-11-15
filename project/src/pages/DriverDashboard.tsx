@@ -30,13 +30,13 @@ import {
 
 export function DriverDashboard(props: any) {
   if (props.activeSection === 'trips') {
-    return <DriverTrips profile={props.profile} />;
+    return <DriverTrips profile={props.profile} onResume={props.onResumeTrip} />;
   }
 
   return <DriverMain key={props.profile.id} {...props} />;
 }
 
-function DriverMain({ profile, wallet, activeSection }: any) {
+function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [rideNotice, setRideNotice] = useState('');
   const [walletNotice, setWalletNotice] = useState('');
@@ -213,7 +213,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
     } catch (err: any) { setWalletNotice(err.message || 'Unable to create USD wallet.'); } finally { setIsCreatingUsd(false); }
   };
 
-  const activeTrackedTrip=activeRequests.find(r=>r.driver_id===profile.id&&['accepted','in_progress'].includes(r.status));
+  const activeTrackedTrip=activeRequests.find(r=>r.id===resumeTripId&&r.driver_id===profile.id&&['accepted','in_progress'].includes(r.status))||activeRequests.find(r=>r.driver_id===profile.id&&['accepted','in_progress'].includes(r.status));
   useEffect(() => {
     if (activeSection !== 'home' || activeTrackedTrip || !mapContainer.current) return;
     let disposed = false;
@@ -626,8 +626,8 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   );
 }
 
-function DriverTrips({ profile }: any) {
-  return <TripHistory userId={profile.id} role="driver" />;
+function DriverTrips({ profile, onResume }: any) {
+  return <TripHistory userId={profile.id} role="driver" onResume={onResume} />;
 }
 
 function PolicyModal({ onAccept }: { onAccept: () => void }) {
