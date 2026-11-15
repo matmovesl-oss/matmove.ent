@@ -105,10 +105,19 @@ export default function TripHistory({ userId, role }: Props) {
         if (document.visibilityState !== 'hidden') void refresh();
       })
       .subscribe();
+    const onResume=()=>{if(document.visibilityState!=='hidden')void refresh();};
     const timer = window.setInterval(() => { if(document.visibilityState!=='hidden')void refresh(); }, 15000);
+    document.addEventListener('visibilitychange',onResume);
+    window.addEventListener('focus',onResume);
+    window.addEventListener('pageshow',onResume);
+    window.addEventListener('online',onResume);
     return () => {
       mounted.current=false;revision.current++;inFlight.current=false;abort.current?.abort();
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange',onResume);
+      window.removeEventListener('focus',onResume);
+      window.removeEventListener('pageshow',onResume);
+      window.removeEventListener('online',onResume);
       void supabase.removeChannel(channel);
     };
   }, [refresh,userId,role]);
