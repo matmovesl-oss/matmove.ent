@@ -53,7 +53,7 @@ export function watchPasscodeBackground(onLock:()=>void,userId='',isUnlocked:()=
 }
 
 export default function CustomerPasscode({userId,onLogout,children}:{userId:string;onLogout:()=>void|Promise<void>;children:(lock:()=>void)=>ReactNode}){
- const privacyDialog=useRef<HTMLDialogElement|null>(null),workspace=useRef<HTMLDivElement|null>(null);
+ const privacyDialog=useRef<HTMLDialogElement|null>(null),workspace=useRef<HTMLDivElement|null>(null),pinEntryRef=useRef<HTMLInputElement|null>(null);
  const [enteredUser,setEnteredUser]=useState('');
  const [status,setStatus]=useState<Receipt|null>(null),[unlocked,setUnlocked]=useState(false),[upgrade,setUpgrade]=useState(false);
  const [workspaceVersion,setWorkspaceVersion]=useState(0);
@@ -62,7 +62,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const [forgotMode, setForgotMode] = useState(false);
  const [resetEmail, setResetEmail] = useState('');
  const [resetSent,setResetSent]=useState(false);
- const [biometricSupported,setBiometricSupported]=useState(false),[passkeyCount,setPasskeyCount]=useState<number|null>(null),[passkeyBusy,setPasskeyBusy]=useState(false),[passkeyError,setPasskeyError]=useState(''),[passkeyNotice,setPasskeyNotice]=useState('');
+ const [biometricSupported,setBiometricSupported]=useState(false),[passkeyCount,setPasskeyCount]=useState<number|null>(null),[passkeyBusy,setPasskeyBusy]=useState(false),[passkeyError,setPasskeyError]=useState(''),[passkeyNotice,setPasskeyNotice]=useState(''),[passkeyCheckError,setPasskeyCheckError]=useState('');
 
  const unlockedNow=useRef(false),statusNow=useRef<Receipt|null>(null);statusNow.current=status;
  const current=useRef(userId);current.current=userId;const mounted=useRef(false),revision=useRef(0),mutex=useRef(false);
@@ -132,27 +132,211 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
    if(!available)return;
    try{
     const result=await (supabase.auth as any).passkey.list();
-    if(live&&!result.error&&Array.isArray(result.data))setPasskeyCount(result.data.length);
-   }catch{if(live)setPasskeyCount(null);}
+    if(!live)return;
+    if(result.error){
+     setPasskeyCount(0);
+     setPasskeyCheckError('Saved biometrics could not be checked. You can try setting up a passkey again; your MatMove passcode remains available.');
+    }else if(Array.isArray(result.data)){
+     setPasskeyCount(result.data.length);
+     setPasskeyCheckError('');
+    }else{
+     setPasskeyCount(0);
+     setPasskeyCheckError('This browser did not return the saved passkey list. You can still try device biometric setup.');
+    }
+   }catch{
+    if(live){
+     setPasskeyCount(0);
+     setPasskeyCheckError('Saved biometrics could not be checked. You can try setting up a passkey again; your MatMove passcode remains available.');
+    }
+   }
   })();
   return()=>{live=false;};
  },[userId]);
 
  async function registerBiometric(){
   if(mutex.current||passkeyBusy||!biometricSupported||!status?.configured||status.digits<6)return;
+  if(!new RegExp(`^[0-9]{${status.digits}}import {useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
+import {supabase} from '@/lib/supabase';
+import {resetPasscode as requestPasscodeReset} from '@/services/authService';
+import {setPortalUnlocked} from '@/lib/portalPrivacy';
+import {profilePhotoPickerOpen,onProfilePhotoPickerEnd,clearProfilePhotoPicker} from '@/lib/profilePhotoPicker';
+
+async function platformPasskeyAvailable():Promise<boolean>{
+ if(typeof window==='undefined'||!('PublicKeyCredential' in window)||!navigator.credentials)return false;
+ try{
+  const credential=(window as any).PublicKeyCredential;
+  if(typeof credential.isUserVerifyingPlatformAuthenticatorAvailable==='function')return await credential.isUserVerifyingPlatformAuthenticatorAvailable();
+  return true;
+ }catch{return false;}
+}
+
+type Receipt={userId:string;configured:boolean;digits:4|6|7|8|9|10;ok:boolean;code:string;attemptsRemaining:number;retryAfterSeconds:number};
+const codes=['status','cooldown','already_configured','saved','setup_required','upgrade_required','verified','incorrect'];
+
+export async function customerPasscode(userId:string,action:'status'|'create'|'verify'|'change'|'recover',pin:string|null=null,newPin:string|null=null):Promise<Receipt>{
+ if(!userId||!['status','create','verify','change','recover'].includes(action))throw Error('Invalid passcode request.');
+ if(['create','change','recover'].includes(action)&&!/^\d{6,9}$/.test(newPin||''))throw Error('Choose between 6 and 9 digits.');
+ if(['verify','change'].includes(action)&&!/^(?:[0-9]{4}|[0-9]{6,10})$/.test(pin||''))throw Error('Enter your current passcode.');
+ const session=await supabase.auth.getSession();
+ if(session.error||session.data.session?.user.id!==userId||!session.data.session.access_token)throw Error('Your sign-in changed. Sign in again.');
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+ try{
+  const r=await supabase.rpc('matmove_customer_passcode',{p_action:action,p_pin:pin,p_new_pin:newPin}).setHeader('Authorization',`Bearer ${session.data.session.access_token}`).abortSignal(controller.signal);
+  if(r.error){
+   if(r.error.message?.includes('ACCESS: Customer account required.'))throw Error('This identity has active staff access. Use Admin or contact support to review your customer account.');
+   if(r.error.message?.includes('ACCESS: Customer account setup required.'))throw Error('Your saved customer role needs review. Contact support; your account and wallet have not been deleted.');
+   const code=typeof r.error.code==='string'&&/^[A-Z0-9_]{3,20}$/.test(r.error.code)?` (${r.error.code})`:'';
+   throw Error(`Passcode check was not confirmed${code}. Reload the passcode screen and try again.`);
+  }
+  const after=await supabase.auth.getSession();
+  if(after.error||after.data.session?.user.id!==userId)throw Error('Your sign-in changed. Sign in again.');
+  const d=r.data;
+  if(d?.userId!==userId||typeof d.configured!=='boolean'||!(d.digits===4||(Number.isInteger(d.digits)&&d.digits>=6&&d.digits<=10))||typeof d.ok!=='boolean'||!codes.includes(d.code)||!Number.isInteger(d.attemptsRemaining)||d.attemptsRemaining<0||d.attemptsRemaining>5||!Number.isInteger(d.retryAfterSeconds)||d.retryAfterSeconds<0||d.retryAfterSeconds>300||
+   (d.ok&&(!d.configured||!['saved','verified','upgrade_required'].includes(d.code)))||(d.ok&&(d.digits<6||d.digits>10)&&d.code!=='upgrade_required')||
+   (d.code==='upgrade_required'&&d.digits!==4)||
+   (d.code==='verified'&&action!=='verify')||(d.code==='saved'&&!['create','change','recover'].includes(action)))throw Error('Passcode response could not be verified. Reload and try again.');
+  return d;
+ }catch(e){if(controller.signal.aborted)throw Error('Passcode check timed out. Reload to confirm the saved state.');throw e;}
+ finally{clearTimeout(timer);}
+}
+
+export function watchPasscodeBackground(onLock:()=>void,userId='',isUnlocked:()=>boolean=()=>false){
+ const hidden=()=>{if(document.visibilityState==='hidden'&&!(isUnlocked()&&profilePhotoPickerOpen(userId)))onLock();};
+ const pickerEnded=()=>{setTimeout(hidden,0);};
+ const stopPicker=onProfilePhotoPickerEnd(pickerEnded);
+ const restored=(event:PageTransitionEvent)=>{if(event.persisted)onLock();};
+ document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',onLock);window.addEventListener('pageshow',restored);
+ return()=>{stopPicker();clearProfilePhotoPicker(userId);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',onLock);window.removeEventListener('pageshow',restored);};
+}
+
+export default function CustomerPasscode({userId,onLogout,children}:{userId:string;onLogout:()=>void|Promise<void>;children:(lock:()=>void)=>ReactNode}){
+ const privacyDialog=useRef<HTMLDialogElement|null>(null),workspace=useRef<HTMLDivElement|null>(null),pinEntryRef=useRef<HTMLInputElement|null>(null);
+ const [enteredUser,setEnteredUser]=useState('');
+ const [status,setStatus]=useState<Receipt|null>(null),[unlocked,setUnlocked]=useState(false),[upgrade,setUpgrade]=useState(false);
+ const [workspaceVersion,setWorkspaceVersion]=useState(0);
+ const [pin,setPin]=useState(''),[next,setNext]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [activePinField,setActivePinField]=useState<'pin'|'next'|'confirm'>('pin');
+ const [forgotMode, setForgotMode] = useState(false);
+ const [resetEmail, setResetEmail] = useState('');
+ const [resetSent,setResetSent]=useState(false);
+ const [biometricSupported,setBiometricSupported]=useState(false),[passkeyCount,setPasskeyCount]=useState<number|null>(null),[passkeyBusy,setPasskeyBusy]=useState(false),[passkeyError,setPasskeyError]=useState(''),[passkeyNotice,setPasskeyNotice]=useState(''),[passkeyCheckError,setPasskeyCheckError]=useState('');
+
+ const unlockedNow=useRef(false),statusNow=useRef<Receipt|null>(null);statusNow.current=status;
+ const current=useRef(userId);current.current=userId;const mounted=useRef(false),revision=useRef(0),mutex=useRef(false);
+ const clear=()=>{setPin('');setNext('');setConfirm('');setActivePinField('pin');};
+ const valid=(id:string,n:number)=>mounted.current&&current.current===id&&revision.current===n;
+ 
+ function lock(){setPortalUnlocked(userId,false);unlockedNow.current=false;clearProfilePhotoPicker(userId);revision.current++;mutex.current=false;setBusy(false);setUnlocked(false);setUpgrade(false);setForgotMode(false);setResetEmail('');setResetSent(false);clear();setError('');}
+ 
+ async function load(){if(mutex.current)return;mutex.current=true;const n=++revision.current,id=userId;setBusy(true);setError('');clear();unlockedNow.current=false;setUnlocked(false);setUpgrade(false);setForgotMode(false);
+  try{const d=await customerPasscode(id,'status');if(valid(id,n))setStatus(d);}catch(e){if(valid(id,n)){setStatus(null);setError(e instanceof Error?e.message:'Passcode service unavailable.');}}
+  finally{if(valid(id,n)){mutex.current=false;setBusy(false);}}
+ }
+ 
+ useEffect(()=>{mounted.current=true;setStatus(null);lock();void load();const stop=watchPasscodeBackground(lock,userId,()=>unlockedNow.current);const resume=()=>{if(document.visibilityState==='visible'&&!statusNow.current&&!mutex.current)void load();};document.addEventListener('visibilitychange',resume);return()=>{document.removeEventListener('visibilitychange',resume);mounted.current=false;revision.current++;mutex.current=false;stop();};},[userId]);
+ 
+ async function sendPasscodeReset(){
+  if(mutex.current||!resetEmail.trim())return;
+  mutex.current=true;setBusy(true);setError('');setResetSent(false);
+  try{
+   // Passcode recovery uses its own redirect and update flow. It does not change
+   // the customer's account password.
+   await requestPasscodeReset(resetEmail);
+   setResetSent(true);
+  }catch(e){setError(e instanceof Error?e.message:'Could not send the passcode recovery email. Try again.');}
+  finally{mutex.current=false;setBusy(false);}
+ }
+
+ async function submit(){
+  if(mutex.current||!status)return;
+  const creating=!status.configured,changing=upgrade;
+  if((creating||changing)&&(!/^\d{6,9}$/.test(next)||next!==confirm)){setError('Enter the same 6–9 digit passcode in both new passcode fields.');return;}
+  if(!creating&&!new RegExp(`^[0-9]{${status.digits}}$`).test(pin)){setError(`Enter your current ${status.digits}-digit passcode.`);return;}
+  mutex.current=true;setBusy(true);setError('');const id=userId,n=++revision.current;
+  try{
+   const d=await customerPasscode(id,creating?'create':changing?'change':'verify',creating?null:pin,creating||changing?next:null);
+   if(!valid(id,n))return;setStatus(d);
+   if(d.ok&&d.digits>=6&&['saved','verified'].includes(d.code)){clear();setUpgrade(false);setPortalUnlocked(id,true);unlockedNow.current=true;setEnteredUser(id);setWorkspaceVersion(v=>v+1);setUnlocked(true);}
+   else if(d.ok&&d.code==='upgrade_required'){setUpgrade(true);setNext('');setConfirm('');}
+   else{clear();setUpgrade(false);setError(d.code==='cooldown'?`Too many attempts. Try again in ${d.retryAfterSeconds} seconds.`:d.code==='already_configured'?'A passcode is already saved. Enter it to continue.':d.code==='setup_required'?'Create your 6–9 digit passcode.':`Incorrect passcode. ${d.attemptsRemaining} attempts remaining.`);}
+  }catch(e){if(valid(id,n)){clear();setUpgrade(false);setError(e instanceof Error?e.message:'Passcode service unavailable.');}}
+  finally{if(valid(id,n)){mutex.current=false;setBusy(false);}}
+ }
+ 
+ const allowed=unlocked&&status?.userId===userId&&status.configured&&status.digits>=6;
+ useLayoutEffect(()=>{
+  const dialog=privacyDialog.current,root=workspace.current;
+  if(root){if(allowed)root.removeAttribute('inert');else root.setAttribute('inert','');}
+  const closePrivateDialogs=()=>{root?.querySelectorAll<HTMLDialogElement>('dialog[open]').forEach(item=>item.close());};
+  let observer:MutationObserver|undefined;
+  if(allowed){if(dialog?.open)dialog.close();}
+  else{
+   closePrivateDialogs();if(dialog&&!dialog.open)dialog.showModal();
+   if(root&&typeof MutationObserver!=='undefined'){observer=new MutationObserver(closePrivateDialogs);observer.observe(root,{subtree:true,attributes:true,attributeFilter:['open']});}
+  }
+  return()=>{observer?.disconnect();};
+ },[allowed,enteredUser,userId]);
+ 
+ const creating=status&&!status.configured;
+ useEffect(()=>{setActivePinField(creating||upgrade?'next':'pin');},[creating,upgrade]);
+
+ useEffect(()=>{
+  let live=true;
+  void (async()=>{
+   const available=await platformPasskeyAvailable();
+   if(!live)return;
+   setBiometricSupported(available);
+   if(!available)return;
+   try{
+    const result=await (supabase.auth as any).passkey.list();
+    if(!live)return;
+    if(result.error){
+     setPasskeyCount(0);
+     setPasskeyCheckError('Saved biometrics could not be checked. You can try setting up a passkey again; your MatMove passcode remains available.');
+    }else if(Array.isArray(result.data)){
+     setPasskeyCount(result.data.length);
+     setPasskeyCheckError('');
+    }else{
+     setPasskeyCount(0);
+     setPasskeyCheckError('This browser did not return the saved passkey list. You can still try device biometric setup.');
+    }
+   }catch{
+    if(live){
+     setPasskeyCount(0);
+     setPasskeyCheckError('Saved biometrics could not be checked. You can try setting up a passkey again; your MatMove passcode remains available.');
+    }
+   }
+  })();
+  return()=>{live=false;};
+ },[userId]);
+
+).test(pin)){
+   setPasskeyError(`Enter your current ${status.digits}-digit MatMove passcode before setting up biometrics.`);
+   setActivePinField('pin');
+   pinEntryRef.current?.focus({preventScroll:true});
+   return;
+  }
   mutex.current=true;setPasskeyBusy(true);setPasskeyError('');setPasskeyNotice('');
   try{
    const session=await supabase.auth.getSession();
    if(session.error||session.data.session?.user.id!==userId)throw Error('Your sign-in changed. Sign in again before enabling biometrics.');
+   const verified=await customerPasscode(userId,'verify',pin);
+   if(!verified.ok||verified.code!=='verified')throw Error('Your current MatMove passcode could not be verified. Enter it again before enabling biometrics.');
    const result=await (supabase.auth as any).registerPasskey();
    if(result.error)throw result.error;
    const listed=await (supabase.auth as any).passkey.list();
    if(listed.error)throw listed.error;
    const count=Array.isArray(listed.data)?listed.data.length:1;
    setPasskeyCount(count);
-   setPasskeyNotice('Biometric passkey enabled on this device. You can now use Face ID, device biometrics or your device screen lock to unlock MatMove.');
+   setPasskeyCheckError('');
+   setPasskeyError('');
+   setPasskeyNotice('Device passkey enabled. This device can now verify with Face ID, Touch ID, Android biometrics or its screen lock.');
+   setPin('');
   }catch(e:any){
-   setPasskeyError(e?.message||'Biometric setup could not be completed. You can still use your MatMove passcode.');
+   const message=String(e?.message||'');
+   setPasskeyError(/passkey.*(disabled|not enabled)|passkey_disabled/i.test(message)
+    ? 'MatMove biometric sign-in is not enabled in the Supabase Authentication settings yet. Continue using your passcode; an administrator must enable Passkeys for the MatMove domain.'
+    : message||'Biometric setup could not be completed. You can still use your MatMove passcode.');
   }finally{mutex.current=false;setPasskeyBusy(false);}
  }
 
@@ -173,21 +357,34 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
   }finally{mutex.current=false;setPasskeyBusy(false);}
  }
  const pinField=(label:string,value:string,key:'pin'|'next'|'confirm',length:number)=><button type="button" aria-label={label} aria-pressed={activePinField===key} disabled={busy} onClick={()=>setActivePinField(key)} className={`block w-full rounded-xl border p-3 text-left transition ${activePinField===key?'border-emerald-500 bg-emerald-50':'border-slate-200 bg-slate-50'}`}><span className="block text-xs font-semibold text-slate-600">{label}:</span><span className="mt-2 flex min-h-8 items-center justify-center gap-3" aria-label={`${value.length} of ${length} digits entered`} aria-live="polite" data-passcode-length={value.length}>{Array.from({length},(_,i)=><span key={i} className={`h-2.5 w-2.5 rounded-full ${i<value.length?'bg-emerald-700':'bg-slate-300'}`}/>)}</span></button>;
- const pinMirror=(label:string,value:string,set:(v:string)=>void)=><input type="text" inputMode="none" autoComplete="off" tabIndex={-1} aria-label={label} aria-valuetext={`${value.length} digits entered`} value="" readOnly onChange={e=>set(e.target.value.replace(/\D/g,'').slice(0,9))} className="sr-only"/>;
+ const pinMirror=(label:string,value:string,key:'pin'|'next'|'confirm',set:(v:string)=>void,length:number)=><input
+  ref={key===activePinField?pinEntryRef:null}
+  type="text" inputMode="none" autoComplete="off"
+  tabIndex={key===activePinField?0:-1}
+  aria-label={label} aria-valuetext={`${value.length} digits entered`}
+  value={key===activePinField?value:''} maxLength={length}
+  onFocus={()=>setActivePinField(key)}
+  onChange={e=>set(e.target.value.replace(/[^0-9]/g,'').slice(0,length))}
+  className="sr-only"
+/>;
  const appendDigit=(digit:string)=>{if(busy||digit.length!==1||digit<'0'||digit>'9')return;if(activePinField==='pin'){const limit=status?.digits||9;setPin(value=>value.length<limit?value+digit:value);return;}if(activePinField==='next'){setNext(value=>value.length<9?value+digit:value);return;}setConfirm(value=>value.length<9?value+digit:value);};
  const deleteLastDigit=()=>{if(busy)return;const setter=activePinField==='pin'?setPin:activePinField==='next'?setNext:setConfirm;const value=activePinField==='pin'?pin:activePinField==='next'?next:confirm;setter(value.slice(0,-1));};
  useEffect(()=>{
   const onKeyDown=(event:KeyboardEvent)=>{
    if(allowed||forgotMode||!status||busy||passkeyBusy||event.repeat)return;
    const target=event.target as HTMLElement|null;
-   if(target?.closest('input,textarea,select,[contenteditable="true"]'))return;
-   if(/^[0-9]$/.test(event.key)){event.preventDefault();appendDigit(event.key);return;}
+   if(target?.closest('input,textarea,select,[contenteditable="true"]')&&target!==pinEntryRef.current)return;
+   const digit=/^[0-9]$/.test(event.key)?event.key:/^Numpad[0-9]$/.test(event.code)?event.code.slice(-1):null;
+   if(digit){event.preventDefault();appendDigit(digit);return;}
    if(event.key==='Backspace'||event.key==='Delete'){event.preventDefault();deleteLastDigit();return;}
    if(event.key==='Enter'){event.preventDefault();void submit();}
   };
   window.addEventListener('keydown',onKeyDown);
   return()=>window.removeEventListener('keydown',onKeyDown);
  },[allowed,forgotMode,status,busy,passkeyBusy,activePinField,pin,next,confirm,upgrade]);
+ useEffect(()=>{
+  if(!allowed&&!forgotMode&&status&&!busy)pinEntryRef.current?.focus({preventScroll:true});
+ },[allowed,forgotMode,status?.userId,activePinField,busy]);
 
  const keypad=<div aria-label="Passcode keypad" className="grid grid-cols-3 gap-2">{['1','2','3','4','5','6','7','8','9'].map(digit=><button key={digit} type="button" disabled={busy} onClick={event=>{event.preventDefault();appendDigit(digit);}} className="h-12 rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-sm active:bg-emerald-50 disabled:opacity-50">{digit}</button>)}<button type="button" aria-label="Delete last digit" disabled={busy} onClick={deleteLastDigit} className="h-12 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 disabled:opacity-50">Delete</button><button type="button" disabled={busy} onClick={event=>{event.preventDefault();appendDigit('0');}} className="h-12 rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-sm active:bg-emerald-50 disabled:opacity-50">0</button><button type="button" disabled={busy} onClick={()=>{if(activePinField==='pin')setPin('');else if(activePinField==='next')setNext('');else setConfirm('');}} className="h-12 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 disabled:opacity-50">Clear</button></div>;
 
@@ -230,13 +427,15 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
              <>
                {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose a new 6–9 digit passcode.</p>}
                {!status?<p role="status" className="text-center text-sm text-slate-600">{busy?'Checking passcode…':'Passcode setup unavailable.'}</p>:<>
-                {!creating&&!upgrade&&<>{pinField(`Current ${status.digits}-digit passcode`,pin,'pin',status.digits)}{pinMirror(`Current ${status.digits}-digit passcode`,pin,setPin)}</>}
-                {(creating||upgrade)&&<>{pinField('New passcode (6–9 digits)',next,'next',9)}{pinMirror('New passcode (6–9 digits)',next,setNext)}{pinField('Confirm passcode',confirm,'confirm',9)}{pinMirror('Confirm passcode',confirm,setConfirm)}</>}
+                {!creating&&!upgrade&&<>{pinField(`Current ${status.digits}-digit passcode`,pin,'pin',status.digits)}{pinMirror(`Current ${status.digits}-digit passcode`,pin,'pin',setPin,status.digits)}</>}
+                {(creating||upgrade)&&<>{pinField('New passcode (6–9 digits)',next,'next',9)}{pinMirror('New passcode (6–9 digits)',next,'next',setNext,9)}{pinField('Confirm passcode',confirm,'confirm',9)}{pinMirror('Confirm passcode',confirm,'confirm',setConfirm,9)}</>}
                 {keypad}
                 <button type="submit" disabled={busy||passkeyBusy} className="h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">{busy?'Checking…':creating||upgrade?'Save passcode':'Unlock'}</button>
-                {biometricSupported&&status?.configured&&status.digits>=6&&passkeyCount===0&&<button type="button" disabled={busy||passkeyBusy} onClick={()=>void registerBiometric()} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-bold text-emerald-800 disabled:opacity-50">{passkeyBusy?'Setting up biometrics…':'Set up Face ID / device biometrics'}</button>}
+                {biometricSupported&&status?.configured&&status.digits>=6&&(passkeyCount??0)===0&&<button type="button" disabled={busy||passkeyBusy} onClick={()=>void registerBiometric()} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-bold text-emerald-800 disabled:opacity-50">{passkeyBusy?'Setting up biometrics…':'Set up Face ID / device biometrics'}</button>}
                 {biometricSupported&&status?.configured&&status.digits>=6&&(passkeyCount??0)>0&&<button type="button" disabled={busy||passkeyBusy} onClick={()=>void unlockWithBiometric()} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-bold text-emerald-800 disabled:opacity-50">{passkeyBusy?'Verifying biometrics…':'Unlock with Face ID / biometrics'}</button>}
                 {biometricSupported&&status?.configured&&status.digits>=6&&(passkeyCount??0)>0&&<button type="button" disabled={busy||passkeyBusy} onClick={()=>void registerBiometric()} className="min-h-9 w-full text-xs text-slate-600 underline">Add another device passkey</button>}
+                {!biometricSupported&&<p className="text-center text-xs text-slate-500">This browser does not report a device biometric authenticator. You can always use your MatMove passcode.</p>}
+                {passkeyCheckError&&<p role="status" className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{passkeyCheckError}</p>}
                 {passkeyNotice&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">{passkeyNotice}</p>}
                 {passkeyError&&<p role="alert" className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">{passkeyError}</p>}
                </>}
