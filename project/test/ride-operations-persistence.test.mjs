@@ -21,3 +21,10 @@ test('Trip detail shows who requested, who accepted, payment and handover status
  assert.match(trips,/Payment method/);
  assert.match(trips,/Cash handover status/);
 });
+
+test('Trips loads bookings without invalid profile embeds and keeps last successful rows on refresh failure',()=>{
+ assert.match(trips,/\.from\('bookings'\)\.select\('\*'\)/);
+ assert.doesNotMatch(trips,/driver:driver_id|rider:rider_id/);
+ assert.doesNotMatch(trips,/setTrips\(\[\]\);setError/);
+ assert.match(trips,/attachTripContacts/);
+});
