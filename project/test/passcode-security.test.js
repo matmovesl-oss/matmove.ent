@@ -165,3 +165,22 @@ test('passcode supports hardware keyboard entry and platform passkey biometric u
  assert.match(source,/signInWithPasskey\(\)/);
  assert.match(source,/result\.data\?\.user\?\.id!==userId/);
 });
+
+test('passcode physical keyboard handles the actual focused PIN field and numeric keypad codes',async()=>{
+ const source=await readFile(new URL('../src/components/CustomerPasscode.tsx',import.meta.url),'utf8');
+ assert.match(source,/inputMode="none"/);
+ assert.match(source,/ref=\{key===activePinField\?pinEntryRef:null\}/);
+ assert.match(source,/onChange=\{e=>set\(e\.target\.value\.replace\(\/\[\^0-9\]\/g,''\)\.slice\(0,length\)\)\}/);
+ assert.match(source,/Numpad\[0-9\]/);
+ assert.match(source,/pinEntryRef\.current\?\.focus/);
+});
+
+test('biometric setup is offered when passkey enumeration fails and requires current PIN verification',async()=>{
+ const source=await readFile(new URL('../src/components/CustomerPasscode.tsx',import.meta.url),'utf8');
+ assert.match(source,/setPasskeyCount\(0\)/);
+ assert.match(source,/Saved biometrics could not be checked/);
+ assert.match(source,/customerPasscode\(userId,'verify',pin\)/);
+ assert.match(source,/registerPasskey\(\)/);
+ assert.match(source,/signInWithPasskey\(\)/);
+ assert.match(source,/passkeyCheckError/);
+});
