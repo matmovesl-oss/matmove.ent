@@ -244,7 +244,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
       busy = true; const readVersion = radarMutation.current; setRequestsLoading(true);
       try {
         const { data, error } = await supabase.from('bookings')
-          .select('*, rider:profiles!rider_id(full_name, phone, phone_number)')
+          .select('*')
           .or(`status.in.(pending,pending_admin),driver_id.eq.${profile.id}`)
           .in('status', ['pending','pending_admin','accepted','in_progress'])
           .neq('status', 'cancelled').neq('status', 'completed')
