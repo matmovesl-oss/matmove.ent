@@ -235,7 +235,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   }, [activeSection, mapRetry, activeTrackedTrip?.id]);
 
   useEffect(() => {
-    if (!isOnline || activeSection !== 'home') { setActiveRequests([]); setNegotiatingId(null); setFareSnapshots({}); setRequestsLoading(false); setRequestsError(''); return; }
+    if (activeSection !== 'home') { setRequestsLoading(false); setRequestsError(''); return; }
     let disposed = false, busy = false, queued = false;
     setRequestsLoading(true); setRequestsError('');
     const fetchInitialRequests = async () => {
@@ -251,7 +251,7 @@ function DriverMain({ profile, wallet, activeSection }: any) {
           .order('created_at', { ascending: false });
         if (error) throw error;
         if (!Array.isArray(data)) throw new Error('Invalid radar response.');
-        const visible=data.filter(item=>item.driver_id===profile.id||(!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)));
+        const visible=data.filter(item=>item.driver_id===profile.id||(isOnline&&!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)));
         const enriched=await attachTripContacts(visible);
         const cashById = new Map<string, any>();
         await Promise.all(enriched.filter(item => item.payment_method === 'cash' && item.driver_id === profile.id).map(async item => {
