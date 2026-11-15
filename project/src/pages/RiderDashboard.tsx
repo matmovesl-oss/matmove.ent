@@ -34,7 +34,7 @@ export function RiderDashboard(props: any) {
   }
 
   if (props.activeSection === 'trips') {
-    return <RiderTrips profile={props.profile} />;
+    return <RiderTrips profile={props.profile} onBack={props.onBack} />;
   }
 
   return <RiderMain key={props.profile?.id || 'rider-main'} {...props} />;
@@ -1070,8 +1070,8 @@ function RiderShop({ profile, wallet }: any) {
   );
 }
 
-function RiderTrips({ profile }: any) {
-  return <TripHistory userId={profile?.id} role="rider" />;
+function RiderTrips({ profile, onBack }: any) {
+  return <TripHistory userId={profile?.id} role="rider" onOpenHome={onBack} />;
 }
 
 function PolicyModal({ onAccept }: { onAccept: () => void }) {
