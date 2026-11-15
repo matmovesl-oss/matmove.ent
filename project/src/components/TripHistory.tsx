@@ -81,14 +81,12 @@ export default function TripHistory({ userId, role }: Props) {
       const unfinished=withContacts.filter(t=>['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(t.status));
       const cashStatuses=new Map<string,any>(),cashReturns=new Map<string,any>();
       await Promise.all(unfinished.filter(t=>t.payment_method==='cash').map(async t=>{
-        try{
-          const [status,returnResult]=await Promise.all([
-            readCashRideStatus(t.id),
-            supabase.rpc('matmove_cash_ride_return_status',{p_booking_id:t.id})
-          ]);
-          if(status?.booking?.id===t.id&&status?.payment)cashStatuses.set(t.id,status.payment);
-          if(!returnResult.error&&returnResult.data?.bookingId===t.id)cashReturns.set(t.id,returnResult.data);
-        }catch{/* A status-read outage must not hide or drop the trip. */}
+        const [status,returnData]=await Promise.all([
+          readCashRideStatus(t.id).catch(()=>null),
+          supabase.rpc('matmove_cash_ride_return_status',{p_booking_id:t.id}).then(result=>result.error?null:result.data).catch(()=>null)
+        ]);
+        if(status?.booking?.id===t.id&&status?.payment)cashStatuses.set(t.id,status.payment);
+        if(returnData?.bookingId===t.id)cashReturns.set(t.id,returnData);
       }));
       const enriched=withContacts.map(t=>({...t,cashPayment:cashStatuses.get(t.id)||t.cashPayment||null,cashReturn:cashReturns.get(t.id)||t.cashReturn||null}));
       const after=await supabase.auth.getSession();if(after.error||after.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
