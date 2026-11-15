@@ -198,7 +198,11 @@ export default function TripHistory({ userId, role, onResume, accountLabel }: Pr
   return <section className="mx-auto max-w-4xl space-y-4 p-4 pb-24 sm:p-6">
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h1 className="text-3xl font-bold">Trips & Deliveries</h1><p className="mt-1 text-sm text-slate-500">Your unfinished rides stay here until the server confirms completion or cancellation. You can reopen the same request after signing back in.</p></div>
+        <div className="min-w-0">
+          <h1 className="text-3xl font-bold">Trips & Deliveries</h1>
+          <p className="mt-1 text-sm text-slate-500">Your unfinished rides stay here until the server confirms completion or cancellation. You can reopen the same request after signing back in.</p>
+          <p className="mt-2 text-xs font-semibold text-slate-600">Signed in as: <span className="text-slate-900">{accountLabel || 'MatMove account'}</span> · Account reference: <span className="font-mono">{userId.slice(-8).toUpperCase()}</span></p>
+        </div>
         <button className="min-h-11 rounded-xl border bg-white px-4 py-2 font-semibold" onClick={() => void refresh()}>Refresh</button>
       </div>
       <div role="tablist" aria-label="Trips categories" className="grid grid-cols-3 gap-2 rounded-2xl border bg-white p-2">
@@ -223,7 +227,7 @@ export default function TripHistory({ userId, role, onResume, accountLabel }: Pr
     {actionNotice&&<p role="status" className="rounded-xl bg-blue-50 p-3 text-blue-900">{actionNotice}</p>}
     <section aria-label="Unfinished requests" className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
       <div><h2 className="text-lg font-bold">Unfinished requests</h2><p className="text-sm text-slate-600">Requests still awaiting a driver, confirmation, completion or payment verification.</p></div>
-      {loading?<p className="text-sm text-slate-500">Checking unfinished requests…</p>:activeRequests.length===0?<p className="rounded-xl bg-white p-4 text-sm text-slate-600">No unfinished requests are linked to {accountLabel || 'this signed-in account'}. Make sure you are using the same Rider or Merchant account that originally submitted the request. Trips are kept with their original account for privacy.</p>:activeRequests.map(t=><article key={`active-${t.id}`} className="rounded-xl border bg-white p-3">
+      {loading?<p className="text-sm text-slate-500">Checking unfinished requests…</p>:activeRequests.length===0?<p className="rounded-xl bg-white p-4 text-sm text-slate-600">No unfinished requests are linked to {accountLabel || 'this signed-in account'} (account reference {userId.slice(-8).toUpperCase()}). Switch to the original account that created the request. MatMove keeps trips private to the account that submitted them; matching names or phone contacts do not merge account histories. {role==='merchant'?'Customer product orders are shown separately under Inventory & Orders.':'Only requests submitted by this Rider account appear here.'}</p>:activeRequests.map(t=><article key={`active-${t.id}`} className="rounded-xl border bg-white p-3">
         <div className="flex flex-wrap items-center justify-between gap-2"><strong className="capitalize">{t.service_type||'Ride'} request</strong><span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{t.status.replace(/_/g,' ')}</span></div>
         <p className="mt-2 text-sm">{t.pickup_location||'Pickup not recorded'} → {t.destination_location||'Destination not recorded'}</p>
         <p className="mt-1 text-xs text-slate-500">Reference: {t.id}</p>
