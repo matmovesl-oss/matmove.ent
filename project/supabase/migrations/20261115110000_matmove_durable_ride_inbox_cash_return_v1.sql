@@ -163,8 +163,8 @@ begin
      or cp.driver_id is distinct from b.driver_id then
     raise exception 'INVALID_STATE: Only a driver-assigned unfinished cash ride can enter physical-return review.';
   end if;
-  if cp.status not in ('collection_pending','capture_pending') or cp.driver_cash_confirmed_at is null then
-    raise exception 'CASH_HANDOVER_NOT_CONFIRMED: There is no verified driver cash-received confirmation to reverse.';
+  if cp.status not in ('fee_reserved','collection_pending','capture_pending') then
+    raise exception 'CASH_HANDOVER_NOT_READY: This cash request is not in a state that can enter physical-return review.';
   end if;
   select * into reserve from public.matmove_cash_ride_legs
     where booking_id=b.id and leg_kind='reserve' for key share;
@@ -208,7 +208,7 @@ begin
   if not found or cp.admin_return_request_id is null then
     raise exception 'RETURN_NOT_REQUESTED: Dispatch has not requested a physical cash return for this ride.';
   end if;
-  if b.status not in ('accepted','in_progress') or cp.status not in ('collection_pending','capture_pending','refund_pending') then
+  if b.status not in ('accepted','in_progress') or cp.status not in ('fee_reserved','collection_pending','capture_pending','refund_pending') then
     if cp.status='refunded' then
       return jsonb_build_object('returnReady',true,'paymentStatus','refunded',
         'driverReturnConfirmed',cp.driver_return_confirmed_at is not null,
@@ -227,9 +227,6 @@ begin
   else
     if p_actor_id is distinct from cp.driver_id or p_actor_id is distinct from b.driver_id then
       raise exception 'FORBIDDEN: Only the assigned driver can confirm returning physical cash.';
-    end if;
-    if cp.driver_cash_confirmed_at is null then
-      raise exception 'CASH_COLLECTION_NOT_CONFIRMED: The driver has no recorded cash-received confirmation to reverse.';
     end if;
     if cp.driver_return_confirmed_at is null then
       update public.matmove_cash_ride_payments set driver_return_confirmed_at=clock_timestamp(),
@@ -538,3 +535,5 @@ grant execute on function public.matmove_cash_ride_confirm_return(uuid,uuid,text
 grant execute on function public.matmove_admin_flag_unpaid_booking(uuid,text,uuid) to authenticated;
 grant execute on function public.matmove_admin_resolve_ride_flag(uuid,text,uuid) to authenticated;
 grant execute on function public.matmove_admin_trip_review(uuid) to authenticated;
+
+notify pgrst, 'reload schema';
