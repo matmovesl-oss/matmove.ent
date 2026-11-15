@@ -12,5 +12,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(
   supabaseUrl,
-  supabaseAnonKey
+  supabaseAnonKey,
+  {
+    auth: {
+      // Supabase Auth passkeys use the platform WebAuthn authenticator:
+      // Face ID, Touch ID, Android biometrics, device PIN or a security key.
+      experimental: { passkey: true },
+    },
+  }
 );
