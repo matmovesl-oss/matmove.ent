@@ -7,7 +7,7 @@ import { filterTripHistory } from '@/lib/tripHistory';
 import { updateRide, readCashRideStatus } from '@/services/rideService';
 import { attachTripContacts } from '@/lib/tripContacts';
 
-type Props = { userId: string; role: 'rider' | 'driver' | 'merchant' };
+type Props = { userId: string; role: 'rider' | 'driver' | 'merchant'; onResume?: (bookingId: string) => void };
 const date = (value: unknown) => {
   if (!value) return 'Not recorded';
   const d = new Date(String(value));
@@ -55,7 +55,7 @@ function tripReceiptFields(t: any, role: Props['role']) {
     ...(t.paymentIssue ? [{ label: 'Admin review', value: t.paymentIssue.reasonCode === 'admin_unpaid_payment_review' ? 'Unpaid payment review' : t.paymentIssue.reasonCode === 'admin_unpaid_cash_fare_review' ? 'Unpaid cash fare review' : 'Investigation open' }] : []),
   ];
 }
-export default function TripHistory({ userId, role }: Props) {
+export default function TripHistory({ userId, role, onResume }: Props) {
   const [trips, setTrips] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -231,6 +231,7 @@ export default function TripHistory({ userId, role }: Props) {
         {t.paymentInfo?.method==='cash'&&<p className="mt-2 text-xs text-slate-600">Cash ledger: {t.paymentInfo.status} · Driver confirmed: {t.paymentInfo.driverCashConfirmed?'Yes':'No'} · Customer confirmed: {t.paymentInfo.customerCashConfirmed?'Yes':'No'} · Fee reserve: {t.paymentInfo.reserveStatus||'not recorded'}</p>}
         {t.paymentIssue&&<p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Admin review: {t.paymentIssue.reasonCode==='admin_unpaid_payment_review'?'Unpaid payment flagged for review':t.paymentIssue.reasonCode==='admin_unpaid_cash_fare_review'?'Unpaid cash fare flagged for review':'This request is under investigation'} · {t.paymentIssue.status}</p>}
         <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={()=>setSelectedId(t.id)} className="min-h-10 rounded-lg border px-3 text-sm font-semibold">Open request details</button>
+        {role==='driver'&&onResume&&t.driver_id===userId&&['pending','pending_admin','accepted','in_progress'].includes(t.status)&&<button type="button" onClick={()=>onResume(t.id)} className="min-h-10 rounded-lg bg-indigo-600 px-3 text-sm font-semibold text-white">{['accepted','in_progress'].includes(t.status)?'Continue this ride':'Open driver dashboard'}</button>}
         {t.cashReturn&&['requested','driver_confirmed','rider_confirmed'].includes(t.cashReturn.returnStatus)&&<button type="button" disabled={!!cancellingId||((role==='driver'&&t.cashReturn.driverConfirmed)||(role!=='driver'&&t.cashReturn.riderConfirmed))} onClick={()=>void confirmCashReturn(t)} className="min-h-10 rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 disabled:opacity-50">{cancellingId===t.id?'Recording…':role==='driver'?(t.cashReturn.driverConfirmed?'You confirmed return':'Confirm cash returned to customer'):(t.cashReturn.riderConfirmed?'You confirmed receipt':'Confirm cash returned to you')}</button>}
         {['pending','pending_admin','cash_reserve_pending'].includes(t.status)&&<button type="button" disabled={!!cancellingId} onClick={()=>void cancelRequest(t)} className="min-h-10 rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-700 disabled:opacity-50">{cancellingId===t.id?'Cancelling…':'Cancel request'}</button>}
         </div>
