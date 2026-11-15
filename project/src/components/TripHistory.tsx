@@ -4,9 +4,11 @@ import { supabase } from '@/lib/supabase';
 import { shareReceiptPdf } from '@/lib/pdfReceipt';
 import { SkeletonList } from '@/components/Skeleton';
 import { filterTripHistory } from '@/lib/tripHistory';
-import { updateRide } from '@/services/rideService';
+import { updateRide, readCashRideStatus, confirmCashRideReturn } from '@/services/rideService';
+import { readRideFares } from '@/services/fareNegotiationService';
+import { assertDriverFare } from '@/lib/useRideNegotiation';
 
-type Props = { userId: string; role: 'rider' | 'driver' | 'merchant' };
+type Props = { userId: string; role: 'rider' | 'driver' | 'merchant'; onOpenHome?: () => void };
 const date = (value: unknown) => {
   if (!value) return 'Not recorded';
   const d = new Date(String(value));
@@ -52,13 +54,17 @@ function tripReceiptFields(t: any, role: Props['role']) {
     ...(t.payment_status ? [{ label: 'Payment status', value: t.payment_status }] : []),
   ];
 }
-export default function TripHistory({ userId, role }: Props) {
+export default function TripHistory({ userId, role, onOpenHome }: Props) {
   const [trips, setTrips] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [period,setPeriod]=useState<'30'|'90'|'all'>('30');
+  const [tripTab,setTripTab]=useState<'active'|'history'>('active');
+  const onlineKey=`matmove:driver-online:v1:${userId}`;
+  const [driverOnline,setDriverOnline]=useState(()=>{try{return role==='driver'&&localStorage.getItem(onlineKey)==='online';}catch{return false;}});
+  const [acceptingId,setAcceptingId]=useState<string|null>(null);
   const [statusFilter,setStatusFilter]=useState<'all'|'pending'|'pending_admin'|'accepted'|'in_progress'|'completed'|'cancelled'>('all');
   const dialog = useRef<HTMLDialogElement>(null);
   const owner=useRef(userId);owner.current=userId;
@@ -71,12 +77,26 @@ export default function TripHistory({ userId, role }: Props) {
     try{
       const before=await supabase.auth.getSession();if(before.error||before.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
       if(!live())return;
-      const result = await supabase.from('bookings').select('*, driver:driver_id(full_name), rider:rider_id(full_name)')
-        .eq(role === 'driver' ? 'driver_id' : 'rider_id', id).order('created_at', { ascending: false }).abortSignal(controller.signal);
+      const base = supabase.from('bookings').select('*, driver:driver_id(full_name, phone), rider:rider_id(full_name, phone)');
+      const query = role === 'driver'
+        ? base.or(`driver_id.eq.${id},and(driver_id.is.null,status.in.(pending,pending_admin))`)
+        : base.eq('rider_id', id);
+      const result = await query.order('created_at', { ascending: false }).limit(1000).abortSignal(controller.signal);
       if(result.error)throw Error('Trip history could not be loaded. Retry; no records have been deleted.');
-      if(!Array.isArray(result.data)||result.data.some(t=>t[role==='driver'?'driver_id':'rider_id']!==id))throw Error('Trip ownership could not be verified.');
+      const ownsEveryRow=Array.isArray(result.data)&&result.data.every(t=>
+        role==='driver'
+          ? (t.driver_id===id || (t.driver_id===null && ['pending','pending_admin'].includes(t.status)))
+          : t.rider_id===id
+      );
+      if(!ownsEveryRow)throw Error('Trip ownership could not be verified.');
+      const cashRows=(result.data||[]).filter(t=>t.payment_method==='cash'&&(role==='driver'?t.driver_id===id:t.rider_id===id));
+      const cashById=new Map<string,any>();
+      await Promise.all(cashRows.map(async t=>{
+        try{const status=await readCashRideStatus(t.id);if(status.booking?.id===t.id&&status.payment)cashById.set(t.id,status.payment);}catch{/* Keep the last server-verified cash snapshot if a read is temporarily unavailable. */}
+      }));
+      const withCash=(result.data||[]).map(t=>({...t,cashPayment:cashById.get(t.id)||t.cashPayment||null}));
       const after=await supabase.auth.getSession();if(after.error||after.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
-      if(live()){setTrips(result.data);setLoadedOwner(id);setError('');}
+      if(live()){setTrips(withCash);setLoadedOwner(id);setError('');}
     }catch(e){if(live()){setTrips([]);setError(e instanceof Error?e.message:'Trip history unavailable.');}}
     finally{clearTimeout(timeout);if(live()){inFlight.current=false;setLoading(false);}}
   }, [userId, role]);
@@ -85,13 +105,12 @@ export default function TripHistory({ userId, role }: Props) {
     void refresh();
     // Supabase Realtime provides prompt trip-status updates. The polling fallback
     // remains enabled in case Realtime is unavailable or the table is not published.
-    const ownerColumn = role === 'driver' ? 'driver_id' : 'rider_id';
     const channel = supabase.channel(`trip-history:${role}:${userId}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'bookings',
-        filter: `${ownerColumn}=eq.${userId}`,
+        ...(role==='driver'?{}:{filter:`rider_id=eq.${userId}`}),
       }, () => {
         if (document.visibilityState !== 'hidden') void refresh();
       })
@@ -107,6 +126,13 @@ export default function TripHistory({ userId, role }: Props) {
   const selected = ownedTrips.find(t => t.id === selectedId);
   const filteredTrips=filterTripHistory(ownedTrips,period,statusFilter);
   const activeRequests = ownedTrips.filter(t => ['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(t.status));
+  const availableRequests = role==='driver' && driverOnline
+    ? activeRequests.filter(t=>!t.driver_id&&['pending','pending_admin'].includes(t.status))
+    : [];
+  const myActiveTrips = role==='driver'
+    ? activeRequests.filter(t=>t.driver_id===userId&&['accepted','in_progress'].includes(t.status))
+    : activeRequests.filter(t=>['accepted','in_progress'].includes(t.status));
+  const historyTrips = filteredTrips.filter(t=>['completed','cancelled'].includes(t.status));
   const [cancellingId,setCancellingId]=useState<string|null>(null);
   const [actionError,setActionError]=useState('');
   const [actionNotice,setActionNotice]=useState('');
@@ -120,6 +146,38 @@ export default function TripHistory({ userId, role }: Props) {
       await refresh();
       setActionNotice(result.pending?'Cancellation received. Any required refund is still being verified. Keep this request reference.':result.message||'Request cancellation verified.');
     }catch(error:any){setActionError(error?.message||'Cancellation could not be verified. Refresh this same request; do not submit another payment.');}
+    finally{setCancellingId(null);}
+  }
+  async function acceptAvailableRequest(t:any){
+    if(role!=='driver'||!driverOnline||acceptingId||t.driver_id||!['pending','pending_admin'].includes(t.status))return;
+    setAcceptingId(t.id);setActionError('');setActionNotice('');
+    try{
+      const snapshot=await readRideFares(userId,t.id);
+      assertDriverFare(snapshot,t,userId);
+      const result=await updateRide('accept',t.id);
+      await refresh();
+      setActionNotice(result.pending
+        ? 'Your acceptance/payment is still being verified. This request remains in your Trips list; do not accept it again.'
+        : 'Ride accepted. It is now saved under My active trips. You can reopen it after closing MatMove.');
+    }catch(error:any){
+      setActionError(error?.message||'This request could not be accepted. Refresh Trips and review the same request.');
+      await refresh();
+    }finally{setAcceptingId(null);}
+  }
+  async function confirmReturnedCash(t:any){
+    if(!t.cashPayment?.adminReturnRequested)return;
+    setCancellingId(t.id);setActionError('');setActionNotice('');
+    try{
+      const result=await confirmCashRideReturn(t.id);
+      await refresh();
+      setActionNotice(result.refundVerified
+        ? 'Physical cash return confirmed by both parties. The MatMove fee reserve refund is verified and the request is cancelled.'
+        : result.returnReady
+          ? 'Both physical cash return confirmations are recorded. The MatMove fee refund is being verified; keep this request open.'
+          : role==='driver'
+            ? 'Your cash-return confirmation is recorded. The customer must also confirm receipt.'
+            : 'Your receipt confirmation is recorded. The assigned driver must also confirm returning the cash.');
+    }catch(error:any){setActionError(error?.message||'Cash return confirmation could not be verified. Refresh this same request.');}
     finally{setCancellingId(null);}
   }
   useEffect(() => {
