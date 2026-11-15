@@ -78,7 +78,7 @@ export function useCustomerActiveRide(userId: string) {
       const version = mutation.current;
       try {
         const { data: rows, error } = await supabase.from('bookings')
-          .select('*, driver:driver_id(full_name, phone)')
+          .select('*')
           .eq('rider_id', userId).in('status', ['pending', 'pending_admin', 'cash_reserve_pending', 'cash_review_required', 'accepted', 'in_progress'])
           .order('created_at', { ascending: false }).limit(101);
         if (error) throw error;
