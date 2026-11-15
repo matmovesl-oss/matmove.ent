@@ -137,8 +137,8 @@ test('new passcodes use six through nine digits and preserve legacy verification
 
 test('customer passcode keypad accepts numeric keys and rejects non-digits',async()=>{
  const component=await readFile('src/components/CustomerPasscode.tsx','utf8');
- assert.match(component,/if\(busy\|\|!\/\^\\d\$\/\.test\(digit\)\)return/);
- assert.match(component,/value\.length<limit\)setter\(value\+digit\)/);
+ assert.match(component,/if\(busy\|\|digit\.length!==1\|\|digit<'0'\|\|digit>'9'\)return/);
+ assert.match(component,/setPin\(value=>value\.length<limit\?value\+digit:value\)/);
  assert.match(component,/value\.slice\(0,-1\)/);
  assert.match(component,/setPin\(''\)|setNext\(''\)|setConfirm\(''\)/);
  const isDigit=/^\d$/;
