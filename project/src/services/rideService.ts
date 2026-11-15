@@ -40,3 +40,12 @@ export async function readRidePayment(bookingId: string) {
   finish();
   return data;
 }
+
+export async function confirmCashRideReturn(bookingId: string) {
+  const { response, data, finish } = await walletFetch('/api/accept-ride-escrow?action=cash_return_confirm', { bookingId });
+  if (!response.ok || data?.success !== true || !data?.payment) {
+    throw new Error(data?.error || data?.message || 'Cash return confirmation could not be verified.');
+  }
+  if (response.status === 200 && data.pending === false) finish();
+  return data;
+}
