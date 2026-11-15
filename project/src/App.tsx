@@ -173,6 +173,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
 
   // Every successful passcode unlock begins at Home, regardless of the last tab visited.
   const [activeSection, setActiveSection] = useState<PortalSection>('home');
+  const [resumeTripId, setResumeTripId] = useState<string | null>(null);
   const [guideReplay,setGuideReplay]=useState(0);
   const [sectionTransitioning,setSectionTransitioning]=useState(false);
   const previousSectionRef=useRef(activeSection);
@@ -426,6 +427,8 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
             profile={profile}
             wallet={wallet}
             activeSection={activeSection === 'ride' ? 'home' : activeSection}
+            resumeTripId={resumeTripId}
+            onResumeTrip={(bookingId:string)=>{setResumeTripId(bookingId);setActiveSection('ride');}}
           />
         )}
 
