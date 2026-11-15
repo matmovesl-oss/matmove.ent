@@ -63,7 +63,7 @@ export default function TripHistory({ userId, role, onResume }: Props) {
   const [notice, setNotice] = useState('');
   const [period,setPeriod]=useState<'30'|'90'|'all'>('all');
   const [tripView,setTripView]=useState<'active'|'pending'|'history'>('active');
-  const [statusFilter,setStatusFilter]=useState<'all'|'pending'|'pending_admin'|'accepted'|'in_progress'|'completed'|'cancelled'>('all');
+  const [statusFilter,setStatusFilter]=useState<'all'|'pending'|'pending_admin'|'cash_reserve_pending'|'cash_review_required'|'accepted'|'in_progress'|'completed'|'cancelled'>('all');
   const dialog = useRef<HTMLDialogElement>(null);
   const owner=useRef(userId);owner.current=userId;
   const mounted=useRef(false),inFlight=useRef(false),revision=useRef(0),abort=useRef<AbortController|null>(null);
@@ -212,7 +212,7 @@ export default function TripHistory({ userId, role, onResume }: Props) {
         </label>
         <label className="block text-sm font-semibold text-slate-700">Trip status
           <select aria-label="Filter trips by status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value as typeof statusFilter)} className="mt-1 min-h-11 w-full rounded-xl border p-3">
-            <option value="all">All statuses</option><option value="pending">Pending</option><option value="pending_admin">Pending Admin review</option><option value="accepted">Accepted</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>
+            <option value="all">All statuses</option><option value="pending">Pending</option><option value="pending_admin">Pending Admin review</option><option value="cash_reserve_pending">Cash reserve pending</option><option value="cash_review_required">Cash review required</option><option value="accepted">Accepted</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>
           </select>
         </label>
         <p className="text-xs text-slate-500 sm:col-span-2">Showing {filteredTrips.length} {tripView==='active'?'live or accepted':tripView==='pending'?'pending':'historical'} trips. Unfinished requests are never hidden by the history date filter.</p>
