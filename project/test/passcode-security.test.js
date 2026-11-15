@@ -155,3 +155,13 @@ test('customer keypad appends digits using explicit numeric bounds and functiona
  assert.match(component,/setConfirm\(value=>value\.length<9\?value\+digit:value\)/);
  assert.match(component,/onClick=\{event=>\{event\.preventDefault\(\);appendDigit\(digit\);\}\}/);
 });
+
+test('passcode supports hardware keyboard entry and platform passkey biometric unlock',async()=>{
+ const source=await readFile(new URL('../src/components/CustomerPasscode.tsx',import.meta.url),'utf8');
+ assert.match(source,/window\.addEventListener\('keydown',onKeyDown\)/);
+ assert.match(source,/event\.key==='Backspace'\|\|event\.key==='Delete'/);
+ assert.match(source,/event\.key==='Enter'/);
+ assert.match(source,/registerPasskey\(\)/);
+ assert.match(source,/signInWithPasskey\(\)/);
+ assert.match(source,/result\.data\?\.user\?\.id!==userId/);
+});
