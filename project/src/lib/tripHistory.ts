@@ -1,5 +1,5 @@
 export type TripPeriod = '30' | '90' | 'all';
-export type TripStatusFilter = 'all' | 'pending' | 'pending_admin' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
+export type TripStatusFilter = 'all' | 'pending' | 'pending_admin' | 'cash_reserve_pending' | 'cash_review_required' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
 
 export function filterTripHistory<T extends { status?: string | null; created_at?: unknown }>(
   trips: T[],
