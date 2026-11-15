@@ -50,7 +50,9 @@ function tripReceiptFields(t: any, role: Props['role']) {
     { label: 'Vehicle', value: t.vehicle_type },
     { label: 'Fare', value: `SLE ${Number(t.fare_amount || 0).toFixed(2)}` },
     ...(role === 'driver' ? [{ label: 'Expected driver share (85%)', value: `SLE ${(Number(t.fare_amount || 0) * 0.85).toFixed(2)}` }] : []),
-    ...(t.payment_status ? [{ label: 'Payment status', value: t.payment_status }] : []),
+    ...(t.paymentInfo?.status ? [{ label: t.paymentInfo.method === 'cash' ? 'Cash ledger status' : 'Escrow status', value: t.paymentInfo.status }] : []),
+    ...(t.paymentInfo?.driverPayoutStatus ? [{ label: 'Driver payout status', value: t.paymentInfo.driverPayoutStatus }] : []),
+    ...(t.paymentIssue ? [{ label: 'Admin review', value: t.paymentIssue.reasonCode === 'admin_unpaid_payment_review' ? 'Unpaid payment review' : 'Investigation open' }] : []),
   ];
 }
 export default function TripHistory({ userId, role }: Props) {
@@ -186,7 +188,12 @@ export default function TripHistory({ userId, role }: Props) {
     ['Fare', `SLE ${Number(selected.fare_amount || 0).toFixed(2)}`], ['Payment method',selected.payment_method], ['Cash handover status',selected.cashPayment?.status], ['Physical cash return',selected.cashReturn?.returnStatus], ['Driver cash confirmed',selected.cashPayment?.driverCashConfirmed?'Yes':'No'], ['Customer cash confirmed',selected.cashPayment?.riderCashConfirmed?'Yes':'No'],
     ...(role === 'driver' ? [['Expected driver share (85%)', `SLE ${(Number(selected.fare_amount || 0) * 0.85).toFixed(2)}`]] : []),
     ...(selected.distance_km != null ? [['Distance', `${selected.distance_km} km`]] : []),
-    ...(selected.payment_status ? [['Payment status', selected.payment_status]] : []),
+    ...(selected.paymentInfo?.status ? [[selected.paymentInfo.method==='cash'?'Cash ledger status':'Escrow status',selected.paymentInfo.status]] : []),
+    ...(selected.paymentInfo?.driverPayoutStatus ? [['Driver payout status',selected.paymentInfo.driverPayoutStatus]] : []),
+    ...(selected.paymentInfo?.driverCashConfirmed!=null ? [['Driver confirmed cash',selected.paymentInfo.driverCashConfirmed?'Yes':'No']] : []),
+    ...(selected.paymentInfo?.customerCashConfirmed!=null ? [['Customer confirmed cash',selected.paymentInfo.customerCashConfirmed?'Yes':'No']] : []),
+    ...(selected.paymentInfo?.cashReturnStatus ? [['Physical cash return',selected.paymentInfo.cashReturnStatus]] : []),
+    ...(selected.paymentIssue ? [['Admin review',selected.paymentIssue.reasonCode==='admin_unpaid_payment_review'?'Unpaid payment review':'Investigation open']] : []),
   ] : [];
   return <section className="mx-auto max-w-4xl space-y-4 p-4 pb-24 sm:p-6">
     <div className="space-y-4">
@@ -220,6 +227,9 @@ export default function TripHistory({ userId, role }: Props) {
         <div className="flex flex-wrap items-center justify-between gap-2"><strong className="capitalize">{t.service_type||'Ride'} request</strong><span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{t.status.replace(/_/g,' ')}</span></div>
         <p className="mt-2 text-sm">{t.pickup_location||'Pickup not recorded'} → {t.destination_location||'Destination not recorded'}</p>
         <p className="mt-1 text-xs text-slate-500">Reference: {t.id}</p>
+        {t.paymentInfo?.method==='digital'&&<p className="mt-2 text-xs text-slate-600">Escrow: {t.paymentInfo.status||'not started'} · Driver payout: {t.paymentInfo.driverPayoutStatus||'not yet released'}</p>}
+        {t.paymentInfo?.method==='cash'&&<p className="mt-2 text-xs text-slate-600">Cash ledger: {t.paymentInfo.status} · Driver confirmed: {t.paymentInfo.driverCashConfirmed?'Yes':'No'} · Customer confirmed: {t.paymentInfo.customerCashConfirmed?'Yes':'No'} · Fee reserve: {t.paymentInfo.reserveStatus||'not recorded'}</p>}
+        {t.paymentIssue&&<p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Admin review: {t.paymentIssue.reasonCode==='admin_unpaid_payment_review'?'Unpaid payment flagged for review':'This request is under investigation'} · {t.paymentIssue.status}</p>}
         <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={()=>setSelectedId(t.id)} className="min-h-10 rounded-lg border px-3 text-sm font-semibold">Open request details</button>
         {t.cashReturn&&['requested','driver_confirmed','rider_confirmed'].includes(t.cashReturn.returnStatus)&&<button type="button" disabled={!!cancellingId||((role==='driver'&&t.cashReturn.driverConfirmed)||(role!=='driver'&&t.cashReturn.riderConfirmed))} onClick={()=>void confirmCashReturn(t)} className="min-h-10 rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 disabled:opacity-50">{cancellingId===t.id?'Recording…':role==='driver'?(t.cashReturn.driverConfirmed?'You confirmed return':'Confirm cash returned to customer'):(t.cashReturn.riderConfirmed?'You confirmed receipt':'Confirm cash returned to you')}</button>}
         {['pending','pending_admin','cash_reserve_pending'].includes(t.status)&&<button type="button" disabled={!!cancellingId} onClick={()=>void cancelRequest(t)} className="min-h-10 rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-700 disabled:opacity-50">{cancellingId===t.id?'Cancelling…':'Cancel request'}</button>}
