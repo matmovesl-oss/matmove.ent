@@ -107,6 +107,13 @@ function publicSnapshot(payment, legs) {
     riderCashConfirmed: Boolean(payment.rider_cash_confirmed_at),
     driverCashConfirmedAt: payment.driver_cash_confirmed_at,
     riderCashConfirmedAt: payment.rider_cash_confirmed_at,
+    adminReturnRequested: Boolean(payment.admin_return_requested_at),
+    adminReturnRequestedAt: payment.admin_return_requested_at,
+    adminReturnNote: payment.admin_return_note || null,
+    driverReturnConfirmed: Boolean(payment.driver_return_confirmed_at),
+    riderReturnConfirmed: Boolean(payment.rider_return_confirmed_at),
+    driverReturnConfirmedAt: payment.driver_return_confirmed_at,
+    riderReturnConfirmedAt: payment.rider_return_confirmed_at,
     reserve: byKind.reserve ? {
       status: byKind.reserve.status,
       transferId: byKind.reserve.provider_transfer_id,
@@ -540,6 +547,47 @@ export async function cashRideAction(
       message: actorType === 'driver'
         ? 'Your cash-received confirmation is recorded. The customer must also confirm.'
         : 'Your cash-handover confirmation is recorded. The assigned driver must also confirm.'
+    });
+  }
+
+  if (action === 'cash_return_confirm') {
+    const actorType = profile.role === 'driver' ? 'driver' : ['rider','merchant'].includes(profile.role) ? profile.role : null;
+    if (!actorType || (actorType === 'driver' && !isDriver) ||
+        (['rider','merchant'].includes(actorType) && !isRider)) {
+      throw new HttpError(403, 'Only this ride’s assigned driver or customer can confirm a physical cash return.');
+    }
+    const result = await cashRpc(db, 'matmove_cash_ride_confirm_return', {
+      p_booking_id: bookingId,
+      p_actor_id: user.id,
+      p_actor_type: actorType
+    });
+    let snapshot = await cashStatus(db, bookingId);
+    if (result.returnReady) {
+      // The database has recorded both independent physical-return confirmations
+      // and created the single immutable refund leg. Reconcile that same leg now;
+      // scheduled reconciliation will retry any provider uncertainty.
+      try {
+        snapshot = await reconcileCashRide(db, bookingId, provider);
+      } catch {
+        snapshot = await cashStatus(db, bookingId);
+      }
+    }
+    const updatedBooking = await readBooking(db, bookingId);
+    const refunded = snapshot?.status === 'refunded';
+    return res.status(refunded ? 200 : result.returnReady ? 202 : 200).json({
+      success: true,
+      pending: result.returnReady && !refunded,
+      booking: updatedBooking,
+      payment: snapshot,
+      returnReady: result.returnReady === true,
+      refundVerified: refunded,
+      message: refunded
+        ? 'Both parties confirmed the physical cash was returned, and the MatMove fee reserve refund is verified.'
+        : result.returnReady
+          ? 'Both parties confirmed the physical cash return. The fee-reserve refund is being verified; do not request another transfer.'
+          : actorType === 'driver'
+            ? 'Your physical cash return confirmation is recorded. The customer must also confirm receiving the cash.'
+            : 'Your confirmation is recorded. The assigned driver must also confirm returning the physical cash.'
     });
   }
 
