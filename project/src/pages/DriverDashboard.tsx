@@ -627,7 +627,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
 }
 
 function DriverTrips({ profile, onResume }: any) {
-  return <TripHistory userId={profile.id} role="driver" onResume={onResume} />;
+  return <TripHistory userId={profile.id} role="driver" accountLabel={profile.full_name || profile.email} onResume={onResume} />;
 }
 
 function PolicyModal({ onAccept }: { onAccept: () => void }) {
