@@ -556,7 +556,7 @@ function MerchantInventory({ profile }: any) {
     const generation = ++ordersGeneration.current;
     setOrdersLoading(true); setOrdersError('');
     try {
-      const { data, error: queryError } = await supabase.from('app_orders').select('*, rider:rider_id(full_name, phone)').eq('merchant_id', profile.id).order('created_at', { ascending: false });
+      const { data, error: queryError } = await supabase.from('app_orders').select('*, rider:profiles!app_orders_rider_id_fkey(full_name, phone)').eq('merchant_id', profile.id).order('created_at', { ascending: false });
       if (queryError) throw queryError;
       if (!Array.isArray(data)) throw new Error('Invalid order response.');
       if (generation === ordersGeneration.current) setOrders(data);
