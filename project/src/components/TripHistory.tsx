@@ -4,7 +4,8 @@ import { supabase } from '@/lib/supabase';
 import { shareReceiptPdf } from '@/lib/pdfReceipt';
 import { SkeletonList } from '@/components/Skeleton';
 import { filterTripHistory } from '@/lib/tripHistory';
-import { updateRide } from '@/services/rideService';
+import { updateRide, readCashRideStatus } from '@/services/rideService';
+import { attachTripContacts } from '@/lib/tripContacts';
 
 type Props = { userId: string; role: 'rider' | 'driver' | 'merchant' };
 const date = (value: unknown) => {
@@ -58,7 +59,8 @@ export default function TripHistory({ userId, role }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [period,setPeriod]=useState<'30'|'90'|'all'>('30');
+  const [period,setPeriod]=useState<'30'|'90'|'all'>('all');
+  const [tripView,setTripView]=useState<'active'|'pending'|'history'>('active');
   const [statusFilter,setStatusFilter]=useState<'all'|'pending'|'pending_admin'|'accepted'|'in_progress'|'completed'|'cancelled'>('all');
   const dialog = useRef<HTMLDialogElement>(null);
   const owner=useRef(userId);owner.current=userId;
@@ -75,8 +77,15 @@ export default function TripHistory({ userId, role }: Props) {
         .eq(role === 'driver' ? 'driver_id' : 'rider_id', id).order('created_at', { ascending: false }).abortSignal(controller.signal);
       if(result.error)throw Error('Trip history could not be loaded. Retry; no records have been deleted.');
       if(!Array.isArray(result.data)||result.data.some(t=>t[role==='driver'?'driver_id':'rider_id']!==id))throw Error('Trip ownership could not be verified.');
+      const withContacts=await attachTripContacts(result.data);
+      const unfinished=withContacts.filter(t=>['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(t.status));
+      const cashStatuses=new Map<string,any>();
+      await Promise.all(unfinished.filter(t=>t.payment_method==='cash').map(async t=>{
+        try{const status=await readCashRideStatus(t.id);if(status?.booking?.id===t.id&&status?.payment)cashStatuses.set(t.id,status.payment);}catch{/* A status-read outage must not hide or drop the trip. */}
+      }));
+      const enriched=withContacts.map(t=>({...t,cashPayment:cashStatuses.get(t.id)||t.cashPayment||null}));
       const after=await supabase.auth.getSession();if(after.error||after.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
-      if(live()){setTrips(result.data);setLoadedOwner(id);setError('');}
+      if(live()){setTrips(enriched);setLoadedOwner(id);setError('');}
     }catch(e){if(live()){setTrips([]);setError(e instanceof Error?e.message:'Trip history unavailable.');}}
     finally{clearTimeout(timeout);if(live()){inFlight.current=false;setLoading(false);}}
   }, [userId, role]);
@@ -96,16 +105,25 @@ export default function TripHistory({ userId, role }: Props) {
         if (document.visibilityState !== 'hidden') void refresh();
       })
       .subscribe();
+    const onResume=()=>{if(document.visibilityState!=='hidden')void refresh();};
     const timer = window.setInterval(() => { if(document.visibilityState!=='hidden')void refresh(); }, 15000);
+    document.addEventListener('visibilitychange',onResume);
+    window.addEventListener('focus',onResume);
+    window.addEventListener('pageshow',onResume);
+    window.addEventListener('online',onResume);
     return () => {
       mounted.current=false;revision.current++;inFlight.current=false;abort.current?.abort();
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange',onResume);
+      window.removeEventListener('focus',onResume);
+      window.removeEventListener('pageshow',onResume);
+      window.removeEventListener('online',onResume);
       void supabase.removeChannel(channel);
     };
   }, [refresh,userId,role]);
   const ownedTrips=loadedOwner===userId?trips:[];
   const selected = ownedTrips.find(t => t.id === selectedId);
-  const filteredTrips=filterTripHistory(ownedTrips,period,statusFilter);
+  const filteredTrips=filterTripHistory(ownedTrips,period,statusFilter).filter(t=>tripView==='active'?['accepted','in_progress'].includes(t.status):tripView==='pending'?['pending','pending_admin','cash_reserve_pending','cash_review_required'].includes(t.status):['completed','cancelled'].includes(t.status));
   const activeRequests = ownedTrips.filter(t => ['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(t.status));
   const [cancellingId,setCancellingId]=useState<string|null>(null);
   const [actionError,setActionError]=useState('');
@@ -143,12 +161,12 @@ export default function TripHistory({ userId, role }: Props) {
 
   const fields = selected ? [
     ['Reference', selected.id], ['Passengers',String(selected.passenger_count??1)], ['Passenger name',selected.passenger_name], ['Service', selected.service_type], ['Status', selected.status],
-    ['Customer', selected.rider?.full_name], ['Driver', selected.driver?.full_name],
+    ['Customer', selected.rider?.full_name], ['Customer phone',selected.rider?.phone||selected.rider?.phone_number], ['Driver', selected.driver?.full_name], ['Driver phone',selected.driver?.phone||selected.driver?.phone_number],
     ['Pickup area', selected.pickup_location], ['Destination area', selected.destination_location],
     ['Requested', date(selected.created_at)], ['Scheduled', selected.scheduled_time?date(selected.scheduled_time):selected.service_type==='scheduled'?'Not recorded':'Not scheduled'],
     ['Accepted', date(selected.accepted_at)], ['Started', date(selected.started_at)],
     ['Completed', date(selected.completed_at)], ['Vehicle', selected.vehicle_type],
-    ['Fare', `SLE ${Number(selected.fare_amount || 0).toFixed(2)}`],
+    ['Fare', `SLE ${Number(selected.fare_amount || 0).toFixed(2)}`], ['Payment method',selected.payment_method], ['Cash handover status',selected.cashPayment?.status], ['Driver cash confirmed',selected.cashPayment?.driverCashConfirmed?'Yes':'No'], ['Customer cash confirmed',selected.cashPayment?.riderCashConfirmed?'Yes':'No'],
     ...(role === 'driver' ? [['Expected driver share (85%)', `SLE ${(Number(selected.fare_amount || 0) * 0.85).toFixed(2)}`]] : []),
     ...(selected.distance_km != null ? [['Distance', `${selected.distance_km} km`]] : []),
     ...(selected.payment_status ? [['Payment status', selected.payment_status]] : []),
@@ -156,8 +174,11 @@ export default function TripHistory({ userId, role }: Props) {
   return <section className="mx-auto max-w-4xl space-y-4 p-4 pb-24 sm:p-6">
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h1 className="text-3xl font-bold">Trips & Deliveries</h1><p className="mt-1 text-sm text-slate-500">Review recent activity or open your full trip history.</p></div>
+        <div><h1 className="text-3xl font-bold">Trips & Deliveries</h1><p className="mt-1 text-sm text-slate-500">Your unfinished rides stay here until the server confirms completion or cancellation. You can reopen the same request after signing back in.</p></div>
         <button className="min-h-11 rounded-xl border bg-white px-4 py-2 font-semibold" onClick={() => void refresh()}>Refresh</button>
+      </div>
+      <div role="tablist" aria-label="Trips categories" className="grid grid-cols-3 gap-2 rounded-2xl border bg-white p-2">
+        {([{id:'active',label:'Live / Active',count:ownedTrips.filter(t=>['accepted','in_progress'].includes(t.status)).length},{id:'pending',label:'Pending',count:ownedTrips.filter(t=>['pending','pending_admin','cash_reserve_pending','cash_review_required'].includes(t.status)).length},{id:'history',label:'History',count:ownedTrips.filter(t=>['completed','cancelled'].includes(t.status)).length}] as const).map(tab=><button key={tab.id} type="button" role="tab" aria-selected={tripView===tab.id} onClick={()=>setTripView(tab.id)} className={`min-h-12 rounded-xl px-2 text-sm font-bold ${tripView===tab.id?'bg-indigo-600 text-white':'text-slate-700 hover:bg-slate-50'}`}>{tab.label}<span className="ml-1 opacity-80">({tab.count})</span></button>)}
       </div>
       <div className="grid gap-3 rounded-2xl border bg-white p-3 sm:grid-cols-2">
         <label className="block text-sm font-semibold text-slate-700">Time period
@@ -170,7 +191,7 @@ export default function TripHistory({ userId, role }: Props) {
             <option value="all">All statuses</option><option value="pending">Pending</option><option value="pending_admin">Pending Admin review</option><option value="accepted">Accepted</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>
           </select>
         </label>
-        <p className="text-xs text-slate-500 sm:col-span-2">Showing {filteredTrips.length} of {ownedTrips.length} trip records.</p>
+        <p className="text-xs text-slate-500 sm:col-span-2">Showing {filteredTrips.length} {tripView==='active'?'live or accepted':tripView==='pending'?'pending':'historical'} trips. Unfinished requests are never hidden by the history date filter.</p>
       </div>
     </div>
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
@@ -190,7 +211,7 @@ export default function TripHistory({ userId, role }: Props) {
     </section>
     {!selectedId && notice && <p role="status" className="rounded-xl bg-emerald-50 p-3">{notice}</p>}
     {loading ? <SkeletonList count={4} /> : !ownedTrips.length && !error ? <p className="rounded-2xl border bg-white py-10 text-center text-slate-500">No trips or deliveries yet.</p> : null}
-    {!loading&&ownedTrips.length>0&&filteredTrips.length===0&&<p className="rounded-2xl border bg-white p-6 text-center text-sm text-slate-600">No trips match these filters. Try a wider time period or another status.</p>}
+    {!loading&&filteredTrips.length===0&&<p className="rounded-2xl border bg-white p-6 text-center text-sm text-slate-600">{tripView==='active'?'No accepted or in-progress trips.':tripView==='pending'?'No pending requests assigned to this account.':'No completed or cancelled trips match this history filter.'}</p>}
     {filteredTrips.map(t => <article key={t.id} className="rounded-2xl border bg-white p-4 shadow-sm">
       <button onClick={() => { setNotice(''); setSelectedId(t.id); }} className="w-full text-left">
         <div className="flex justify-between gap-3"><strong className="capitalize">{t.service_type || 'Ride'}</strong><span>{t.status}</span></div>
