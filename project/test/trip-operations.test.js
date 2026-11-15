@@ -30,3 +30,13 @@ test('trip requests preserve accepted work, recover original submissions and kee
  await t.test('reruns preserve original receipts, fares and passenger details',async()=>{await pg.exec(sql);const row=await create(first.id);assert.equal(row.status,'completed');assert.equal(row.passenger_name,'Guest Rider');assert.equal((await pg.query('select count(*)::int n from matmove_customer_trip_requests')).rows[0].n,2);});
  }finally{await pg.close();}
 });
+
+test('trip history filters include cash reserve and cash review states',()=>{
+ const trips=[
+  {id:'a',status:'cash_reserve_pending',created_at:new Date().toISOString()},
+  {id:'b',status:'cash_review_required',created_at:new Date().toISOString()},
+  {id:'c',status:'accepted',created_at:new Date().toISOString()}
+ ];
+ assert.equal(filterTripHistory(trips,'all','cash_reserve_pending').length,1);
+ assert.equal(filterTripHistory(trips,'all','cash_review_required').length,1);
+});
