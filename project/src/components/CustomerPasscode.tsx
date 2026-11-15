@@ -310,8 +310,11 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
   return()=>{live=false;};
  },[userId]);
 
-).test(pin)){
-   setPasskeyError(`Enter your current ${status.digits}-digit MatMove passcode before setting up biometrics.`);
+ async function registerBiometric(){
+  if(mutex.current||passkeyBusy||!biometricSupported||!status?.configured||status.digits<6)return;
+  const validPin=pin.length===status.digits&&new RegExp('^[0-9]{'+status.digits+'}$').test(pin);
+  if(!validPin){
+   setPasskeyError('Enter your current '+status.digits+'-digit MatMove passcode before setting up biometrics.');
    setActivePinField('pin');
    pinEntryRef.current?.focus({preventScroll:true});
    return;
