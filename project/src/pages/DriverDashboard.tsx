@@ -30,7 +30,7 @@ import {
 
 export function DriverDashboard(props: any) {
   if (props.activeSection === 'trips') {
-    return <DriverTrips profile={props.profile} />;
+    return <DriverTrips profile={props.profile} onOpenHome={() => props.onNavigate?.('home')} />;
   }
 
   return <DriverMain key={props.profile.id} {...props} />;
@@ -631,8 +631,8 @@ function DriverMain({ profile, wallet, activeSection }: any) {
   );
 }
 
-function DriverTrips({ profile }: any) {
-  return <TripHistory userId={profile.id} role="driver" />;
+function DriverTrips({ profile, onOpenHome }: any) {
+  return <TripHistory userId={profile.id} role="driver" onOpenHome={onOpenHome} />;
 }
 
 function PolicyModal({ onAccept }: { onAccept: () => void }) {
