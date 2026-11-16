@@ -51,7 +51,8 @@ test('browser retries preserve the same idempotency request ID for accept and ca
   assert.match(rideService, /const requestId = .*randomUUID/);
   assert.match(rideService, /requestId,?\s*\}/);
   assert.match(rideService, /walletFetch\(urls\[action\], body\)/);
-  assert.match(rideService, /sessionStorage\.getItem\(key\)/);\n  assert.match(rideService, /clearRideActionRequestId\(action, bookingId\)/);
+  assert.match(rideService, /sessionStorage\.getItem\(key\)/);
+  assert.match(rideService, /clearRideActionRequestId\(action, bookingId\)/);
 });
 
 test('driver radar excludes the driver who cancelled while other eligible drivers can see the same pending request', () => {
