@@ -465,7 +465,7 @@ declare
 begin
   if p_booking_id is null or p_driver_id is null
      or p_driver_account is null
-     or p_driver_account !~ '^fac-[A-Za-z0-9_-]+    raise exception 'INVALID: A booking, driver and verified SLE financial account are required.';
+     or p_driver_account !~ '^fac-[A-Za-z0-9_-]+$' then
   end if;
 
   select * into b from public.bookings where id=p_booking_id for update;
