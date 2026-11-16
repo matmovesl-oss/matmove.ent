@@ -556,6 +556,26 @@ export async function cashRideAction(
       throw new HttpError(403, 'Only the rider or assigned driver can cancel this cash ride.');
     }
 
+    if (actorType === 'driver') {
+      const result = await cashRpc(db, 'matmove_driver_cancel_and_redispatch', {
+        p_booking_id: bookingId,
+        p_driver_id: user.id,
+        p_reason: 'driver_unavailable'
+      });
+      const updatedBooking = await readBooking(db, bookingId);
+      return res.status(200).json({
+        success: true,
+        pending: false,
+        redispatched: result.redispatched === true,
+        reviewRequired: result.reviewRequired === true,
+        booking: updatedBooking,
+        payment: await cashStatus(db, bookingId),
+        message: result.reviewRequired
+          ? 'This cash trip cannot be re-dispatched automatically. Its physical cash and payment state have been sent to MatMove Admin for review.'
+          : 'Your assignment is cancelled. The same booking is available to another eligible driver, and the original 15% fee reserve has been kept. No second reserve was created.'
+      });
+    }
+
     const result = await cashRpc(db, 'matmove_cash_ride_cancel', {
       p_booking_id: bookingId,
       p_actor_id: user.id,
