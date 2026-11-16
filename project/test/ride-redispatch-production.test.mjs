@@ -37,20 +37,20 @@ test('both re-dispatch database functions are service-role only and idempotent b
 });
 
 test('the API sends driver cancellations through redispatch and never through customer refund', () => {
-  assert.match(ridePayments, /if \(action === 'cancel' && profile\.role === 'driver'\)[\s\S]*matmove_driver_cancel_redispatch/);
+  assert.match(ridePayments, /const isDriver = profile\.role === 'driver'[\s\S]*matmove_driver_cancel_redispatch/);
   assert.match(cashPayments, /if \(actorType === 'driver'\)[\s\S]*matmove_driver_cancel_redispatch/);
   assert.match(cashPayments, /Driver cancellation re-dispatched the same request/);
 });
 
 test('the digital replacement acceptance path does not create another customer debit or escrow hold', () => {
   assert.match(ridePayments, /matmove_accept_redispatched_digital/);
-  assert.match(ridePayments, /payment\.driver_id !== user\.id/);
+  assert.match(ridePayments, /booking\.driver_id === user\.id && payment\.driver_id === user\.id/);
 });
 
 test('browser retries preserve the same idempotency request ID for accept and cancel', () => {
   assert.match(rideService, /const requestId = .*randomUUID/);
   assert.match(rideService, /requestId,?\s*\}/);
-  assert.match(rideService, /walletFetch\(urls\[action\], body\)/);
+  assert.match(rideService, /walletFetch\(urls\[action\], body\)/);\n  assert.match(rideService, /sessionStorage\.getItem\(key\)/);\n  assert.match(rideService, /clearRideActionRequestId\(action, bookingId\)/);
 });
 
 test('driver radar excludes the driver who cancelled while other eligible drivers can see the same pending request', () => {
