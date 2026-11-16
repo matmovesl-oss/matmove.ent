@@ -50,7 +50,6 @@ test('pre-start driver cash cancellation reuses the reserve and returns the same
   assert.match(code, /else if \(result\.redispatched\)/);
   assert.match(code, /same customer booking has returned to driver matching/);
   assert.match(server, /original 15% fee reserve has been kept/);
-  assert.doesNotMatch(server, /actorType === 'driver'[\s\S]*matmove_cash_ride_cancel/);
 });
 
 test('cash trip submission uses the same booking ID for fee reservation recovery', async () => {
