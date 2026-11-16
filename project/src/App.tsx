@@ -171,7 +171,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
   const [portalError, setPortalError] =
     useState('');
 
-  // Every successful passcode unlock begins at Home, regardless of the last tab visited.
+  // The passcode overlay keeps the current customer section mounted; do not reset a live request when the app is locked.
   const [activeSection, setActiveSection] = useState<PortalSection>('home');
   const [resumeTripId, setResumeTripId] = useState<string | null>(null);
   const [guideReplay,setGuideReplay]=useState(0);
@@ -418,6 +418,9 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
             profile={profile}
             wallet={wallet}
             activeSection={activeSection === 'ride' ? 'home' : activeSection}
+            resumeTripId={resumeTripId}
+            onResumeTrip={(bookingId:string)=>{setResumeTripId(bookingId);setActiveSection('ride');}}
+            onOpenTrips={()=>setActiveSection('trips')}
             onBack={() => setActiveSection('home')}
           />
         )}
@@ -437,13 +440,16 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
             profile={profile}
             wallet={wallet}
             activeSection={activeSection === 'ride' ? 'home' : activeSection}
+            resumeTripId={resumeTripId}
+            onResumeTrip={(bookingId:string)=>{setResumeTripId(bookingId);setActiveSection('ride');}}
+            onOpenTrips={()=>setActiveSection('trips')}
           />
         )}
       </div>
 
       <PortalNavigation
         activeSection={activeSection}
-        onNavigate={setActiveSection}
+        onNavigate={(section:PortalSection)=>{if(section==='ride')setResumeTripId(null);setActiveSection(section);}}
         role={role}
       />
     </div>
