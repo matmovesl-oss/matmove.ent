@@ -345,7 +345,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
       return;
     }
 
-    if (!/^\d+(\.\d{1,2})?$/.test(offerAmount.trim()) || !Number.isFinite(finalAmount) || finalAmount <= 0 || finalAmount > 1000000)) {
+    if (!/^\d+(\.\d{1,2})?$/.test(offerAmount.trim()) || !Number.isFinite(finalAmount) || finalAmount <= 0 || finalAmount > 1000000) {
       setRideNotice('Enter and review a positive fare with at most two decimal places, up to SLE 1,000,000.');
       return;
     }
