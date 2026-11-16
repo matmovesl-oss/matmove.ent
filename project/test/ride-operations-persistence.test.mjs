@@ -81,3 +81,42 @@ test('Trips identifies the signed-in Rider or Merchant account and explains acco
  assert.match(trips,/matching names or phone contacts do not merge account histories/);
  assert.match(trips,/Customer product orders are shown separately under Inventory & Orders/);
 });
+
+test('Rider and Merchant can create another request while existing bookings remain listed',()=>{
+ const negotiation=readFileSync(new URL('../src/lib/useRideNegotiation.ts',import.meta.url),'utf8');
+ const request=readFileSync(new URL('../src/lib/useTripRequest.ts',import.meta.url),'utf8');
+ const switcher=readFileSync(new URL('../src/components/CustomerTripSwitcher.tsx',import.meta.url),'utf8');
+ const rider=readFileSync(new URL('../src/pages/RiderDashboard.tsx',import.meta.url),'utf8');
+ const merchant=readFileSync(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
+ assert.match(negotiation,/const canCreate=current\.userId===userId&&!current\.loading&&!current\.error;/);
+ assert.doesNotMatch(negotiation,/bookings\.some\(row=>row\.rider_id===userId/);
+ assert.match(switcher,/Create new ride request/);
+ assert.match(request,/async function restore\(\)/);
+ assert.match(request,/\.from\('bookings'\)\.select\('\*'\)\.eq\('id',retained\.id\)\.eq\('rider_id',id\)\.maybeSingle\(\)/);
+ const restoreBlock=request.slice(request.indexOf('async function restore'),request.indexOf('async function submit'));
+ assert.doesNotMatch(restoreBlock,/matmove_create_customer_trip|reserveCashRide/);
+ assert.match(rider,/tripRequest\.restore\(\)/);
+ assert.match(merchant,/tripRequest\.restore\(\)/);
+});
+
+test('parallel customer request migration removes the server-side pending-booking creation block',()=>{
+ const migration=readFileSync(new URL('../supabase/migrations/20261116094000_matmove_allow_parallel_customer_requests_v1.sql',import.meta.url),'utf8');
+ assert.match(migration,/matmove_create_customer_trip\(uuid,jsonb\)/);
+ assert.match(migration,/Resolve your pending request before creating another/);
+ assert.match(migration,/v_updated := replace\(v_definition, v_old, ''\)/);
+});
+
+test('Admin digital dispute cancellation reconciles customer 50, driver 5 and platform 45 before closing',()=>{
+ const settlement=readFileSync(new URL('../supabase/migrations/20261116101500_matmove_admin_dispute_escrow_split_v1.sql',import.meta.url),'utf8');
+ const hardening=readFileSync(new URL('../supabase/migrations/20261116103000_matmove_harden_admin_dispute_split_retry_v1.sql',import.meta.url),'utf8');
+ const payments=readFileSync(new URL('../server/ride-payments.js',import.meta.url),'utf8');
+ assert.match(settlement,/rp\.fare_minor::numeric \* 0\.50/);
+ assert.match(settlement,/rp\.fare_minor::numeric \* 0\.05/);
+ assert.match(settlement,/platform_minor := rp\.fare_minor - refund_minor - driver_award_minor/);
+ assert.match(settlement,/kind,'refund',refund_minor/);
+ assert.match(settlement,/kind,'driver',driver_award_minor/);
+ assert.match(settlement,/kind,'fee',platform_minor/);
+ assert.match(settlement,/p\.escrow_account = p\.fee_account/);
+ assert.match(hardening,/amount_minor = p\.fare_minor/);
+ assert.match(payments,/refunding: \['refund', 'driver', 'fee'\]/);
+});
