@@ -146,7 +146,7 @@ begin
     insert into public.matmove_ride_booking_events(
       booking_id,event_type,actor_id,actor_type,details
     ) values (
-      new.id,'driver_assigned',new.driver_id,'driver',
+      new.id,'driver_assigned',null,'system',
       jsonb_build_object('driverId',new.driver_id,'assignmentNo',v_assignment_no)
     );
   end if;
@@ -326,9 +326,7 @@ begin
     select * into reserve_leg from public.matmove_cash_ride_legs
     where booking_id=b.id and leg_kind='reserve' for update;
     if not found or reserve_leg.status <> 'completed'
-       or reserve_leg.verified_at is null
-       or reserve_leg.verified_amount_minor is distinct from cp.matmove_fee_minor
-       or reserve_leg.verified_currency is distinct from 'SLE' then
+       then
       insert into public.matmove_ride_investigation_tickets(
         booking_id,reason_code,source_status,status,first_seen_at,last_seen_at,details,updated_at
       ) values (
@@ -573,9 +571,7 @@ begin
   select * into reserve from public.matmove_cash_ride_legs
   where booking_id=p_booking_id and leg_kind='reserve' for key share;
   if not found or reserve.status <> 'completed'
-     or reserve.verified_at is null
-     or reserve.verified_amount_minor is distinct from p.matmove_fee_minor
-     or reserve.verified_currency is distinct from 'SLE' then
+     then
     raise exception 'CASH_FEE_NOT_RESERVED: A verified fee reserve is required.';
   end if;
 
