@@ -573,9 +573,12 @@ export async function cashRideAction(
         success: result?.success === true,
         pending: false,
         redispatched: result?.redispatched === true,
+        reviewRequired: result?.reviewRequired === true,
         booking: updatedBooking,
         payment: await cashStatus(db, bookingId),
-        message: 'Driver cancellation re-dispatched the same request. The original MatMove fee reserve is retained; no second reserve or refund was created.'
+        message: result?.reviewRequired
+          ? 'Admin investigation opened. The trip was not re-dispatched and no fee refund or additional reserve was started.'
+          : 'Driver cancellation re-dispatched the same request. The original MatMove fee reserve is retained; no second reserve or refund was created.'
       });
     }
 
