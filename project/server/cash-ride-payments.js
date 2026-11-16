@@ -556,6 +556,27 @@ export async function cashRideAction(
       throw new HttpError(403, 'Only the rider or assigned driver can cancel this cash ride.');
     }
 
+    if (actorType === 'driver') {
+      const requestId = uuid.test(String(req.body?.requestId || ''))
+        ? req.body.requestId
+        : (globalThis.crypto?.randomUUID?.() || null);
+      if (!requestId) throw new HttpError(400, 'A valid request reference is required. Refresh and retry.');
+      const result = await cashRpc(db, 'matmove_driver_cancel_redispatch', {
+        p_booking_id: bookingId,
+        p_driver_id: user.id,
+        p_request_id: requestId
+      });
+      const updatedBooking = await readBooking(db, bookingId);
+      return res.status(200).json({
+        success: result?.success === true,
+        pending: false,
+        redispatched: result?.redispatched === true,
+        booking: updatedBooking,
+        payment: await cashStatus(db, bookingId),
+        message: 'Driver cancellation re-dispatched the same request. The original MatMove fee reserve is retained; no second reserve or refund was created.'
+      });
+    }
+
     const result = await cashRpc(db, 'matmove_cash_ride_cancel', {
       p_booking_id: bookingId,
       p_actor_id: user.id,
