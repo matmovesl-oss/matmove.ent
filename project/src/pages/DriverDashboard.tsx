@@ -533,7 +533,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
                           {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Arrived / Start'}
                         </button>
                         <button onClick={() => void handleCancelRide(r)} disabled={acceptingId === r.id} className="flex-1 bg-red-50 text-red-600 border border-red-200 font-bold py-3.5 rounded-xl hover:bg-red-100 disabled:opacity-50">
-                          {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Cancel (Refund)'}
+                          {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Cancel · Find new driver'}
                         </button>
                       </div>
                     )}
