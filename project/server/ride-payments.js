@@ -507,9 +507,12 @@ export async function rideAction(
             success: result?.success === true,
             pending: false,
             redispatched: result?.redispatched === true,
+            reviewRequired: result?.reviewRequired === true,
             booking: updatedBooking,
             payment: await paymentSnapshot(db, bookingId, updatedPayment),
-            message: 'Driver cancellation re-dispatched the same request. Customer escrow remains protected; no new customer debit or refund was created.'
+            message: result?.reviewRequired
+              ? 'Admin investigation opened. The trip was not re-dispatched and no refund or payout was started.'
+              : 'Driver cancellation re-dispatched the same request. Customer escrow remains protected; no new customer debit or refund was created.'
           });
         }
 
