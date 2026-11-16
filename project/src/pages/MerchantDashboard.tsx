@@ -350,13 +350,13 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
       {((rideNotice&&!tripRequest.retained)||walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice&&!tripRequest.retained&&<p>{rideNotice}</p>}{walletNotice&&<p>{walletNotice}</p>}</div>}
       {activeSection==='home'&&tripRequest.retained&&<section role="status" className="m-3 space-y-2 rounded-2xl border border-amber-300 bg-amber-50 p-4"><div><p className="font-extrabold text-amber-950">An earlier request needs checking</p><p className="mt-1 text-sm text-amber-900">MatMove retained the original request reference. Open Trips to check that exact booking before attempting another request.</p></div><button type="button" onClick={()=>onOpenTrips?.()} className="min-h-11 rounded-xl bg-amber-900 px-4 font-bold text-white">Go to Trips</button></section>}
       {activeSection==='home'&&tripRequest.error&&!tripRequest.retained&&<p role="alert" className="m-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{tripRequest.error}</p>}
-      {activeSection==='home'&&{activeSection === 'home' && hasUnfinishedBookings && !activeBooking && (
+      {activeSection === 'home' && hasUnfinishedBookings && !activeBooking && (
         <section className="m-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
           <h2 className="font-bold text-blue-950">You have an unfinished request</h2>
           <p className="mt-1 text-sm text-blue-900">Existing requests are kept in Trips, separate from creating another request. Open Trips to review the original delivery or ride, verify cash or digital payment status and continue that same request.</p>
           <button type="button" onClick={() => onOpenTrips?.()} className="mt-3 min-h-11 rounded-xl bg-blue-700 px-4 font-bold text-white">Open Trips</button>
         </section>
-      )}}
+      )}
       {activeSection === 'home' && (activeBooking || (pickupCoords && destinationCoords && !routeEditing)) && (
         <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
           <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[58dvh] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6"
