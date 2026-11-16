@@ -678,7 +678,7 @@ begin
     v_updated := pg_catalog.replace(
       v_definition,
       '''state'',rp.state,''fareMinor''',
-      '''state'',rp.state,''payoutDriverId'',rp.driver_id,''payoutAccount'',rp.driver_account,''fareMinor'''
+      '''state'',rp.state,''payoutDriverId'',case when rp.driver_id=b.driver_id then rp.driver_id else null end,''payoutAccount'',case when rp.driver_id=b.driver_id then rp.driver_account else null end,''fareMinor'''
     );
     if v_updated = v_definition then
       raise exception 'Could not extend matmove_admin_trip_review payment details; expected definition marker was not found.';
