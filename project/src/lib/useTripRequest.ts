@@ -27,23 +27,31 @@ export function useTripRequest(userId:string){
  const current=useRef(userId),mounted=useRef(false),mutex=useRef(false),epoch=useRef(0),active=useRef<AbortController|null>(null);current.current=userId;
  useEffect(()=>{mounted.current=true;epoch.current++;mutex.current=false;setRetained(null);setError('');setWorking(false);setReady(false);try{const raw=localStorage.getItem(key);if(raw){const body=JSON.parse(raw);if(!uuid.test(body?.id)||!body.details||body.details.client_version!==1)throw Error();setRetained(body);}}catch{setError('This browser cannot confirm the previous trip request. Restore browser storage before requesting another.');}finally{setReady(true);}return()=>{mounted.current=false;epoch.current++;active.current?.abort();};},[userId,key]);
  async function restore(){
-  if(!ready)throw Error('The saved request is not ready to restore yet.');
-  if(!retained)throw Error('There is no saved request reference in this browser. Refresh Trips to load the server record.');
+  if(!ready)throw Error('The request recovery service is still starting. Try again in a moment.');
   if(mutex.current)throw Error('A request check is already running.');
-  mutex.current=true;setWorking(true);const id=userId,n=++epoch.current;
+  mutex.current=true;setWorking(true);setError('');
+  const id=userId,n=++epoch.current;
   const live=()=>mounted.current&&current.current===id&&epoch.current===n;
   try{
    const before=await supabase.auth.getSession();
    if(before.error||before.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
-   if(!live())throw Error('Your account changed.');
-   const result=await supabase.from('bookings').select('*').eq('id',retained.id).eq('rider_id',id).maybeSingle();
-   if(result.error)throw Error('The original booking could not be read. Refresh Trips and retry the same request.');
-   const row=result.data;
-   if(!row||row.id!==retained.id||row.rider_id!==id||!validBookingStatuses.includes(row.status)){
-    throw Error('The saved request was not found under this signed-in account. No new ride or payment was created.');
+   let row:any=null;
+   if(retained?.id){
+    const exact=await supabase.from('bookings').select('*').eq('id',retained.id).eq('rider_id',id).maybeSingle();
+    if(exact.error)throw Error('The original request could not be checked. Your saved reference is preserved; retry without creating another ride.');
+    row=exact.data;
+    if(row&&(row.rider_id!==id||!validBookingStatuses.includes(row.status)))throw Error('The original request ownership or status could not be verified.');
+   }
+   if(!row){
+    const latest=await supabase.from('bookings').select('*').eq('rider_id',id)
+      .in('status',['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'])
+      .order('created_at',{ascending:false}).limit(1).maybeSingle();
+    if(latest.error)throw Error('MatMove could not check your server-side unfinished requests. Your saved reference is preserved.');
+    row=latest.data;
    }
    const after=await supabase.auth.getSession();
    if(after.error||after.data.session?.user.id!==id||!live())throw Error('Your sign-in changed. Reopen Trips.');
+   if(row&&(row.rider_id!==id||!validBookingStatuses.includes(row.status)))throw Error('The original request could not be verified.');
    localStorage.removeItem(key);setRetained(null);setError('');
    return row;
   }catch(e){
