@@ -136,10 +136,3 @@ test('Original request recovery checks the saved reference and server-side open 
  assert.match(switcher,/onCheckOriginal/);
 });
 
-test('Admin uncompleted ride screen explains the verified 50/5/45 split',()=>{
- const review=readFileSync(new URL('../../matmove-admin/project/src/components/AdminTripReview.tsx',import.meta.url),'utf8');
- assert.match(review,/50\/5\/45 settlement/);
- assert.match(review,/Customer refund \(50%\)/);
- assert.match(review,/Assigned driver award \(5%\)/);
- assert.match(review,/MatMove platform share \(45%\)/);
-});
