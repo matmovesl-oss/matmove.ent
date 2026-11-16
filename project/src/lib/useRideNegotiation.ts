@@ -71,7 +71,7 @@ export function useCustomerActiveRide(userId: string, resumeBookingId: string | 
     let disposed = false, busy = false, queued = false;
     selection.current = resumeBookingId || '';
     if(identity.current!==state.userId){setBookings([]);setCreating(false);selection.current='';}
-    setState(previous => ({ userId, booking: previous.userId === userId ? previous.booking : null, loading: true, error: '' }));
+    setState(previous => ({ userId, booking: previous.userId === userId && resumeBookingId && previous.booking?.id === resumeBookingId ? previous.booking : null, loading: true, error: '' }));
     const refresh = async () => {
       if (disposed || !userId) return;
       if (busy) { queued = true; return; }
