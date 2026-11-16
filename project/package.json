@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && node --test test/shared-trip-sync.test.mjs test/customer-home-ui.test.mjs test/customer-phone-ui.test.mjs test/customer-onboarding.test.js test/cash-ride-ui.test.js test/cash-ride-state-machine-migration.test.js test/request-action-center.test.js test/ride-location-reliability.test.mjs test/passcode-security.test.js test/ride-operations-persistence.test.mjs test/cash-return-confirmation.test.mjs && vite build",
+    "build": "npm run typecheck && node --test test/shared-trip-sync.test.mjs test/customer-home-ui.test.mjs test/customer-phone-ui.test.mjs test/customer-onboarding.test.js test/cash-ride-ui.test.js test/cash-ride-state-machine-migration.test.js test/request-action-center.test.js test/ride-location-reliability.test.mjs test/passcode-security.test.js test/ride-operations-persistence.test.mjs test/ride-redispatch-production.test.mjs test/cash-return-confirmation.test.mjs && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
