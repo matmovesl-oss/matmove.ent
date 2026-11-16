@@ -485,7 +485,10 @@ export async function rideAction(
 
     if (['complete', 'cancel'].includes(action)) {
       if (action === 'cancel') {
-        const isDriver = profile.role === 'driver' && booking.driver_id === user.id;
+        // A driver-role caller is allowed through to the service RPC. The database
+        // verifies the current assignment for a new cancellation, or the exact
+        // actor + request ID for an idempotent retry after unassignment.
+        const isDriver = profile.role === 'driver';
         const isRider = booking.rider_id === user.id;
 
         if (!isDriver && !isRider) {
