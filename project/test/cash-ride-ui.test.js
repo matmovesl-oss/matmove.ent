@@ -58,7 +58,7 @@ test('cash trip submission uses the same booking ID for fee reservation recovery
 });
 
 test('Rider keeps existing requests in Trips and reopens the exact request before payment',async()=>{
-  const [code,trips,hook]=await Promise.all([readFile(riderFile,'utf8'),readFile(tripsFile,'utf8'),readFile(new URL('../src/lib/useRideNegotiation.ts',import.meta.url),'utf8')]);
+  const [code,trips,hook]=await Promise.all([readFile(riderFile,'utf8'),readFile(new URL('../src/components/TripHistory.tsx',import.meta.url),'utf8'),readFile(new URL('../src/lib/useRideNegotiation.ts',import.meta.url),'utf8')]);
   assert.doesNotMatch(code,/CustomerTripSwitcher/);
   assert.match(code,/hasUnfinishedBookings/);
   assert.match(code,/onOpenTrips/);
