@@ -289,10 +289,27 @@ export async function reconcileRide(
       ? ['driver']
       : ['driver', 'fee'];
 
+  let refundKinds = ['refund'];
+  if (payment.state === 'refunding') {
+    // A full Admin refund has only a refund leg. Preserve already-created
+    // historical driver/fee legs, but never create new legs that are absent.
+    const { data: existingRefundLegs, error: refundLegError } = await db
+      .from('ride_payment_transfers')
+      .select('kind')
+      .eq('booking_id', bookingId)
+      .in('kind', ['driver', 'fee']);
+    if (refundLegError) {
+      throw new HttpError(503, 'Unable to read the existing ride refund legs.');
+    }
+    const legacyKinds = [...new Set((existingRefundLegs || []).map(leg => leg.kind))]
+      .filter(kind => ['driver', 'fee'].includes(kind));
+    refundKinds = ['refund', ...legacyKinds];
+  }
+
   const kinds = {
     funding: ['hold'],
     releasing: releaseKinds,
-    refunding: ['refund', 'driver', 'fee']
+    refunding: refundKinds
   }[payment.state] || [];
 
   for (const kind of kinds) {
