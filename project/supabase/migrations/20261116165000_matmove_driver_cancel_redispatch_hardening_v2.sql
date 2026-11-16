@@ -29,6 +29,9 @@ begin
   if not found or b.driver_id is distinct from p_driver_id then
     raise exception 'FORBIDDEN: Only the assigned driver can open this review.';
   end if;
+  if b.status::text not in ('accepted','in_progress') then
+    raise exception 'INVALID_STATE: A cancellation review can only be opened for an active trip.';
+  end if;
 
   insert into public.matmove_ride_investigation_tickets(
     booking_id, reason_code, source_status, last_seen_at, details
@@ -111,6 +114,17 @@ begin
     raise exception 'FORBIDDEN: An authenticated driver account is required.';
   end if;
 
+  select * into b
+  from public.bookings
+  where id = p_booking_id
+  for update;
+
+  if not found then
+    raise exception 'NOT_FOUND: Booking not found.';
+  end if;
+
+  -- Re-check idempotency only after taking the booking lock. A concurrent
+  -- duplicate may have committed its audit row while this request waited.
   select * into prior
   from public.matmove_dispatch_audit
   where request_id = p_request_id;
@@ -132,13 +146,8 @@ begin
     );
   end if;
 
-  select * into b
-  from public.bookings
-  where id = p_booking_id
-  for update;
-
-  if not found then
-    raise exception 'NOT_FOUND: Booking not found.';
+  if b.status::text not in ('accepted','in_progress') then
+    raise exception 'INVALID_STATE: Only an active trip can be cancelled by its driver.';
   end if;
 
   -- A cancellation after the trip starts is never an automatic re-dispatch.
