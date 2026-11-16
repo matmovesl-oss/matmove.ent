@@ -94,6 +94,19 @@ test('cancellation checks the idempotency record after locking the booking to ha
   assert.match(cancelFn, /b\.status::text not in \('accepted','in_progress'\)/);
 });
 
+test('digital replacement acceptance rechecks idempotency after acquiring the booking lock', () => {
+  const start = migration.indexOf('create or replace function public.matmove_accept_redispatched_digital');
+  const end = migration.indexOf('$function$;', start) + '$function$;'.length;
+  const acceptFn = migration.slice(start, end);
+  const lockIndex = acceptFn.indexOf('for update');
+  const postLockPriorIndex = acceptFn.indexOf('select * into prior', lockIndex);
+  const paymentLockIndex = acceptFn.indexOf('select * into rp', lockIndex);
+  assert.ok(lockIndex >= 0, 'booking row must be locked');
+  assert.ok(postLockPriorIndex > lockIndex, 'idempotency must be rechecked after waiting for the booking lock');
+  assert.ok(paymentLockIndex > postLockPriorIndex, 'the retry result must be checked before treating the assigned booking as unavailable');
+  assert.match(acceptFn.slice(postLockPriorIndex, paymentLockIndex), /prior\.action <> 'assign'[\s\S]*prior\.actor_id <> p_driver_id[\s\S]*rp\.driver_account = p_driver_account/);
+});
+
 test('review tickets cannot be opened for completed or cancelled trips', () => {
   const start = migration.indexOf('create or replace function public.matmove_open_driver_cancel_review');
   const end = migration.indexOf('$function$;', start) + '$function$;'.length;
