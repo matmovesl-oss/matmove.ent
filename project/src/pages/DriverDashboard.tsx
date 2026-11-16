@@ -251,7 +251,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
           .order('created_at', { ascending: false });
         if (error) throw error;
         if (!Array.isArray(data)) throw new Error('Invalid radar response.');
-        const visible=data.filter(item=>item.driver_id===profile.id||(isOnline&&!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)));
+        const visible=data.filter(item=>item.driver_id===profile.id||(isOnline&&!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)&&!(Array.isArray(item.matmove_excluded_driver_ids)&&item.matmove_excluded_driver_ids.includes(profile.id))));
         const enriched=await attachTripContacts(visible);
         const cashById = new Map<string, any>();
         await Promise.all(enriched.filter(item => item.payment_method === 'cash' && item.driver_id === profile.id).map(async item => {
@@ -375,14 +375,20 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
       const result = await updateRide('cancel', booking.id);
       if (!mounted.current || currentDriver.current !== userId) return;
       radarMutation.current++;
-      if (result.pending) {
+      if (result.reviewRequired) {
         setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
-        setRideNotice('The cash fee refund is still being verified. The booking remains under review; do not request another transfer.');
+        setRideNotice('This trip has started or its payment needs review. It remains assigned and MatMove Admin has been notified. Do not leave the trip or collect/refund money outside the support process.');
+      } else if (result.redispatched) {
+        setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
+        setRideNotice('Your cancellation is recorded. The same customer booking has returned to driver matching. The customer will not be charged again, and you will not be offered this request again.');
+      } else if (result.pending) {
+        setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
+        setRideNotice('The payment is still being verified. The booking remains under review; do not request another transfer.');
       } else {
         setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
         setRideNotice(booking.payment_method === 'cash'
-          ? 'Cash ride cancelled and the reserved MatMove fee refund is verified.'
-          : 'Trip cancelled successfully. The verified refund has been issued to the customer.');
+          ? 'Cash ride cancellation is recorded.'
+          : 'Trip cancellation is recorded and the payment state has been verified.');
       }
     } catch (err: any) { if (mounted.current) setRideNotice(err.message); }
     finally { tripMutex.current = false; if (mounted.current) setAcceptingId(null); }
