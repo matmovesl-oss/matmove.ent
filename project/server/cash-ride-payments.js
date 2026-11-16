@@ -554,7 +554,7 @@ export async function cashRideAction(
 
   if (action === 'cancel') {
     const actorType = profile.role === 'driver' ? 'driver' : ['rider','merchant'].includes(profile.role) ? profile.role : null;
-    if (!actorType || (['rider','merchant'].includes(actorType) && !isRider) || (actorType === 'driver' && !isDriver)) {
+    if (!actorType || (['rider','merchant'].includes(actorType) && !isRider) || (actorType === 'driver' && profile.role !== 'driver')) {
       throw new HttpError(403, 'Only the rider or assigned driver can cancel this cash ride.');
     }
 
