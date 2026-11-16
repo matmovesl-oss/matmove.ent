@@ -184,3 +184,10 @@ test('biometric setup is offered when passkey enumeration fails and requires cur
  assert.match(source,/signInWithPasskey\(\)/);
  assert.match(source,/passkeyCheckError/);
 });
+
+test('passcode unlock uses clear unlock wording while preserving server verification',async()=>{
+ const source=await readFile(new URL('../src/components/CustomerPasscode.tsx',import.meta.url),'utf8');
+ assert.match(source,/busy\?'Unlocking…':creating\|\|upgrade\?'Save passcode':'Unlock'/);
+ assert.match(source,/customerPasscode\(id,creating\?'create':changing\?'change':'verify'/);
+ assert.doesNotMatch(source,/busy\?'Checking…':creating\|\|upgrade\?'Save passcode':'Unlock'/);
+});
