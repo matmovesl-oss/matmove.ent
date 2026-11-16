@@ -64,6 +64,26 @@ test('started trips and uncertain payment states are routed to Admin review with
   assert.match(cash, /result\.reviewRequired/);
 });
 
+
+test('Admin trip review timeline includes the original and replacement driver history', () => {
+  const adminMigration = read('supabase/migrations/20261116171000_matmove_admin_trip_review_driver_history_v1.sql');
+  assert.match(adminMigration, /matmove_admin_trip_review/);
+  assert.match(adminMigration, /matmove_ride_driver_assignments/);
+  assert.match(adminMigration, /matmove_ride_booking_events/);
+  assert.match(adminMigration, /Driver assignment #/);
+  assert.match(adminMigration, /Booking event:/);
+});
+
+test('each replacement acceptance refreshes accepted_at and terminal states close the active assignment', () => {
+  const lifecycleMigration = read('supabase/migrations/20261116172000_matmove_redispatch_timeline_lifecycle_v1.sql');
+  assert.match(lifecycleMigration, /matmove_record_trip_timeline/);
+  assert.match(lifecycleMigration, /and old\.accepted_at is null/);
+  assert.match(lifecycleMigration, /matmove_close_ride_driver_assignment/);
+  assert.match(lifecycleMigration, /assignment_status = v_closed_status/);
+  assert.match(lifecycleMigration, /'booking_completed'/);
+  assert.match(lifecycleMigration, /'booking_cancelled'/);
+});
+
 test('the cancelling driver does not see their own returned booking in the driver radar', () => {
   assert.match(driverUi, /matmove_excluded_driver_ids/);
   assert.match(driverUi, /result\.redispatched/);
