@@ -380,6 +380,9 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
         setRideNotice(booking.payment_method === 'cash'
           ? 'You cancelled before starting. The same booking is back in driver matching, your driver account is excluded, and the original MatMove fee reserve remains protected.'
           : 'You cancelled before starting. The same booking is back in driver matching, your driver account is excluded, and the customer escrow hold remains protected. No second debit or refund was created.');
+      } else if (result.reviewRequired === true) {
+        setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
+        setRideNotice('This trip had already started or its escrow/reserve state is uncertain. It was not re-dispatched. An Admin investigation has been opened; do not initiate a refund or another transfer.');
       } else if (result.pending) {
         setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
         setRideNotice('This request needs payment review. Do not collect cash or attempt another transfer.');
