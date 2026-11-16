@@ -555,7 +555,6 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
             <button type="button" onClick={() => onOpenTrips?.()} className="mt-3 min-h-11 rounded-xl bg-blue-700 px-4 font-bold text-white">Open Trips</button>
           </section>
         )}
-        {activeTrips.some(row=>Date.now()-Date.parse(row.created_at||'')>24*60*60*1000) && <p role="status" className="mx-3 mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">An older request is still open. Select it above to review the driver's latest status and complete any pending cash confirmation. Do not submit a duplicate request.</p>}
       </div>
       <div className="mx-auto max-w-7xl space-y-4 px-0 pb-8 sm:px-4">
         {(activeSection === 'home' || activeSection === 'ride' || !activeSection) && (
