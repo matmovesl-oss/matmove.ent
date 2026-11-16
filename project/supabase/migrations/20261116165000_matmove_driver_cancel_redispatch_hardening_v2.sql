@@ -598,6 +598,55 @@ revoke all on function public.matmove_cash_ride_assign_driver(uuid,uuid)
 grant execute on function public.matmove_cash_ride_assign_driver(uuid,uuid)
   to service_role;
 
+
+-- Reset the live acceptance timestamp when an unstarted driver cancellation
+-- returns the same booking to matching. Assignment history retains the
+-- previous driver's acceptance and cancellation timestamps.
+create or replace function public.matmove_record_trip_timeline()
+returns trigger
+language plpgsql
+set search_path to 'pg_catalog'
+as $function$
+begin
+  if tg_op = 'INSERT' then
+    new.accepted_at := null;
+    new.started_at := null;
+    new.completed_at := null;
+  else
+    new.accepted_at := old.accepted_at;
+    new.started_at := old.started_at;
+    new.completed_at := old.completed_at;
+
+    if new.status::text = 'pending'
+       and old.status::text = 'accepted'
+       and old.started_at is null
+       and new.driver_id is null then
+      new.accepted_at := null;
+    end if;
+
+    if new.status::text = 'accepted'
+       and old.status::text in ('pending', 'pending_admin')
+       and new.driver_id is not null then
+      new.accepted_at := pg_catalog.clock_timestamp();
+    end if;
+
+    if new.status::text = 'in_progress'
+       and old.status::text = 'accepted'
+       and old.started_at is null then
+      new.started_at := pg_catalog.clock_timestamp();
+    end if;
+
+    if new.status::text = 'completed'
+       and old.status::text = 'in_progress'
+       and old.completed_at is null then
+      new.completed_at := pg_catalog.clock_timestamp();
+    end if;
+  end if;
+
+  return new;
+end;
+$function$;
+
 -- Expose the current final payout beneficiary to the authorized Admin review
 -- RPC. The complete assignment chain remains in the existing timeline.
 do $migration$
