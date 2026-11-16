@@ -118,7 +118,8 @@ test('Admin digital dispute cancellation reconciles customer 50, driver 5 and pl
  assert.match(settlement,/values\(b\.id,'fee',platform_minor/);
  assert.match(settlement,/p\.escrow_account = p\.fee_account/);
  assert.match(hardening,/amount_minor = p\.fare_minor/);
- assert.match(payments,/refunding: \['refund', 'driver', 'fee'\]/);
+ assert.match(payments,/refundKinds = \['refund', \.\.\.legacyKinds\]/);
+ assert.match(payments,/\.in\('kind', \['driver', 'fee'\]\)/);
 });
 
 test('Original request recovery checks the saved reference and server-side open requests before unlocking new booking creation',()=>{
