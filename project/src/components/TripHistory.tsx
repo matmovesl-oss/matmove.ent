@@ -7,7 +7,7 @@ import { filterTripHistory } from '@/lib/tripHistory';
 import { updateRide, readCashRideStatus } from '@/services/rideService';
 import { attachTripContacts } from '@/lib/tripContacts';
 
-type Props = { userId: string; role: 'rider' | 'driver' | 'merchant'; onResume?: (bookingId: string) => void; accountLabel?: string };
+type Props = { userId: string; role: 'rider' | 'driver' | 'merchant'; onResume?: (bookingId: string) => void; accountLabel?: string; accountEmail?: string };
 const date = (value: unknown) => {
   if (!value) return 'Not recorded';
   const d = new Date(String(value));
@@ -218,7 +218,7 @@ export default function TripHistory({ userId, role, onResume, accountLabel }: Pr
         <div className="min-w-0">
           <h1 className="text-3xl font-bold">Trips & Deliveries</h1>
           <p className="mt-1 text-sm text-slate-500">Your unfinished rides stay here until the server confirms completion or cancellation. You can reopen the same request after signing back in.</p>
-          <p className="mt-2 text-xs font-semibold text-slate-600">Signed in as: <span className="text-slate-900">{accountLabel || 'MatMove account'}</span> · Account reference: <span className="font-mono">{userId.slice(-8).toUpperCase()}</span></p>
+          <p className="mt-2 text-xs font-semibold text-slate-600">Signed in as: <span className="text-slate-900">{accountLabel || 'MatMove account'}</span>{accountEmail&&<span className="block break-all font-normal text-slate-500">{accountEmail}</span>} · Account reference: <span className="font-mono">{userId.slice(-8).toUpperCase()}</span></p>
         </div>
         <button className="min-h-11 rounded-xl border bg-white px-4 py-2 font-semibold" onClick={() => void refresh()}>Refresh</button>
       </div>
