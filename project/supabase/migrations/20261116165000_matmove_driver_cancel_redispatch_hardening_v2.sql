@@ -374,6 +374,35 @@ begin
 
   if not found then raise exception 'NOT_FOUND: Booking not found.'; end if;
 
+  -- Re-check after the booking lock. A concurrent identical acceptance may
+  -- have committed while this request waited for the row lock.
+  select * into prior
+  from public.matmove_dispatch_audit
+  where request_id = p_request_id;
+
+  if found then
+    if prior.booking_id <> p_booking_id
+       or prior.actor_id <> p_driver_id
+       or prior.action <> 'assign'
+       or prior.driver_id <> p_driver_id then
+      raise exception 'DISPATCH_CONFLICT: This request reference was already used for another action.';
+    end if;
+    if not exists (
+      select 1 from public.ride_payments rp
+      where rp.booking_id = p_booking_id
+        and rp.driver_id = p_driver_id
+        and rp.driver_account = p_driver_account
+    ) then
+      raise exception 'DISPATCH_CONFLICT: The request reference does not match the current payout beneficiary.';
+    end if;
+    select * into b_after from public.bookings where id = p_booking_id;
+    if not found then raise exception 'NOT_FOUND: Booking not found.'; end if;
+    return pg_catalog.jsonb_build_object(
+      'success', true, 'alreadyApplied', true,
+      'booking', pg_catalog.to_jsonb(b_after)
+    );
+  end if;
+
   select * into rp
   from public.ride_payments
   where booking_id = p_booking_id
