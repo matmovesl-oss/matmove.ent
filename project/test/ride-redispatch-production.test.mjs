@@ -82,3 +82,21 @@ test('driver cancellation retry reaches the database idempotency check after the
   assert.doesNotMatch(cancelBranch, /booking\.driver_id\s*!==\s*user\.id/);
   assert.match(cashPayments, /if \(actorType === 'driver'\)[\s\S]*matmove_driver_cancel_redispatch/);
 });
+
+
+test('cancellation checks the idempotency record after locking the booking to handle concurrent retries', () => {
+  const start = migration.indexOf('create or replace function public.matmove_driver_cancel_redispatch');
+  const end = migration.indexOf('$function$;', start) + '$function$;'.length;
+  const cancelFn = migration.slice(start, end);
+  const lockIndex = cancelFn.indexOf('for update');
+  const priorIndex = cancelFn.indexOf('select * into prior');
+  assert.ok(lockIndex >= 0 && priorIndex > lockIndex, 'idempotency lookup must follow the booking row lock');
+  assert.match(cancelFn, /b\.status::text not in \('accepted','in_progress'\)/);
+});
+
+test('review tickets cannot be opened for completed or cancelled trips', () => {
+  const start = migration.indexOf('create or replace function public.matmove_open_driver_cancel_review');
+  const end = migration.indexOf('$function$;', start) + '$function$;'.length;
+  const reviewFn = migration.slice(start, end);
+  assert.match(reviewFn, /b\.status::text not in \('accepted','in_progress'\)/);
+});
