@@ -50,7 +50,8 @@ test('the digital replacement acceptance path does not create another customer d
 test('browser retries preserve the same idempotency request ID for accept and cancel', () => {
   assert.match(rideService, /const requestId = .*randomUUID/);
   assert.match(rideService, /requestId,?\s*\}/);
-  assert.match(rideService, /walletFetch\(urls\[action\], body\)/);\n  assert.match(rideService, /sessionStorage\.getItem\(key\)/);\n  assert.match(rideService, /clearRideActionRequestId\(action, bookingId\)/);
+  assert.match(rideService, /walletFetch\(urls\[action\], body\)/);
+  assert.match(rideService, /sessionStorage\.getItem\(key\)/);\n  assert.match(rideService, /clearRideActionRequestId\(action, bookingId\)/);
 });
 
 test('driver radar excludes the driver who cancelled while other eligible drivers can see the same pending request', () => {
@@ -62,4 +63,22 @@ test('driver radar excludes the driver who cancelled while other eligible driver
 test('Admin trip review surfaces the actual digital payout beneficiary and keeps assignment history in the timeline', () => {
   assert.match(migration, /payoutDriverId/);
   assert.match(migration, /payoutAccount/);
+});
+
+
+test('accepted timestamp resets when the same unstarted booking returns to driver matching', () => {
+  const start = migration.indexOf('create or replace function public.matmove_record_trip_timeline');
+  const end = migration.indexOf('$function$;', start) + '$function$;'.length;
+  const timeline = migration.slice(start, end);
+  assert.match(timeline, /new\.status::text = 'pending'[\s\S]*old\.status::text = 'accepted'[\s\S]*new\.driver_id is null[\s\S]*new\.accepted_at := null/i);
+  assert.match(timeline, /new\.status::text = 'accepted'[\s\S]*old\.status::text in \('pending', 'pending_admin'\)[\s\S]*new\.accepted_at := pg_catalog\.clock_timestamp\(\)/i);
+});
+
+test('driver cancellation retry reaches the database idempotency check after the old assignment is cleared', () => {
+  const retryBranchStart = ridePayments.indexOf('if (isDriver) {');
+  const retryBranchEnd = ridePayments.indexOf('// Do not silently turn an accepted rider cancellation', retryBranchStart);
+  const cancelBranch = ridePayments.slice(retryBranchStart, retryBranchEnd);
+  assert.match(cancelBranch, /matmove_driver_cancel_redispatch/);
+  assert.doesNotMatch(cancelBranch, /booking\.driver_id\s*!==\s*user\.id/);
+  assert.match(cashPayments, /if \(actorType === 'driver'\)[\s\S]*matmove_driver_cancel_redispatch/);
 });
