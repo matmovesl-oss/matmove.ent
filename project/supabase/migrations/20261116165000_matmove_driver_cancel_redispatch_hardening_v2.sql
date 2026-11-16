@@ -3,6 +3,85 @@
 -- replacement driver may become the final digital payout beneficiary.
 begin;
 
+create or replace function public.matmove_open_driver_cancel_review(
+  p_booking_id uuid,
+  p_driver_id uuid,
+  p_request_id uuid,
+  p_reason_code text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  b public.bookings%rowtype;
+begin
+  if p_reason_code not in (
+    'driver_cancelled_after_start',
+    'cash_fee_reserve_state_uncertain',
+    'digital_escrow_state_uncertain'
+  ) then
+    raise exception 'INVALID_STATE: Unsupported driver cancellation review reason.';
+  end if;
+
+  select * into b from public.bookings where id=p_booking_id for update;
+  if not found or b.driver_id is distinct from p_driver_id then
+    raise exception 'FORBIDDEN: Only the assigned driver can open this review.';
+  end if;
+
+  insert into public.matmove_ride_investigation_tickets(
+    booking_id, reason_code, source_status, last_seen_at, details
+  ) values (
+    p_booking_id, p_reason_code, b.status::text, pg_catalog.clock_timestamp(),
+    pg_catalog.jsonb_build_object(
+      'paymentMethod', b.payment_method,
+      'driverId', p_driver_id,
+      'requestId', p_request_id,
+      'driverCancellationReview', true,
+      'automaticRedispatch', false
+    )
+  )
+  on conflict (booking_id) do update
+    set reason_code=excluded.reason_code,
+        source_status=excluded.source_status,
+        status='open',
+        last_seen_at=pg_catalog.clock_timestamp(),
+        details=public.matmove_ride_investigation_tickets.details || excluded.details,
+        updated_at=pg_catalog.clock_timestamp();
+
+  if not exists (
+    select 1 from public.matmove_ride_booking_events e
+    where e.booking_id=p_booking_id
+      and e.event_type='driver_cancel_review_opened'
+      and e.details->>'requestId'=p_request_id::text
+  ) then
+    insert into public.matmove_ride_booking_events(
+      booking_id,event_type,actor_id,actor_type,details
+    ) values (
+      p_booking_id,'driver_cancel_review_opened',p_driver_id,'driver',
+      pg_catalog.jsonb_build_object(
+        'requestId',p_request_id,
+        'reasonCode',p_reason_code,
+        'bookingStatus',b.status::text,
+        'automaticRedispatch',false
+      )
+    );
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'success',true,'reviewRequired',true,'redispatched',false,
+    'booking',pg_catalog.to_jsonb(b),
+    'message','Admin investigation opened. No refund, payout or re-dispatch was started.'
+  );
+end;
+$function$;
+
+revoke all on function public.matmove_open_driver_cancel_review(uuid,uuid,uuid,text)
+  from public, anon, authenticated;
+grant execute on function public.matmove_open_driver_cancel_review(uuid,uuid,uuid,text)
+  to service_role;
+
 create or replace function public.matmove_driver_cancel_redispatch(
   p_booking_id uuid,
   p_driver_id uuid,
@@ -62,10 +141,18 @@ begin
   end if;
 
   -- A cancellation after the trip starts is never an automatic re-dispatch.
-  if b.driver_id is distinct from p_driver_id
-     or b.status::text <> 'accepted'
-     or b.started_at is not null then
-    raise exception 'INVALID_STATE: Only the currently assigned driver can cancel before the trip starts.';
+  if b.driver_id is distinct from p_driver_id then
+    raise exception 'FORBIDDEN: Only the currently assigned driver can cancel this booking.';
+  end if;
+
+  if b.started_at is not null or b.status::text = 'in_progress' then
+    return public.matmove_open_driver_cancel_review(
+      p_booking_id,p_driver_id,p_request_id,'driver_cancelled_after_start'
+    );
+  end if;
+
+  if b.status::text <> 'accepted' then
+    raise exception 'INVALID_STATE: Only an accepted, unstarted trip can be re-dispatched.';
   end if;
 
   if b.payment_method = 'cash' then
@@ -74,8 +161,13 @@ begin
     where booking_id = p_booking_id
     for update;
 
-    if not found
-       or cp.status <> 'fee_reserved'
+    if not found then
+      return public.matmove_open_driver_cancel_review(
+        p_booking_id,p_driver_id,p_request_id,'cash_fee_reserve_state_uncertain'
+      );
+    end if;
+
+    if cp.status <> 'fee_reserved'
        or cp.driver_id is distinct from p_driver_id
        or cp.driver_cash_confirmed_at is not null
        or cp.rider_cash_confirmed_at is not null
@@ -99,7 +191,9 @@ begin
              or l.status in ('pending','processing','completed','review_required')
            )
        ) then
-      raise exception 'REDISPATCH_REVIEW_REQUIRED: Cash reserve or collection state is not safe for automatic re-dispatch.';
+      return public.matmove_open_driver_cancel_review(
+        p_booking_id,p_driver_id,p_request_id,'cash_fee_reserve_state_uncertain'
+      );
     end if;
 
     -- Keep the exact original 15 percent reserve. Clear only the old driver.
@@ -114,8 +208,13 @@ begin
     where booking_id = p_booking_id
     for update;
 
-    if not found
-       or rp.state <> 'funded'
+    if not found then
+      return public.matmove_open_driver_cancel_review(
+        p_booking_id,p_driver_id,p_request_id,'digital_escrow_state_uncertain'
+      );
+    end if;
+
+    if rp.state <> 'funded'
        or rp.driver_id is distinct from p_driver_id
        or not exists (
          select 1 from public.ride_payment_transfers t
@@ -137,7 +236,9 @@ begin
              or t.status <> 'ready'
            )
        ) then
-      raise exception 'REDISPATCH_REVIEW_REQUIRED: Digital escrow is not in a verified funded state; contact Admin.';
+      return public.matmove_open_driver_cancel_review(
+        p_booking_id,p_driver_id,p_request_id,'digital_escrow_state_uncertain'
+      );
     end if;
   else
     raise exception 'INVALID_STATE: This booking payment method cannot be re-dispatched.';
@@ -404,7 +505,7 @@ begin
     'public.matmove_admin_trip_review(uuid)'::regprocedure
   ) into v_definition;
 
-  if pg_catalog.position('payoutDriverId' in v_definition) = 0 then
+  if pg_catalog.strpos(v_definition, 'payoutDriverId') = 0 then
     v_updated := pg_catalog.replace(
       v_definition,
       '''state'',rp.state,''fareMinor''',
