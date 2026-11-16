@@ -335,12 +335,12 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
     }
     const finalAmount = Number(offerAmount);
 
-    if (!retainedDetails && (!pickupCoords || !destinationCoords)) {
+    if (!pickupCoords || !destinationCoords) {
       setRideNotice('Please select pickup and destination using address search or map pins.');
       return;
     }
 
-    if (!retainedDetails && serviceType === 'scheduled' && !scheduledTime) {
+    if (serviceType === 'scheduled' && !scheduledTime) {
       setRideNotice('Select a time for your scheduled request.');
       return;
     }
@@ -350,24 +350,22 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
       return;
     }
 
-    if (!retainedDetails) {
-      const minFare = pricingRates?.[vehicleType]?.min || defaultPricing[vehicleType].min;
-      if (finalAmount < minFare) {
-        setRideNotice(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minFare}.`);
-        return;
-      }
+    const minFare = pricingRates?.[vehicleType]?.min || defaultPricing[vehicleType].min;
+    if (finalAmount < minFare) {
+      setRideNotice(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minFare}.`);
+      return;
+    }
 
-      const fareMinor = Math.round(finalAmount * 100);
-      const driverCashMinor = Math.round(fareMinor * 0.85);
-      const requiredWalletAmount = paymentMethod === 'cash'
-        ? (fareMinor - driverCashMinor) / 100
-        : finalAmount;
-      if ((sleWallet?.balance || 0) < requiredWalletAmount) {
-        setRideNotice(paymentMethod === 'cash'
-          ? `Insufficient SLE wallet balance. You need SLE ${requiredWalletAmount.toFixed(2)} to secure MatMove's 15% cash-ride fee.`
-          : `Insufficient balance. You need SLE ${finalAmount} to request this trip. Please load your wallet.`);
-        return;
-      }
+    const fareMinor = Math.round(finalAmount * 100);
+    const driverCashMinor = Math.round(fareMinor * 0.85);
+    const requiredWalletAmount = paymentMethod === 'cash'
+      ? (fareMinor - driverCashMinor) / 100
+      : finalAmount;
+    if ((sleWallet?.balance || 0) < requiredWalletAmount) {
+      setRideNotice(paymentMethod === 'cash'
+        ? `Insufficient SLE wallet balance. You need SLE ${requiredWalletAmount.toFixed(2)} to secure MatMove's 15% cash-ride fee.`
+        : `Insufficient balance. You need SLE ${finalAmount} to request this trip. Please load your wallet.`);
+      return;
     }
 
     setIsRequesting(true);
