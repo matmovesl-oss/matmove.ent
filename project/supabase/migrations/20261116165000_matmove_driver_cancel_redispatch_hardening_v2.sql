@@ -494,6 +494,99 @@ revoke all on function public.matmove_accept_redispatched_digital(uuid,uuid,text
 grant execute on function public.matmove_accept_redispatched_digital(uuid,uuid,text,uuid)
   to service_role;
 
+create or replace function public.matmove_cash_ride_assign_driver(
+  p_booking_id uuid,
+  p_driver_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'pg_catalog','public'
+as $function$
+declare
+  b public.bookings%rowtype;
+  p public.matmove_cash_ride_payments%rowtype;
+  reserve public.matmove_cash_ride_legs%rowtype;
+  eligibility jsonb;
+begin
+  select * into b from public.bookings where id=p_booking_id for update;
+  if not found or b.payment_method <> 'cash' then
+    raise exception 'NOT_FOUND: Cash ride booking not found.';
+  end if;
+
+  select * into p from public.matmove_cash_ride_payments
+  where booking_id=p_booking_id for update;
+  if not found then
+    raise exception 'CASH_FEE_NOT_RESERVED: Cash payment record is missing.';
+  end if;
+
+  -- If the first response was lost, accepting the same assigned booking is safe.
+  if p.status='fee_reserved'
+     and p.driver_id=p_driver_id
+     and b.driver_id=p_driver_id
+     and b.status='accepted' then
+    return jsonb_build_object(
+      'booking',to_jsonb(b),'payment',to_jsonb(p),'alreadyAssigned',true
+    );
+  end if;
+
+  if p.status <> 'fee_reserved' or b.status <> 'pending' then
+    raise exception 'CASH_FEE_NOT_RESERVED: Cash fee must be reserved before driver acceptance.';
+  end if;
+
+  select * into reserve from public.matmove_cash_ride_legs
+  where booking_id=p_booking_id and leg_kind='reserve' for key share;
+  if not found or reserve.status <> 'completed'
+     or reserve.provider_transfer_id is null or reserve.verified_at is null then
+    raise exception 'CASH_FEE_NOT_RESERVED: A verified fee reserve is required.';
+  end if;
+
+  if p_driver_id is null or p_driver_id=p.rider_id
+     or p_driver_id=any(coalesce(b.matmove_excluded_driver_ids,'{}'::uuid[]))
+     or exists (
+       select 1 from public.matmove_ride_driver_assignments a
+       where a.booking_id=b.id and a.driver_id=p_driver_id
+         and a.assignment_status='driver_cancelled'
+     ) then
+    raise exception 'FORBIDDEN: Choose a different approved driver.';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('matmove-dispatch-driver:'||p_driver_id::text,0));
+  eligibility := public.matmove_dispatch_driver_status(p_driver_id,p_booking_id);
+  if eligibility->>'eligible' is distinct from 'true' then
+    raise exception 'FORBIDDEN: Driver is not eligible. %',eligibility->>'reason';
+  end if;
+
+  if b.driver_id is not null and b.driver_id is distinct from p_driver_id then
+    raise exception 'CONFLICT: Another driver is already assigned.';
+  end if;
+
+  update public.bookings
+  set driver_id=p_driver_id,status='accepted',accepted_at=clock_timestamp(),updated_at=clock_timestamp()
+  where id=p_booking_id
+  returning * into b;
+
+  update public.matmove_cash_ride_payments
+  set driver_id=p_driver_id,version=version+1,updated_at=clock_timestamp()
+  where booking_id=p_booking_id
+  returning * into p;
+
+  insert into public.matmove_cash_ride_audit_events(
+    booking_id,event_type,actor_type,actor_profile_id,details
+  ) values (
+    p_booking_id,'driver_assigned','driver',p_driver_id,
+    jsonb_build_object('driverId',p_driver_id)
+  );
+
+  return jsonb_build_object('booking',to_jsonb(b),'payment',to_jsonb(p),'alreadyAssigned',false);
+end;
+$function$;
+
+revoke all on function public.matmove_cash_ride_assign_driver(uuid,uuid)
+  from public,anon,authenticated;
+grant execute on function public.matmove_cash_ride_assign_driver(uuid,uuid)
+  to service_role;
+
 -- Expose the current final payout beneficiary to the authorized Admin review
 -- RPC. The complete assignment chain remains in the existing timeline.
 do $migration$
