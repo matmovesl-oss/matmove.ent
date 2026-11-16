@@ -12,9 +12,13 @@ test('customer home starts with ride intent, role-aware services and no more tha
  assert.match(home,/Where to\?/);assert.match(home,/Driver radar/);assert.match(home,/My shop/);
  assert.match(home,/CustomerHomePosts/);assert.match(posts,/\.limit\(3\)/);assert.match(posts,/matmove_submit_homepage_post_enquiry/);
 });
-test('passcode unlock remounts the workspace and returns the user to Home',async()=>{
+test('passcode is a full-screen overlay and preserves the mounted customer workspace',async()=>{
  const [app,pass]=await Promise.all([read('../src/App.tsx'),read('../src/components/CustomerPasscode.tsx')]);
- assert.match(app,/useState<PortalSection>\('home'\)/);assert.match(pass,/workspaceVersion/);
+ assert.match(app,/useState<PortalSection>\('home'\)/);
+ assert.match(pass,/showModal\(\)/);
+ assert.match(pass,/hidden=\{!allowed\}/);
+ assert.match(pass,/enteredUser===userId&&children\(lock\)/);
+ assert.doesNotMatch(pass,/workspaceVersion|key=\{workspaceVersion\}/);
 });
 
 test('homepage feed replaces the decorative route demo with admin-published moving post cards',async()=>{
