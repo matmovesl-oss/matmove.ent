@@ -51,7 +51,7 @@ $old$;
         end if;
 $new$;
 begin
-  v_definition := pg_get_functiondef('public.matmove_admin_cancel_booking(uuid,bigint,uuid,text,uuid)'::regprocedure);
+  v_definition := replace(pg_get_functiondef('public.matmove_admin_cancel_booking(uuid,bigint,uuid,text,uuid)'::regprocedure),E'\r','');
   if position('driver_award_minor' in v_definition)=0 then
     v_updated := replace(v_definition,'  outcome text;','  outcome text;'||E'\n  refund_minor bigint;'||E'\n  driver_award_minor bigint;'||E'\n  platform_minor bigint;');
     if v_updated=v_definition then
@@ -98,8 +98,6 @@ $old$;
       select 1 from public.ride_payment_transfers
       where booking_id = p_booking_id and kind = 'driver'
     ) then
-      -- Admin dispute split: customer refund (50%), driver award (5%), and
-      -- platform share (45%). Complete only after every applicable leg verifies.
       if exists (
         select 1 from public.ride_payment_transfers
         where booking_id = p_booking_id and kind = 'refund' and status = 'completed'
@@ -121,7 +119,6 @@ $old$;
         where id = p_booking_id;
       end if;
     elsif exists (
-      -- Legacy customer-initiated full refunds have no driver award leg.
       select 1 from public.ride_payment_transfers
       where booking_id = p_booking_id and kind = 'refund' and status = 'completed'
     ) then
@@ -132,8 +129,9 @@ $old$;
     end if;
 $new$;
 begin
-  v_definition := pg_get_functiondef('public.finalize_ride_payment(uuid)'::regprocedure);
-  if position('Admin dispute split: customer refund' in v_definition)=0 then
+  v_definition := replace(pg_get_functiondef('public.finalize_ride_payment(uuid)'::regprocedure),E'\r','');
+  if position('kind = ''driver'' and status = ''completed''' in v_definition)=0
+     or position('p.escrow_account = p.fee_account' in v_definition)=0 then
     v_updated := replace(v_definition,v_old,v_new);
     if v_updated=v_definition then
       raise exception 'Could not safely update Admin split settlement finalization.';
@@ -150,7 +148,7 @@ declare
   v_new text;
   v_updated text;
 begin
-  v_definition := pg_get_functiondef('public.matmove_admin_trip_review(uuid)'::regprocedure);
+  v_definition := replace(pg_get_functiondef('public.matmove_admin_trip_review(uuid)'::regprocedure),E'\r','');
   v_old := $old$payment_data:=jsonb_build_object('state',rp.state,'fareMinor',rp.fare_minor::text,'driverMinor',rp.driver_minor::text,'feeMinor',rp.fee_minor::text,'createdAt',rp.created_at,'updatedAt',rp.updated_at,$old$;
   v_new := $new$payment_data:=jsonb_build_object('state',rp.state,'fareMinor',rp.fare_minor::text,'driverMinor',rp.driver_minor::text,'feeMinor',rp.fee_minor::text,'escrowAccount',rp.escrow_account,'feeAccount',rp.fee_account,'createdAt',rp.created_at,'updatedAt',rp.updated_at,$new$;
   if position('''escrowAccount'',rp.escrow_account' in v_definition)=0 then
