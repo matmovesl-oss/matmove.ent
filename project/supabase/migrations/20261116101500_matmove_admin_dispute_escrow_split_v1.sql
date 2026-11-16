@@ -59,7 +59,7 @@ begin
     end if;
     v_definition := v_updated;
   end if;
-  if position('Admin dispute split' in v_definition)=0 then
+  if position('refund_minor := floor(rp.fare_minor::numeric * 0.50)' in v_definition)=0 then
     v_updated := replace(v_definition,v_old,v_new);
     if v_updated=v_definition then
       raise exception 'Could not safely add the Admin 50/5/45 escrow split.';
