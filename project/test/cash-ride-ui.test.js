@@ -42,12 +42,15 @@ test('assigned driver must explicitly confirm physical cash received', async () 
 });
 
 test('pre-start driver cash cancellation reuses the reserve and returns the same booking to matching', async () => {
-  const code = await readFile(driverFile, 'utf8');
+  const [code, server] = await Promise.all([
+    readFile(driverFile, 'utf8'),
+    readFile(new URL('../server/cash-ride-payments.js', import.meta.url), 'utf8')
+  ]);
   assert.match(code, /if \(result\.reviewRequired\)/);
   assert.match(code, /else if \(result\.redispatched\)/);
   assert.match(code, /same customer booking has returned to driver matching/);
-  assert.match(code, /original 15% fee reserve/);
-  assert.doesNotMatch(code, /cash fee refund is still being verified/);
+  assert.match(server, /original 15% fee reserve has been kept/);
+  assert.doesNotMatch(server, /actorType === 'driver'[\s\S]*matmove_cash_ride_cancel/);
 });
 
 test('cash trip submission uses the same booking ID for fee reservation recovery', async () => {
