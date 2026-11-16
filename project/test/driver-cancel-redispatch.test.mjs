@@ -87,5 +87,6 @@ test('each replacement acceptance refreshes accepted_at and terminal states clos
 test('the cancelling driver does not see their own returned booking in the driver radar', () => {
   assert.match(driverUi, /matmove_excluded_driver_ids/);
   assert.match(driverUi, /result\.redispatched/);
+  assert.match(driverUi, /Cancel · Find new driver/);
   assert.match(driverUi, /same customer booking has returned to driver matching/);
 });
