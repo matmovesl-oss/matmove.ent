@@ -206,12 +206,8 @@ begin
       );
     end if;
 
-    -- Keep the exact original 15 percent reserve. Clear only the old driver.
-    update public.matmove_cash_ride_payments
-    set driver_id = null,
-        version = version + 1,
-        updated_at = pg_catalog.clock_timestamp()
-    where booking_id = p_booking_id;
+    -- Keep the exact original 15 percent reserve; clear the driver only after
+    -- the booking update has recorded this assignment as driver_cancelled.
   elsif b.payment_method = 'digital' then
     select * into rp
     from public.ride_payments
@@ -270,6 +266,17 @@ begin
       updated_at = pg_catalog.clock_timestamp()
   where id = p_booking_id
   returning * into b_after;
+
+  -- The cash-ledger guard requires the booking to be pending/unassigned and
+  -- the assignment-history trigger to have marked this driver cancelled.
+  -- These statements remain in one transaction, so no intermediate state is
+  -- visible outside this cancellation operation.
+  if b.payment_method = 'cash' then
+    update public.matmove_cash_ride_payments
+    set driver_id = null,
+        updated_at = pg_catalog.clock_timestamp()
+    where booking_id = p_booking_id;
+  end if;
 
   insert into public.matmove_dispatch_audit(
     request_id, actor_id, booking_id, action, driver_id,
