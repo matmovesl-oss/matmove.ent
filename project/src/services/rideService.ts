@@ -9,10 +9,12 @@ const urls: Record<RideAction, string> = {
 };
 
 export async function updateRide(action: RideAction, bookingId: string) {
-  // The browser sends only intent and booking ID. Amounts, financial accounts,
-  // driver assignment, transfer keys and settlement all belong to the backend.
+  // Keep one idempotency key across retries of the same accept/cancel action.
+  // The browser never supplies amounts, accounts, payout beneficiaries or ledger state.
+  const requestId = ['accept', 'cancel'].includes(action) ? crypto.randomUUID() : undefined;
+  const body = requestId ? { bookingId, requestId } : { bookingId };
   for (let attempt = 0; attempt < 5; attempt++) {
-    const { response, data, finish } = await walletFetch(urls[action], { bookingId });
+    const { response, data, finish } = await walletFetch(urls[action], body);
     if (!response.ok) throw new Error(data.error || 'Unable to update this trip.');
     if (response.status === 200 && data.success === true && data.pending === false) {
       finish();
