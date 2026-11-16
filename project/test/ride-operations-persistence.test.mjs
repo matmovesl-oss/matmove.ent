@@ -120,3 +120,26 @@ test('Admin digital dispute cancellation reconciles customer 50, driver 5 and pl
  assert.match(hardening,/amount_minor = p\.fare_minor/);
  assert.match(payments,/refunding: \['refund', 'driver', 'fee'\]/);
 });
+
+test('Original request recovery checks the saved reference and server-side open requests before unlocking new booking creation',()=>{
+ const request=readFileSync(new URL('../src/lib/useTripRequest.ts',import.meta.url),'utf8');
+ const rider=readFileSync(new URL('../src/pages/RiderDashboard.tsx',import.meta.url),'utf8');
+ const merchant=readFileSync(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
+ const switcher=readFileSync(new URL('../src/components/CustomerTripSwitcher.tsx',import.meta.url),'utf8');
+ const restore=request.slice(request.indexOf('async function restore'),request.indexOf('async function submit'));
+ assert.match(restore,/\.eq\('id',retained\.id\)\.eq\('rider_id',id\)/);
+ assert.match(restore,/\.in\('status',\['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'\]\)/);
+ assert.match(restore,/localStorage\.removeItem\(key\)/);
+ assert.match(rider,/const original = await tripRequest\.restore\(\)/);
+ assert.match(merchant,/const row=await tripRequest\.restore\(\)/);
+ assert.match(switcher,/Check original request/);
+ assert.match(switcher,/onCheckOriginal/);
+});
+
+test('Admin uncompleted ride screen explains the verified 50/5/45 split',()=>{
+ const review=readFileSync(new URL('../../matmove-admin/project/src/components/AdminTripReview.tsx',import.meta.url),'utf8');
+ assert.match(review,/50\/5\/45 settlement/);
+ assert.match(review,/Customer refund \(50%\)/);
+ assert.match(review,/Assigned driver award \(5%\)/);
+ assert.match(review,/MatMove platform share \(45%\)/);
+});
