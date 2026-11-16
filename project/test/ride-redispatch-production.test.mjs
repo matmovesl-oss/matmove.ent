@@ -100,3 +100,15 @@ test('review tickets cannot be opened for completed or cancelled trips', () => {
   const reviewFn = migration.slice(start, end);
   assert.match(reviewFn, /b\.status::text not in \('accepted','in_progress'\)/);
 });
+
+
+test('cash ledger driver is cleared only after booking and assignment history are updated', () => {
+  const start = migration.indexOf('create or replace function public.matmove_driver_cancel_redispatch');
+  const end = migration.indexOf('$function$;', start) + '$function$;'.length;
+  const cancelFn = migration.slice(start, end);
+  const bookingUpdate = cancelFn.indexOf('update public.bookings');
+  const cashLedgerClear = cancelFn.indexOf('update public.matmove_cash_ride_payments');
+  assert.ok(bookingUpdate >= 0 && cashLedgerClear > bookingUpdate, 'booking must be unassigned before cash ledger driver is cleared');
+  assert.match(cancelFn, /matmove\.driver_cancelled/);
+  assert.match(cancelFn, /assignment-history trigger/i);
+});
