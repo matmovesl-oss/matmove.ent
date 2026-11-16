@@ -291,8 +291,9 @@ export async function reconcileRide(
 
   let refundKinds = ['refund'];
   if (payment.state === 'refunding') {
-    // A full Admin refund has only a refund leg. Preserve already-created
-    // historical driver/fee legs, but never create new legs that are absent.
+    // Admin cancellation may have a 50/5/45 dispute split or a legacy
+    // full-refund leg. Reconcile only transfer kinds already recorded
+    // for this booking; never invent missing legs during a retry.
     const { data: existingRefundLegs, error: refundLegError } = await db
       .from('ride_payment_transfers')
       .select('kind')
