@@ -66,7 +66,7 @@ function tripReceiptFields(t: any, role: Props['role']) {
     ...(t.paymentIssue ? [{ label: 'Admin review', value: t.paymentIssue.reasonCode === 'admin_unpaid_payment_review' ? 'Unpaid payment review' : t.paymentIssue.reasonCode === 'admin_unpaid_cash_fare_review' ? 'Unpaid cash fare review' : 'Investigation open' }] : []),
   ];
 }
-export default function TripHistory({ userId, role, onResume, accountLabel }: Props) {
+export default function TripHistory({ userId, role, onResume, accountLabel, accountEmail }: Props) {
   const [trips, setTrips] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
