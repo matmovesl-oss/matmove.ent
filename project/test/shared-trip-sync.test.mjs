@@ -48,14 +48,14 @@ test('Rider and Merchant show driver name and tap-to-call phone after acceptance
  }
 });
 
-test('customer request recovery tells users to check the same id and does not encourage duplicate bookings',async()=>{
+test('customer request recovery tells users to check the same id and restores the exact original booking without creating a duplicate',async()=>{
  const [rider,merchant,switcher]=await Promise.all([
   read('../src/pages/RiderDashboard.tsx'),read('../src/pages/MerchantDashboard.tsx'),read('../src/components/CustomerTripSwitcher.tsx')
  ]);
  assert.match(rider,/Reconnect to your original request/);
  assert.match(merchant,/Reconnect to your original request/);
- assert.match(rider,/tripRequest\.submit\(\)/);
- assert.match(merchant,/tripRequest\.submit\(\)/);
+ assert.match(rider,/tripRequest\.restore\(\)/);
+ assert.match(merchant,/tripRequest\.restore\(\)/);
  assert.match(switcher,/Driver accepted · arriving/);
 });
 
