@@ -49,7 +49,18 @@ function tripReceiptFields(t: any, role: Props['role']) {
     { label: 'Driver', value: t.driver?.full_name },
     { label: 'Vehicle', value: t.vehicle_type },
     { label: 'Fare', value: `SLE ${Number(t.fare_amount || 0).toFixed(2)}` },
-    ...(role === 'driver' ? [{ label: 'Expected driver share (85%)', value: `SLE ${(Number(t.fare_amount || 0) * 0.85).toFixed(2)}` }] : []),
+    ...(role === 'driver' ? [{
+      label: t.paymentInfo?.adminSettlement ? 'Admin dispute driver award (5%)' : 'Expected driver share (85%)',
+      value: t.paymentInfo?.adminSettlement
+        ? `SLE ${(Number(t.paymentInfo.adminSettlement.driverAwardMinor || 0) / 100).toFixed(2)}`
+        : `SLE ${(Number(t.fare_amount || 0) * 0.85).toFixed(2)}`
+    }] : []),
+    ...(t.paymentInfo?.adminSettlement ? [
+      { label: 'Admin dispute settlement status', value: t.paymentInfo.adminSettlement.status },
+      { label: 'Customer refund (50%)', value: `SLE ${(Number(t.paymentInfo.adminSettlement.customerRefundMinor || 0) / 100).toFixed(2)}` },
+      { label: 'Driver award (5%)', value: `SLE ${(Number(t.paymentInfo.adminSettlement.driverAwardMinor || 0) / 100).toFixed(2)}` },
+      { label: 'MatMove platform share (45%)', value: `SLE ${(Number(t.paymentInfo.adminSettlement.platformShareMinor || 0) / 100).toFixed(2)} · ${t.paymentInfo.adminSettlement.platformMode === 'retained' ? 'retained in escrow' : 'transferred to fee account'}` },
+    ] : []),
     ...(t.paymentInfo?.status ? [{ label: t.paymentInfo.method === 'cash' ? 'Cash ledger status' : 'Escrow status', value: t.paymentInfo.status }] : []),
     ...(t.paymentInfo?.driverPayoutStatus ? [{ label: 'Driver payout status', value: t.paymentInfo.driverPayoutStatus }] : []),
     ...(t.paymentIssue ? [{ label: 'Admin review', value: t.paymentIssue.reasonCode === 'admin_unpaid_payment_review' ? 'Unpaid payment review' : t.paymentIssue.reasonCode === 'admin_unpaid_cash_fare_review' ? 'Unpaid cash fare review' : 'Investigation open' }] : []),
@@ -186,7 +197,13 @@ export default function TripHistory({ userId, role, onResume, accountLabel }: Pr
     ['Accepted', date(selected.accepted_at)], ['Started', date(selected.started_at)],
     ['Completed', date(selected.completed_at)], ['Vehicle', selected.vehicle_type],
     ['Fare', `SLE ${Number(selected.fare_amount || 0).toFixed(2)}`], ['Payment method',selected.payment_method], ['Cash handover status',selected.cashPayment?.status], ['Physical cash return',selected.cashReturn?.returnStatus], ['Driver cash confirmed',selected.cashPayment?.driverCashConfirmed?'Yes':'No'], ['Customer cash confirmed',selected.cashPayment?.riderCashConfirmed?'Yes':'No'],
-    ...(role === 'driver' ? [['Expected driver share (85%)', `SLE ${(Number(selected.fare_amount || 0) * 0.85).toFixed(2)}`]] : []),
+    ...(role === 'driver' ? [[selected.paymentInfo?.adminSettlement ? 'Admin dispute driver award (5%)' : 'Expected driver share (85%)', selected.paymentInfo?.adminSettlement ? `SLE ${(Number(selected.paymentInfo.adminSettlement.driverAwardMinor || 0) / 100).toFixed(2)}` : `SLE ${(Number(selected.fare_amount || 0) * 0.85).toFixed(2)}`]] : []),
+    ...(selected.paymentInfo?.adminSettlement ? [
+      ['Admin dispute settlement status',selected.paymentInfo.adminSettlement.status],
+      ['Customer refund (50%)',`SLE ${(Number(selected.paymentInfo.adminSettlement.customerRefundMinor || 0)/100).toFixed(2)}`],
+      ['Driver award (5%)',`SLE ${(Number(selected.paymentInfo.adminSettlement.driverAwardMinor || 0)/100).toFixed(2)}`],
+      ['MatMove platform share (45%)',`SLE ${(Number(selected.paymentInfo.adminSettlement.platformShareMinor || 0)/100).toFixed(2)} · ${selected.paymentInfo.adminSettlement.platformMode==='retained'?'retained in escrow':'transferred to fee account'}`],
+    ] : []),
     ...(selected.distance_km != null ? [['Distance', `${selected.distance_km} km`]] : []),
     ...(selected.paymentInfo?.status ? [[selected.paymentInfo.method==='cash'?'Cash ledger status':'Escrow status',selected.paymentInfo.status]] : []),
     ...(selected.paymentInfo?.driverPayoutStatus ? [['Driver payout status',selected.paymentInfo.driverPayoutStatus]] : []),
@@ -252,7 +269,8 @@ export default function TripHistory({ userId, role, onResume, accountLabel }: Pr
         <p className="mt-2 text-sm text-slate-500">{date(t.created_at)}</p>
         <p className="mt-2 truncate">{t.pickup_location} → {t.destination_location}</p>
         <p className="mt-2 font-bold">SLE {Number(t.fare_amount || 0).toFixed(2)}</p>
-        {role === 'driver' && <p className="mt-1 text-sm text-emerald-700">Expected driver share: SLE {(Number(t.fare_amount || 0) * 0.85).toFixed(2)}</p>}
+        {role === 'driver' && <p className="mt-1 text-sm text-emerald-700">{t.paymentInfo?.adminSettlement?'Admin dispute award (5%)':'Expected driver share (85%)'}: SLE {t.paymentInfo?.adminSettlement?(Number(t.paymentInfo.adminSettlement.driverAwardMinor || 0)/100).toFixed(2):(Number(t.fare_amount || 0) * 0.85).toFixed(2)}</p>}
+        {t.paymentInfo?.adminSettlement && <p className="mt-2 rounded-lg bg-indigo-50 p-2 text-xs text-indigo-900">Admin dispute settlement · {t.paymentInfo.adminSettlement.status} · Customer refund: SLE {(Number(t.paymentInfo.adminSettlement.customerRefundMinor || 0)/100).toFixed(2)} · Driver award: SLE {(Number(t.paymentInfo.adminSettlement.driverAwardMinor || 0)/100).toFixed(2)} · MatMove share: SLE {(Number(t.paymentInfo.adminSettlement.platformShareMinor || 0)/100).toFixed(2)}</p>}
         <p className="mt-2 text-sm text-blue-700">View full trip details</p>
       </button>
       <button className="mt-3 rounded-lg border px-3 py-2 text-sm" onClick={() => void share(t)}>Share PDF receipt</button>
