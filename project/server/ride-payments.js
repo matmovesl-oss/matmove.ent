@@ -292,7 +292,7 @@ export async function reconcileRide(
   const kinds = {
     funding: ['hold'],
     releasing: releaseKinds,
-    refunding: ['refund']
+    refunding: ['refund', 'driver', 'fee']
   }[payment.state] || [];
 
   for (const kind of kinds) {
