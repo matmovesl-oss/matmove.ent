@@ -25,7 +25,7 @@ export async function rpc(db, name, args) {
     });
 
     const known =
-      /^(FORBIDDEN|NOT_FOUND|INVALID_STATE|PAYMENT_PENDING|LEGACY_PAYMENT|INVALID_FARE|ACCOUNT_CHANGED|CANCEL_FEE_NOT_CONFIGURED|CANCEL_ALREADY_PROCESSING):/;
+      /^(FORBIDDEN|NOT_FOUND|INVALID_STATE|PAYMENT_PENDING|LEGACY_PAYMENT|INVALID_FARE|ACCOUNT_CHANGED|CANCEL_FEE_NOT_CONFIGURED|CANCEL_ALREADY_PROCESSING|REDISPATCH_DRIVER_EXCLUDED):/;
 
     throw new HttpError(
       known.test(error.message) ? 409 : 503,
@@ -440,14 +440,46 @@ export async function rideAction(
         p_escrow_account: platform.escrow,
         p_fee_account: platform.revenue
       });
-    } else {
-      if (payment.driver_id !== user.id) {
+    } else if (
+      payment.driver_id !== user.id ||
+      booking.driver_id !== user.id
+    ) {
+      // The one original customer hold is reused only after the former
+      // driver has been safely removed and the booking is pending/unassigned.
+      if (
+        booking.driver_id !== null ||
+        booking.status !== 'pending' ||
+        payment.state !== 'funded'
+      ) {
         throw new HttpError(
-          403,
-          'This payment has another driver.'
+          409,
+          'This request is not ready for a replacement driver. Refresh the same booking or contact MatMove support.'
         );
       }
 
+      const driver = await customerAccount(
+        db,
+        user.id,
+        ['driver'],
+        verifyAccount
+      );
+
+      if (
+        [payment.payer_account, payment.escrow_account, payment.fee_account]
+          .includes(driver.id)
+      ) {
+        throw new HttpError(
+          409,
+          'The replacement driver wallet must be separate from the customer and platform accounts.'
+        );
+      }
+
+      await rpc(db, 'matmove_redispatch_assign_digital_driver', {
+        p_booking_id: bookingId,
+        p_driver_id: user.id,
+        p_driver_account: driver.id
+      });
+    } else {
       await rpc(db, 'prepare_ride_payment', {
         p_booking_id: bookingId,
         p_actor_id: user.id,
@@ -475,6 +507,27 @@ export async function rideAction(
 
         if (!isDriver && !isRider) {
           throw new HttpError(403, 'Only the assigned driver or customer can cancel this trip.');
+        }
+
+        if (isDriver) {
+          const result = await rpc(db, 'matmove_driver_cancel_and_redispatch', {
+            p_booking_id: bookingId,
+            p_driver_id: user.id,
+            p_reason: 'driver_unavailable'
+          });
+          const updatedBooking = await readBooking(db, bookingId);
+          const updatedPayment = await readPayment(db, bookingId);
+          return res.status(200).json({
+            success: true,
+            pending: false,
+            redispatched: result.redispatched === true,
+            reviewRequired: result.reviewRequired === true,
+            booking: updatedBooking,
+            payment: await paymentSnapshot(db, bookingId, updatedPayment),
+            message: result.reviewRequired
+              ? 'This trip cannot be automatically re-dispatched because it has started or its payment state needs verification. MatMove Admin review has been opened.'
+              : 'Your assignment has been recorded as cancelled. The same customer request is back in driver matching; no second customer charge was created.'
+          });
         }
 
         // Do not silently turn an accepted rider cancellation into a full
