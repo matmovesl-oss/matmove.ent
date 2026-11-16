@@ -123,18 +123,21 @@ test('Admin digital dispute cancellation reconciles customer 50, driver 5 and pl
  assert.match(payments,/\.in\('kind', \['driver', 'fee'\]\)/);
 });
 
-test('Original request recovery checks the saved reference and server-side open requests before unlocking new booking creation',()=>{
+test('Original request recovery verifies the exact saved reference and routes unresolved requests into Trips',()=>{
  const request=readFileSync(new URL('../src/lib/useTripRequest.ts',import.meta.url),'utf8');
  const rider=readFileSync(new URL('../src/pages/RiderDashboard.tsx',import.meta.url),'utf8');
  const merchant=readFileSync(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
- const switcher=readFileSync(new URL('../src/components/CustomerTripSwitcher.tsx',import.meta.url),'utf8');
+ const trips=readFileSync(new URL('../src/components/TripHistory.tsx',import.meta.url),'utf8');
  const restore=request.slice(request.indexOf('async function restore'),request.indexOf('async function submit'));
  assert.match(restore,/\.eq\('id',retained\.id\)\.eq\('rider_id',id\)/);
  assert.match(restore,/\.in\('status',\['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'\]\)/);
  assert.match(restore,/localStorage\.removeItem\(key\)/);
- assert.match(rider,/const original = await tripRequest\.restore\(\)/);
- assert.match(merchant,/const row=await tripRequest\.restore\(\)/);
- assert.match(switcher,/Check original request/);
- assert.match(switcher,/onCheckOriginal/);
+ for(const page of [rider,merchant]){
+  assert.match(page,/tripRequest\.retained/);
+  assert.match(page,/onOpenTrips\?\.\(\)/);
+  assert.doesNotMatch(page,/CustomerTripSwitcher/);
+ }
+ assert.match(trips,/onResume\(t\.id\)/);
+ assert.match(trips,/Reopen original request/);
 });
 
