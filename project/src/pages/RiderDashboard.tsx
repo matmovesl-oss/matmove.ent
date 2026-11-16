@@ -312,15 +312,28 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
 
   const handleRequest = async () => {
     if (tripLoading || tripError || activeBooking || isRequesting) return;
+    if (tripRequest.retained) {
+      setIsRequesting(true);setRideNotice('');
+      try {
+        const original = await tripRequest.restore();
+        if (original) {
+          setActiveBooking(original);setViewMode('active');
+          setRideNotice('Original request recovered from MatMove. No new booking or payment was created.');
+        } else {
+          setActiveBooking(null);
+          setRideNotice('No unfinished original request was found on the server. You can now create a new request.');
+          setViewMode('new');
+        }
+      } catch (error:any) {
+        setRideNotice(error?.message||'Original request could not be verified. Your saved reference is preserved.');
+      } finally { setIsRequesting(false); }
+      return;
+    }
     if (tripRequest.error) {
       setRideNotice(tripRequest.error);
       return;
     }
-
-    // If a previous request lost its response, recover that exact request.
-    // Never build a new payload or create another booking until it is resolved.
-    const retainedDetails = tripRequest.retained?.details as Record<string, unknown> | undefined;
-    const finalAmount = Number(retainedDetails?.fare_amount ?? offerAmount);
+    const finalAmount = Number(offerAmount);
 
     if (!retainedDetails && (!pickupCoords || !destinationCoords)) {
       setRideNotice('Please select pickup and destination using address search or map pins.');
@@ -361,7 +374,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
     setRideNotice('');
 
     try {
-      const details = retainedDetails ? undefined : {
+      const details = {
         client_version: 1,
         payment_method: paymentMethod,
         service_type: serviceType,
@@ -378,7 +391,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
 
       const booking = await tripRequest.submit(details);
       setActiveBooking(booking);
-      if ((retainedDetails?.payment_method ?? paymentMethod) === 'cash') void fetchLiveBalance();
+      if (paymentMethod === 'cash') void fetchLiveBalance();
       setViewMode('active');
       setRideNotice('');
     } catch (err: any) {
@@ -549,7 +562,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
       {walletSetupPanel}
 
       <div className="mx-auto max-w-7xl px-0 pt-2 sm:px-4">
-        <CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} refreshing={tripLoading} onRefresh={retryTrip} onSelect={selectTrip} onCancel={handleCancelCustomerRequest} cancellingId={cancellingRequestId} onNew={()=>{startNewBooking();setViewMode('new');setRouteEditing(true);setBookingSheetExpanded(true);setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerCount(1);setPaymentMethod('digital');setRideNotice('Your previous trip remains active. Review the new pickup, destination and fare.');}} />
+        <CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} refreshing={tripLoading} onRefresh={retryTrip} onSelect={selectTrip} onCancel={handleCancelCustomerRequest} cancellingId={cancellingRequestId} hasOriginalReference={!!tripRequest.retained||!!tripRequest.error} checkingOriginal={tripRequest.working} onCheckOriginal={async()=>{try{const original=await tripRequest.restore();if(original){setActiveBooking(original);setViewMode('active');setRideNotice('Original request recovered from the server.');}else{setActiveBooking(null);setRideNotice('No unfinished request remains on the server. You can create a new ride request.');}}catch(error:any){setRideNotice(error?.message||'Original request could not be verified.');}}} onNew={()=>{startNewBooking();setViewMode('new');setRouteEditing(true);setBookingSheetExpanded(true);setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerCount(1);setPaymentMethod('digital');setRideNotice('Enter a new pickup, destination and fare.');}} />
         {activeTrips.some(row=>Date.now()-Date.parse(row.created_at||'')>24*60*60*1000) && <p role="status" className="mx-3 mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">An older request is still open. Select it above to review the driver's latest status and complete any pending cash confirmation. Do not submit a duplicate request.</p>}
       </div>
       <div className="mx-auto max-w-7xl space-y-4 px-0 pb-8 sm:px-4">
