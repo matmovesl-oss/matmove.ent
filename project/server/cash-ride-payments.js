@@ -17,6 +17,8 @@ const safeErrors = {
   CASH_CAPTURE_NOT_VERIFIED: [409, 'The MatMove fee capture has not been verified. This ride is not complete.'],
   CASH_REFUND_NOT_VERIFIED: [409, 'The cash-ride fee refund has not been verified.'],
   CASH_REVIEW_STATE_INVALID: [409, 'This cash booking is held for manual review. No further transfer will be attempted.'],
+  REDISPATCH_REVIEW_REQUIRED: [409, 'Cash payment state needs Admin investigation. No refund or re-dispatch was attempted.'],
+  DISPATCH_CONFLICT: [409, 'This request reference was already used. Refresh the booking before retrying.'],
   WALLET_FROZEN: [423, 'The rider SLE wallet is frozen. Contact MatMove support.'],
   WALLET_NOT_READY: [409, 'The rider SLE Monime wallet is not ready.'],
   ACCOUNT_LINK_CONFLICT: [409, 'The rider Monime account is linked to another wallet. Contact MatMove support.'],
@@ -27,7 +29,7 @@ const safeErrors = {
 
 function rpcErrorCode(error) {
   const message = String(error?.message || '');
-  return /^(CASH_[A-Z0-9_]+|WALLET_[A-Z0-9_]+|ACCOUNT_[A-Z0-9_]+|FORBIDDEN|INVALID_STATE|NOT_FOUND):/.exec(message)?.[1] || null;
+  return /^(CASH_[A-Z0-9_]+|WALLET_[A-Z0-9_]+|ACCOUNT_[A-Z0-9_]+|FORBIDDEN|INVALID_STATE|NOT_FOUND|REDISPATCH_REVIEW_REQUIRED|DISPATCH_CONFLICT):/.exec(message)?.[1] || null;
 }
 
 async function cashRpc(db, name, args) {
