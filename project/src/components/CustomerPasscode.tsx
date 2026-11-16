@@ -56,7 +56,6 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const privacyDialog=useRef<HTMLDialogElement|null>(null),workspace=useRef<HTMLDivElement|null>(null),pinEntryRef=useRef<HTMLInputElement|null>(null);
  const [enteredUser,setEnteredUser]=useState('');
  const [status,setStatus]=useState<Receipt|null>(null),[unlocked,setUnlocked]=useState(false),[upgrade,setUpgrade]=useState(false);
- const [workspaceVersion,setWorkspaceVersion]=useState(0);
  const [pin,setPin]=useState(''),[next,setNext]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [activePinField,setActivePinField]=useState<'pin'|'next'|'confirm'>('pin');
  const [forgotMode, setForgotMode] = useState(false);
@@ -99,7 +98,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
   try{
    const d=await customerPasscode(id,creating?'create':changing?'change':'verify',creating?null:pin,creating||changing?next:null);
    if(!valid(id,n))return;setStatus(d);
-   if(d.ok&&d.digits>=6&&['saved','verified'].includes(d.code)){clear();setUpgrade(false);setPortalUnlocked(id,true);unlockedNow.current=true;setEnteredUser(id);setWorkspaceVersion(v=>v+1);setUnlocked(true);}
+   if(d.ok&&d.digits>=6&&['saved','verified'].includes(d.code)){clear();setUpgrade(false);setPortalUnlocked(id,true);unlockedNow.current=true;setEnteredUser(id);setUnlocked(true);}
    else if(d.ok&&d.code==='upgrade_required'){setUpgrade(true);setNext('');setConfirm('');}
    else{clear();setUpgrade(false);setError(d.code==='cooldown'?`Too many attempts. Try again in ${d.retryAfterSeconds} seconds.`:d.code==='already_configured'?'A passcode is already saved. Enter it to continue.':d.code==='setup_required'?'Create your 6–9 digit passcode.':`Incorrect passcode. ${d.attemptsRemaining} attempts remaining.`);}
   }catch(e){if(valid(id,n)){clear();setUpgrade(false);setError(e instanceof Error?e.message:'Passcode service unavailable.');}}
@@ -197,7 +196,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
    if(!receipt.configured||receipt.digits<6)throw Error('Create or upgrade your 6–9 digit MatMove passcode before using biometric unlock.');
    const currentSession=await supabase.auth.getSession();
    if(currentSession.error||currentSession.data.session?.user.id!==userId)throw Error('The passkey session could not be verified for this account.');
-   setStatus(receipt);clear();setUpgrade(false);setPortalUnlocked(userId,true);unlockedNow.current=true;setEnteredUser(userId);setWorkspaceVersion(v=>v+1);setUnlocked(true);
+   setStatus(receipt);clear();setUpgrade(false);setPortalUnlocked(userId,true);unlockedNow.current=true;setEnteredUser(userId);setUnlocked(true);
   }catch(e:any){
    setPasskeyError(e?.message||'Biometric verification failed. Enter your MatMove passcode instead.');
   }finally{mutex.current=false;setPasskeyBusy(false);}
@@ -305,7 +304,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
      </dialog>
      
      <div ref={workspace} hidden={!allowed} aria-hidden={!allowed} style={allowed?undefined:{display:'none'}}>
-       {enteredUser===userId&&<div key={workspaceVersion}>{children(lock)}</div>}
+       {enteredUser===userId&&children(lock)}
      </div>
    </>
  );
