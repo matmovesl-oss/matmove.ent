@@ -37,12 +37,12 @@ export function assertDriverFare(snapshot: FareSnapshot, booking: any, userId: s
   }
 }
 
-export function useCustomerActiveRide(userId: string) {
+export function useCustomerActiveRide(userId: string, resumeBookingId: string | null = null) {
   const [state, setState] = useState<{ userId: string; booking: any; loading: boolean; error: string }>({ userId, booking: null, loading: true, error: '' });
   const [retryCount, setRetryCount] = useState(0);
   const [bookings,setBookings]=useState<any[]>([]);
   const [creating,setCreating]=useState(false);
-  const selection=useRef('');
+  const selection=useRef(resumeBookingId || '');
   const identity = useRef(userId);
   identity.current = userId;
   const mutation = useRef(0);
@@ -69,6 +69,7 @@ export function useCustomerActiveRide(userId: string) {
 
   useEffect(() => {
     let disposed = false, busy = false, queued = false;
+    selection.current = resumeBookingId || '';
     if(identity.current!==state.userId){setBookings([]);setCreating(false);selection.current='';}
     setState(previous => ({ userId, booking: previous.userId === userId ? previous.booking : null, loading: true, error: '' }));
     const refresh = async () => {
@@ -93,7 +94,7 @@ export function useCustomerActiveRide(userId: string) {
           } catch { /* Keep the last verified handover state on transient read failures. */ }
         }));
         const withCash = enriched.map(row => ({ ...row, cashPayment:cashById.get(row.id) || row.cashPayment || null }));
-        const data=withCash.find(row=>row.id===selection.current)||withCash[0]||null;
+        const data=selection.current ? withCash.find(row=>row.id===selection.current) || null : null;
         if (!disposed && identity.current === userId && version === mutation.current) {
           setBookings(previous=>withCash.map(row=>mergeRideRow(previous.find(old=>old.id===row.id),row)));
           setState(previous => ({ userId, booking: mergeRideRow(previous.userId === userId ? previous.booking : null, data&&terminal.current[`${userId}:${data.id}`]?null:data || null), loading: false, error: '' }));
@@ -126,12 +127,12 @@ export function useCustomerActiveRide(userId: string) {
       window.removeEventListener('online',refreshOnResume);
       void supabase.removeChannel(channel);
     };
-  }, [userId, retryCount]);
+  }, [userId, retryCount, resumeBookingId]);
 
   const retry = useCallback(() => setRetryCount(value => value + 1), []);
   const current = state.userId === userId ? state : { userId, booking: null, loading: true, error: '' };
   const selectBooking=(id:string)=>{const row=bookings.find(item=>item.id===id&&item.rider_id===userId);if(!row||identity.current!==userId)return;selection.current=id;mutation.current++;setCreating(false);setState({userId,booking:row,loading:false,error:''});};
   const canCreate=current.userId===userId&&!current.loading&&!current.error;
   const startNewBooking=()=>{if(!canCreate)return;mutation.current++;setCreating(true);};
-  return { ...current, booking:creating?null:current.booking, bookings:bookings.filter(row=>row.rider_id===userId),creating,canCreate,selectBooking,startNewBooking,setBooking,applySnapshot,retry };
+  return { ...current, booking:creating?null:current.booking, bookings:bookings.filter(row=>row.rider_id===userId), hasUnfinishedBookings:bookings.some(row=>row.rider_id===userId&&['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(row.status)), creating,canCreate,selectBooking,startNewBooking,setBooking,applySnapshot,retry };
 }
