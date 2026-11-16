@@ -464,7 +464,246 @@ declare
   eligibility jsonb;
 begin
   if p_booking_id is null or p_driver_id is null
-     or p_driver_account is null or p_driver_account !~ '^fac-[A-Za-z0-9_-]+
+     or p_driver_account is null
+     or p_driver_account !~ '^fac-[A-Za-z0-9_-]+    raise exception 'INVALID: A booking, driver and verified SLE financial account are required.';
+  end if;
+
+  select * into b from public.bookings where id=p_booking_id for update;
+  if not found then raise exception 'NOT_FOUND: Booking not found.'; end if;
+  if b.payment_method <> 'digital' or b.status <> 'pending'
+     or b.driver_id is not null or b.started_at is not null then
+    raise exception 'INVALID_STATE: This digital booking is not waiting for a replacement driver.';
+  end if;
+  if b.rider_id = p_driver_id
+     or p_driver_id = any(coalesce(b.matmove_excluded_driver_ids,'{}'::uuid[]))
+     or exists(
+       select 1 from public.matmove_ride_driver_assignments a
+       where a.booking_id=b.id and a.driver_id=p_driver_id
+         and a.assignment_status='driver_cancelled'
+     ) then
+    raise exception 'REDISPATCH_DRIVER_EXCLUDED: The cancelling driver cannot accept this same booking again.';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('matmove-dispatch-driver:'||p_driver_id::text,0));
+  eligibility := public.matmove_dispatch_driver_status(p_driver_id,p_booking_id);
+  if eligibility->>'eligible' is distinct from 'true' then
+    raise exception 'FORBIDDEN: Driver is not eligible. %',eligibility->>'reason';
+  end if;
+
+  if not exists (
+    select 1 from public.profiles pr
+    where pr.id=p_driver_id and pr.role='driver' and pr.kyc_status='approved'
+      and not coalesce((to_jsonb(pr)->>'is_wallet_frozen')::boolean,false)
+  ) or not exists (
+    select 1 from public.wallets w
+    where w.user_id=p_driver_id and w.currency='SLE'
+      and coalesce(w.monime_account_id,w.metadata->>'monime_account_id')=p_driver_account
+      and not coalesce(w.is_frozen,false)
+  ) then
+    raise exception 'FORBIDDEN: A verified, approved, unfrozen driver SLE wallet is required.';
+  end if;
+
+  select * into p from public.ride_payments where booking_id=b.id for update;
+  if not found or p.state <> 'funded'
+     or not exists (
+       select 1 from public.ride_payment_transfers t
+       where t.booking_id=b.id and t.kind='hold'
+         and t.status='completed' and t.provider_id is not null
+     )
+     or exists (
+       select 1 from public.ride_payment_transfers t
+       where t.booking_id=b.id and t.kind in ('driver','fee','refund')
+     ) then
+    raise exception 'PAYMENT_PENDING: The original escrow hold must be fully verified with no payout or refund legs before re-dispatch.';
+  end if;
+
+  if p_driver_account in (p.payer_account,p.escrow_account,p.fee_account) then
+    raise exception 'ACCOUNT_CHANGED: The replacement driver wallet must be separate from the payer and platform financial accounts.';
+  end if;
+
+  update public.ride_payments
+  set driver_id=p_driver_id,driver_account=p_driver_account,updated_at=clock_timestamp()
+  where booking_id=b.id
+  returning * into p;
+
+  update public.bookings
+  set driver_id=p_driver_id,status='accepted',updated_at=clock_timestamp()
+  where id=b.id
+  returning * into b;
+
+  return jsonb_build_object(
+    'booking',to_jsonb(b),'payment',to_jsonb(p),
+    'reassigned',true,'holdReused',true,'newChargeCreated',false
+  );
+end;
+$function$;
+revoke all on function public.matmove_redispatch_assign_digital_driver(uuid,uuid,text) from public, anon, authenticated;
+grant execute on function public.matmove_redispatch_assign_digital_driver(uuid,uuid,text) to service_role;
+
+-- Cash assignment is still serialized by driver advisory lock and reuses the
+-- one verified 15% reserve. A driver removed from this booking is excluded.
+create or replace function public.matmove_cash_ride_assign_driver(
+  p_booking_id uuid,
+  p_driver_id uuid
+) returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $function$
+declare
+  b public.bookings%rowtype;
+  p public.matmove_cash_ride_payments%rowtype;
+  reserve public.matmove_cash_ride_legs%rowtype;
+  eligibility jsonb;
+begin
+  select * into b from public.bookings where id=p_booking_id for update;
+  if not found or b.payment_method <> 'cash' then
+    raise exception 'NOT_FOUND: Cash ride booking not found.';
+  end if;
+
+  select * into p from public.matmove_cash_ride_payments
+  where booking_id=p_booking_id for update;
+  if not found or p.status <> 'fee_reserved' or b.status <> 'pending' then
+    raise exception 'CASH_FEE_NOT_RESERVED: Cash fee must be reserved before driver acceptance.';
+  end if;
+
+  select * into reserve from public.matmove_cash_ride_legs
+  where booking_id=p_booking_id and leg_kind='reserve' for key share;
+  if not found or reserve.status <> 'completed'
+     then
+    raise exception 'CASH_FEE_NOT_RESERVED: A verified fee reserve is required.';
+  end if;
+
+  if p_driver_id is null or p_driver_id=p.rider_id
+     or p_driver_id=any(coalesce(b.matmove_excluded_driver_ids,'{}'::uuid[]))
+     or exists (
+       select 1 from public.matmove_ride_driver_assignments a
+       where a.booking_id=b.id and a.driver_id=p_driver_id
+         and a.assignment_status='driver_cancelled'
+     ) then
+    raise exception 'FORBIDDEN: Choose a different approved driver.';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('matmove-dispatch-driver:'||p_driver_id::text,0));
+  eligibility := public.matmove_dispatch_driver_status(p_driver_id,p_booking_id);
+  if eligibility->>'eligible' is distinct from 'true' then
+    raise exception 'FORBIDDEN: Driver is not eligible. %',eligibility->>'reason';
+  end if;
+
+  if b.driver_id is not null and b.driver_id is distinct from p_driver_id then
+    raise exception 'CONFLICT: Another driver is already assigned.';
+  end if;
+
+  update public.bookings
+  set driver_id=p_driver_id,status='accepted',updated_at=clock_timestamp()
+  where id=p_booking_id
+  returning * into b;
+
+  update public.matmove_cash_ride_payments
+  set driver_id=p_driver_id,updated_at=clock_timestamp()
+  where booking_id=p_booking_id
+  returning * into p;
+
+  insert into public.matmove_cash_ride_audit_events(
+    booking_id,event_type,actor_type,actor_profile_id,details
+  ) values (
+    p_booking_id,'driver_assigned','driver',p_driver_id,
+    jsonb_build_object('driverId',p_driver_id)
+  );
+
+  return jsonb_build_object('booking',to_jsonb(b),'payment',to_jsonb(p));
+end;
+$function$;
+revoke all on function public.matmove_cash_ride_assign_driver(uuid,uuid) from public, anon, authenticated;
+grant execute on function public.matmove_cash_ride_assign_driver(uuid,uuid) to service_role;
+
+-- Preserve every cash ledger invariant. The sole exception is clearing the
+-- current driver after the atomic driver-cancel transaction has already moved
+-- the booking to pending and closed that driver's assignment history.
+create or replace function public.matmove_cash_ride_payment_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $function$
+declare
+  v_booking_driver_id uuid;
+  v_booking_status text;
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'CASH_LEDGER_IMMUTABLE: Cash ride payment records cannot be deleted.';
+  end if;
+
+  if old.driver_id is null and new.driver_id is not null then
+    select b.driver_id into v_booking_driver_id
+    from public.bookings b
+    where b.id=old.booking_id for key share;
+    if not found or v_booking_driver_id is distinct from new.driver_id then
+      raise exception 'CASH_DRIVER_ASSIGNMENT_MISMATCH: Cash ride driver must match the booking assignment.';
+    end if;
+  end if;
+
+  if new.booking_id is distinct from old.booking_id
+     or new.rider_id is distinct from old.rider_id
+     or new.fare_minor is distinct from old.fare_minor
+     or new.driver_cash_minor is distinct from old.driver_cash_minor
+     or new.matmove_fee_minor is distinct from old.matmove_fee_minor
+     or new.currency is distinct from old.currency
+     or new.created_at is distinct from old.created_at then
+    raise exception 'CASH_LEDGER_IMMUTABLE: Booking identity and quoted fare fields cannot be changed.';
+  end if;
+
+  if old.driver_id is not null and new.driver_id is distinct from old.driver_id then
+    select b.driver_id,b.status into v_booking_driver_id,v_booking_status
+    from public.bookings b where b.id=old.booking_id for key share;
+    if new.driver_id is not null
+       or old.status <> 'fee_reserved'
+       or new.status <> 'fee_reserved'
+       or old.driver_cash_confirmed_at is not null
+       or new.driver_cash_confirmed_at is not null
+       or old.rider_cash_confirmed_at is not null
+       or new.rider_cash_confirmed_at is not null
+       or old.cash_return_status <> 'not_requested'
+       or new.cash_return_status <> 'not_requested'
+       or v_booking_driver_id is not null
+       or v_booking_status <> 'pending'
+       or not exists (
+         select 1 from public.matmove_ride_driver_assignments a
+         where a.booking_id=old.booking_id and a.driver_id=old.driver_id
+           and a.assignment_status='driver_cancelled'
+       ) then
+      raise exception 'CASH_DRIVER_IMMUTABLE: A cash driver can only be cleared by the verified pre-start cancellation transaction.';
+    end if;
+  end if;
+
+  if old.driver_cash_confirmed_at is not null
+     and (new.driver_cash_confirmed_at is distinct from old.driver_cash_confirmed_at
+       or new.driver_cash_confirmed_by is distinct from old.driver_cash_confirmed_by) then
+    raise exception 'CASH_CONFIRMATION_IMMUTABLE: Driver cash confirmation cannot be overwritten.';
+  end if;
+
+  if old.rider_cash_confirmed_at is not null
+     and (new.rider_cash_confirmed_at is distinct from old.rider_cash_confirmed_at
+       or new.rider_cash_confirmed_by is distinct from old.rider_cash_confirmed_by) then
+    raise exception 'CASH_CONFIRMATION_IMMUTABLE: Rider cash confirmation cannot be overwritten.';
+  end if;
+
+  if old.manual_resolution_at is not null
+     and (new.manual_resolution_at is distinct from old.manual_resolution_at
+       or new.manual_resolution_by is distinct from old.manual_resolution_by
+       or new.manual_resolution_note is distinct from old.manual_resolution_note) then
+    raise exception 'CASH_RESOLUTION_IMMUTABLE: A recorded manual resolution cannot be overwritten.';
+  end if;
+
+  new.updated_at := clock_timestamp();
+  new.version := old.version + 1;
+  return new;
+end;
+$function$;
+revoke all on function public.matmove_cash_ride_payment_guard() from public, anon, authenticated;
+
+commit;
+ then
     raise exception 'INVALID: A booking, driver and verified SLE financial account are required.';
   end if;
 
