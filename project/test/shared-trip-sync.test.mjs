@@ -48,17 +48,19 @@ test('Rider and Merchant show driver name and tap-to-call phone after acceptance
  }
 });
 
-test('customer request recovery tells users to check the same id and restores the exact original booking without creating a duplicate',async()=>{
- const [rider,merchant,switcher]=await Promise.all([
-  read('../src/pages/RiderDashboard.tsx'),read('../src/pages/MerchantDashboard.tsx'),read('../src/components/CustomerTripSwitcher.tsx')
+test('unresolved earlier requests are routed from Create into Trips for safe recovery',async()=>{
+ const [rider,merchant,trips,app]=await Promise.all([
+  read('../src/pages/RiderDashboard.tsx'),read('../src/pages/MerchantDashboard.tsx'),
+  read('../src/components/TripHistory.tsx'),read('../src/App.tsx')
  ]);
- assert.match(rider,/Reconnect to your original request/);
- assert.match(merchant,/Reconnect to your original request/);
- assert.match(rider,/tripRequest\.restore\(\)/);
- assert.match(merchant,/tripRequest\.restore\(\)/);
- assert.match(switcher,/Driver accepted · arriving/);
+ for(const source of [rider,merchant]){
+  assert.match(source,/An earlier request needs checking/);
+  assert.match(source,/onOpenTrips\?\.\(\)/);
+  assert.doesNotMatch(source,/CustomerTripSwitcher/);
+ }
+ assert.match(trips,/onResume\(t\.id\)/);
+ assert.match(app,/setResumeTripId\(bookingId\);setActiveSection\('ride'\)/);
 });
-
 test('participant contact RPC is privacy-scoped and Merchant ride requests enter the driver radar lane',async()=>{
  const sql=await read('../supabase/migrations/20261114013851_matmove_shared_ride_dispatch_and_trip_contact_cards_v1.sql');
  assert.match(sql,/matmove_trip_contact_cards/);
@@ -71,18 +73,22 @@ test('participant contact RPC is privacy-scoped and Merchant ride requests enter
  assert.match(sql,/grant execute on function public\.matmove_trip_contact_cards\(uuid\[\]\) to authenticated/);
 });
 
-test('Rider and Merchant can manually refresh and select an older active request without creating a duplicate',async()=>{
- const [rider,merchant,switcher]=await Promise.all([read('../src/pages/RiderDashboard.tsx'),read('../src/pages/MerchantDashboard.tsx'),read('../src/components/CustomerTripSwitcher.tsx')]);
+test('Trips is the only customer location for unfinished requests and reopens the selected booking',async()=>{
+ const [rider,merchant,trips,hook]=await Promise.all([
+  read('../src/pages/RiderDashboard.tsx'),read('../src/pages/MerchantDashboard.tsx'),
+  read('../src/components/TripHistory.tsx'),read('../src/lib/useRideNegotiation.ts')
+ ]);
  for(const source of [rider,merchant]){
-  assert.match(source,/CustomerTripSwitcher bookings=\{activeTrips\}/);
-  assert.match(source,/onRefresh=\{retryTrip\}/);
-  assert.match(source,/onSelect=\{selectTrip\}/);
+  assert.doesNotMatch(source,/CustomerTripSwitcher/);
+  assert.match(source,/hasUnfinishedBookings/);
+  assert.match(source,/useCustomerActiveRide\(profile(\?\.id|\.id), resumeTripId \|\| null\)/);
  }
- assert.match(switcher,/Refresh status/);
- assert.match(switcher,/Driver confirmed · your cash confirmation needed/);
- assert.match(switcher,/\{onRefresh&&<button/);
+ assert.match(trips,/onResume\(t\.id\)/);
+ assert.match(trips,/Reopen original request/);
+ assert.match(hook,/resumeBookingId: string \| null = null/);
+ assert.match(hook,/selection\.current \? withCash\.find/);
+ assert.doesNotMatch(hook,/withCash\.find\(row=>row\.id===selection\.current\)\|\|withCash\[0\]/);
 });
-
 test('Driver keeps assigned unfinished rides recoverable while offline but hides unassigned radar requests',async()=>{
  const driver=await read('../src/pages/DriverDashboard.tsx');
  assert.match(driver,/if \(activeSection !== 'home'\) \{ setRequestsLoading\(false\); setRequestsError\(''\); return; \}/);
