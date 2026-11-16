@@ -1,5 +1,4 @@
 import ActiveTripMap from '@/components/ActiveTripMap';
-import CustomerTripSwitcher from '@/components/CustomerTripSwitcher';
 import { ProductGallery, catalogMoney, catalogCheckoutAllowed } from '@/components/ProductCatalog';
 import FareNegotiation from '@/components/FareNegotiation';
 import { useCustomerActiveRide } from '@/lib/useRideNegotiation';
@@ -34,13 +33,13 @@ export function RiderDashboard(props: any) {
   }
 
   if (props.activeSection === 'trips') {
-    return <RiderTrips profile={props.profile} />;
+    return <RiderTrips profile={props.profile} onResume={props.onResumeTrip} />;
   }
 
   return <RiderMain key={props.profile?.id || 'rider-main'} {...props} />;
 }
 
-function RiderMain({ profile, wallet, activeSection, onBack }: any) {
+function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpenTrips }: any) {
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [rideNotice, setRideNotice] = useState('');
   const [walletNotice, setWalletNotice] = useState('');
@@ -69,7 +68,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
 
-  const [viewMode, setViewMode] = useState<'active' | 'new'>('active');
+  const [viewMode, setViewMode] = useState<'active' | 'new'>(resumeTripId ? 'active' : 'new');
   const [serviceType, setServiceType] = useState<'ride' | 'delivery' | 'scheduled'>('ride');
   const [vehicleType, setVehicleType] = useState<'keke' | 'bike' | 'car' | 'van'>('car');
   const [offerAmount, setOfferAmount] = useState('');
@@ -97,12 +96,12 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
     error: tripError,
     retry: retryTrip,
     applySnapshot: applyFareSnapshot,
-    bookings: activeTrips,
-    creating: creatingTrip,
-    canCreate: canCreateTrip,
-    selectBooking: selectTrip,
-    startNewBooking
-  } = useCustomerActiveRide(profile?.id);
+    hasUnfinishedBookings
+  } = useCustomerActiveRide(profile?.id, resumeTripId || null);
+
+  useEffect(() => {
+    if (resumeTripId && activeBooking?.id === resumeTripId) setViewMode('active');
+  }, [resumeTripId, activeBooking?.id]);
   const tripRequest = useTripRequest(profile?.id || '');
   const [cancellingRequestId,setCancellingRequestId]=useState<string|null>(null);
   const handleCancelCustomerRequest=async(id:string)=>{
@@ -313,20 +312,8 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
   const handleRequest = async () => {
     if (tripLoading || tripError || activeBooking || isRequesting) return;
     if (tripRequest.retained) {
-      setIsRequesting(true);setRideNotice('');
-      try {
-        const original = await tripRequest.restore();
-        if (original) {
-          setActiveBooking(original);setViewMode('active');
-          setRideNotice('Original request recovered from MatMove. No new booking or payment was created.');
-        } else {
-          setActiveBooking(null);
-          setRideNotice('No unfinished original request was found on the server. You can now create a new request.');
-          setViewMode('new');
-        }
-      } catch (error:any) {
-        setRideNotice(error?.message||'Original request could not be verified. Your saved reference is preserved.');
-      } finally { setIsRequesting(false); }
+      setRideNotice('An earlier request still needs verification. Open Trips and reopen that exact request before creating another one.');
+      onOpenTrips?.();
       return;
     }
     if (tripRequest.error) {
@@ -392,6 +379,7 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
       if (paymentMethod === 'cash') void fetchLiveBalance();
       setViewMode('active');
       setRideNotice('');
+      onOpenTrips?.();
     } catch (err: any) {
       setRideNotice(err?.message || 'Trip request could not be confirmed. Check the original request before trying again.');
     } finally {
@@ -560,19 +548,20 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
       {walletSetupPanel}
 
       <div className="mx-auto max-w-7xl px-0 pt-2 sm:px-4">
-        <CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} refreshing={tripLoading} onRefresh={retryTrip} onSelect={selectTrip} onCancel={handleCancelCustomerRequest} cancellingId={cancellingRequestId} hasOriginalReference={!!tripRequest.retained||!!tripRequest.error} checkingOriginal={tripRequest.working} onCheckOriginal={async()=>{try{const original=await tripRequest.restore();if(original){setActiveBooking(original);setViewMode('active');setRideNotice('Original request recovered from the server.');}else{setActiveBooking(null);setRideNotice('No unfinished request remains on the server. You can create a new ride request.');}}catch(error:any){setRideNotice(error?.message||'Original request could not be verified.');}}} onNew={()=>{startNewBooking();setViewMode('new');setRouteEditing(true);setBookingSheetExpanded(true);setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerCount(1);setPaymentMethod('digital');setRideNotice('Enter a new pickup, destination and fare.');}} />
+        {activeSection === 'home' && hasUnfinishedBookings && !activeBooking && (
+          <section className="mx-3 mb-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+            <h2 className="font-bold text-blue-950">You have an unfinished request</h2>
+            <p className="mt-1 text-sm text-blue-900">Existing requests are kept in Trips, separate from creating a new one. Open Trips to review the original status, cash handover or digital payment and continue that same request.</p>
+            <button type="button" onClick={() => onOpenTrips?.()} className="mt-3 min-h-11 rounded-xl bg-blue-700 px-4 font-bold text-white">Open Trips</button>
+          </section>
+        )}
         {activeTrips.some(row=>Date.now()-Date.parse(row.created_at||'')>24*60*60*1000) && <p role="status" className="mx-3 mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">An older request is still open. Select it above to review the driver's latest status and complete any pending cash confirmation. Do not submit a duplicate request.</p>}
       </div>
       <div className="mx-auto max-w-7xl space-y-4 px-0 pb-8 sm:px-4">
         {(activeSection === 'home' || activeSection === 'ride' || !activeSection) && (
           <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
-            {(activeBooking || creatingTrip || viewMode === 'new' || (pickupCoords && destinationCoords && !routeEditing)) && <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[min(66dvh,700px)] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6" style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(66dvh,700px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
+            {(activeBooking || viewMode === 'new' || (pickupCoords && destinationCoords && !routeEditing)) && <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[min(66dvh,700px)] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6" style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(66dvh,700px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
               <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded} onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;sheetDragStartHeight.current=bookingSheetExpanded?Math.min(window.innerHeight*.66,700):148;setBookingSheetDragging(true);setBookingSheetDragDelta(0);event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={event=>{if(sheetPointerStart.current!==null){const maxHeight=Math.min(window.innerHeight*.66,700),base=sheetDragStartHeight.current,delta=event.clientY-sheetPointerStart.current;setBookingSheetDragDelta(Math.max(base-maxHeight,Math.min(base-148,delta)));}}} onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start,base=sheetDragStartHeight.current,maxHeight=Math.min(window.innerHeight*.66,700),nextHeight=Math.max(148,Math.min(maxHeight,base-delta));if(Math.abs(delta)>6){sheetDragged.current=true;setBookingSheetExpanded(delta < -6 ? true : delta > 80 ? false : bookingSheetExpanded);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}} onPointerCancel={()=>{sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}} onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}} className="mx-auto flex h-6 w-16 touch-none select-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button><div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><p className="mt-1 text-sm text-slate-500">Choose a service, set your route and review your fare.</p></div>
-              <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                <button onClick={() => setViewMode('active')} className={`font-bold ${viewMode === 'active' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Active Request</button>
-                <button onClick={() => setViewMode('new')} className={`font-bold ${viewMode === 'new' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>Create New</button>
-              </div>
-
               {(tripError || tripRequest.error || (rideNotice && !tripRequest.retained)) && (
                 <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">
                   {tripRequest.error || (rideNotice && !tripRequest.retained) || tripError}
@@ -581,10 +570,9 @@ function RiderMain({ profile, wallet, activeSection, onBack }: any) {
               )}
               {tripRequest.retained && (
                 <section role="status" className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
-                  <p className="font-extrabold text-amber-950">Reconnect to your original request</p>
-                  <p className="mt-1 text-sm text-amber-900">MatMove saved this exact booking reference. Check it again to restore the latest driver and trip status. No second request will be created.</p>
-                  {rideNotice&&<p role="alert" className="mt-2 rounded-lg bg-white/80 p-2 text-sm text-amber-900">{rideNotice}</p>}
-                  <button type="button" disabled={tripRequest.working||isRequesting||!tripRequest.ready} onClick={async()=>{try{const row=await tripRequest.restore();setActiveBooking(row);setViewMode('active');setRideNotice('Original request restored. Live driver updates are active.');}catch(e){setRideNotice(e instanceof Error?e.message:'Original request could not be confirmed. Retry this same request.');}}} className="mt-3 min-h-11 rounded-xl bg-amber-900 px-4 font-bold text-white disabled:opacity-50">{tripRequest.working?'Opening original request…':'Check original request'}</button>
+                  <p className="font-extrabold text-amber-950">An earlier request needs checking</p>
+                  <p className="mt-1 text-sm text-amber-900">MatMove retained the original request reference. Open Trips to check that exact booking before attempting another request.</p>
+                  <button type="button" onClick={() => onOpenTrips?.()} className="mt-3 min-h-11 rounded-xl bg-amber-900 px-4 font-bold text-white">Go to Trips</button>
                 </section>
               )}
 
@@ -1081,8 +1069,8 @@ function RiderShop({ profile, wallet }: any) {
   );
 }
 
-function RiderTrips({ profile }: any) {
-  return <TripHistory userId={profile?.id} role="rider" accountLabel={profile?.full_name || 'Rider'} accountEmail={profile?.email} />;
+function RiderTrips({ profile, onResume }: any) {
+  return <TripHistory userId={profile?.id} role="rider" accountLabel={profile?.full_name || 'Rider'} accountEmail={profile?.email} onResume={onResume} />;
 }
 
 function PolicyModal({ onAccept }: { onAccept: () => void }) {
