@@ -57,16 +57,16 @@ test('cash trip submission uses the same booking ID for fee reservation recovery
   assert.match(service, /cash_reserve: '\/api\/accept-ride-escrow\?action=cash_reserve'/);
 });
 
-test('Rider can reopen any active or old request instead of seeing only the newest booking',async()=>{
-  const code=await readFile(riderFile,'utf8');
-  assert.match(code,/import CustomerTripSwitcher from '@\/components\/CustomerTripSwitcher'/);
-  assert.match(code,/bookings: activeTrips/);
-  assert.match(code,/selectBooking: selectTrip/);
-  assert.match(code,/CustomerTripSwitcher bookings=\{activeTrips\}/);
-  assert.match(code,/An older request is still open/);
-  assert.match(code,/selectTrip/);
+test('Rider keeps existing requests in Trips and reopens the exact request before payment',async()=>{
+  const [code,trips,hook]=await Promise.all([readFile(riderFile,'utf8'),readFile(tripsFile,'utf8'),readFile(new URL('../src/lib/useRideNegotiation.ts',import.meta.url),'utf8')]);
+  assert.doesNotMatch(code,/CustomerTripSwitcher/);
+  assert.match(code,/hasUnfinishedBookings/);
+  assert.match(code,/onOpenTrips/);
+  assert.match(code,/useCustomerActiveRide\(profile\?\.id, resumeTripId \|\| null\)/);
+  assert.match(trips,/onResume\(t\.id\)/);
+  assert.match(trips,/Reopen cash confirmation/);
+  assert.match(hook,/const data=selection\.current \? withCash\.find\(row=>row\.id===selection\.current\) \|\| null : null/);
 });
-
 test('Driver can refresh the server-verified cash handover and old requests are flagged for support',async()=>{
   const code=await readFile(driverFile,'utf8');
   assert.match(code,/handleRefreshCashStatus/);
