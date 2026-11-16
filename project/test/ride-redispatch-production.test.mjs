@@ -112,3 +112,9 @@ test('cash ledger driver is cleared only after booking and assignment history ar
   assert.match(cancelFn, /matmove\.driver_cancelled/);
   assert.match(cancelFn, /assignment-history trigger/i);
 });
+
+
+test('Admin review does not expose the cancelled driver as the pending booking payout beneficiary', () => {
+  assert.match(migration, /'payoutDriverId'',case when rp\.driver_id=b\.driver_id then rp\.driver_id else null end/);
+  assert.match(migration, /'payoutAccount'',case when rp\.driver_id=b\.driver_id then rp\.driver_account else null end/);
+});
