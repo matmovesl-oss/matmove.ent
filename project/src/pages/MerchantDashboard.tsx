@@ -1,5 +1,4 @@
 import {useTripRequest} from '@/lib/useTripRequest';
-import CustomerTripSwitcher from '@/components/CustomerTripSwitcher';
 import ActiveTripMap from '@/components/ActiveTripMap';
 import {MerchantProductCatalog, catalogMoney} from '@/components/ProductCatalog';
 import { SkeletonBlock, SkeletonList } from '@/components/Skeleton';
@@ -36,11 +35,11 @@ type VehicleType = 'keke' | 'bike' | 'car' | 'van';
 
 export function MerchantDashboard(props: any) {
   if (props.activeSection === 'inventory') return <MerchantInventory profile={props.profile} />;
-  if (props.activeSection === 'trips') return <MerchantTrips profile={props.profile} />;
+  if (props.activeSection === 'trips') return <MerchantTrips profile={props.profile} onResume={props.onResumeTrip} />;
   return <MerchantMain key={props.profile.id} {...props} />;
 }
 
-function MerchantMain({ profile, wallet, activeSection }: any) {
+function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrips }: any) {
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [rideNotice, setRideNotice] = useState('');
   const [walletNotice, setWalletNotice] = useState('');
@@ -95,7 +94,11 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
   const sheetPointerStart=useRef<number|null>(null);
   const sheetDragStartHeight=useRef(148);
   const sheetDragged=useRef(false);
-  const { booking: activeBooking, setBooking: setActiveBooking, loading: tripLoading, error: tripError, retry: retryTrip, applySnapshot: applyFareSnapshot,bookings:activeTrips,creating:creatingTrip,canCreate:canCreateTrip,selectBooking:selectTrip,startNewBooking } = useCustomerActiveRide(profile.id);
+  const { booking: activeBooking, setBooking: setActiveBooking, loading: tripLoading, error: tripError, retry: retryTrip, applySnapshot: applyFareSnapshot, hasUnfinishedBookings, canCreate: canCreateTrip } = useCustomerActiveRide(profile.id, resumeTripId || null);
+
+  useEffect(() => {
+    if (resumeTripId && activeBooking?.id === resumeTripId) setBookingSheetExpanded(true);
+  }, [resumeTripId, activeBooking?.id]);
 
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
@@ -240,6 +243,7 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
     try {
       const data=await tripRequest.submit({client_version:1,payment_method:serviceType==='ride'?paymentMethod:'digital',service_type:serviceType,vehicle_type:vehicleType,pickup_location:pickup,destination_location:destination,fare_amount:finalAmount.toFixed(2),scheduled_time:serviceType==='scheduled'?new Date(scheduledTime).toISOString():null,passenger_count:passengerCount,passenger_name:passengerName.trim()||null,pickup_pin:{lat:pickupCoords[1],lng:pickupCoords[0]},destination_pin:{lat:destinationCoords[1],lng:destinationCoords[0]}});
       setActiveBooking(data);
+      onOpenTrips?.();
     } catch (err: any) { alert(err.message); } finally { setIsRequesting(false); }
   };
 
@@ -344,10 +348,16 @@ function MerchantMain({ profile, wallet, activeSection }: any) {
       </header>
       {walletSetupPanel}
       {((rideNotice&&!tripRequest.retained)||walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice&&!tripRequest.retained&&<p>{rideNotice}</p>}{walletNotice&&<p>{walletNotice}</p>}</div>}
-      {activeSection==='home'&&(tripRequest.retained||tripRequest.error)&&<section role="status" className="m-3 space-y-2 rounded-2xl border border-amber-300 bg-amber-50 p-4"><div><p className="font-extrabold text-amber-950">Reconnect to your original request</p><p className="mt-1 text-sm text-amber-900">MatMove will check the saved reference and your server-side unfinished requests. It will not create a duplicate booking or payment.</p></div>{rideNotice&&<p role="alert" className="rounded-lg bg-white/80 p-2 text-sm text-amber-900">{rideNotice}</p>}<button type="button" disabled={tripRequest.working||isRequesting||!tripRequest.ready} onClick={async()=>{try{const row=await tripRequest.restore();if(row){setActiveBooking(row);setRideNotice('Original request recovered from MatMove. Live driver updates are active.');}else{setActiveBooking(null);setRideNotice('No unfinished original request was found on the server. You can now create a new request.');}}catch(e){setRideNotice(e instanceof Error?e.message:'Original request could not be confirmed. Your saved reference remains safe.');}}} className="min-h-11 rounded-xl bg-amber-900 px-4 font-bold text-white disabled:opacity-50">{tripRequest.working?'Checking original request…':'Check original request'}</button></section>}
+      {activeSection==='home'&&tripRequest.retained&&<section role="status" className="m-3 space-y-2 rounded-2xl border border-amber-300 bg-amber-50 p-4"><div><p className="font-extrabold text-amber-950">An earlier request needs checking</p><p className="mt-1 text-sm text-amber-900">MatMove retained the original request reference. Open Trips to check that exact booking before attempting another request.</p></div><button type="button" onClick={()=>onOpenTrips?.()} className="min-h-11 rounded-xl bg-amber-900 px-4 font-bold text-white">Go to Trips</button></section>}
       {activeSection==='home'&&tripRequest.error&&!tripRequest.retained&&<p role="alert" className="m-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{tripRequest.error}</p>}
-      {activeSection==='home'&&<CustomerTripSwitcher bookings={activeTrips} selectedId={activeBooking?.id} creating={creatingTrip} canCreate={canCreateTrip&&!tripRequest.retained&&!tripRequest.error} busy={isRequesting} refreshing={tripLoading} onRefresh={retryTrip} onSelect={selectTrip} onCancel={handleCancelCustomerRequest} cancellingId={cancellingRequestId} hasOriginalReference={!!tripRequest.retained||!!tripRequest.error} checkingOriginal={tripRequest.working} onCheckOriginal={async()=>{try{const original=await tripRequest.restore();if(original){setActiveBooking(original);setRideNotice('Original request recovered from the server.');}else{setActiveBooking(null);setRideNotice('No unfinished request remains on the server. You can create a new request.');}}catch(error:any){setRideNotice(error?.message||'Original request could not be verified.');}}} onNew={()=>{startNewBooking();setRouteEditing(true);setBookingSheetExpanded(true);setPickup('');setDestination('');setPickupCoords(null);setDestinationCoords(null);setTripDistanceKm(null);setOfferAmount('');setScheduledTime('');setPassengerName('');setPassengerCount(1);setPaymentMethod('digital');setRideNotice('Enter a new pickup, destination and fare.');}}/>}
-      {activeSection === 'home' && (activeBooking || creatingTrip || (pickupCoords && destinationCoords && !routeEditing)) && (
+      {activeSection==='home'&&{activeSection === 'home' && hasUnfinishedBookings && !activeBooking && (
+        <section className="m-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+          <h2 className="font-bold text-blue-950">You have an unfinished request</h2>
+          <p className="mt-1 text-sm text-blue-900">Existing requests are kept in Trips, separate from creating another request. Open Trips to review the original delivery or ride, verify cash or digital payment status and continue that same request.</p>
+          <button type="button" onClick={() => onOpenTrips?.()} className="mt-3 min-h-11 rounded-xl bg-blue-700 px-4 font-bold text-white">Open Trips</button>
+        </section>
+      )}}
+      {activeSection === 'home' && (activeBooking || (pickupCoords && destinationCoords && !routeEditing)) && (
         <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
           <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[58dvh] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6"
             style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(58dvh,640px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
@@ -639,8 +649,8 @@ function MerchantInventory({ profile }: any) {
   );
 }
 
-function MerchantTrips({ profile }: any) {
-  return <TripHistory userId={profile.id} role="merchant" accountLabel={profile.full_name || 'Merchant'} accountEmail={profile.email} />;
+function MerchantTrips({ profile, onResume }: any) {
+  return <TripHistory userId={profile.id} role="merchant" accountLabel={profile.full_name || 'Merchant'} accountEmail={profile.email} onResume={onResume} />;
 }
 
 function PolicyModal({ onAccept }: { onAccept: () => void }) {
