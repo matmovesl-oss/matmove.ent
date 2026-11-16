@@ -113,9 +113,9 @@ test('Admin digital dispute cancellation reconciles customer 50, driver 5 and pl
  assert.match(settlement,/rp\.fare_minor::numeric \* 0\.50/);
  assert.match(settlement,/rp\.fare_minor::numeric \* 0\.05/);
  assert.match(settlement,/platform_minor := rp\.fare_minor - refund_minor - driver_award_minor/);
- assert.match(settlement,/values\\(b\\.id,'refund',refund_minor/);
- assert.match(settlement,/values\\(b\\.id,'driver',driver_award_minor/);
- assert.match(settlement,/values\\(b\\.id,'fee',platform_minor/);
+ assert.match(settlement,/values\(b\.id,'refund',refund_minor/);
+ assert.match(settlement,/values\(b\.id,'driver',driver_award_minor/);
+ assert.match(settlement,/values\(b\.id,'fee',platform_minor/);
  assert.match(settlement,/p\.escrow_account = p\.fee_account/);
  assert.match(hardening,/amount_minor = p\.fare_minor/);
  assert.match(payments,/refunding: \['refund', 'driver', 'fee'\]/);
