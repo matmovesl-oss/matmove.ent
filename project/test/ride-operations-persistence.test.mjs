@@ -82,23 +82,24 @@ test('Trips identifies the signed-in Rider or Merchant account and explains acco
  assert.match(trips,/Customer product orders are shown separately under Inventory & Orders/);
 });
 
-test('Rider and Merchant can create another request while existing bookings remain listed',()=>{
+test('Rider and Merchant can create separately while unfinished requests remain in Trips',()=>{
  const negotiation=readFileSync(new URL('../src/lib/useRideNegotiation.ts',import.meta.url),'utf8');
  const request=readFileSync(new URL('../src/lib/useTripRequest.ts',import.meta.url),'utf8');
- const switcher=readFileSync(new URL('../src/components/CustomerTripSwitcher.tsx',import.meta.url),'utf8');
+ const trips=readFileSync(new URL('../src/components/TripHistory.tsx',import.meta.url),'utf8');
  const rider=readFileSync(new URL('../src/pages/RiderDashboard.tsx',import.meta.url),'utf8');
  const merchant=readFileSync(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
  assert.match(negotiation,/const canCreate=current\.userId===userId&&!current\.loading&&!current\.error;/);
- assert.doesNotMatch(negotiation,/bookings\.some\(row=>row\.rider_id===userId/);
- assert.match(switcher,/Create new ride request/);
+ assert.match(negotiation,/hasUnfinishedBookings:bookings\.some/);
+ assert.match(negotiation,/const data=selection\.current \? withCash\.find\(row=>row\.id===selection\.current\) \|\| null : null/);
+ assert.match(trips,/onResume\(t\.id\)/);
+ assert.doesNotMatch(rider,/CustomerTripSwitcher/);
+ assert.doesNotMatch(merchant,/CustomerTripSwitcher/);
+ assert.match(rider,/onOpenTrips/);
+ assert.match(merchant,/onOpenTrips/);
  assert.match(request,/async function restore\(\)/);
- assert.match(request,/\.from\('bookings'\)\.select\('\*'\)\.eq\('id',retained\.id\)\.eq\('rider_id',id\)\.maybeSingle\(\)/);
  const restoreBlock=request.slice(request.indexOf('async function restore'),request.indexOf('async function submit'));
  assert.doesNotMatch(restoreBlock,/matmove_create_customer_trip|reserveCashRide/);
- assert.match(rider,/tripRequest\.restore\(\)/);
- assert.match(merchant,/tripRequest\.restore\(\)/);
 });
-
 test('parallel customer request migration removes the server-side pending-booking creation block',()=>{
  const migration=readFileSync(new URL('../supabase/migrations/20261116094000_matmove_allow_parallel_customer_requests_v1.sql',import.meta.url),'utf8');
  assert.match(migration,/matmove_create_customer_trip\(uuid,jsonb\)/);
