@@ -103,6 +103,14 @@ begin
     raise exception 'INVALID_STATE: Booking, driver and request reference are required.';
   end if;
 
+  -- Validate the actor even for an idempotent replay.
+  if not exists (
+    select 1 from public.profiles p
+    where p.id = p_driver_id and p.role::text = 'driver'
+  ) then
+    raise exception 'FORBIDDEN: An authenticated driver account is required.';
+  end if;
+
   select * into prior
   from public.matmove_dispatch_audit
   where request_id = p_request_id;
@@ -131,13 +139,6 @@ begin
 
   if not found then
     raise exception 'NOT_FOUND: Booking not found.';
-  end if;
-
-  if not exists (
-    select 1 from public.profiles p
-    where p.id = p_driver_id and p.role::text = 'driver'
-  ) then
-    raise exception 'FORBIDDEN: An authenticated driver account is required.';
   end if;
 
   -- A cancellation after the trip starts is never an automatic re-dispatch.
@@ -333,6 +334,14 @@ begin
        or prior.action <> 'assign'
        or prior.driver_id <> p_driver_id then
       raise exception 'DISPATCH_CONFLICT: This request reference was already used for another action.';
+    end if;
+    if not exists (
+      select 1 from public.ride_payments rp
+      where rp.booking_id = p_booking_id
+        and rp.driver_id = p_driver_id
+        and rp.driver_account = p_driver_account
+    ) then
+      raise exception 'DISPATCH_CONFLICT: The request reference does not match the current payout beneficiary.';
     end if;
     select * into b_after from public.bookings where id = p_booking_id;
     if not found then raise exception 'NOT_FOUND: Booking not found.'; end if;
@@ -537,8 +546,10 @@ begin
   select * into reserve from public.matmove_cash_ride_legs
   where booking_id=p_booking_id and leg_kind='reserve' for key share;
   if not found or reserve.status <> 'completed'
-     or reserve.provider_transfer_id is null or reserve.verified_at is null then
-    raise exception 'CASH_FEE_NOT_RESERVED: A verified fee reserve is required.';
+     or reserve.provider_transfer_id is null or reserve.verified_at is null
+     or reserve.verified_amount_minor is distinct from p.matmove_fee_minor
+     or reserve.verified_currency is distinct from p.currency then
+    raise exception 'CASH_FEE_NOT_RESERVED: A verified fee reserve with the exact amount and currency is required.';
   end if;
 
   if p_driver_id is null or p_driver_id=p.rider_id
