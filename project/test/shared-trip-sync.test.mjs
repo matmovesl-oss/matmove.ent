@@ -141,3 +141,4 @@ test('cash review is not a retained active-request pointer and does not block a 
  assert.match(rider,/const restored = await tripRequest\.restore\(\)/);
  assert.match(merchant,/const restored = await tripRequest\.restore\(\)/);
 });
+\ntest('restored cash-review pointer is cleared synchronously before Rider and Merchant submit the next request',async()=>{\n const [request,rider,merchant]=await Promise.all([read('../src/lib/useTripRequest.ts'),read('../src/pages/RiderDashboard.tsx'),read('../src/pages/MerchantDashboard.tsx')]);\n assert.match(request,/retainedRef\\.current=null/);\n assert.match(request,/const saved=retainedRef\\.current;const body=saved/);\n for(const page of [rider,merchant])assert.match(page,/recoveredSavedRequest = true/);\n});\n
