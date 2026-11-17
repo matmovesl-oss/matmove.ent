@@ -66,7 +66,9 @@ test('Rider keeps existing requests in Trips and reopens the exact request befor
   assert.match(code,/useCustomerActiveRide\(profile\?\.id, resumeTripId \|\| null\)/);
   assert.match(trips,/onResume\(t\.id\)/);
   assert.match(trips,/Reopen cash confirmation/);
-  assert.match(hook,/const data=selection\\.current \\? withCash\\.find\\(row=>row\\.id===selection\\.current && row\\.status!==\'cash_review_required\'\\) \\|\\| null : null/);
+  assert.match(hook,/const exact = selection\.current/);
+  assert.match(hook,/const data = exact \|\| withCash\.find/);
+  assert.match(hook,/row\.status!=='cash_review_required'/);
 });
 test('Driver can refresh the server-verified cash handover and old requests are flagged for support',async()=>{
   const code=await readFile(driverFile,'utf8');
