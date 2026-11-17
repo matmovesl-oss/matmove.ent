@@ -25,7 +25,7 @@ test('replacement digital driver is validated and becomes only the future payout
   assert.match(migration, /public\.matmove_accept_redispatched_digital/);
   assert.match(migration, /rp\.state <> 'funded'/);
   assert.match(migration, /matmove_dispatch_driver_status/);
-  assert.match(migration, /p_driver_account =/i);
+  assert.match(migration, /driver_account = p_driver_account/i);
   assert.match(migration, /set driver_id = p_driver_id,[\s\S]*driver_account = p_driver_account/);
   assert.match(migration, /newEscrowHold', false/);
   assert.doesNotMatch(migration.slice(migration.indexOf('create or replace function public.matmove_accept_redispatched_digital'), migration.indexOf('revoke all on function public.matmove_accept_redispatched_digital')), /insert into public\.ride_payment_transfers/i);
@@ -58,7 +58,7 @@ test('browser retries preserve the same idempotency request ID for accept and ca
 
 test('driver radar excludes the driver who cancelled while other eligible drivers can see the same pending request', () => {
   assert.match(driver, /matmove_excluded_driver_ids/);
-  assert.match(driver, /Finding another driver/);
+  assert.match(driver, /same booking is back in driver matching/i);
   assert.match(driver, /result\.redispatched === true/);
 });
 
