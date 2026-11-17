@@ -738,7 +738,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
                   <button
                     onClick={handleRequest}
-                    disabled={isRequesting || !tripRequest.ready || !!tripRequest.error}
+                    disabled={isRequesting || !tripRequest.ready || (!!tripRequest.error && !tripRequest.retained)}
                     className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4"
                   >
                     {isRequesting || tripRequest.working ? <Loader2 size={20} className="animate-spin mx-auto" /> : tripRequest.retained ? 'Check Original Request' : 'Confirm Request'}
