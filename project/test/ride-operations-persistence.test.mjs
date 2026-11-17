@@ -90,7 +90,8 @@ test('Rider and Merchant can create separately while unfinished requests remain 
  const merchant=readFileSync(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
  assert.match(negotiation,/const canCreate=current\.userId===userId&&!current\.loading&&!current\.error;/);
  assert.match(negotiation,/hasUnfinishedBookings:bookings\.some/);
- assert.match(negotiation,/const exact = selection\.current/);\n assert.match(negotiation,/const data = exact \|\| withCash\.find/);
+ assert.match(negotiation,/const exact = selection\.current/);
+ assert.match(negotiation,/const data = exact \|\| withCash\.find/);
  assert.match(trips,/onResume\(t\.id\)/);
  assert.doesNotMatch(rider,/CustomerTripSwitcher/);
  assert.doesNotMatch(merchant,/CustomerTripSwitcher/);
