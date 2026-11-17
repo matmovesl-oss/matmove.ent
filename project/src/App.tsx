@@ -448,7 +448,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
             wallet={wallet}
             activeSection={activeSection === 'ride' ? 'home' : activeSection}
             resumeTripId={resumeTripId}
-            onResumeTrip={(bookingId:string)=>{setResumeTripId(bookingId);setActiveSection('ride');}}
+            onResumeTrip={(bookingId:string)=>{rememberTrip(bookingId);setActiveSection('ride');}}
           />
         )}
 
@@ -458,8 +458,8 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
             wallet={wallet}
             activeSection={activeSection === 'ride' ? 'home' : activeSection}
             resumeTripId={resumeTripId}
-            onResumeTrip={(bookingId:string)=>{setResumeTripId(bookingId);setActiveSection('ride');}}
-            onOpenTrips={()=>setActiveSection('trips')}
+            onResumeTrip={(bookingId:string)=>{rememberTrip(bookingId);setActiveSection('ride');}}
+            onOpenTrips={(bookingId?:string|null)=>{if(bookingId)rememberTrip(bookingId);setActiveSection('trips');}}
           />
         )}
       </div>
