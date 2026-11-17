@@ -129,7 +129,7 @@ test('Original request recovery verifies the exact saved reference and routes un
  const merchant=readFileSync(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
  const trips=readFileSync(new URL('../src/components/TripHistory.tsx',import.meta.url),'utf8');
  const restore=request.slice(request.indexOf('async function restore'),request.indexOf('async function submit'));
- assert.match(restore,/\.eq\('id',retained\.id\)\.eq\('rider_id',id\)/);
+ assert.match(restore,/\.eq\('id',savedRequest\.id\)\.eq\('rider_id',id\)/);
  assert.match(restore,/\.in\('status',\['pending','pending_admin','cash_reserve_pending','accepted','in_progress'\]\)/);
  assert.match(restore,/row&&\['cash_review_required','completed','cancelled'\]\.includes\(row\.status\)\)row=null/);
  assert.match(restore,/localStorage\.removeItem\(key\)/);
