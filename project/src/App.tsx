@@ -819,7 +819,7 @@ function AccountSection({
     try{
       const receipt=await customerPasscode(profile.id,'verify',deletePin);
       setDeletePin('');
-      if(!receipt.ok||receipt.digits<6||receipt.digits>10||receipt.code!=='verified')throw Error(receipt.code==='cooldown'?'Try again in '+receipt.retryAfterSeconds+' seconds.':'Incorrect passcode.');
+      if(!receipt.ok||receipt.digits<6||receipt.digits>9||receipt.code!=='verified')throw Error(receipt.code==='cooldown'?'Try again in '+receipt.retryAfterSeconds+' seconds.':'Incorrect passcode.');
       const result=await supabase.rpc('matmove_customer_request_account_deletion',{p_reason:'Customer requested account deletion from Account Settings.'});
       if(result.error)throw result.error;
       if(result.data?.success!==true||typeof result.data.status!=='string')throw Error('MatMove did not confirm the deletion request. Check its status before retrying.');
@@ -1404,25 +1404,23 @@ function AccountSection({
         ) : (
           <div className="bg-red-50 border border-red-200 p-5 rounded-xl">
             <p className="text-sm text-red-800 font-bold mb-3">
-              Enter your 6-digit passcode to confirm the deletion request. This submits a request for review; it does not instantly erase your account.
+              Enter your 6–9 digit passcode to confirm the deletion request. This submits a request for review; it does not instantly erase your account.
             </p>
 
             <div className="flex gap-2 mb-4">
               <input
                 type="password"
-                maxLength={6}
+                maxLength={9}
+                inputMode="numeric"
+                autoComplete="off"
                 value={deletePin}
-                onChange={e =>
-                  setDeletePin(
-                    e.target.value
-                  )
-                }
+                onChange={e => setDeletePin(e.target.value.replace(/[^0-9]/g,'').slice(0,9))}
                 className="w-24 text-center tracking-widest text-lg p-2 rounded-lg border border-red-300 outline-none bg-white"
               />
 
               <button
                 onClick={handleDeleteAccount}
-                disabled={deleteRequestBusy||deletePin.length!==6}
+                disabled={deleteRequestBusy||deletePin.length<6||deletePin.length>9}
                 className="min-h-11 rounded-lg bg-red-600 px-4 font-bold text-white disabled:opacity-50"
               >
                 {deleteRequestBusy?'Submitting…':'Submit deletion request'}
