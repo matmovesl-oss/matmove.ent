@@ -142,4 +142,11 @@ test('Original request recovery verifies the exact saved reference and routes un
  assert.match(trips,/Reopen original request/);
 });
 
-\ntest('Trip recovery clears the persisted pointer for review-only cash cases without removing the booking',()=>{\n const request=readFileSync(new URL('../src/lib/useTripRequest.ts',import.meta.url),'utf8');\n assert.match(request,/const retainedRef=useRef<Saved\\|null>\\(null\\)/);\n assert.match(request,/retainedRef\\.current=null;setRetained\\(null\\)/);\n assert.match(request,/cash_review_required','completed','cancelled/);\n assert.match(request,/const saved=retainedRef\\.current/);\n});\n
+
+test('Trip recovery clears the persisted pointer for review-only cash cases without removing the booking',()=>{
+ const request=readFileSync(new URL('../src/lib/useTripRequest.ts',import.meta.url),'utf8');
+ assert.ok(request.includes('const retainedRef=useRef<Saved|null>(null)'));
+ assert.ok(request.includes('retainedRef.current=null;setRetained(null)'));
+ assert.ok(request.includes("if(row&&['cash_review_required','completed','cancelled'].includes(row.status))row=null;"));
+ assert.ok(request.includes('const saved=retainedRef.current'));
+});
