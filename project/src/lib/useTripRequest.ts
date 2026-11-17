@@ -23,7 +23,8 @@ async function reserveCashRide(bookingId:string,accessToken:string,signal:AbortS
 
 export function useTripRequest(userId:string){
  const key=`matmove:booking-create:v1:${userId}`;
- const [retained,setRetained]=useState<Saved|null>(null),[error,setError]=useState(''),[working,setWorking]=useState(false),[ready,setReady]=useState(false);\n const retainedRef=useRef<Saved|null>(null),errorRef=useRef('');
+ const [retained,setRetained]=useState<Saved|null>(null),[error,setError]=useState(''),[working,setWorking]=useState(false),[ready,setReady]=useState(false);
+ const retainedRef=useRef<Saved|null>(null),errorRef=useRef('');
  const current=useRef(userId),mounted=useRef(false),mutex=useRef(false),epoch=useRef(0),active=useRef<AbortController|null>(null);current.current=userId;
  useEffect(()=>{mounted.current=true;epoch.current++;mutex.current=false;retainedRef.current=null;errorRef.current='';setRetained(null);setError('');setWorking(false);setReady(false);try{const raw=localStorage.getItem(key);if(raw){const body=JSON.parse(raw);if(!uuid.test(body?.id)||!body.details||body.details.client_version!==1)throw Error();retainedRef.current=body;setRetained(body);}}catch{errorRef.current='This browser cannot confirm the previous trip request. Restore browser storage before requesting another.';setError(errorRef.current);}finally{setReady(true);}return()=>{mounted.current=false;epoch.current++;active.current?.abort();};},[userId,key]);
  async function restore(){
@@ -36,11 +37,13 @@ export function useTripRequest(userId:string){
    const before=await supabase.auth.getSession();
    if(before.error||before.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
    let row:any=null;
-   const saved=retainedRef.current;\n   if(saved?.id){
+   const saved=retainedRef.current;
+   if(saved?.id){
     const exact=await supabase.from('bookings').select('*').eq('id',saved.id).eq('rider_id',id).maybeSingle();
     if(exact.error)throw Error('The original request could not be checked. Your saved reference is preserved; retry without creating another ride.');
     row=exact.data;
     if(row&&(row.rider_id!==id||!validBookingStatuses.includes(row.status)))throw Error('The original request ownership or status could not be verified.');
+    if(row&&['cash_review_required','completed','cancelled'].includes(row.status))row=null;
    }
    if(!row){
     const latest=await supabase.from('bookings').select('*').eq('rider_id',id)
@@ -52,10 +55,8 @@ export function useTripRequest(userId:string){
    const after=await supabase.auth.getSession();
    if(after.error||after.data.session?.user.id!==id||!live())throw Error('Your sign-in changed. Reopen Trips.');
    if(row&&(row.rider_id!==id||!validBookingStatuses.includes(row.status)))throw Error('The original request could not be verified.');
-   // A quarantined cash case is retained in Trips for support, but it is no
-   // longer an active request pointer and must not block a fresh booking.
-   if(row&&['cash_review_required','completed','cancelled'].includes(row.status))row=null;
-   localStorage.removeItem(key);setRetained(null);setError('');
+   // A quarantined cash case remains in Trips for support, not in the active-request pointer.
+   localStorage.removeItem(key);retainedRef.current=null;setRetained(null);errorRef.current='';setError('');
    return row;
   }catch(e){
    if(live()){errorRef.current=e instanceof Error?e.message:'The original request could not be restored.';setError(errorRef.current);}
@@ -70,8 +71,8 @@ export function useTripRequest(userId:string){
   try{
    const before=await supabase.auth.getSession();if(before.error||before.data.session?.user.id!==id||!before.data.session.access_token)throw Error('Your sign-in changed. Reopen Ride.');
    if(!live())throw Error('Your account changed.');
-   const body=retained||{id:crypto.randomUUID(),details:details!};if(!body.details)throw Error('Review the request first.');
-   if(!retained){localStorage.setItem(key,JSON.stringify(body));setRetained(body);}
+   const saved=retainedRef.current;const body=saved||{id:crypto.randomUUID(),details:details!};if(!body.details)throw Error('Review the request first.');
+   if(!saved){localStorage.setItem(key,JSON.stringify(body));retainedRef.current=body;setRetained(body);}
    const controller=new AbortController();active.current=controller;const timer=setTimeout(()=>controller.abort(),20000);
    // Production currently accepts the original 11-field digital trip payload.
    // Keep the optional payment_method marker only for cash bookings, which the
