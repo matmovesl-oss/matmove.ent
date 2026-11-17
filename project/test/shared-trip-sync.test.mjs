@@ -250,8 +250,8 @@ test('Driver radar only displays its initial loading state and keeps cards stabl
  assert.match(driver,/if \(requestsLoadedOwner\.current !== profile\.id\) setRequestsLoading\(true\)/);
  assert.doesNotMatch(fetcher,/busy = true; const readVersion = radarMutation\.current; setRequestsLoading\(true\)/);
  assert.match(fetcher,/loadedSuccessfully = true/);
- assert.match(driver,/if \(requestsLoadedOwner\.current !== profile\.id\) setRequestsLoading\(true\)/);
- assert.match(fetcher,/}, 10000\)/);
+ assert.match(fetcher,/requestsLoadedOwner\.current = profile\.id/);
+ assert.match(driver,/}, 10000\)/);
 });
 
 test('MatMove passcode remains available without a visible in-app biometric or passkey control',async()=>{
