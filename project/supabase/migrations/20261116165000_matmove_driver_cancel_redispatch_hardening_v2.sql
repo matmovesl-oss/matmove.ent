@@ -190,6 +190,7 @@ begin
            and l.provider_transfer_id is not null
            and l.verified_at is not null
            and l.verified_amount_minor = cp.matmove_fee_minor
+           and l.verified_currency = cp.currency
        )
        or exists (
          select 1 from public.matmove_cash_ride_legs l
