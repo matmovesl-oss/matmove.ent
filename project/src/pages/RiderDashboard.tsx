@@ -313,9 +313,20 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   const handleRequest = async () => {
     if (tripLoading || tripError || activeBooking || isRequesting) return;
     if (tripRequest.retained) {
-      setRideNotice('An earlier request still needs verification. Open Trips and reopen that exact request before creating another one.');
-      onOpenTrips?.();
-      return;
+      try {
+        const restored = await tripRequest.restore();
+        if (restored) {
+          setActiveBooking(restored);
+          setViewMode('active');
+          setRideNotice('An earlier request is still active. Open Trips to review that exact booking before making another one.');
+          onOpenTrips?.();
+          return;
+        }
+      } catch (error: any) {
+        setRideNotice(error?.message || 'The earlier request could not be verified. Open Trips before trying again.');
+        onOpenTrips?.();
+        return;
+      }
     }
     if (tripRequest.error) {
       setRideNotice(tripRequest.error);
