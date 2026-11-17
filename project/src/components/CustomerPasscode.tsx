@@ -4,15 +4,6 @@ import {resetPasscode as requestPasscodeReset} from '@/services/authService';
 import {setPortalUnlocked} from '@/lib/portalPrivacy';
 import {profilePhotoPickerOpen,onProfilePhotoPickerEnd,clearProfilePhotoPicker} from '@/lib/profilePhotoPicker';
 
-async function platformPasskeyAvailable():Promise<boolean>{
- if(typeof window==='undefined'||!('PublicKeyCredential' in window)||!navigator.credentials)return false;
- try{
-  const credential=(window as any).PublicKeyCredential;
-  if(typeof credential.isUserVerifyingPlatformAuthenticatorAvailable==='function')return await credential.isUserVerifyingPlatformAuthenticatorAvailable();
-  return true;
- }catch{return false;}
-}
-
 type Receipt={userId:string;configured:boolean;digits:4|6|7|8|9|10;ok:boolean;code:string;attemptsRemaining:number;retryAfterSeconds:number};
 const codes=['status','cooldown','already_configured','saved','setup_required','upgrade_required','verified','incorrect'];
 
@@ -61,7 +52,6 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const [forgotMode, setForgotMode] = useState(false);
  const [resetEmail, setResetEmail] = useState('');
  const [resetSent,setResetSent]=useState(false);
- const [biometricSupported,setBiometricSupported]=useState(false),[passkeyCount,setPasskeyCount]=useState<number|null>(null),[passkeyBusy,setPasskeyBusy]=useState(false),[passkeyError,setPasskeyError]=useState(''),[passkeyNotice,setPasskeyNotice]=useState(''),[passkeyCheckError,setPasskeyCheckError]=useState('');
 
  const unlockedNow=useRef(false),statusNow=useRef<Receipt|null>(null);statusNow.current=status;
  const current=useRef(userId);current.current=userId;const mounted=useRef(false),revision=useRef(0),mutex=useRef(false);
@@ -122,85 +112,6 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const creating=status&&!status.configured;
  useEffect(()=>{setActivePinField(creating||upgrade?'next':'pin');},[creating,upgrade]);
 
- useEffect(()=>{
-  let live=true;
-  void (async()=>{
-   const available=await platformPasskeyAvailable();
-   if(!live)return;
-   setBiometricSupported(available);
-   if(!available)return;
-   try{
-    const result=await (supabase.auth as any).passkey.list();
-    if(!live)return;
-    if(result.error){
-     setPasskeyCount(0);
-     setPasskeyCheckError('Saved biometrics could not be checked. You can try setting up a passkey again; your MatMove passcode remains available.');
-    }else if(Array.isArray(result.data)){
-     setPasskeyCount(result.data.length);
-     setPasskeyCheckError('');
-    }else{
-     setPasskeyCount(0);
-     setPasskeyCheckError('This browser did not return the saved passkey list. You can still try device biometric setup.');
-    }
-   }catch{
-    if(live){
-     setPasskeyCount(0);
-     setPasskeyCheckError('Saved biometrics could not be checked. You can try setting up a passkey again; your MatMove passcode remains available.');
-    }
-   }
-  })();
-  return()=>{live=false;};
- },[userId]);
-
- async function registerBiometric(){
-  if(mutex.current||passkeyBusy||!biometricSupported||!status?.configured||status.digits<6)return;
-  const validPin=pin.length===status.digits&&new RegExp('^[0-9]{'+status.digits+'}$').test(pin);
-  if(!validPin){
-   setPasskeyError('Enter your current '+status.digits+'-digit MatMove passcode before setting up biometrics.');
-   setActivePinField('pin');
-   pinEntryRef.current?.focus({preventScroll:true});
-   return;
-  }
-  mutex.current=true;setPasskeyBusy(true);setPasskeyError('');setPasskeyNotice('');
-  try{
-   const session=await supabase.auth.getSession();
-   if(session.error||session.data.session?.user.id!==userId)throw Error('Your sign-in changed. Sign in again before enabling biometrics.');
-   const verified=await customerPasscode(userId,'verify',pin);
-   if(!verified.ok||verified.code!=='verified')throw Error('Your current MatMove passcode could not be verified. Enter it again before enabling biometrics.');
-   const result=await (supabase.auth as any).registerPasskey();
-   if(result.error)throw result.error;
-   const listed=await (supabase.auth as any).passkey.list();
-   if(listed.error)throw listed.error;
-   const count=Array.isArray(listed.data)?listed.data.length:1;
-   setPasskeyCount(count);setPasskeyCheckError('');setPasskeyError('');
-   setPasskeyNotice('Device passkey enabled. This device can now verify with Face ID, Touch ID, Android biometrics or its screen lock.');
-   setPin('');
-  }catch(e:any){
-   const message=String(e?.message||'');
-   if(/passkey.*(disabled|not enabled)|passkey_disabled/i.test(message)){
-    setPasskeyError('MatMove biometric sign-in is not enabled in the Supabase Authentication settings yet. Continue using your passcode until Passkeys are enabled for the MatMove domain.');
-   }else{
-    setPasskeyError(message||'Biometric setup could not be completed. You can still use your MatMove passcode.');
-   }
-  }finally{mutex.current=false;setPasskeyBusy(false);}
- }
-
- async function unlockWithBiometric(){
-  if(mutex.current||passkeyBusy||!biometricSupported||!status?.configured||status.digits<6)return;
-  mutex.current=true;setPasskeyBusy(true);setPasskeyError('');setPasskeyNotice('');
-  try{
-   const result=await (supabase.auth as any).signInWithPasskey();
-   if(result.error)throw result.error;
-   if(result.data?.user?.id!==userId)throw Error('The passkey belongs to a different MatMove account. Your account has not been unlocked.');
-   const receipt=await customerPasscode(userId,'status');
-   if(!receipt.configured||receipt.digits<6)throw Error('Create or upgrade your 6–9 digit MatMove passcode before using biometric unlock.');
-   const currentSession=await supabase.auth.getSession();
-   if(currentSession.error||currentSession.data.session?.user.id!==userId)throw Error('The passkey session could not be verified for this account.');
-   setStatus(receipt);clear();setUpgrade(false);setPortalUnlocked(userId,true);unlockedNow.current=true;setEnteredUser(userId);setUnlocked(true);
-  }catch(e:any){
-   setPasskeyError(e?.message||'Biometric verification failed. Enter your MatMove passcode instead.');
-  }finally{mutex.current=false;setPasskeyBusy(false);}
- }
  const pinField=(label:string,value:string,key:'pin'|'next'|'confirm',length:number)=><button type="button" aria-label={label} aria-pressed={activePinField===key} disabled={busy} onClick={()=>setActivePinField(key)} className={`block w-full rounded-xl border p-3 text-left transition ${activePinField===key?'border-emerald-500 bg-emerald-50':'border-slate-200 bg-slate-50'}`}><span className="block text-xs font-semibold text-slate-600">{label}:</span><span className="mt-2 flex min-h-8 items-center justify-center gap-3" aria-label={`${value.length} of ${length} digits entered`} aria-live="polite" data-passcode-length={value.length}>{Array.from({length},(_,i)=><span key={i} className={`h-2.5 w-2.5 rounded-full ${i<value.length?'bg-emerald-700':'bg-slate-300'}`}/>)}</span></button>;
  const pinMirror=(label:string,value:string,key:'pin'|'next'|'confirm',set:(v:string)=>void,length:number)=><input
   ref={key===activePinField?pinEntryRef:null}
@@ -216,7 +127,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const deleteLastDigit=()=>{if(busy)return;const setter=activePinField==='pin'?setPin:activePinField==='next'?setNext:setConfirm;const value=activePinField==='pin'?pin:activePinField==='next'?next:confirm;setter(value.slice(0,-1));};
  useEffect(()=>{
   const onKeyDown=(event:KeyboardEvent)=>{
-   if(allowed||forgotMode||!status||busy||passkeyBusy||event.repeat)return;
+   if(allowed||forgotMode||!status||busy||event.repeat)return;
    const target=event.target as HTMLElement|null;
    if(target?.closest('input,textarea,select,[contenteditable="true"]')&&target!==pinEntryRef.current)return;
    const digit=/^[0-9]$/.test(event.key)?event.key:/^Numpad[0-9]$/.test(event.code)?event.code.slice(-1):null;
@@ -226,7 +137,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
   };
   window.addEventListener('keydown',onKeyDown);
   return()=>window.removeEventListener('keydown',onKeyDown);
- },[allowed,forgotMode,status,busy,passkeyBusy,activePinField,pin,next,confirm,upgrade]);
+ },[allowed,forgotMode,status,busy,activePinField,pin,next,confirm,upgrade]);
  useEffect(()=>{
   if(!allowed&&!forgotMode&&status&&!busy)pinEntryRef.current?.focus({preventScroll:true});
  },[allowed,forgotMode,status?.userId,activePinField,busy]);
@@ -275,14 +186,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
                 {!creating&&!upgrade&&<>{pinField(`Current ${status.digits}-digit passcode`,pin,'pin',status.digits)}{pinMirror(`Current ${status.digits}-digit passcode`,pin,'pin',setPin,status.digits)}</>}
                 {(creating||upgrade)&&<>{pinField('New passcode (6–9 digits)',next,'next',9)}{pinMirror('New passcode (6–9 digits)',next,'next',setNext,9)}{pinField('Confirm passcode',confirm,'confirm',9)}{pinMirror('Confirm passcode',confirm,'confirm',setConfirm,9)}</>}
                 {keypad}
-                <button type="submit" disabled={busy||passkeyBusy} className="h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">{creating||upgrade?'Save passcode':'Unlock'}</button>
-                {biometricSupported&&status?.configured&&status.digits>=6&&(passkeyCount??0)===0&&<button type="button" disabled={busy||passkeyBusy} onClick={()=>void registerBiometric()} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-bold text-emerald-800 disabled:opacity-50">{passkeyBusy?'Setting up biometrics…':'Set up Face ID / device biometrics'}</button>}
-                {biometricSupported&&status?.configured&&status.digits>=6&&(passkeyCount??0)>0&&<button type="button" disabled={busy||passkeyBusy} onClick={()=>void unlockWithBiometric()} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-bold text-emerald-800 disabled:opacity-50">{passkeyBusy?'Verifying biometrics…':'Unlock with Face ID / biometrics'}</button>}
-                {biometricSupported&&status?.configured&&status.digits>=6&&(passkeyCount??0)>0&&<button type="button" disabled={busy||passkeyBusy} onClick={()=>void registerBiometric()} className="min-h-9 w-full text-xs text-slate-600 underline">Add another device passkey</button>}
-                {!biometricSupported&&<p className="text-center text-xs text-slate-500">This browser does not report a device biometric authenticator. You can always use your MatMove passcode.</p>}
-                {passkeyCheckError&&<p role="status" className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{passkeyCheckError}</p>}
-                {passkeyNotice&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">{passkeyNotice}</p>}
-                {passkeyError&&<p role="alert" className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">{passkeyError}</p>}
+                <button type="submit" disabled={busy} className="h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">{creating||upgrade?'Save passcode':'Unlock'}</button>
                </>}
                
                {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p>}

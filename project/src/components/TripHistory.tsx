@@ -73,14 +73,14 @@ export default function TripHistory({ userId, role, onResume, accountLabel, acco
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [period,setPeriod]=useState<'30'|'90'|'all'>('all');
-  const [tripView,setTripView]=useState<'active'|'pending'|'history'>('active');
+  const [tripView,setTripView]=useState<'active'|'pending'|'history'>(role==='driver'?'active':'pending');
   const [statusFilter,setStatusFilter]=useState<'all'|'pending'|'pending_admin'|'cash_reserve_pending'|'cash_review_required'|'accepted'|'in_progress'|'completed'|'cancelled'>('all');
   const dialog = useRef<HTMLDialogElement>(null);
   const owner=useRef(userId);owner.current=userId;
-  const mounted=useRef(false),inFlight=useRef(false),revision=useRef(0),abort=useRef<AbortController|null>(null);
+  const mounted=useRef(false),inFlight=useRef(false),queuedRefresh=useRef(false),revision=useRef(0),abort=useRef<AbortController|null>(null);
   const [loadedOwner,setLoadedOwner]=useState(userId);
   const refresh = useCallback(async () => {
-    if(inFlight.current)return;inFlight.current=true;const n=++revision.current,id=userId;
+    if(inFlight.current){queuedRefresh.current=true;return;}inFlight.current=true;const n=++revision.current,id=userId;
     const controller=new AbortController();abort.current=controller;const timeout=setTimeout(()=>controller.abort(),15000);
     const live=()=>mounted.current&&owner.current===id&&revision.current===n;
     try{
@@ -105,7 +105,7 @@ export default function TripHistory({ userId, role, onResume, accountLabel, acco
       const after=await supabase.auth.getSession();if(after.error||after.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
       if(live()){setTrips(enriched);setLoadedOwner(id);setError('');}
     }catch(e){if(live()){setError(e instanceof Error?e.message:'Trip history could not be refreshed. Showing the last successfully loaded records if available.');}}
-    finally{clearTimeout(timeout);if(live()){inFlight.current=false;setLoading(false);}}
+    finally{clearTimeout(timeout);if(live()){inFlight.current=false;setLoading(false);if(queuedRefresh.current){queuedRefresh.current=false;queueMicrotask(()=>void refresh());}}}
   }, [userId, role]);
   useEffect(() => {
     mounted.current=true;revision.current++;inFlight.current=false;setTrips([]);setLoadedOwner(userId);setSelectedId(null);setLoading(true);setError('');

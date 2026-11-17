@@ -14,7 +14,9 @@ test('customer home starts with ride intent, role-aware services and no more tha
 });
 test('passcode is a full-screen overlay and preserves the mounted customer workspace',async()=>{
  const [app,pass]=await Promise.all([read('../src/App.tsx'),read('../src/components/CustomerPasscode.tsx')]);
- assert.match(app,/useState<PortalSection>\('home'\)/);
+ assert.match(app,/useState<PortalSection>\(\(\) =>/);
+ assert.match(app,/sessionStorage\.getItem\(\`matmove:portal-section:v1:/);
+ assert.match(app,/localStorage\.getItem\(\`matmove:active-booking:v1:/);
  assert.match(pass,/showModal\(\)/);
  assert.match(pass,/hidden=\{!allowed\}/);
  assert.match(pass,/enteredUser===userId&&children\(lock\)/);

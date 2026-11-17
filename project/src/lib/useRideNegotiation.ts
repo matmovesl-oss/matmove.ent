@@ -5,6 +5,29 @@ import type { FareSnapshot } from '@/services/fareNegotiationService';
 import { attachTripContacts } from '@/lib/tripContacts';
 import { readCashRideStatus } from '@/services/rideService';
 
+const activeBookingStorageKey = (userId: string) => `matmove:active-booking:v1:${userId}`;
+
+function readSavedActiveBooking(userId: string): string {
+  if (typeof window === 'undefined' || !userId) return '';
+  try {
+    const id = window.localStorage.getItem(activeBookingStorageKey(userId)) || '';
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : '';
+  } catch {
+    return '';
+  }
+}
+
+function saveActiveBooking(userId: string, bookingId: string | null) {
+  if (typeof window === 'undefined' || !userId) return;
+  try {
+    const key = activeBookingStorageKey(userId);
+    if (bookingId) window.localStorage.setItem(key, bookingId);
+    else window.localStorage.removeItem(key);
+  } catch {
+    // Server-side booking reads remain authoritative if browser storage is unavailable.
+  }
+}
+
 // A booking poll may have started before a customer confirmed a newer fare.
 // Keep that fare while still accepting fresh trip status/driver details.
 export function mergeRideRow(previous: any, incoming: any) {
@@ -42,7 +65,7 @@ export function useCustomerActiveRide(userId: string, resumeBookingId: string | 
   const [retryCount, setRetryCount] = useState(0);
   const [bookings,setBookings]=useState<any[]>([]);
   const [creating,setCreating]=useState(false);
-  const selection=useRef(resumeBookingId || '');
+  const selection=useRef(resumeBookingId || readSavedActiveBooking(userId));
   const identity = useRef(userId);
   identity.current = userId;
   const mutation = useRef(0);
@@ -55,6 +78,7 @@ export function useCustomerActiveRide(userId: string, resumeBookingId: string | 
     const retainedBooking = booking;
     const liveBooking = retainedBooking?.status === 'cash_review_required' ? null : retainedBooking;
     selection.current=liveBooking?.id||'';
+    saveActiveBooking(userId, selection.current || null);
     setBookings(old=>retainedBooking?[retainedBooking,...old.filter(row=>row.id!==retainedBooking.id)]:old.filter(row=>!terminal.current[`${userId}:${row.id}`]));
     setState(previous => ({ userId, booking: mergeRideRow(previous.userId === userId ? previous.booking : null, liveBooking), loading: false, error: '' }));
   }, [userId]);
@@ -71,7 +95,7 @@ export function useCustomerActiveRide(userId: string, resumeBookingId: string | 
 
   useEffect(() => {
     let disposed = false, busy = false, queued = false;
-    selection.current = resumeBookingId || '';
+    selection.current = resumeBookingId || readSavedActiveBooking(userId);
     if(identity.current!==state.userId){setBookings([]);setCreating(false);selection.current='';}
     setState(previous => ({ userId, booking: previous.userId === userId && resumeBookingId && previous.booking?.id === resumeBookingId ? previous.booking : null, loading: true, error: '' }));
     const refresh = async () => {
@@ -96,10 +120,20 @@ export function useCustomerActiveRide(userId: string, resumeBookingId: string | 
           } catch { /* Keep the last verified handover state on transient read failures. */ }
         }));
         const withCash = enriched.map(row => ({ ...row, cashPayment:cashById.get(row.id) || row.cashPayment || null }));
-        const data=selection.current ? withCash.find(row=>row.id===selection.current && row.status!=='cash_review_required') || null : null;
+        const exact = selection.current
+          ? withCash.find(row=>row.id===selection.current && row.status!=='cash_review_required' && !terminal.current[`${userId}:${row.id}`]) || null
+          : null;
+        // When there is no saved pointer (fresh browser, passcode restart or
+        // cleared storage), restore the newest server-confirmed unfinished request.
+        const data = exact || withCash.find(row=>
+          ['pending','pending_admin','cash_reserve_pending','accepted','in_progress'].includes(row.status) &&
+          !terminal.current[`${userId}:${row.id}`]
+        ) || null;
         if (!disposed && identity.current === userId && version === mutation.current) {
+          selection.current = data?.id || '';
+          saveActiveBooking(userId, selection.current || null);
           setBookings(previous=>withCash.map(row=>mergeRideRow(previous.find(old=>old.id===row.id),row)));
-          setState(previous => ({ userId, booking: mergeRideRow(previous.userId === userId ? previous.booking : null, data&&terminal.current[`${userId}:${data.id}`]?null:data || null), loading: false, error: '' }));
+          setState(previous => ({ userId, booking: mergeRideRow(previous.userId === userId ? previous.booking : null, data || null), loading: false, error: '' }));
         }
       } catch {
         if (!disposed && identity.current === userId && version === mutation.current) {
@@ -133,7 +167,7 @@ export function useCustomerActiveRide(userId: string, resumeBookingId: string | 
 
   const retry = useCallback(() => setRetryCount(value => value + 1), []);
   const current = state.userId === userId ? state : { userId, booking: null, loading: true, error: '' };
-  const selectBooking=(id:string)=>{const row=bookings.find(item=>item.id===id&&item.rider_id===userId);if(!row||row.status==='cash_review_required'||identity.current!==userId)return;selection.current=id;mutation.current++;setCreating(false);setState({userId,booking:row,loading:false,error:''});};
+  const selectBooking=(id:string)=>{const row=bookings.find(item=>item.id===id&&item.rider_id===userId);if(!row||row.status==='cash_review_required'||identity.current!==userId)return;selection.current=id;saveActiveBooking(userId,id);mutation.current++;setCreating(false);setState({userId,booking:row,loading:false,error:''});};
   const canCreate=current.userId===userId&&!current.loading&&!current.error;
   const startNewBooking=()=>{if(!canCreate)return;mutation.current++;setCreating(true);};
   return { ...current, booking:creating?null:current.booking, bookings:bookings.filter(row=>row.rider_id===userId), hasUnfinishedBookings:bookings.some(row=>row.rider_id===userId&&['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(row.status)), hasCashReviewCases:bookings.some(row=>row.rider_id===userId&&row.status==='cash_review_required'), creating,canCreate,selectBooking,startNewBooking,setBooking,applySnapshot,retry };

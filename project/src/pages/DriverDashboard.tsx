@@ -82,6 +82,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
   };
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [requestsLoading, setRequestsLoading] = useState(false);
+  const requestsLoadedOwner = useRef('');
   const [requestsError, setRequestsError] = useState('');
   const [requestsRetry, setRequestsRetry] = useState(0);
   const [mapReady, setMapReady] = useState(false);
@@ -236,12 +237,13 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
 
   useEffect(() => {
     if (activeSection !== 'home') { setRequestsLoading(false); setRequestsError(''); return; }
-    let disposed = false, busy = false, queued = false;
-    setRequestsLoading(true); setRequestsError('');
+    let disposed = false, busy = false, queued = false, loadedSuccessfully = false;
+    if (requestsLoadedOwner.current !== profile.id) setRequestsLoading(true);
+    setRequestsError('');
     const fetchInitialRequests = async () => {
       if (disposed) return;
       if (busy) { queued = true; return; }
-      busy = true; const readVersion = radarMutation.current; setRequestsLoading(true);
+      busy = true; const readVersion = radarMutation.current;
       try {
         const { data, error } = await supabase.from('bookings')
           .select('*')
@@ -265,11 +267,13 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
           setActiveRequests(previous => withCash.map(item => mergeRideRow(previous.find(old => old.id === item.id), item)));
           setNegotiatingId(previous => enriched.some(item => !item.driver_id && item.id === previous && ['pending', 'pending_admin'].includes(item.status)) ? previous : null);
           setRequestsError('');
+          loadedSuccessfully = true;
         }
       } catch { if (!disposed) setRequestsError('Could not load ride requests. Check your connection and retry.'); }
       finally {
         busy = false;
         if (!disposed) {
+          if (loadedSuccessfully) requestsLoadedOwner.current = profile.id;
           setRequestsLoading(false);
           if (queued) { queued = false; void fetchInitialRequests(); }
         }
@@ -281,7 +285,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
     const channel = supabase.channel(`driver-radar-${profile.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => { void fetchInitialRequests(); void fetchLiveBalance(); })
       .subscribe(status=>{if(status==='SUBSCRIBED')void fetchInitialRequests();});
-    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void fetchInitialRequests(); }, 5000);
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void fetchInitialRequests(); }, 10000);
     document.addEventListener('visibilitychange',onVisibility);
     window.addEventListener('focus',refreshOnResume);
     window.addEventListener('pageshow',refreshOnResume);
@@ -499,7 +503,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
                       </span>
                       <div>
                         <span className="text-2xl font-bold text-slate-900 block text-right">{Number.isFinite(Number(r.fare_amount))&&Number(r.fare_amount)>0?`SLE ${Number(r.fare_amount).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`:'Fare awaiting confirmation'}</span>
-                        {Number.isFinite(Number(r.fare_amount))&&Number(r.fare_amount)>0&&<span className="text-[10px] font-bold text-emerald-600 block text-right bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mt-1">{r.payment_method === 'cash' ? 'Physical cash due: ' : 'Estimated take-home: '}SLE {(r.fare_amount * 0.85).toFixed(2)}</span>}
+                        {Number.isFinite(Number(r.fare_amount))&&Number(r.fare_amount)>0&&<span className="text-[10px] font-bold text-emerald-600 block text-right bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mt-1">{r.payment_method === 'cash' ? 'Physical cash due: ' : 'Digital · escrow-backed driver share: '}SLE {(r.fare_amount * 0.85).toFixed(2)}</span>}
                       </div>
                     </div>
 

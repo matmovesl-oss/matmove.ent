@@ -171,9 +171,26 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
   const [portalError, setPortalError] =
     useState('');
 
-  // The passcode overlay keeps the current customer section mounted; do not reset a live request when the app is locked.
-  const [activeSection, setActiveSection] = useState<PortalSection>('home');
-  const [resumeTripId, setResumeTripId] = useState<string | null>(null);
+  // Restore the same portal tab and booking after a passcode lock, reload or app resume.
+  const savedSections: PortalSection[] = ['home','ride','services','wallet','trips','account',...(portalSession?.roles?.[0]==='rider'?['shop' as PortalSection]:portalSession?.roles?.[0]==='merchant'?['inventory' as PortalSection]:[])];
+  const [activeSection, setActiveSection] = useState<PortalSection>(() => {
+    try {
+      const saved = sessionStorage.getItem(`matmove:portal-section:v1:${sectionOwner}`) as PortalSection | null;
+      return saved && savedSections.includes(saved) ? saved : 'home';
+    } catch { return 'home'; }
+  });
+  const [resumeTripId, setResumeTripId] = useState<string | null>(() => {
+    try { return localStorage.getItem(`matmove:active-booking:v1:${sectionOwner}`); }
+    catch { return null; }
+  });
+  const rememberTrip = (bookingId: string | null) => {
+    try {
+      const key = `matmove:active-booking:v1:${sectionOwner}`;
+      if (bookingId) localStorage.setItem(key, bookingId);
+      else localStorage.removeItem(key);
+    } catch { /* Server-side unfinished-booking recovery remains authoritative. */ }
+    setResumeTripId(bookingId);
+  };
   const [guideReplay,setGuideReplay]=useState(0);
   const [sectionTransitioning,setSectionTransitioning]=useState(false);
   const previousSectionRef=useRef(activeSection);
@@ -419,8 +436,8 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
             wallet={wallet}
             activeSection={activeSection === 'ride' ? 'home' : activeSection}
             resumeTripId={resumeTripId}
-            onResumeTrip={(bookingId:string)=>{setResumeTripId(bookingId);setActiveSection('ride');}}
-            onOpenTrips={()=>setActiveSection('trips')}
+            onResumeTrip={(bookingId:string)=>{rememberTrip(bookingId);setActiveSection('ride');}}
+            onOpenTrips={(bookingId?:string|null)=>{if(bookingId)rememberTrip(bookingId);setActiveSection('trips');}}
             onBack={() => setActiveSection('home')}
           />
         )}
@@ -431,7 +448,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
             wallet={wallet}
             activeSection={activeSection === 'ride' ? 'home' : activeSection}
             resumeTripId={resumeTripId}
-            onResumeTrip={(bookingId:string)=>{setResumeTripId(bookingId);setActiveSection('ride');}}
+            onResumeTrip={(bookingId:string)=>{rememberTrip(bookingId);setActiveSection('ride');}}
           />
         )}
 
@@ -441,15 +458,15 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
             wallet={wallet}
             activeSection={activeSection === 'ride' ? 'home' : activeSection}
             resumeTripId={resumeTripId}
-            onResumeTrip={(bookingId:string)=>{setResumeTripId(bookingId);setActiveSection('ride');}}
-            onOpenTrips={()=>setActiveSection('trips')}
+            onResumeTrip={(bookingId:string)=>{rememberTrip(bookingId);setActiveSection('ride');}}
+            onOpenTrips={(bookingId?:string|null)=>{if(bookingId)rememberTrip(bookingId);setActiveSection('trips');}}
           />
         )}
       </div>
 
       <PortalNavigation
         activeSection={activeSection}
-        onNavigate={(section:PortalSection)=>{if(section==='ride')setResumeTripId(null);setActiveSection(section);}}
+        onNavigate={(section:PortalSection)=>setActiveSection(section)}
         role={role}
       />
     </div>
