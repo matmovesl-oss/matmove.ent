@@ -90,7 +90,7 @@ test('Rider and Merchant can create separately while unfinished requests remain 
  const merchant=readFileSync(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
  assert.match(negotiation,/const canCreate=current\.userId===userId&&!current\.loading&&!current\.error;/);
  assert.match(negotiation,/hasUnfinishedBookings:bookings\.some/);
- assert.match(negotiation,/const data=selection\.current \? withCash\.find\(row=>row\.id===selection\.current\) \|\| null : null/);
+ assert.match(negotiation,/const data=selection\\.current \\? withCash\\.find\\(row=>row\\.id===selection\\.current && row\\.status!==\'cash_review_required\'\\) \\|\\| null : null/);
  assert.match(trips,/onResume\(t\.id\)/);
  assert.doesNotMatch(rider,/CustomerTripSwitcher/);
  assert.doesNotMatch(merchant,/CustomerTripSwitcher/);
