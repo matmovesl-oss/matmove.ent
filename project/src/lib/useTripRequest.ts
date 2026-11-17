@@ -36,8 +36,8 @@ export function useTripRequest(userId:string){
    const before=await supabase.auth.getSession();
    if(before.error||before.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
    let row:any=null;
-   if(retained?.id){
-    const exact=await supabase.from('bookings').select('*').eq('id',retained.id).eq('rider_id',id).maybeSingle();
+   const saved=retainedRef.current;\n   if(saved?.id){
+    const exact=await supabase.from('bookings').select('*').eq('id',saved.id).eq('rider_id',id).maybeSingle();
     if(exact.error)throw Error('The original request could not be checked. Your saved reference is preserved; retry without creating another ride.');
     row=exact.data;
     if(row&&(row.rider_id!==id||!validBookingStatuses.includes(row.status)))throw Error('The original request ownership or status could not be verified.');
