@@ -312,9 +312,11 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
   const handleRequest = async () => {
     if (tripLoading || tripError || activeBooking || isRequesting) return;
+    let recoveredSavedRequest = false;
     if (tripRequest.retained) {
       try {
         const restored = await tripRequest.restore();
+        recoveredSavedRequest = true;
         if (restored) {
           setActiveBooking(restored);
           setViewMode('active');
@@ -328,7 +330,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
         return;
       }
     }
-    if (tripRequest.error) {
+    if (tripRequest.error && !recoveredSavedRequest) {
       setRideNotice(tripRequest.error);
       return;
     }
