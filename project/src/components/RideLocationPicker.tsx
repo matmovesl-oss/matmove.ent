@@ -107,6 +107,9 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
   };
   const invalidate = (target: Target, text: string) => {
     stopVoice();
+    setEditingRoute(true);
+    setLocationPanelExpanded(true);
+    onRouteEditingChange?.(true);
     searchEpoch.current++;
     if(debounce.current!==null){window.clearTimeout(debounce.current);timers.current.delete(debounce.current);debounce.current=null;}
     setSuggestions(null);setActiveSuggestion(-1);
@@ -415,7 +418,13 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
       const meters = result?.routes?.[0]?.legs?.[0]?.distance?.value;
       if (status === 'OK' && result && typeof meters === 'number' && Number.isFinite(meters) && meters > 0) {
         renderer.current?.setMap(map.current); renderer.current?.setDirections(result);
-        value.current.distanceKm = meters / 1000; setDistance(meters / 1000);setMessage('Route preview ready. Check both pins and the fare before requesting.'); emit();
+        value.current.distanceKm = meters / 1000;
+        setDistance(meters / 1000);
+        setMessage('Route preview ready. Check both pins and the fare before requesting.');
+        setEditingRoute(false);
+        setLocationPanelExpanded(false);
+        onRouteEditingChange?.(false);
+        emit();
       } else setMessage(status==='REQUEST_DENIED'?'Route service is unavailable. Contact MatMove support or retry after the map configuration is corrected.':'Could not calculate this driving route. Check both pins and retry.');
     });}catch{stopTimeout();completed=true;setRouting(false);setMessage('Route service could not start. Check your connection and retry the preview.');}
   }
