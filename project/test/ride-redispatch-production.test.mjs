@@ -15,6 +15,7 @@ test('driver cancellation keeps the same booking and retains verified digital es
   assert.match(migration, /rp\.state <> 'funded'/);
   assert.match(migration, /cp\.status <> 'fee_reserved'/);
   assert.match(migration, /paymentHoldRetained', true/);
+  assert.match(migration, /verified_currency = cp\.currency/);
   assert.match(migration, /matmove_excluded_driver_ids/);
   assert.match(migration, /driver_redispatch_queued/);
   assert.doesNotMatch(migration, /insert into public\.ride_payment_transfers\s*\([\s\S]{0,300}kind,\s*amount_minor[\s\S]{0,100}'refund'/i);
