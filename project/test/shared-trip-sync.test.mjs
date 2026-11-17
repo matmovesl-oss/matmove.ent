@@ -130,3 +130,14 @@ test('scheduled stale cash return quarantine closes dispatch without settling or
  assert.doesNotMatch(migration,/insert into public\.matmove_cash_ride_legs/i);
  assert.doesNotMatch(migration,/set cash_return_status\s*=|set manual_resolution_at\s*=/i);
 });
+
+test('cash review is not a retained active-request pointer and does not block a fresh customer booking',async()=>{
+ const request=await read('../src/lib/useTripRequest.ts');
+ const rider=await read('../src/pages/RiderDashboard.tsx');
+ const merchant=await read('../src/pages/MerchantDashboard.tsx');
+ const restore=request.slice(request.indexOf('async function restore'),request.indexOf('async function submit'));
+ assert.match(restore,/row&&\['cash_review_required','completed','cancelled'\]\.includes\(row\.status\)\)row=null/);
+ assert.match(restore,/\.in\('status',\['pending','pending_admin','cash_reserve_pending','accepted','in_progress'\]\)/);
+ assert.match(rider,/const restored = await tripRequest\.restore\(\)/);
+ assert.match(merchant,/const restored = await tripRequest\.restore\(\)/);
+});
