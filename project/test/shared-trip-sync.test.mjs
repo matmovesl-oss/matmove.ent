@@ -120,8 +120,7 @@ test('review-only cash bookings stay in Trips but are excluded from the Rider an
 test('scheduled stale cash return quarantine closes dispatch without settling or refunding money',async()=>{
  const migration=await read('../supabase/migrations/20261117033000_matmove_stale_cash_handover_quarantine_v1.sql');
  assert.ok(migration.includes("cash_return_requested_at < pg_catalog.clock_timestamp() - interval '24 hours'"));
- assert.match(migration,/cp\.cash_return_driver_confirmed_at is null/);
- assert.match(migration,/cp\.cash_return_rider_confirmed_at is null/);
+ assert.match(migration,/cp\.cash_return_driver_confirmed_at is null\s+or cp\.cash_return_rider_confirmed_at is null/);
  assert.match(migration,/set status='review_required'/);
  assert.match(migration,/set status='cash_review_required'/);
  assert.match(migration,/cashDispatchClosedForReview/);
@@ -152,4 +151,52 @@ test('restored cash-review pointer is cleared synchronously before Rider and Mer
  assert.ok(request.includes('const savedRequest = retainedRef.current;'));
  assert.ok(request.includes('const body = savedRequest ||'));
  for(const page of [rider,merchant]) assert.match(page,/recoveredSavedRequest = true/);
+});
+
+
+test('Rider and Merchant route editing use one synchronized sheet and wait for a valid route preview',async()=>{
+ const [rider,merchant,picker]=await Promise.all([
+  read('../src/pages/RiderDashboard.tsx'),
+  read('../src/pages/MerchantDashboard.tsx'),
+  read('../src/components/RideLocationPicker.tsx')
+ ]);
+ for(const source of [rider,merchant]){
+  assert.match(source,/bookingReady=\{Boolean\(pickupCoords && destinationCoords && !routeEditing\)\}/);
+  assert.doesNotMatch(source,/setRouteEditing\(!ready\)/);
+ }
+ assert.match(picker,/setEditingRoute\(true\);\s*setLocationPanelExpanded\(true\);\s*onRouteEditingChange\?\.\(true\)/);
+ assert.match(picker,/setEditingRoute\(false\);\s*setLocationPanelExpanded\(false\);\s*onRouteEditingChange\?\.\(false\)/);
+ assert.match(picker,/status === 'OK'[\s\S]*setEditingRoute\(false\)/);
+});
+
+test('Rider Ride tab displays the unfinished cash-review notice instead of hiding it on Home only',async()=>{
+ const rider=await read('../src/pages/RiderDashboard.tsx');
+ assert.match(rider,/\(activeSection === 'home' \|\| activeSection === 'ride'\) && hasUnfinishedBookings && !activeBooking/);
+ assert.match(rider,/A previous cash request is under review/);
+});
+
+test('stale cash requests with an exact verified fee reserve are closed from live matching without refunding or capturing',async()=>{
+ const migration=await read('../supabase/migrations/20261117033000_matmove_stale_cash_handover_quarantine_v1.sql');
+ assert.match(migration,/b\.status in \('pending','pending_admin'\)/);
+ assert.match(migration,/b\.driver_id is null[\s\S]*b\.started_at is null/);
+ assert.match(migration,/cp\.status='fee_reserved'/);
+ assert.match(migration,/cp\.cash_return_status='not_requested'/);
+ assert.match(migration,/reserve\.status='completed'/);
+ assert.match(migration,/reserve\.verified_amount_minor=cp\.matmove_fee_minor/);
+ assert.match(migration,/reserve\.verified_currency=cp\.currency/);
+ assert.match(migration,/set status='review_required'/);
+ assert.match(migration,/set status='cash_review_required'/);
+ assert.match(migration,/stale_cash_fee_reserve_request/);
+ assert.match(migration,/staleCashReserveQuarantined/);
+ assert.match(migration,/cashDispatchClosedForReview',true/);
+ assert.match(migration,/moneyMovement',false/);
+ assert.doesNotMatch(migration,/insert into public\.matmove_cash_ride_legs/i);
+});
+
+test('Trip History distinguishes a returned cash handover from an old reserved duplicate',async()=>{
+ const trips=await read('../src/components/TripHistory.tsx');
+ assert.match(trips,/t\.cashReturn\?\.returnStatus==='driver_confirmed'/);
+ assert.match(trips,/t\.cashReturn\?\.returnStatus==='not_requested'/);
+ assert.match(trips,/verified MatMove fee reserve is awaiting support reconciliation/);
+ assert.match(trips,/driver recorded returning the physical cash/);
 });

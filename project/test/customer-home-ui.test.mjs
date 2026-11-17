@@ -55,7 +55,7 @@ test('ride booking uses a full-screen map and draggable Uber-style location shee
  assert.match(picker,/onPointerUp/);
  assert.match(picker,/Back to MatMove home/);
  assert.match(picker,/Change locations/);
- assert.match(ride,/bookingReady=\{Boolean\(pickupCoords && destinationCoords\)\}/);
+ assert.match(ride,/bookingReady=\{Boolean\(pickupCoords && destinationCoords && !routeEditing\)\}/);
  assert.match(ride,/onRouteEditingChange=\{setRouteEditing\}/);
  assert.match(ride,/fixed inset-x-0 bottom/);
  assert.match(ride,/min-h-\[148px\]/);
