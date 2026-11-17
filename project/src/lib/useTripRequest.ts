@@ -42,7 +42,7 @@ export function useTripRequest(userId:string){
    if(before.error||before.data.session?.user.id!==id)throw Error('Your sign-in changed. Reopen Trips.');
    let row:any=null;
    const savedRequest = retainedRef.current;
-   if(saved?.id){
+   if(savedRequest?.id){
     const exact=await supabase.from('bookings').select('*').eq('id',savedRequest.id).eq('rider_id',id).maybeSingle();
     if(exact.error)throw Error('The original request could not be checked. Your saved reference is preserved; retry without creating another ride.');
     row=exact.data;
