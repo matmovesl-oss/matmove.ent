@@ -23,13 +23,13 @@ async function reserveCashRide(bookingId:string,accessToken:string,signal:AbortS
 
 export function useTripRequest(userId:string){
  const key=`matmove:booking-create:v1:${userId}`;
- const [retained,setRetained]=useState<Saved|null>(null),[error,setError]=useState(''),[working,setWorking]=useState(false),[ready,setReady]=useState(false);
+ const [retained,setRetained]=useState<Saved|null>(null),[error,setError]=useState(''),[working,setWorking]=useState(false),[ready,setReady]=useState(false);\n const retainedRef=useRef<Saved|null>(null),errorRef=useRef('');
  const current=useRef(userId),mounted=useRef(false),mutex=useRef(false),epoch=useRef(0),active=useRef<AbortController|null>(null);current.current=userId;
- useEffect(()=>{mounted.current=true;epoch.current++;mutex.current=false;setRetained(null);setError('');setWorking(false);setReady(false);try{const raw=localStorage.getItem(key);if(raw){const body=JSON.parse(raw);if(!uuid.test(body?.id)||!body.details||body.details.client_version!==1)throw Error();setRetained(body);}}catch{setError('This browser cannot confirm the previous trip request. Restore browser storage before requesting another.');}finally{setReady(true);}return()=>{mounted.current=false;epoch.current++;active.current?.abort();};},[userId,key]);
+ useEffect(()=>{mounted.current=true;epoch.current++;mutex.current=false;retainedRef.current=null;errorRef.current='';setRetained(null);setError('');setWorking(false);setReady(false);try{const raw=localStorage.getItem(key);if(raw){const body=JSON.parse(raw);if(!uuid.test(body?.id)||!body.details||body.details.client_version!==1)throw Error();retainedRef.current=body;setRetained(body);}}catch{errorRef.current='This browser cannot confirm the previous trip request. Restore browser storage before requesting another.';setError(errorRef.current);}finally{setReady(true);}return()=>{mounted.current=false;epoch.current++;active.current?.abort();};},[userId,key]);
  async function restore(){
   if(!ready)throw Error('The request recovery service is still starting. Try again in a moment.');
   if(mutex.current)throw Error('A request check is already running.');
-  mutex.current=true;setWorking(true);setError('');
+  mutex.current=true;setWorking(true);errorRef.current='';setError('');
   const id=userId,n=++epoch.current;
   const live=()=>mounted.current&&current.current===id&&epoch.current===n;
   try{
@@ -58,14 +58,14 @@ export function useTripRequest(userId:string){
    localStorage.removeItem(key);setRetained(null);setError('');
    return row;
   }catch(e){
-   if(live())setError(e instanceof Error?e.message:'The original request could not be restored.');
+   if(live()){errorRef.current=e instanceof Error?e.message:'The original request could not be restored.';setError(errorRef.current);}
    throw e;
   }finally{if(live()){mutex.current=false;setWorking(false);}}
  }
 
  async function submit(details?:Record<string,unknown>){
   if(!ready)throw Error('Checking your previous trip request. Please wait.');
-  if(mutex.current||error)throw Error(error||'A trip request is already being checked.');
+  if(mutex.current||errorRef.current)throw Error(errorRef.current||'A trip request is already being checked.');
   mutex.current=true;setWorking(true);const id=userId,n=++epoch.current;const live=()=>mounted.current&&current.current===id&&epoch.current===n;
   try{
    const before=await supabase.auth.getSession();if(before.error||before.data.session?.user.id!==id||!before.data.session.access_token)throw Error('Your sign-in changed. Reopen Ride.');
@@ -104,7 +104,7 @@ export function useTripRequest(userId:string){
 
    const after=await supabase.auth.getSession();
    if(after.error||after.data.session?.user.id!==id||!live())throw Error('Your sign-in changed.');
-   localStorage.removeItem(key);setRetained(null);return confirmedBooking;
+   localStorage.removeItem(key);retainedRef.current=null;setRetained(null);errorRef.current='';setError('');return confirmedBooking;
   }finally{if(live()){mutex.current=false;setWorking(false);}}
  }
  return{retained,error,working,ready,submit,restore};
