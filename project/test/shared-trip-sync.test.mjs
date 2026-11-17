@@ -95,3 +95,61 @@ test('Driver keeps assigned unfinished rides recoverable while offline but hides
  assert.match(driver,/item\.driver_id===profile\.id\|\|\(isOnline&&!item\.driver_id/);
  assert.doesNotMatch(driver,/if \(!isOnline \|\| activeSection !== 'home'\) \{ setActiveRequests\(\[\]\)/);
 });
+
+test('Rider uses the Merchant one-sheet sequence: location selection first, vehicle/fare panel second',async()=>{
+ const rider=await read('../src/pages/RiderDashboard.tsx');
+ const merchant=await read('../src/pages/MerchantDashboard.tsx');
+ assert.match(rider,/layout="map-first"/);
+ assert.match(merchant,/layout="map-first"/);
+ assert.match(rider,/activeBooking \|\| \(pickupCoords && destinationCoords && !routeEditing\)/);
+ assert.doesNotMatch(rider,/activeBooking \|\| viewMode === 'new' \|\|/);
+ assert.match(rider,/Choose your vehicle/);
+ assert.match(rider,/Total Fare \(SLE\)/);
+});
+test('review-only cash bookings stay in Trips but are excluded from the Rider and Merchant live booking selection',async()=>{
+ const hook=await read('../src/lib/useRideNegotiation.ts');
+ const trips=await read('../src/components/TripHistory.tsx');
+ assert.match(hook,/status === 'cash_review_required' \? null/);
+ assert.match(hook,/row\.status!=='cash_review_required'/);
+ assert.match(hook,/hasCashReviewCases:bookings\.some/);
+ assert.doesNotMatch(trips,/\['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'\]\.includes\(t\.status\)&&<button[^]*?onResume/);
+ assert.match(trips,/Live dispatch is closed for this old cash request/);
+ assert.match(trips,/No cash settlement or refund has been recorded/);
+ assert.match(trips,/t\.status==='in_progress'&&t\.cashReturn/);
+});
+test('scheduled stale cash return quarantine closes dispatch without settling or refunding money',async()=>{
+ const migration=await read('../supabase/migrations/20261117033000_matmove_stale_cash_handover_quarantine_v1.sql');
+ assert.ok(migration.includes("cash_return_requested_at < pg_catalog.clock_timestamp() - interval '24 hours'"));
+ assert.match(migration,/cp\.cash_return_driver_confirmed_at is null/);
+ assert.match(migration,/cp\.cash_return_rider_confirmed_at is null/);
+ assert.match(migration,/set status='review_required'/);
+ assert.match(migration,/set status='cash_review_required'/);
+ assert.match(migration,/cashDispatchClosedForReview/);
+ assert.match(migration,/cash_handover_confirmation_stale/);
+ assert.match(migration,/moneyMovement/);
+ assert.doesNotMatch(migration,/insert into public\.matmove_cash_ride_legs/i);
+ assert.doesNotMatch(migration,/set cash_return_status\s*=|set manual_resolution_at\s*=/i);
+});
+
+test('cash review is not a retained active-request pointer and does not block a fresh customer booking',async()=>{
+ const request=await read('../src/lib/useTripRequest.ts');
+ const rider=await read('../src/pages/RiderDashboard.tsx');
+ const merchant=await read('../src/pages/MerchantDashboard.tsx');
+ const restore=request.slice(request.indexOf('async function restore'),request.indexOf('async function submit'));
+ assert.match(restore,/row&&\['cash_review_required','completed','cancelled'\]\.includes\(row\.status\)\)row=null/);
+ assert.match(restore,/\.in\('status',\['pending','pending_admin','cash_reserve_pending','accepted','in_progress'\]\)/);
+ assert.match(rider,/const restored = await tripRequest\.restore\(\)/);
+ assert.match(merchant,/const restored = await tripRequest\.restore\(\)/);
+});
+
+test('restored cash-review pointer is cleared synchronously before Rider and Merchant submit the next request',async()=>{
+ const [request,rider,merchant]=await Promise.all([
+  read('../src/lib/useTripRequest.ts'),
+  read('../src/pages/RiderDashboard.tsx'),
+  read('../src/pages/MerchantDashboard.tsx')
+ ]);
+ assert.ok(request.includes('retainedRef.current=null;setRetained(null)'));
+ assert.ok(request.includes('const savedRequest = retainedRef.current;'));
+ assert.ok(request.includes('const body = savedRequest ||'));
+ for(const page of [rider,merchant]) assert.match(page,/recoveredSavedRequest = true/);
+});

@@ -94,7 +94,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
   const sheetPointerStart=useRef<number|null>(null);
   const sheetDragStartHeight=useRef(148);
   const sheetDragged=useRef(false);
-  const { booking: activeBooking, setBooking: setActiveBooking, loading: tripLoading, error: tripError, retry: retryTrip, applySnapshot: applyFareSnapshot, hasUnfinishedBookings, canCreate: canCreateTrip } = useCustomerActiveRide(profile.id, resumeTripId || null);
+  const { booking: activeBooking, setBooking: setActiveBooking, loading: tripLoading, error: tripError, retry: retryTrip, applySnapshot: applyFareSnapshot, hasUnfinishedBookings, hasCashReviewCases, canCreate: canCreateTrip } = useCustomerActiveRide(profile.id, resumeTripId || null);
 
   useEffect(() => {
     if (resumeTripId && activeBooking?.id === resumeTripId) setBookingSheetExpanded(true);
@@ -224,8 +224,25 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
   };
 
   const handleDispatchDelivery = async () => {
-    if (tripLoading || tripError || activeBooking || !canCreateTrip || tripRequest.retained || tripRequest.error || isRequesting) return;
-    if (isRequesting) return;
+    if (tripLoading || tripError || activeBooking || !canCreateTrip || isRequesting) return;
+    let recoveredSavedRequest = false;
+    if (tripRequest.retained) {
+      try {
+        const restored = await tripRequest.restore();
+        recoveredSavedRequest = true;
+        if (restored) {
+          setActiveBooking(restored);
+          setRideNotice('An earlier request is still active. Open Trips to review that exact booking before making another one.');
+          onOpenTrips?.();
+          return;
+        }
+      } catch (error: any) {
+        setRideNotice(error?.message || 'The earlier request could not be verified. Open Trips before trying again.');
+        onOpenTrips?.();
+        return;
+      }
+    }
+    if (tripRequest.error && !recoveredSavedRequest) return;
     if (!pickupCoords || !destinationCoords) return alert('Choose pickup and destination using search or map pins.');
     if (serviceType === 'scheduled' && !scheduledTime) return alert('Select a time for your scheduled request.');
 
@@ -352,9 +369,9 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
       {activeSection==='home'&&tripRequest.error&&!tripRequest.retained&&<p role="alert" className="m-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{tripRequest.error}</p>}
       {activeSection === 'home' && hasUnfinishedBookings && !activeBooking && (
         <section className="m-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-          <h2 className="font-bold text-blue-950">You have an unfinished request</h2>
-          <p className="mt-1 text-sm text-blue-900">Existing requests are kept in Trips, separate from creating another request. Open Trips to review the original delivery or ride, verify cash or digital payment status and continue that same request.</p>
-          <button type="button" onClick={() => onOpenTrips?.()} className="mt-3 min-h-11 rounded-xl bg-blue-700 px-4 font-bold text-white">Open Trips</button>
+          <h2 className="font-bold text-blue-950">{hasCashReviewCases ? 'A previous cash request is under review' : 'You have an unfinished request'}</h2>
+          <p className="mt-1 text-sm text-blue-900">{hasCashReviewCases ? 'Its live dispatch has been closed. The original cash-return confirmations and fee reserve remain preserved for MatMove Support. No cash settlement or refund has been recorded. You can make a fresh request while the case remains visible in Trips.' : 'Existing requests are kept in Trips, separate from creating another request. Open Trips to review the original delivery or ride, verify cash or digital payment status and continue that same request.'}</p>
+          <button type="button" onClick={() => onOpenTrips?.()} className="mt-3 min-h-11 rounded-xl bg-blue-700 px-4 font-bold text-white">{hasCashReviewCases ? 'Review cash case in Trips' : 'Open Trips'}</button>
         </section>
       )}
       {activeSection === 'home' && (activeBooking || (pickupCoords && destinationCoords && !routeEditing)) && (
@@ -409,7 +426,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
                   {Number(offerAmount)>0&&<div className="mt-3 flex justify-between rounded-xl border border-slate-100 bg-white p-2 text-[11px] font-bold shadow-sm"><span className="text-emerald-700">Driver earns: SLE {(Number(offerAmount)*.85).toFixed(2)}</span><span className="text-rose-600">Platform fee: SLE {(Number(offerAmount)*.15).toFixed(2)}</span></div>}
                 </div>
                 {serviceType==='scheduled'&&<label className="block text-xs font-bold text-slate-700">Schedule your trip<input type="datetime-local" value={scheduledTime} onChange={e=>setScheduledTime(e.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm"/></label>}
-                <button type="button" onClick={()=>void handleDispatchDelivery()} disabled={isRequesting||tripLoading||!!tripError||!canCreateTrip||!!tripRequest.retained||!!tripRequest.error||!pickupCoords||!destinationCoords} className="w-full rounded-2xl bg-slate-900 py-4 font-bold text-white shadow-lg transition hover:bg-slate-800 disabled:opacity-50">{isRequesting?<Loader2 size={20} className="mx-auto animate-spin"/>:serviceType==='delivery'?'Confirm Delivery Request':'Confirm Request'}</button>
+                <button type="button" onClick={()=>void handleDispatchDelivery()} disabled={isRequesting||tripLoading||!!tripError||!canCreateTrip||(!!tripRequest.error&&!tripRequest.retained)||!pickupCoords||!destinationCoords} className="w-full rounded-2xl bg-slate-900 py-4 font-bold text-white shadow-lg transition hover:bg-slate-800 disabled:opacity-50">{isRequesting?<Loader2 size={20} className="mx-auto animate-spin"/>:serviceType==='delivery'?'Confirm Delivery Request':'Confirm Request'}</button>
               </>
             ) : (
               <div className="py-6 text-center">

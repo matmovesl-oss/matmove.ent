@@ -96,7 +96,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
     error: tripError,
     retry: retryTrip,
     applySnapshot: applyFareSnapshot,
-    hasUnfinishedBookings
+    hasUnfinishedBookings,
+    hasCashReviewCases
   } = useCustomerActiveRide(profile?.id, resumeTripId || null);
 
   useEffect(() => {
@@ -311,12 +312,25 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
   const handleRequest = async () => {
     if (tripLoading || tripError || activeBooking || isRequesting) return;
+    let recoveredSavedRequest = false;
     if (tripRequest.retained) {
-      setRideNotice('An earlier request still needs verification. Open Trips and reopen that exact request before creating another one.');
-      onOpenTrips?.();
-      return;
+      try {
+        const restored = await tripRequest.restore();
+        recoveredSavedRequest = true;
+        if (restored) {
+          setActiveBooking(restored);
+          setViewMode('active');
+          setRideNotice('An earlier request is still active. Open Trips to review that exact booking before making another one.');
+          onOpenTrips?.();
+          return;
+        }
+      } catch (error: any) {
+        setRideNotice(error?.message || 'The earlier request could not be verified. Open Trips before trying again.');
+        onOpenTrips?.();
+        return;
+      }
     }
-    if (tripRequest.error) {
+    if (tripRequest.error && !recoveredSavedRequest) {
       setRideNotice(tripRequest.error);
       return;
     }
@@ -550,16 +564,16 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       <div className="mx-auto max-w-7xl px-0 pt-2 sm:px-4">
         {activeSection === 'home' && hasUnfinishedBookings && !activeBooking && (
           <section className="mx-3 mb-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-            <h2 className="font-bold text-blue-950">You have an unfinished request</h2>
-            <p className="mt-1 text-sm text-blue-900">Existing requests are kept in Trips, separate from creating a new one. Open Trips to review the original status, cash handover or digital payment and continue that same request.</p>
-            <button type="button" onClick={() => onOpenTrips?.()} className="mt-3 min-h-11 rounded-xl bg-blue-700 px-4 font-bold text-white">Open Trips</button>
+            <h2 className="font-bold text-blue-950">{hasCashReviewCases ? 'A previous cash request is under review' : 'You have an unfinished request'}</h2>
+            <p className="mt-1 text-sm text-blue-900">{hasCashReviewCases ? 'Its live dispatch has been closed. The original cash-return confirmations and fee reserve remain preserved for MatMove Support. No cash settlement or refund has been recorded. You can make a fresh request while the case remains visible in Trips.' : 'Existing requests are kept in Trips, separate from creating a new one. Open Trips to review the original status, cash handover or digital payment and continue that same request.'}</p>
+            <button type="button" onClick={() => onOpenTrips?.()} className="mt-3 min-h-11 rounded-xl bg-blue-700 px-4 font-bold text-white">{hasCashReviewCases ? 'Review cash case in Trips' : 'Open Trips'}</button>
           </section>
         )}
       </div>
       <div className="mx-auto max-w-7xl space-y-4 px-0 pb-8 sm:px-4">
         {(activeSection === 'home' || activeSection === 'ride' || !activeSection) && (
           <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
-            {(activeBooking || viewMode === 'new' || (pickupCoords && destinationCoords && !routeEditing)) && <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[min(66dvh,700px)] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6" style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(66dvh,700px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
+            {(activeBooking || (pickupCoords && destinationCoords && !routeEditing)) && <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[min(66dvh,700px)] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6" style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(66dvh,700px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
               <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded} onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;sheetDragStartHeight.current=bookingSheetExpanded?Math.min(window.innerHeight*.66,700):148;setBookingSheetDragging(true);setBookingSheetDragDelta(0);event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={event=>{if(sheetPointerStart.current!==null){const maxHeight=Math.min(window.innerHeight*.66,700),base=sheetDragStartHeight.current,delta=event.clientY-sheetPointerStart.current;setBookingSheetDragDelta(Math.max(base-maxHeight,Math.min(base-148,delta)));}}} onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start,base=sheetDragStartHeight.current,maxHeight=Math.min(window.innerHeight*.66,700),nextHeight=Math.max(148,Math.min(maxHeight,base-delta));if(Math.abs(delta)>6){sheetDragged.current=true;setBookingSheetExpanded(delta < -6 ? true : delta > 80 ? false : bookingSheetExpanded);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}} onPointerCancel={()=>{sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}} onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}} className="mx-auto flex h-6 w-16 touch-none select-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button><div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><p className="mt-1 text-sm text-slate-500">Choose a service, set your route and review your fare.</p></div>
               {(tripError || tripRequest.error || (rideNotice && !tripRequest.retained)) && (
                 <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">
@@ -724,7 +738,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
                   <button
                     onClick={handleRequest}
-                    disabled={isRequesting || !tripRequest.ready || !!tripRequest.error}
+                    disabled={isRequesting || !tripRequest.ready || (!!tripRequest.error && !tripRequest.retained)}
                     className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4"
                   >
                     {isRequesting || tripRequest.working ? <Loader2 size={20} className="animate-spin mx-auto" /> : tripRequest.retained ? 'Check Original Request' : 'Confirm Request'}

@@ -52,9 +52,11 @@ export function useCustomerActiveRide(userId: string, resumeBookingId: string | 
     if (identity.current !== userId) return;
     mutation.current++;setCreating(false);
     if(booking?.id&&['completed','cancelled'].includes(booking.status)) {terminal.current[`${userId}:${booking.id}`]=booking.status;booking=null;}
-    selection.current=booking?.id||'';
-    setBookings(old=>booking?[booking,...old.filter(row=>row.id!==booking.id)]:old.filter(row=>!terminal.current[`${userId}:${row.id}`]));
-    setState(previous => ({ userId, booking: mergeRideRow(previous.userId === userId ? previous.booking : null, booking), loading: false, error: '' }));
+    const retainedBooking = booking;
+    const liveBooking = retainedBooking?.status === 'cash_review_required' ? null : retainedBooking;
+    selection.current=liveBooking?.id||'';
+    setBookings(old=>retainedBooking?[retainedBooking,...old.filter(row=>row.id!==retainedBooking.id)]:old.filter(row=>!terminal.current[`${userId}:${row.id}`]));
+    setState(previous => ({ userId, booking: mergeRideRow(previous.userId === userId ? previous.booking : null, liveBooking), loading: false, error: '' }));
   }, [userId]);
   const applySnapshot = useCallback((snapshot: FareSnapshot) => {
     if (identity.current !== userId || snapshot.viewerId !== userId) return;
@@ -94,7 +96,7 @@ export function useCustomerActiveRide(userId: string, resumeBookingId: string | 
           } catch { /* Keep the last verified handover state on transient read failures. */ }
         }));
         const withCash = enriched.map(row => ({ ...row, cashPayment:cashById.get(row.id) || row.cashPayment || null }));
-        const data=selection.current ? withCash.find(row=>row.id===selection.current) || null : null;
+        const data=selection.current ? withCash.find(row=>row.id===selection.current && row.status!=='cash_review_required') || null : null;
         if (!disposed && identity.current === userId && version === mutation.current) {
           setBookings(previous=>withCash.map(row=>mergeRideRow(previous.find(old=>old.id===row.id),row)));
           setState(previous => ({ userId, booking: mergeRideRow(previous.userId === userId ? previous.booking : null, data&&terminal.current[`${userId}:${data.id}`]?null:data || null), loading: false, error: '' }));
@@ -131,8 +133,8 @@ export function useCustomerActiveRide(userId: string, resumeBookingId: string | 
 
   const retry = useCallback(() => setRetryCount(value => value + 1), []);
   const current = state.userId === userId ? state : { userId, booking: null, loading: true, error: '' };
-  const selectBooking=(id:string)=>{const row=bookings.find(item=>item.id===id&&item.rider_id===userId);if(!row||identity.current!==userId)return;selection.current=id;mutation.current++;setCreating(false);setState({userId,booking:row,loading:false,error:''});};
+  const selectBooking=(id:string)=>{const row=bookings.find(item=>item.id===id&&item.rider_id===userId);if(!row||row.status==='cash_review_required'||identity.current!==userId)return;selection.current=id;mutation.current++;setCreating(false);setState({userId,booking:row,loading:false,error:''});};
   const canCreate=current.userId===userId&&!current.loading&&!current.error;
   const startNewBooking=()=>{if(!canCreate)return;mutation.current++;setCreating(true);};
-  return { ...current, booking:creating?null:current.booking, bookings:bookings.filter(row=>row.rider_id===userId), hasUnfinishedBookings:bookings.some(row=>row.rider_id===userId&&['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(row.status)), creating,canCreate,selectBooking,startNewBooking,setBooking,applySnapshot,retry };
+  return { ...current, booking:creating?null:current.booking, bookings:bookings.filter(row=>row.rider_id===userId), hasUnfinishedBookings:bookings.some(row=>row.rider_id===userId&&['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(row.status)), hasCashReviewCases:bookings.some(row=>row.rider_id===userId&&row.status==='cash_review_required'), creating,canCreate,selectBooking,startNewBooking,setBooking,applySnapshot,retry };
 }

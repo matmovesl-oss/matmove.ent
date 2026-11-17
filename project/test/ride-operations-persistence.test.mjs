@@ -90,7 +90,7 @@ test('Rider and Merchant can create separately while unfinished requests remain 
  const merchant=readFileSync(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
  assert.match(negotiation,/const canCreate=current\.userId===userId&&!current\.loading&&!current\.error;/);
  assert.match(negotiation,/hasUnfinishedBookings:bookings\.some/);
- assert.match(negotiation,/const data=selection\.current \? withCash\.find\(row=>row\.id===selection\.current\) \|\| null : null/);
+ assert.match(negotiation,/const data=selection\\.current \\? withCash\\.find\\(row=>row\\.id===selection\\.current && row\\.status!==\'cash_review_required\'\\) \\|\\| null : null/);
  assert.match(trips,/onResume\(t\.id\)/);
  assert.doesNotMatch(rider,/CustomerTripSwitcher/);
  assert.doesNotMatch(merchant,/CustomerTripSwitcher/);
@@ -129,8 +129,9 @@ test('Original request recovery verifies the exact saved reference and routes un
  const merchant=readFileSync(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
  const trips=readFileSync(new URL('../src/components/TripHistory.tsx',import.meta.url),'utf8');
  const restore=request.slice(request.indexOf('async function restore'),request.indexOf('async function submit'));
- assert.match(restore,/\.eq\('id',retained\.id\)\.eq\('rider_id',id\)/);
- assert.match(restore,/\.in\('status',\['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'\]\)/);
+ assert.match(restore,/\.eq\('id',savedRequest\.id\)\.eq\('rider_id',id\)/);
+ assert.match(restore,/\.in\('status',\['pending','pending_admin','cash_reserve_pending','accepted','in_progress'\]\)/);
+ assert.match(restore,/row&&\['cash_review_required','completed','cancelled'\]\.includes\(row\.status\)\)row=null/);
  assert.match(restore,/localStorage\.removeItem\(key\)/);
  for(const page of [rider,merchant]){
   assert.match(page,/tripRequest\.retained/);
@@ -141,3 +142,11 @@ test('Original request recovery verifies the exact saved reference and routes un
  assert.match(trips,/Reopen original request/);
 });
 
+
+test('Trip recovery clears the persisted pointer for review-only cash cases without removing the booking',()=>{
+ const request=readFileSync(new URL('../src/lib/useTripRequest.ts',import.meta.url),'utf8');
+ assert.ok(request.includes('const retainedRef = useRef<Saved | null>(null);'));
+ assert.ok(request.includes('retainedRef.current=null;setRetained(null)'));
+ assert.ok(request.includes("if(row&&['cash_review_required','completed','cancelled'].includes(row.status))row=null;"));
+ assert.ok(request.includes('const savedRequest = retainedRef.current;'));
+});
