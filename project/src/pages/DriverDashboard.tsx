@@ -224,7 +224,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
       googleMap.current = new google.maps.Map(mapContainer.current, {
         center: { lat: 8.4808, lng: -13.2290 }, zoom: 14,
         disableDefaultUI: true, zoomControl: true, clickableIcons: false,
-        gestureHandling: 'cooperative'
+        gestureHandling: 'greedy'
       });
       setMapReady(true);
     }).catch(error => { if (!disposed) setMapError(error.message || 'Could not load the map.'); });
