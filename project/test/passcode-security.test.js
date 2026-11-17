@@ -175,7 +175,7 @@ test('passcode physical keyboard handles the actual focused PIN field and numeri
 
 test('MatMove does not add an in-app biometric enrollment or unlock control',async()=>{
  const source=await readFile(new URL('../src/components/CustomerPasscode.tsx',import.meta.url),'utf8');
- assert.match(source,/customerPasscode\(userId,'status'\)/);
+ assert.match(source,/customerPasscode\(id,'status'\)/);
  assert.match(source,/customerPasscode\(id,creating\?'create':changing\?'change':'verify'/);
  assert.doesNotMatch(source,/setPasskeyCount|registerPasskey|signInWithPasskey|passkeyCheckError|biometricSupported|Face ID|Touch ID/i);
 });
