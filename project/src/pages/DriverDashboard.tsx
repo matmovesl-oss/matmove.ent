@@ -251,7 +251,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
           .order('created_at', { ascending: false });
         if (error) throw error;
         if (!Array.isArray(data)) throw new Error('Invalid radar response.');
-        const visible=data.filter(item=>item.driver_id===profile.id||(isOnline&&!item.driver_id&&item.rider_id!==profile.id&&['pending','pending_admin'].includes(item.status)));
+        const visible=data.filter(item=>item.driver_id===profile.id||(isOnline&&!item.driver_id&&item.rider_id!==profile.id&&!((item.matmove_excluded_driver_ids||[]).includes(profile.id))&&['pending','pending_admin'].includes(item.status)));
         const enriched=await attachTripContacts(visible);
         const cashById = new Map<string, any>();
         await Promise.all(enriched.filter(item => item.payment_method === 'cash' && item.driver_id === profile.id).map(async item => {
@@ -375,9 +375,17 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
       const result = await updateRide('cancel', booking.id);
       if (!mounted.current || currentDriver.current !== userId) return;
       radarMutation.current++;
-      if (result.pending) {
+      if (result.redispatched === true) {
+        setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
+        setRideNotice(booking.payment_method === 'cash'
+          ? 'You cancelled before starting. The same booking is back in driver matching, your driver account is excluded, and the original MatMove fee reserve remains protected.'
+          : 'You cancelled before starting. The same booking is back in driver matching, your driver account is excluded, and the customer escrow hold remains protected. No second debit or refund was created.');
+      } else if (result.reviewRequired === true) {
         setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
-        setRideNotice('The cash fee refund is still being verified. The booking remains under review; do not request another transfer.');
+        setRideNotice('This trip had already started or its escrow/reserve state is uncertain. It was not re-dispatched. An Admin investigation has been opened; do not initiate a refund or another transfer.');
+      } else if (result.pending) {
+        setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
+        setRideNotice('This request needs payment review. Do not collect cash or attempt another transfer.');
       } else {
         setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
         setRideNotice(booking.payment_method === 'cash'
@@ -527,7 +535,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
                           {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Arrived / Start'}
                         </button>
                         <button onClick={() => void handleCancelRide(r)} disabled={acceptingId === r.id} className="flex-1 bg-red-50 text-red-600 border border-red-200 font-bold py-3.5 rounded-xl hover:bg-red-100 disabled:opacity-50">
-                          {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Cancel (Refund)'}
+                          {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Cancel & Find Another Driver'}
                         </button>
                       </div>
                     )}

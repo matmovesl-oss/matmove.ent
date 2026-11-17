@@ -1,4 +1,5 @@
 
+import { randomUUID } from 'node:crypto';
 import {
   HttpError,
   assertAllowed,
@@ -25,7 +26,7 @@ export async function rpc(db, name, args) {
     });
 
     const known =
-      /^(FORBIDDEN|NOT_FOUND|INVALID_STATE|PAYMENT_PENDING|LEGACY_PAYMENT|INVALID_FARE|ACCOUNT_CHANGED|CANCEL_FEE_NOT_CONFIGURED|CANCEL_ALREADY_PROCESSING):/;
+      /^(FORBIDDEN|NOT_FOUND|INVALID_STATE|PAYMENT_PENDING|LEGACY_PAYMENT|INVALID_FARE|ACCOUNT_CHANGED|DISPATCH_CONFLICT|REDISPATCH_REVIEW_REQUIRED|CANCEL_FEE_NOT_CONFIGURED|CANCEL_ALREADY_PROCESSING):/;
 
     throw new HttpError(
       known.test(error.message) ? 409 : 503,
@@ -440,19 +441,33 @@ export async function rideAction(
         p_escrow_account: platform.escrow,
         p_fee_account: platform.revenue
       });
-    } else {
-      if (payment.driver_id !== user.id) {
-        throw new HttpError(
-          403,
-          'This payment has another driver.'
-        );
-      }
-
+    } else if (booking.driver_id === user.id && payment.driver_id === user.id) {
       await rpc(db, 'prepare_ride_payment', {
         p_booking_id: bookingId,
         p_actor_id: user.id,
         p_action: action
       });
+    } else if (!booking.driver_id && ['pending', 'pending_admin'].includes(booking.status)) {
+      // A prior driver cancelled before starting. Verify the replacement
+      // driver's current SLE wallet, then change only the payout beneficiary.
+      // The original rider debit and escrow hold are never recreated.
+      const driver = await customerAccount(
+        db,
+        user.id,
+        ['driver'],
+        verifyAccount
+      );
+      const requestId = uuid.test(String(req.body?.requestId || ''))
+        ? req.body.requestId
+        : randomUUID();
+      await rpc(db, 'matmove_accept_redispatched_digital', {
+        p_booking_id: bookingId,
+        p_driver_id: user.id,
+        p_driver_account: driver.id,
+        p_request_id: requestId
+      });
+    } else {
+      throw new HttpError(409, 'This payment is not available to this driver. Refresh the request.');
     }
   } else {
     if (
@@ -470,11 +485,38 @@ export async function rideAction(
 
     if (['complete', 'cancel'].includes(action)) {
       if (action === 'cancel') {
-        const isDriver = profile.role === 'driver' && booking.driver_id === user.id;
+        // A driver-role caller is allowed through to the service RPC. The database
+        // verifies the current assignment for a new cancellation, or the exact
+        // actor + request ID for an idempotent retry after unassignment.
+        const isDriver = profile.role === 'driver';
         const isRider = booking.rider_id === user.id;
 
         if (!isDriver && !isRider) {
           throw new HttpError(403, 'Only the assigned driver or customer can cancel this trip.');
+        }
+
+        if (isDriver) {
+          const requestId = uuid.test(String(req.body?.requestId || ''))
+            ? req.body.requestId
+            : randomUUID();
+          const result = await rpc(db, 'matmove_driver_cancel_redispatch', {
+            p_booking_id: bookingId,
+            p_driver_id: user.id,
+            p_request_id: requestId
+          });
+          const updatedBooking = await readBooking(db, bookingId);
+          const updatedPayment = await readPayment(db, bookingId);
+          return res.status(200).json({
+            success: result?.success === true,
+            pending: false,
+            redispatched: result?.redispatched === true,
+            reviewRequired: result?.reviewRequired === true,
+            booking: updatedBooking,
+            payment: await paymentSnapshot(db, bookingId, updatedPayment),
+            message: result?.reviewRequired
+              ? 'Admin investigation opened. The trip was not re-dispatched and no refund or payout was started.'
+              : 'Driver cancellation re-dispatched the same request. Customer escrow remains protected; no new customer debit or refund was created.'
+          });
         }
 
         // Do not silently turn an accepted rider cancellation into a full

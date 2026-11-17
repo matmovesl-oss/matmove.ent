@@ -43,8 +43,9 @@ test('assigned driver must explicitly confirm physical cash received', async () 
 
 test('driver cash cancellation does not report a refund before provider verification', async () => {
   const code = await readFile(driverFile, 'utf8');
-  assert.match(code, /if \(result\.pending\)[\s\S]*?cash fee refund is still being verified/i);
-  assert.match(code, /reserved MatMove fee refund is verified/);
+  assert.match(code, /if \(result\.redispatched === true\)[\s\S]*?original MatMove fee reserve remains protected/i);
+  assert.match(code, /else if \(result\.reviewRequired === true\)[\s\S]*?Admin investigation has been opened/i);
+  assert.doesNotMatch(code, /cash fee refund is still being verified/i);
 });
 
 test('cash trip submission uses the same booking ID for fee reservation recovery', async () => {

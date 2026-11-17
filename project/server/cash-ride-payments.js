@@ -17,6 +17,8 @@ const safeErrors = {
   CASH_CAPTURE_NOT_VERIFIED: [409, 'The MatMove fee capture has not been verified. This ride is not complete.'],
   CASH_REFUND_NOT_VERIFIED: [409, 'The cash-ride fee refund has not been verified.'],
   CASH_REVIEW_STATE_INVALID: [409, 'This cash booking is held for manual review. No further transfer will be attempted.'],
+  REDISPATCH_REVIEW_REQUIRED: [409, 'Cash payment state needs Admin investigation. No refund or re-dispatch was attempted.'],
+  DISPATCH_CONFLICT: [409, 'This request reference was already used. Refresh the booking before retrying.'],
   WALLET_FROZEN: [423, 'The rider SLE wallet is frozen. Contact MatMove support.'],
   WALLET_NOT_READY: [409, 'The rider SLE Monime wallet is not ready.'],
   ACCOUNT_LINK_CONFLICT: [409, 'The rider Monime account is linked to another wallet. Contact MatMove support.'],
@@ -27,7 +29,7 @@ const safeErrors = {
 
 function rpcErrorCode(error) {
   const message = String(error?.message || '');
-  return /^(CASH_[A-Z0-9_]+|WALLET_[A-Z0-9_]+|ACCOUNT_[A-Z0-9_]+|FORBIDDEN|INVALID_STATE|NOT_FOUND):/.exec(message)?.[1] || null;
+  return /^(CASH_[A-Z0-9_]+|WALLET_[A-Z0-9_]+|ACCOUNT_[A-Z0-9_]+|FORBIDDEN|INVALID_STATE|NOT_FOUND|REDISPATCH_REVIEW_REQUIRED|DISPATCH_CONFLICT):/.exec(message)?.[1] || null;
 }
 
 async function cashRpc(db, name, args) {
@@ -552,8 +554,32 @@ export async function cashRideAction(
 
   if (action === 'cancel') {
     const actorType = profile.role === 'driver' ? 'driver' : ['rider','merchant'].includes(profile.role) ? profile.role : null;
-    if (!actorType || (['rider','merchant'].includes(actorType) && !isRider) || (actorType === 'driver' && !isDriver)) {
+    if (!actorType || (['rider','merchant'].includes(actorType) && !isRider) || (actorType === 'driver' && profile.role !== 'driver')) {
       throw new HttpError(403, 'Only the rider or assigned driver can cancel this cash ride.');
+    }
+
+    if (actorType === 'driver') {
+      const requestId = uuid.test(String(req.body?.requestId || ''))
+        ? req.body.requestId
+        : (globalThis.crypto?.randomUUID?.() || null);
+      if (!requestId) throw new HttpError(400, 'A valid request reference is required. Refresh and retry.');
+      const result = await cashRpc(db, 'matmove_driver_cancel_redispatch', {
+        p_booking_id: bookingId,
+        p_driver_id: user.id,
+        p_request_id: requestId
+      });
+      const updatedBooking = await readBooking(db, bookingId);
+      return res.status(200).json({
+        success: result?.success === true,
+        pending: false,
+        redispatched: result?.redispatched === true,
+        reviewRequired: result?.reviewRequired === true,
+        booking: updatedBooking,
+        payment: await cashStatus(db, bookingId),
+        message: result?.reviewRequired
+          ? 'Admin investigation opened. The trip was not re-dispatched and no fee refund or additional reserve was started.'
+          : 'Driver cancellation re-dispatched the same request. The original MatMove fee reserve is retained; no second reserve or refund was created.'
+      });
     }
 
     const result = await cashRpc(db, 'matmove_cash_ride_cancel', {
