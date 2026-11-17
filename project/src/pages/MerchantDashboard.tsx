@@ -94,7 +94,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
   const sheetPointerStart=useRef<number|null>(null);
   const sheetDragStartHeight=useRef(148);
   const sheetDragged=useRef(false);
-  const { booking: activeBooking, setBooking: setActiveBooking, loading: tripLoading, error: tripError, retry: retryTrip, applySnapshot: applyFareSnapshot, hasUnfinishedBookings, canCreate: canCreateTrip } = useCustomerActiveRide(profile.id, resumeTripId || null);
+  const { booking: activeBooking, setBooking: setActiveBooking, loading: tripLoading, error: tripError, retry: retryTrip, applySnapshot: applyFareSnapshot, hasUnfinishedBookings, hasCashReviewCases, canCreate: canCreateTrip } = useCustomerActiveRide(profile.id, resumeTripId || null);
 
   useEffect(() => {
     if (resumeTripId && activeBooking?.id === resumeTripId) setBookingSheetExpanded(true);
@@ -352,9 +352,9 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
       {activeSection==='home'&&tripRequest.error&&!tripRequest.retained&&<p role="alert" className="m-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{tripRequest.error}</p>}
       {activeSection === 'home' && hasUnfinishedBookings && !activeBooking && (
         <section className="m-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-          <h2 className="font-bold text-blue-950">You have an unfinished request</h2>
-          <p className="mt-1 text-sm text-blue-900">Existing requests are kept in Trips, separate from creating another request. Open Trips to review the original delivery or ride, verify cash or digital payment status and continue that same request.</p>
-          <button type="button" onClick={() => onOpenTrips?.()} className="mt-3 min-h-11 rounded-xl bg-blue-700 px-4 font-bold text-white">Open Trips</button>
+          <h2 className="font-bold text-blue-950">{hasCashReviewCases ? 'A previous cash request is under review' : 'You have an unfinished request'}</h2>
+          <p className="mt-1 text-sm text-blue-900">{hasCashReviewCases ? 'Its live dispatch has been closed. The original cash-return confirmations and fee reserve remain preserved for MatMove Support. No cash settlement or refund has been recorded. You can make a fresh request while the case remains visible in Trips.' : 'Existing requests are kept in Trips, separate from creating another request. Open Trips to review the original delivery or ride, verify cash or digital payment status and continue that same request.'}</p>
+          <button type="button" onClick={() => onOpenTrips?.()} className="mt-3 min-h-11 rounded-xl bg-blue-700 px-4 font-bold text-white">{hasCashReviewCases ? 'Review cash case in Trips' : 'Open Trips'}</button>
         </section>
       )}
       {activeSection === 'home' && (activeBooking || (pickupCoords && destinationCoords && !routeEditing)) && (
