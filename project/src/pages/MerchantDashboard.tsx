@@ -233,7 +233,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
         if (restored) {
           setActiveBooking(restored);
           setRideNotice('An earlier request is still active. Open Trips to review that exact booking before making another one.');
-          onOpenTrips?.();
+          onOpenTrips?.(restored.id);
           return;
         }
       } catch (error: any) {
@@ -260,7 +260,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
     try {
       const data=await tripRequest.submit({client_version:1,payment_method:serviceType==='ride'?paymentMethod:'digital',service_type:serviceType,vehicle_type:vehicleType,pickup_location:pickup,destination_location:destination,fare_amount:finalAmount.toFixed(2),scheduled_time:serviceType==='scheduled'?new Date(scheduledTime).toISOString():null,passenger_count:passengerCount,passenger_name:passengerName.trim()||null,pickup_pin:{lat:pickupCoords[1],lng:pickupCoords[0]},destination_pin:{lat:destinationCoords[1],lng:destinationCoords[0]}});
       setActiveBooking(data);
-      onOpenTrips?.();
+      onOpenTrips?.(data.id);
     } catch (err: any) { alert(err.message); } finally { setIsRequesting(false); }
   };
 
