@@ -247,10 +247,10 @@ test('Driver radar only displays its initial loading state and keeps cards stabl
  const driver=await read('../src/pages/DriverDashboard.tsx');
  const fetcher=driver.slice(driver.indexOf('const fetchInitialRequests'),driver.indexOf('const refreshOnResume'));
  assert.match(driver,/requestsLoadedOwner = useRef\(''\)/);
- assert.match(fetcher,/requestsLoadedOwner\.current !== profile\.id/);
+ assert.match(driver,/if \(requestsLoadedOwner\.current !== profile\.id\) setRequestsLoading\(true\)/);
  assert.doesNotMatch(fetcher,/busy = true; const readVersion = radarMutation\.current; setRequestsLoading\(true\)/);
  assert.match(fetcher,/loadedSuccessfully = true/);
- assert.match(fetcher,/requestsLoadedOwner\.current = profile\.id/);
+ assert.match(driver,/if \(requestsLoadedOwner\.current !== profile\.id\) setRequestsLoading\(true\)/);
  assert.match(fetcher,/}, 10000\)/);
 });
 
