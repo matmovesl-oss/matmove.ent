@@ -88,9 +88,9 @@ test('Merchant location selection and Ride booking form are sequential with one 
   read('../src/pages/RiderDashboard.tsx'),
   read('../src/components/RideLocationPicker.tsx')
  ]);
- assert.match(merchant,/const \[routeEditing,setRouteEditing\]=useState\(true\)/);
+ assert.doesNotMatch(merchant,/const \[routeEditing,setRouteEditing\]=useState\(true\)/);
  assert.match(merchant,/activeBooking \|\| \(pickupCoords && destinationCoords && !routeEditing\)/);
- assert.match(merchant,/bookingReady=\{Boolean\(pickupCoords && destinationCoords\)\}/);
+ assert.match(merchant,/bookingReady=\{Boolean\(pickupCoords && destinationCoords && !routeEditing\)\}/);
  assert.match(merchant,/onRouteEditingChange=\{setRouteEditing\}/);
  assert.match(merchant,/setRouteEditing\(!ready\)/);
  assert.match(rider,/routeEditing/);
