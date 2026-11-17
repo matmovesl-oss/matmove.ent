@@ -107,8 +107,8 @@ test('digital replacement acceptance rechecks idempotency after acquiring the bo
   assert.ok(postLockPriorIndex > lockIndex, 'idempotency must be rechecked after waiting for the booking lock');
   assert.ok(paymentLockIndex > postLockPriorIndex, 'the retry result must be checked before treating the assigned booking as unavailable');
   const postLockReplay = acceptFn.slice(postLockPriorIndex, paymentLockIndex);
-  assert.match(postLockReplay, /prior\\.actor_id <> p_driver_id[\\s\\S]*prior\\.action <> 'assign'/);
-  assert.match(postLockReplay, /rp\\.driver_account = p_driver_account/);
+  assert.match(postLockReplay, /prior\.actor_id <> p_driver_id[\s\S]*prior\.action <> 'assign'/);
+  assert.match(postLockReplay, /rp\.driver_account = p_driver_account/);
 });
 
 test('review tickets cannot be opened for completed or cancelled trips', () => {
