@@ -225,9 +225,11 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
 
   const handleDispatchDelivery = async () => {
     if (tripLoading || tripError || activeBooking || !canCreateTrip || tripRequest.error || isRequesting) return;
+    let recoveredSavedRequest = false;
     if (tripRequest.retained) {
       try {
         const restored = await tripRequest.restore();
+        recoveredSavedRequest = true;
         if (restored) {
           setActiveBooking(restored);
           setRideNotice('An earlier request is still active. Open Trips to review that exact booking before making another one.');
@@ -240,7 +242,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
         return;
       }
     }
-    if (tripRequest.retained || tripRequest.error) return;
+    if (tripRequest.error && !recoveredSavedRequest) return;
     if (!pickupCoords || !destinationCoords) return alert('Choose pickup and destination using search or map pins.');
     if (serviceType === 'scheduled' && !scheduledTime) return alert('Select a time for your scheduled request.');
 
