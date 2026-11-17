@@ -95,3 +95,36 @@ test('Driver keeps assigned unfinished rides recoverable while offline but hides
  assert.match(driver,/item\.driver_id===profile\.id\|\|\(isOnline&&!item\.driver_id/);
  assert.doesNotMatch(driver,/if \(!isOnline \|\| activeSection !== 'home'\) \{ setActiveRequests\(\[\]\)/);
 });
+
+test('Rider uses the Merchant one-sheet sequence: location selection first, vehicle/fare panel second',async()=>{
+ const rider=await read('../src/pages/RiderDashboard.tsx');
+ const merchant=await read('../src/pages/MerchantDashboard.tsx');
+ assert.match(rider,/layout="map-first"/);
+ assert.match(merchant,/layout="map-first"/);
+ assert.match(rider,/activeBooking \|\| \(pickupCoords && destinationCoords && !routeEditing\)/);
+ assert.doesNotMatch(rider,/activeBooking \|\| viewMode === 'new' \|\|/);
+ assert.match(rider,/Choose your vehicle/);
+ assert.match(rider,/Total Fare \(SLE\)/);
+});
+test('review-only cash bookings stay in Trips but are excluded from the Rider and Merchant live booking selection',async()=>{
+ const hook=await read('../src/lib/useRideNegotiation.ts');
+ const trips=await read('../src/components/TripHistory.tsx');
+ assert.match(hook,/status === 'cash_review_required' \? null/);
+ assert.match(hook,/row\.status!=='cash_review_required'/);
+ assert.match(hook,/hasCashReviewCases:bookings\.some/);
+ assert.doesNotMatch(trips,/\['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'\]\.includes\(t\.status\)&&<button[^]*?onResume/);
+ assert.match(trips,/Live dispatch is closed for this old cash request/);
+ assert.match(trips,/No cash settlement or refund has been recorded/);
+});
+test('scheduled stale cash return quarantine closes dispatch without settling or refunding money',async()=>{
+ const migration=await read('../supabase/migrations/20261117033000_matmove_stale_cash_handover_quarantine_v1.sql');
+ assert.match(migration,/cash_return_requested_at < clock_timestamp\(\) - interval '24 hours'/);
+ assert.match(migration,/cash_return_driver_confirmed_at is null or cp\.cash_return_rider_confirmed_at is null/);
+ assert.match(migration,/set status='review_required'/);
+ assert.match(migration,/set status='cash_review_required'/);
+ assert.match(migration,/cashDispatchClosedForReview/);
+ assert.match(migration,/cash_handover_confirmation_stale/);
+ assert.match(migration,/moneyMovement/);
+ assert.doesNotMatch(migration,/insert into public\.matmove_cash_ride_legs/i);
+ assert.doesNotMatch(migration,/set cash_return_status\s*=|set manual_resolution_at\s*=/i);
+});
