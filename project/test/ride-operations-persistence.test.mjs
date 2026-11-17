@@ -57,7 +57,7 @@ test('Driver can resume the exact accepted ride from Trips into the live driver 
  assert.match(trips,/Continue this ride/);
  assert.match(driverDashboard,/DriverTrips profile=\{props\.profile\} onResume=\{props\.onResumeTrip\}/);
  assert.match(driverDashboard,/r\.id===resumeTripId/);
- assert.match(portal,/setResumeTripId\(bookingId\);setActiveSection\('ride'\)/);
+ assert.match(portal,/rememberTrip\(bookingId\);setActiveSection\('ride'\)/);
 });
 
 test('Driver and merchant request lists use valid booking/profile retrieval paths',()=>{
@@ -90,7 +90,7 @@ test('Rider and Merchant can create separately while unfinished requests remain 
  const merchant=readFileSync(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
  assert.match(negotiation,/const canCreate=current\.userId===userId&&!current\.loading&&!current\.error;/);
  assert.match(negotiation,/hasUnfinishedBookings:bookings\.some/);
- assert.match(negotiation,/const data=selection\\.current \\? withCash\\.find\\(row=>row\\.id===selection\\.current && row\\.status!==\'cash_review_required\'\\) \\|\\| null : null/);
+ assert.match(negotiation,/const exact = selection\.current/);\n assert.match(negotiation,/const data = exact \|\| withCash\.find/);
  assert.match(trips,/onResume\(t\.id\)/);
  assert.doesNotMatch(rider,/CustomerTripSwitcher/);
  assert.doesNotMatch(merchant,/CustomerTripSwitcher/);
