@@ -44,7 +44,7 @@ export function useTripRequest(userId:string){
    }
    if(!row){
     const latest=await supabase.from('bookings').select('*').eq('rider_id',id)
-      .in('status',['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'])
+      .in('status',['pending','pending_admin','cash_reserve_pending','accepted','in_progress'])
       .order('created_at',{ascending:false}).limit(1).maybeSingle();
     if(latest.error)throw Error('MatMove could not check your server-side unfinished requests. Your saved reference is preserved.');
     row=latest.data;
@@ -52,6 +52,9 @@ export function useTripRequest(userId:string){
    const after=await supabase.auth.getSession();
    if(after.error||after.data.session?.user.id!==id||!live())throw Error('Your sign-in changed. Reopen Trips.');
    if(row&&(row.rider_id!==id||!validBookingStatuses.includes(row.status)))throw Error('The original request could not be verified.');
+   // A quarantined cash case is retained in Trips for support, but it is no
+   // longer an active request pointer and must not block a fresh booking.
+   if(row&&['cash_review_required','completed','cancelled'].includes(row.status))row=null;
    localStorage.removeItem(key);setRetained(null);setError('');
    return row;
   }catch(e){
