@@ -321,7 +321,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
           setActiveBooking(restored);
           setViewMode('active');
           setRideNotice('An earlier request is still active. Open Trips to review that exact booking before making another one.');
-          onOpenTrips?.();
+          onOpenTrips?.(restored.id);
           return;
         }
       } catch (error: any) {
@@ -393,7 +393,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       if (paymentMethod === 'cash') void fetchLiveBalance();
       setViewMode('active');
       setRideNotice('');
-      onOpenTrips?.();
+      onOpenTrips?.(booking.id);
     } catch (err: any) {
       setRideNotice(err?.message || 'Trip request could not be confirmed. Check the original request before trying again.');
     } finally {
