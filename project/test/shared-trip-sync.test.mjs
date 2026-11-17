@@ -120,7 +120,8 @@ test('review-only cash bookings stay in Trips but are excluded from the Rider an
 test('scheduled stale cash return quarantine closes dispatch without settling or refunding money',async()=>{
  const migration=await read('../supabase/migrations/20261117033000_matmove_stale_cash_handover_quarantine_v1.sql');
  assert.ok(migration.includes("cash_return_requested_at < pg_catalog.clock_timestamp() - interval '24 hours'"));
- assert.match(migration,/cash_return_driver_confirmed_at is null or cp\.cash_return_rider_confirmed_at is null/);
+ assert.match(migration,/cp\\.cash_return_driver_confirmed_at is null/);
+ assert.match(migration,/cp\\.cash_return_rider_confirmed_at is null/);
  assert.match(migration,/set status='review_required'/);
  assert.match(migration,/set status='cash_review_required'/);
  assert.match(migration,/cashDispatchClosedForReview/);
