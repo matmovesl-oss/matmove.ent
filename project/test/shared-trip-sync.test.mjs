@@ -115,6 +115,7 @@ test('review-only cash bookings stay in Trips but are excluded from the Rider an
  assert.doesNotMatch(trips,/\['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'\]\.includes\(t\.status\)&&<button[^]*?onResume/);
  assert.match(trips,/Live dispatch is closed for this old cash request/);
  assert.match(trips,/No cash settlement or refund has been recorded/);
+ assert.match(trips,/t\.status==='in_progress'&&t\.cashReturn/);
 });
 test('scheduled stale cash return quarantine closes dispatch without settling or refunding money',async()=>{
  const migration=await read('../supabase/migrations/20261117033000_matmove_stale_cash_handover_quarantine_v1.sql');
