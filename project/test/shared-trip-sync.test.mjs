@@ -59,7 +59,7 @@ test('unresolved earlier requests are routed from Create into Trips for safe rec
   assert.doesNotMatch(source,/CustomerTripSwitcher/);
  }
  assert.match(trips,/onResume\(t\.id\)/);
- assert.match(app,/setResumeTripId\(bookingId\);setActiveSection\('ride'\)/);
+ assert.match(app,/rememberTrip\(bookingId\);setActiveSection\('ride'\)/);
 });
 test('participant contact RPC is privacy-scoped and Merchant ride requests enter the driver radar lane',async()=>{
  const sql=await read('../supabase/migrations/20261114013851_matmove_shared_ride_dispatch_and_trip_contact_cards_v1.sql');
@@ -86,8 +86,8 @@ test('Trips is the only customer location for unfinished requests and reopens th
  assert.match(trips,/onResume\(t\.id\)/);
  assert.match(trips,/Reopen original request/);
  assert.match(hook,/resumeBookingId: string \| null = null/);
- assert.match(hook,/selection\.current \? withCash\.find/);
- assert.doesNotMatch(hook,/withCash\.find\(row=>row\.id===selection\.current\)\|\|withCash\[0\]/);
+ assert.match(hook,/const data = exact \|\| withCash\.find/);
+ assert.match(hook,/readSavedActiveBooking\(userId\)/);
 });
 test('Driver keeps assigned unfinished rides recoverable while offline but hides unassigned radar requests',async()=>{
  const driver=await read('../src/pages/DriverDashboard.tsx');
