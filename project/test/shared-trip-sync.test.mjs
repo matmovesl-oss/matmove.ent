@@ -149,6 +149,6 @@ test('restored cash-review pointer is cleared synchronously before Rider and Mer
   read('../src/pages/MerchantDashboard.tsx')
  ]);
  assert.ok(request.includes('retainedRef.current=null;setRetained(null)'));
- assert.ok(request.includes('const saved=retainedRef.current;const body=saved||'));
+ assert.ok(request.includes('const savedRequest = retainedRef.current;'));\n assert.ok(request.includes('const body = savedRequest ||'));
  for(const page of [rider,merchant]) assert.match(page,/recoveredSavedRequest = true/);
 });
