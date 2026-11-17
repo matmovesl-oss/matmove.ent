@@ -636,7 +636,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
                     </button>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-3" hidden={routeEditing}>
                     <div><div className="mb-2 flex items-center justify-between"><span className="text-xs font-extrabold text-slate-800">Choose your vehicle</span><span className="text-[10px] font-semibold text-slate-400">Tap to select</span></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {(['keke', 'bike', 'car', 'van'] as const).map(v => {
                         const label = v === 'bike' ? 'Bike' : v === 'keke' ? 'Keke' : v === 'car' ? 'Car' : 'Van';
@@ -738,7 +738,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
                   <button
                     onClick={handleRequest}
-                    disabled={isRequesting || !tripRequest.ready || (!!tripRequest.error && !tripRequest.retained)}
+                    disabled={isRequesting || routeEditing || !tripRequest.ready || (!!tripRequest.error && !tripRequest.retained)}
                     className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition shadow-md mt-4"
                   >
                     {isRequesting || tripRequest.working ? <Loader2 size={20} className="animate-spin mx-auto" /> : tripRequest.retained ? 'Check Original Request' : 'Confirm Request'}
