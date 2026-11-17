@@ -132,3 +132,13 @@ test('Admin review does not expose the cancelled driver as the pending booking p
   assert.match(migration, /'payoutDriverId'',case when rp\.driver_id=b\.driver_id then rp\.driver_id else null end/);
   assert.match(migration, /'payoutAccount'',case when rp\.driver_id=b\.driver_id then rp\.driver_account else null end/);
 });
+
+
+test('the Supabase SDK manifest and npm lockfile remain synchronized for clean production installs', async () => {
+  const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  const lockfile = JSON.parse(await readFile(new URL('../package-lock.json', import.meta.url), 'utf8'));
+  assert.equal(
+    lockfile.packages?.['']?.dependencies?.['@supabase/supabase-js'],
+    manifest.dependencies?.['@supabase/supabase-js']
+  );
+});
