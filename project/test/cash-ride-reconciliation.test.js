@@ -9,7 +9,7 @@ test('cash pending-leg recovery is behind the existing scheduler secret and neve
   const api = await readFile(apiFile, 'utf8');
   assert.match(api, /secret\.length < 32/);
   assert.match(api, /from\('matmove_cash_ride_legs'\)/);
-  assert.match(api, /in\('status', \['pending','processing'\]\)/);
+  assert.match(api, /or\('status\.in\.\(pending,processing\),and\(leg_kind\.eq\.refund,status\.eq\.ready\)'\)/);
   assert.match(api, /cashBookingIds\.map\(bookingId => reconcileCashRide\(db, bookingId\)\)/);
   assert.match(api, /cashAvailable: !missingCashSchema/);
   assert.match(api, /cashFailed/);
