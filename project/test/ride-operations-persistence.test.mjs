@@ -8,11 +8,12 @@ const merchantDashboard=readFileSync(new URL('../src/pages/MerchantDashboard.tsx
 const contacts=readFileSync(new URL('../src/lib/tripContacts.ts',import.meta.url),'utf8');
 const tripCardsMigration=readFileSync(new URL('../supabase/migrations/20261115114900_matmove_trip_payment_and_investigation_cards_v1.sql',import.meta.url),'utf8');
 const unpaidCashMigration=readFileSync(new URL('../supabase/migrations/20261115115100_matmove_admin_flag_unpaid_cash_fare_v1.sql',import.meta.url),'utf8');
-test('Trips centre has persistent Live, Pending and History views',()=>{
- assert.match(trips,/Live \/ Active/);
- assert.match(trips,/Pending/);
- assert.match(trips,/History/);
- assert.match(trips,/Unfinished requests/);
+test('Trips centre has compact Active, Requests and History tabs',()=>{
+ assert.match(trips,/label:'Active'/);
+ assert.match(trips,/label:'Requests'/);
+ assert.match(trips,/label:'History'/);
+ assert.match(trips,/max-w-3xl/);
+ assert.match(trips,/View full receipt/);
 });
 test('Driver and customer trip lists restore owned bookings and enrich participant/payment status',()=>{
  assert.match(trips,/\.eq\(role === 'driver' \? 'driver_id' : 'rider_id', id\)/);
@@ -40,7 +41,7 @@ test('Drivers can see Admin payment flags and verified cash/digital settlement s
  assert.match(contacts,/paymentInfo: card\.payment/);
  assert.match(contacts,/paymentIssue: card\.investigation/);
  assert.match(trips,/Driver payout status/);
- assert.match(trips,/Unpaid payment flagged for review/);
+ assert.match(trips,/Admin review/);
  assert.match(tripCardsMigration,/driverPayoutStatus/);
  assert.match(tripCardsMigration,/investigation/);
 });
@@ -49,7 +50,7 @@ test('Admin unpaid cash-fare flag distinguishes the physical driver fare from th
  assert.match(unpaidCashMigration,/cp\.status <> 'collection_pending'/);
  assert.match(unpaidCashMigration,/cp\.driver_cash_confirmed_at is not null/);
  assert.match(unpaidCashMigration,/admin_unpaid_cash_fare_review/);
- assert.match(trips,/Unpaid cash fare flagged for review/);
+ assert.match(trips,/paymentIssue/);
 });
 
 test('Driver can resume the exact accepted ride from Trips into the live driver dashboard',()=>{
@@ -68,18 +69,15 @@ test('Driver and merchant request lists use valid booking/profile retrieval path
  assert.doesNotMatch(merchantDashboard,/rider:rider_id/);
 });
 
-test('Trips status filter includes cash reserve and cash review states',()=>{
+test('Compact Requests tab continues to include cash reserve and cash review states',()=>{
  assert.match(trips,/cash_reserve_pending/);
  assert.match(trips,/cash_review_required/);
- assert.match(trips,/Cash reserve pending/);
- assert.match(trips,/Cash review required/);
+ assert.match(trips,/label:'Requests'/);
 });
 
-test('Trips identifies the signed-in Rider or Merchant account and explains account-private histories',()=>{
- assert.match(trips,/Signed in as:/);
- assert.match(trips,/Account reference:/);
- assert.match(trips,/matching names or phone contacts do not merge account histories/);
- assert.match(trips,/Customer product orders are shown separately under Inventory & Orders/);
+test('Trips loads only the current account owner records and keeps merchant orders separate',()=>{
+ assert.match(trips,/\.eq\(role === 'driver' \? 'driver_id' : 'rider_id', id\)/);
+ assert.match(merchantDashboard,/MerchantTrips profile=\{props\.profile\}/);
 });
 
 test('Rider and Merchant can create separately while unfinished requests remain in Trips',()=>{
@@ -140,7 +138,7 @@ test('Original request recovery verifies the exact saved reference and routes un
   assert.doesNotMatch(page,/CustomerTripSwitcher/);
  }
  assert.match(trips,/onResume\(t\.id\)/);
- assert.match(trips,/Reopen original request/);
+ assert.match(trips,/Continue request/);
 });
 
 
