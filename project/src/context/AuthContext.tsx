@@ -12,6 +12,7 @@ interface AuthContextValue {
   refreshSession: () => Promise<AuthSession | null>;
   signUp: (email: string, phone: string, password: string) => Promise<boolean>;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithPasskey: () => Promise<void>;
   signOut: () => Promise<void>;
   saveAccount: (role: UserRole, phone: string) => Promise<AuthSession>;
   setRoles: (roles: UserRole[]) => Promise<void>;
@@ -65,6 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const current = await auth.signIn(email, password); setSession(current); navigate(customerPath(current));
   };
+  const signInWithPasskey = async () => {
+    const { error } = await supabase.auth.signInWithPasskey();
+    if (error) throw error;
+    const current = await auth.getCustomerSession();
+    if (!current) throw new Error('Passkey authentication was not confirmed. Use your existing sign-in method.');
+    setSession(current);
+    navigate(customerPath(current));
+  };
   const signOut = async () => { await auth.signOut(); revision.current++; setSession(null); navigate('/'); };
   const saveAccount = async (role: UserRole, phone: string) => {
     const current = await auth.saveCustomerAccount(role, phone); setSession(current); return current;
@@ -79,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!session?.roles[0]) { navigate('/select-role'); return; }
     sessionStorage.setItem('ob_role', session.roles[0]); navigate('/onboarding/personal');
   };
-  return <AuthContext.Provider value={{ session, loading, authError, refreshSession, signUp, signIn, signOut,
+  return <AuthContext.Provider value={{ session, loading, authError, refreshSession, signUp, signIn, signInWithPasskey, signOut,
     saveAccount, setRoles, completeKyc, submitKycForReview, resubmitKycForReview, resetPassword: auth.resetPassword }}>{children}</AuthContext.Provider>;
 }
 export function useAuth() {
