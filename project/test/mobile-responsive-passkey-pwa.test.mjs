@@ -52,4 +52,5 @@ test('PWA shell does not cache API, authentication or private user data', async 
   assert.match(worker, /auth\|wallet\|payment\|transaction\|profile\|booking/i);
   assert.match(worker, /APP_SHELL/);
   assert.match(worker, /offline\.html/);
+  assert.ok(worker.includes("return (await caches.match('/offline.html')) || (await caches.match('/index.html'))"), 'offline navigation must prefer the safe offline page over the cached app shell');
 });
