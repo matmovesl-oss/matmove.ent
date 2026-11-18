@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { CarFront, ArrowRight, Mail, Lock, Phone, Eye, EyeOff, ShieldCheck, Zap } from 'lucide-react';
 import { AuthShell, AuthFormCard, AuthBackButton } from '@/components/AuthShell';
 import { useAuth, customerPath } from '@/context/AuthContext';
-import { signInWithGoogle } from '@/services/authService';
+import { signInWithGoogle, resetPassword } from '@/services/authService';
 
 export function LoginPage() {
   const { signIn, loading, authError } = useAuth();
@@ -16,6 +16,16 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetNotice, setResetNotice] = useState('');
+
+  const handlePasswordReset = async () => {
+    if (!email.trim()) { setError('Enter your account email address first.'); return; }
+    setResetBusy(true); setError(''); setResetNotice('');
+    try { await resetPassword(email); setResetNotice('If an account exists for this email, a secure password reset link has been sent.'); }
+    catch (err: any) { setError(err?.message || 'Could not request a password reset. Try again.'); }
+    finally { setResetBusy(false); }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +61,9 @@ export function LoginPage() {
             </div>
           </label>
           
-          {error && <div className="p-3 bg-red-50 text-red-600 text-sm font-medium rounded-lg border border-red-100">{error}</div>}
+          <div className="flex justify-end -mt-2"><button type="button" onClick={() => void handlePasswordReset()} disabled={resetBusy || busy || loading} className="text-sm font-semibold text-[#184f9a] hover:underline disabled:opacity-50">{resetBusy ? 'Sending reset link…' : 'Forgot password?'}</button></div>
+          {resetNotice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{resetNotice}</p>}
+          {error && <div role="alert" className="p-3 bg-red-50 text-red-600 text-sm font-medium rounded-lg border border-red-100">{error}</div>}
           <button className="primary-button full-button" type="submit" disabled={loading || busy}>
             {loading || busy ? <Zap size={17} className="animate-pulse" /> : null}
             {loading || busy ? 'Signing in...' : 'Sign in'}
