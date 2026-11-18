@@ -3,10 +3,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 test('account password recovery is on sign-in while passcode recovery stays on the passcode screen', async () => {
-  const [auth, app, lock] = await Promise.all([
+  const [auth, app, lock, recovery, recoveryState, supabase] = await Promise.all([
     readFile('src/pages/AuthPages.tsx', 'utf8'),
     readFile('src/App.tsx', 'utf8'),
-    readFile('src/components/CustomerPasscode.tsx', 'utf8')
+    readFile('src/components/CustomerPasscode.tsx', 'utf8'),
+    readFile('src/pages/UpdatePassword.tsx', 'utf8'),
+    readFile('src/services/authRecoveryState.ts', 'utf8'),
+    readFile('src/lib/supabase.ts', 'utf8')
   ]);
   const login = auth.slice(auth.indexOf('export function LoginPage'), auth.indexOf('export function SignupPage'));
   const signup = auth.slice(auth.indexOf('export function SignupPage'), auth.indexOf('function GoogleButton'));
@@ -24,10 +27,14 @@ test('account password recovery is on sign-in while passcode recovery stays on t
   assert.ok(!app.includes('path="/forgot-password"'));
   assert.ok(!app.includes('path="/forgot-passcode"'));
   assert.ok(app.includes('path="/reset-password"'));
-  const recovery = await readFile('src/pages/UpdatePassword.tsx', 'utf8');
-  assert.ok(recovery.includes("type RecoveryMode = 'password' | 'passcode'"));
+    assert.ok(recovery.includes("type RecoveryMode = 'password' | 'passcode'"));
   assert.ok(recovery.includes("supabase.auth.updateUser({ password })"));
   assert.ok(recovery.includes("navigate('/login', { replace: true })"));
   assert.ok(recovery.includes('password.length < 8'));
   assert.ok(recovery.includes('recoveryReady'));
+  assert.ok(recovery.includes('hasVerifiedPasswordRecovery(userId)'));
+  assert.ok(recovery.includes('hasVerifiedPasswordRecovery(data.session.user.id)'));
+  assert.ok(recoveryState.includes("event === 'PASSWORD_RECOVERY'"));
+  assert.ok(supabase.includes('observePasswordRecoveryEvent(event, session?.user.id)'));
+  assert.ok(!recovery.includes('if (marker && data.session?.user)'));
 });
