@@ -34,7 +34,7 @@ self.addEventListener('fetch', event => {
         }
         return response;
       } catch {
-        return (await caches.match('/index.html')) || (await caches.match('/offline.html'));
+        return (await caches.match('/offline.html')) || (await caches.match('/index.html'));
       }
     })());
     return;
