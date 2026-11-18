@@ -496,6 +496,7 @@ function AccountSection({
 }: any) {
   const navigate = useNavigate();
   const resumeVerification = () => { if (profile.kyc_status === 'approved') return; sessionStorage.setItem('ob_role', profile.role); navigate('/onboarding/personal?resume=1'); };
+  const [activePanel, setActivePanel] = useState<string | null>(null);
   const [viewingGames, setViewingGames] = useState(false);
   const [viewingWallet, setViewingWallet] = useState(false);
   const [
@@ -1241,213 +1242,95 @@ function AccountSection({
     </div>;
   }
 
-  return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-      <button
-        onClick={onBack}
-        className="text-sm font-semibold text-slate-500 hover:text-blue-600 transition mb-5"
-      >
-        ← Back to portal
-      </button>
-
-      <h1 className="text-3xl font-bold text-slate-900 mb-6">
-        Account & Profile
-      </h1>
-      <button type="button" onClick={() => setViewingWallet(true)} className="mb-5 flex w-full items-center gap-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-left transition hover:bg-emerald-100">
-        <span className="rounded-2xl bg-white p-3 text-emerald-700"><Wallet size={24}/></span>
-        <span className="min-w-0 flex-1"><strong className="block text-slate-950">Wallet & payments</strong><span className="mt-1 block text-xs text-slate-600">Open balances, transactions, top-ups, withdrawals and transfers</span></span>
-        <ArrowRight className="text-emerald-700"/>
-      </button>
-      <button type="button" onClick={onServices} className="mb-5 flex w-full items-center gap-4 rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:bg-slate-50">
-        <span className="rounded-2xl bg-slate-100 p-3 text-slate-700"><Store size={24}/></span>
-        <span className="min-w-0 flex-1"><strong className="block text-slate-950">Services & tools</strong><span className="mt-1 block text-xs text-slate-600">Shop, business, travel, events, concierge and games</span></span>
-        <ArrowRight className="text-slate-500"/>
-      </button>
-
-      <div className="mb-5 flex justify-end"><button type="button" onClick={onLock} className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2 font-bold text-slate-700"><LockKeyhole size={18}/>Lock app</button></div>
-      <KycStatusNotice profile={profile} onVerify={resumeVerification}/>
-      <AccountProfile key={profile.id} userId={profile.id}/>
-      <InviteEarn key={`referrals:${profile.id}`} userId={profile.id}/>
-      <AccountPolicy />
-
-      <button onClick={() => setViewingGames(true)} className="mb-6 w-full rounded-3xl border border-amber-300 bg-gradient-to-r from-purple-950 to-slate-950 p-6 text-left text-white">
-        <h2 className="text-xl font-bold text-amber-300">Games — Spin & Win</h2>
-        <p className="mt-2">Choose a fee · Six segments · One possible free bonus</p>
-        <p className="mt-2 text-xs text-slate-300">18+ · Play responsibly · View rules and prize chances</p>
-      </button>
-
-      <button type="button" disabled={profile.kyc_status === 'approved'} onClick={resumeVerification} className="w-full text-left bg-white border border-slate-200 rounded-3xl p-4 sm:p-6 mb-3 flex flex-wrap items-center gap-4">
-        <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-          <UserCircle size={34} />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="text-xl font-bold">
-            {profile.full_name?.trim() ||
-              `${profile.first_name || ''} ${profile.last_name || ''}`.trim() ||
-              (profile.kyc_status === 'approved' ? 'Verified account' : 'Complete your profile')}
-          </div>
-
-          <div className="break-words text-sm text-slate-500">
-            {profile.email}
-            {' • '}
-            {profile.phone || profile.phone_number || 'Phone not supplied'}
-          </div>
-        </div>
-      <span className="ml-auto text-sm font-bold text-blue-700">{profile.kyc_status === 'approved' ? 'Verified · Locked' : 'Continue verification →'}</span></button>
-      <p className="mb-6 text-sm text-slate-600">{profile.kyc_status === 'approved'
-        ? 'Your verified identity is locked. Contact MatMove support if your details need correcting.'
-        : 'Your account is registered. Continue verification to complete your identity details. Wallet access follows your verification and approval status.'}</p>
-
-      <button
-        onClick={() =>
-          setViewingAnalytics(true)
-        }
-        className="w-full bg-white border border-slate-200 rounded-3xl p-6 mb-6 flex justify-between items-center hover:bg-slate-50 transition shadow-sm group"
-      >
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-            <BarChart2 size={24} />
-          </div>
-
-          <div className="text-left">
-            <h2 className="text-lg font-bold text-slate-900">
-              {profile.role === 'merchant'
-                ? 'Business Analytics'
-                : profile.role === 'driver'
-                  ? 'Driving Analytics'
-                  : 'Rider Analytics'}
-            </h2>
-
-            <p className="text-sm text-slate-500 mt-0.5">
-              View full performance breakdown,
-              earnings & reports
-            </p>
-          </div>
-        </div>
-
-        <ArrowRight className="text-slate-400 group-hover:text-blue-600 transition" />
-      </button>
-
-      {profile.role === 'rider' && (
-        <button
-          onClick={() =>
-            setViewingCartOrders(true)
-          }
-          className="w-full bg-white border border-slate-200 rounded-3xl p-6 mb-6 flex justify-between items-center hover:bg-slate-50 transition shadow-sm group"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <ShoppingCart size={24} />
-            </div>
-
-            <div className="text-left">
-              <h2 className="text-lg font-bold text-slate-900">
-                My Cart & Orders
-              </h2>
-
-              <p className="text-sm text-slate-500 mt-0.5">
-                {cartItems.length} items in cart
-                {' • '}
-                {riderOrders.length} active orders
-              </p>
-            </div>
-          </div>
-
-          <ArrowRight className="text-slate-400 group-hover:text-blue-600 transition" />
+  if (activePanel === 'profile') {
+    return (
+      <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
+        <button type="button" onClick={() => setActivePanel(null)} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+          <ArrowLeft size={17}/> Back to Account
         </button>
-      )}
+        <h1 className="mb-4 text-2xl font-bold text-slate-900">Profile</h1>
+        <AccountProfile key={profile.id} userId={profile.id}/>
+        <section aria-labelledby="mm-verified-details-title" className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="mm-verified-details-title" className="font-bold text-slate-900">Account & verified details</h2>
+            {profile.kyc_status === 'approved' && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800"><LockKeyhole size={13}/> Verified · Locked</span>}
+          </div>
+          <p className="mt-1 text-sm text-slate-500">Your registered contact information and legal identity are managed separately from your display name and profile photo.</p>
+          <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="min-w-0 rounded-xl bg-slate-50 p-3"><dt className="text-xs font-semibold text-slate-500">Legal name</dt><dd className="mt-1 break-words text-sm font-semibold text-slate-900">{profile.full_name?.trim() || [profile.first_name,profile.last_name].filter(Boolean).join(' ') || 'Not supplied'}</dd></div>
+            <div className="min-w-0 rounded-xl bg-slate-50 p-3"><dt className="text-xs font-semibold text-slate-500">Email address</dt><dd className="mt-1 break-all text-sm font-semibold text-slate-900">{profile.email || 'Not supplied'}</dd></div>
+            <div className="min-w-0 rounded-xl bg-slate-50 p-3"><dt className="text-xs font-semibold text-slate-500">Phone number</dt><dd className="mt-1 break-words text-sm font-semibold text-slate-900">{profile.phone || profile.phone_number || 'Not supplied'}</dd></div>
+            <div className="min-w-0 rounded-xl bg-slate-50 p-3"><dt className="text-xs font-semibold text-slate-500">Verification status</dt><dd className="mt-1 text-sm font-semibold capitalize text-slate-900">{String(profile.kyc_status || 'not_started').replace(/_/g,' ')}</dd></div>
+          </dl>
+          {profile.kyc_status === 'approved'
+            ? <p className="mt-3 text-xs leading-5 text-slate-500">These verified details are read-only. Contact MatMove Support if an approved identity or contact detail needs correction.</p>
+            : <button type="button" onClick={resumeVerification} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white">Continue verification <ArrowRight size={16}/></button>}
+        </section>
+      </section>
+    );
+  }
 
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 mb-6">
-        <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-          <MessageSquare
-            className="text-emerald-600"
-            size={20}
-          />
-          Customer Support
-        </h2>
+  if (activePanel === 'invite') {
+    return <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
+      <button type="button" onClick={() => setActivePanel(null)} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Account</button>
+      <h1 className="mb-4 text-2xl font-bold text-slate-900">Invite & Earn</h1>
+      <InviteEarn key={`referrals:${profile.id}`} userId={profile.id}/>
+    </section>;
+  }
 
-        <p className="text-sm text-slate-500 mb-4">
-          Contact our team directly on WhatsApp
-          for instant assistance.
-        </p>
+  if (activePanel === 'policy') {
+    return <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
+      <button type="button" onClick={() => setActivePanel(null)} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Account</button>
+      <h1 className="mb-4 text-2xl font-bold text-slate-900">Safety & Compliance</h1>
+      <AccountPolicy />
+    </section>;
+  }
 
-        <a
-          href={`https://wa.me/${WHATSAPP_NUMBER}`}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-2 bg-emerald-600 text-white font-bold px-5 py-3 rounded-xl hover:bg-emerald-700 transition"
-        >
-          <MessageSquare size={18} />
-          Chat with Support (+232 90 330 362)
-        </a>
+  return (
+    <div className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
+      <button type="button" onClick={onBack} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"><ArrowLeft size={17}/> Back to portal</button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div><p className="text-xs font-bold uppercase tracking-wider text-emerald-700">MatMove account</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Account & Profile</h1></div>
+        <button type="button" onClick={onLock} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><LockKeyhole size={17}/> Lock app</button>
       </div>
 
-      <div className="bg-white border border-red-100 rounded-3xl p-6 mb-6">
-        <h2 className="text-lg font-bold text-red-600 mb-4 flex items-center gap-2">
-          <ShieldAlert size={20} />
-          Danger Zone
-        </h2>
+      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <button type="button" onClick={() => setViewingWallet(true)} className="mm-account-link"><span className="mm-account-link-icon bg-emerald-50 text-emerald-700"><Wallet size={19}/></span><span className="min-w-0 flex-1"><b>Wallet & payments</b><small>Balances, transactions, top-ups and transfers</small></span><ArrowRight size={18}/></button>
+        <button type="button" onClick={onServices} className="mm-account-link"><span className="mm-account-link-icon bg-slate-100 text-slate-700"><Store size={19}/></span><span className="min-w-0 flex-1"><b>Services & tools</b><small>Shop, business, travel, events and games</small></span><ArrowRight size={18}/></button>
+      </div>
 
+      <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white divide-y divide-slate-100">
+        <button type="button" onClick={() => setActivePanel('profile')} className="mm-account-row"><span className="mm-account-link-icon bg-blue-50 text-blue-700"><UserCircle size={19}/></span><span className="min-w-0 flex-1"><b>Profile & personal details</b><small>Profile photo, display name, email, phone and verified identity</small></span><ArrowRight size={18}/></button>
+        <button type="button" onClick={() => setActivePanel('invite')} className="mm-account-row"><span className="mm-account-link-icon bg-amber-50 text-amber-700"><Gift size={19}/></span><span className="min-w-0 flex-1"><b>Invite & Earn</b><small>Your referral code, friends and rewards</small></span><ArrowRight size={18}/></button>
+        <button type="button" onClick={() => setActivePanel('policy')} className="mm-account-row"><span className="mm-account-link-icon bg-orange-50 text-orange-700"><ShieldAlert size={19}/></span><span className="min-w-0 flex-1"><b>Safety & Compliance</b><small>MatMove safety rules and user policy</small></span><ArrowRight size={18}/></button>
+        <button type="button" onClick={() => setViewingAnalytics(true)} className="mm-account-row"><span className="mm-account-link-icon bg-violet-50 text-violet-700"><BarChart2 size={19}/></span><span className="min-w-0 flex-1"><b>{profile.role === 'merchant' ? 'Business Analytics' : profile.role === 'driver' ? 'Driving Analytics' : 'Rider Analytics'}</b><small>Performance, activity and reports</small></span><ArrowRight size={18}/></button>
+        {profile.role === 'rider' && <button type="button" onClick={() => setViewingCartOrders(true)} className="mm-account-row"><span className="mm-account-link-icon bg-sky-50 text-sky-700"><ShoppingCart size={19}/></span><span className="min-w-0 flex-1"><b>My Cart & Orders</b><small>{cartItems.length} items in cart · {riderOrders.length} orders</small></span><ArrowRight size={18}/></button>}
+      </div>
+
+      <button type="button" onClick={() => setViewingGames(true)} className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-amber-300 bg-gradient-to-r from-purple-950 to-slate-950 p-4 text-left text-white">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-amber-300"><Gift size={20}/></span><span className="min-w-0 flex-1"><b className="block text-sm text-amber-300">Games — Spin & Win</b><small className="mt-1 block text-xs text-slate-300">Choose a fee · Six segments · One possible free bonus · 18+</small></span><ArrowRight size={18} className="text-amber-300"/>
+      </button>
+
+      <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+        <h2 className="flex items-center gap-2 font-bold text-slate-900"><MessageSquare size={18} className="text-emerald-600"/>Customer Support</h2>
+        <p className="mt-2 text-sm text-slate-500">Contact our team directly on WhatsApp for instant assistance.</p>
+        <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700"><MessageSquare size={17}/> Chat with Support (+232 90 330 362)</a>
+      </section>
+
+      <section className="mb-4 rounded-2xl border border-red-100 bg-white p-4">
+        <h2 className="mb-2 flex items-center gap-2 font-bold text-red-600"><ShieldAlert size={18}/>Danger Zone</h2>
         <p className="mb-3 text-sm text-slate-600">Request account closure securely. MatMove checks for unsettled wallet funds, active trips, orders and pending payments first. Your login and historical financial records are not erased automatically.</p>
         {deleteRequestStatus&&deleteRequestStatus!=='rejected'&&<p role="status" className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Deletion request status: <b>{deleteRequestStatus.replace('_',' ')}</b>. Your account remains available while the request is reviewed.</p>}
         {deleteRequestNotice&&<p role="status" className="mb-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{deleteRequestNotice}</p>}
         {deleteRequestError&&<p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">{deleteRequestError}</p>}
-        {!showDeleteConfirm ? (
-          <button
-            disabled={deleteRequestStatus==='requested'||deleteRequestStatus==='under_review'||deleteRequestBusy}
-            onClick={() => {setDeleteRequestError('');setShowDeleteConfirm(true);}}
-            className="min-h-11 rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-sm font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
-          >
-            {deleteRequestStatus==='requested'||deleteRequestStatus==='under_review'?'Deletion request already submitted':'Request Account Deletion'}
-          </button>
-        ) : (
-          <div className="bg-red-50 border border-red-200 p-5 rounded-xl">
-            <p className="text-sm text-red-800 font-bold mb-3">
-              Enter your 6–9 digit passcode to confirm the deletion request. This submits a request for review; it does not instantly erase your account.
-            </p>
+        {!showDeleteConfirm ? <button disabled={deleteRequestStatus==='requested'||deleteRequestStatus==='under_review'||deleteRequestBusy} onClick={() => {setDeleteRequestError('');setShowDeleteConfirm(true);}} className="min-h-11 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 disabled:opacity-50">{deleteRequestStatus==='requested'||deleteRequestStatus==='under_review'?'Deletion request already submitted':'Request Account Deletion'}</button> : <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+          <p className="mb-3 text-sm font-bold text-red-800">Enter your 6–9 digit passcode to confirm the deletion request. This submits a request for review; it does not instantly erase your account.</p>
+          <div className="flex flex-wrap gap-2"><input type="password" maxLength={9} inputMode="numeric" autoComplete="off" value={deletePin} onChange={e => setDeletePin(e.target.value.replace(/[^0-9]/g,'').slice(0,9))} className="min-h-11 w-32 rounded-lg border border-red-300 bg-white p-2 text-center text-lg tracking-widest"/><button onClick={handleDeleteAccount} disabled={deleteRequestBusy||deletePin.length<6||deletePin.length>9} className="min-h-11 rounded-lg bg-red-600 px-4 font-bold text-white disabled:opacity-50">{deleteRequestBusy?'Submitting…':'Submit deletion request'}</button></div>
+          <button onClick={() => {setShowDeleteConfirm(false);setDeletePin('');}} className="mt-2 min-h-10 text-xs font-bold text-slate-500">Cancel</button>
+        </div>}
+      </section>
 
-            <div className="flex gap-2 mb-4">
-              <input
-                type="password"
-                maxLength={9}
-                inputMode="numeric"
-                autoComplete="off"
-                value={deletePin}
-                onChange={e => setDeletePin(e.target.value.replace(/[^0-9]/g,'').slice(0,9))}
-                className="w-24 text-center tracking-widest text-lg p-2 rounded-lg border border-red-300 outline-none bg-white"
-              />
-
-              <button
-                onClick={handleDeleteAccount}
-                disabled={deleteRequestBusy||deletePin.length<6||deletePin.length>9}
-                className="min-h-11 rounded-lg bg-red-600 px-4 font-bold text-white disabled:opacity-50"
-              >
-                {deleteRequestBusy?'Submitting…':'Submit deletion request'}
-              </button>
-            </div>
-
-            <button
-              onClick={() => {setShowDeleteConfirm(false);setDeletePin('');}}
-              className="min-h-11 text-xs font-bold text-slate-500 hover:text-slate-700"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-      </div>
-
-      <button
-        onClick={onLogout}
-        disabled={loggingOut}
-        className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition flex items-center justify-center gap-2"
-      >
-        <LogOut size={18} />
-
-        {loggingOut
-          ? 'Signing out...'
-          : 'Log out of MatMove'}
-      </button>
+      <button onClick={onLogout} disabled={loggingOut} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white hover:bg-slate-800 sm:w-auto"><LogOut size={18}/>{loggingOut?'Signing out…':'Log out of MatMove'}</button>
     </div>
   );
 }
