@@ -18,11 +18,22 @@
 
 ## Supabase configuration required
 
-1. Confirm the Passkeys feature is enabled in Authentication settings for project jjqtpnrnfzlwhnvhbsdy.
-2. Confirm the deployed production domain is included in Supabase Auth allowed redirect URLs and that the project Auth WebAuthn relying-party configuration matches that domain.
-3. Verify passkey registration and sign-in with a confirmed test account on HTTPS.
+Supabase's current hosted-project guide requires both the dashboard feature and the WebAuthn relying-party settings. The client flag alone is not enough.
 
-The connected Supabase tools do not expose the Auth Passkeys dashboard toggle or relying-party configuration, so those settings have not been changed or claimed as verified.
+For the current production host, the initial configuration should be:
+
+1. Open Supabase Dashboard → Authentication → Passkeys for project jjqtpnrnfzlwhnvhbsdy.
+2. Enable Passkey authentication.
+3. Set Relying Party Display Name to MatMove.
+4. Set Relying Party ID to matmoveent.vercel.app.
+5. Set Relying Party Origins to https://matmoveent.vercel.app.
+6. Save and verify passkey registration/sign-in on that production HTTPS origin.
+
+The Vercel preview hostname is a different origin and is intentionally not included in the production RP origins. Do not register real user passkeys on a preview hostname.
+
+**Domain migration warning:** WebAuthn passkeys are bound to the RP ID. Changing the RP ID later (for example, moving from the Vercel default domain to a future custom MatMove domain) invalidates passkeys created under the old RP ID; affected users must register new passkeys. Since a custom domain has not yet been selected, treat the RP ID choice as a production decision before enabling user rollout.
+
+The connected Supabase tools can inspect the project and database but do not expose the hosted Auth Passkeys configuration endpoint. I have therefore not enabled the server-side setting or claimed that passkey enrollment is live. The UI and SDK integration are committed; project dashboard configuration and real-device tests remain outstanding.
 
 ## Platform compatibility
 
