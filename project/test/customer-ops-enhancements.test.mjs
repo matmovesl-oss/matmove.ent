@@ -37,8 +37,8 @@ test('trip status combines with time filters and never mutates the original hist
 test('TripHistory renders accessible recent/history and status selectors using the shared filter',async()=>{
   const fs=await import('node:fs/promises');
   const component=await fs.readFile('src/components/TripHistory.tsx','utf8');
-  assert.match(component,/Filter trips by time period/);
-  assert.match(component,/Filter trips by status/);
+  assert.match(component,/label:'Active'/);
+  assert.match(component,/label:'History'/);
   assert.match(component,/filterTripHistory\(ownedTrips,period,statusFilter\)/);
 });
 
