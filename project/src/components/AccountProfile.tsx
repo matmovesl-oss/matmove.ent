@@ -92,6 +92,7 @@ function PasskeySecurity({userId}:{userId:string}) {
  const [confirming,setConfirming]=useState('');
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('');
+ const [passkeyDisabled,setPasskeyDisabled]=useState(false);
  const secureBrowser=typeof window!=='undefined'&&window.isSecureContext&&typeof window.PublicKeyCredential!=='undefined'&&!!navigator.credentials;
 
  const reload=useCallback(async()=>{
@@ -102,7 +103,7 @@ function PasskeySecurity({userId}:{userId:string}) {
    const {data,error:listError}=await supabase.auth.passkey.list();
    if(listError)throw listError;
    setPasskeys(Array.isArray(data)?data as PasskeyEntry[]:[]);
-  }catch(err:any){setError((err?.code==='passkey_disabled'||/passkey_disabled/i.test(err?.message||''))?'Passkeys are not enabled in MatMove Supabase Auth yet. Enable the Passkeys option in the project Auth settings before registering devices.':(err?.message||'Registered passkeys could not be loaded.'));}
+  }catch(err:any){if(err?.code==='passkey_disabled'||/passkey_disabled/i.test(err?.message||'')){setPasskeyDisabled(true);setError('');setNotice('Device passkeys are not enabled for MatMove yet. Password and Google sign-in remain available.');}else setError(err?.message||'Registered passkeys could not be loaded.');}
   finally{setLoading(false);}
  },[userId]);
 
@@ -118,8 +119,8 @@ function PasskeySecurity({userId}:{userId:string}) {
    const {data,error:registerError}=await supabase.auth.registerPasskey();
    if(registerError)throw registerError;
    await reload();
-   setNotice(data?.friendly_name?'Passkey registered: '+data.friendly_name+'. You can now use your device to sign in.':'Passkey registered. You can now use your device to sign in.');
-  }catch(err:any){setError((err?.code==='passkey_disabled'||/passkey_disabled/i.test(err?.message||''))?'Passkeys are not enabled in MatMove Supabase Auth yet. Enable the Passkeys option in the project Auth settings first.':err?.name==='NotAllowedError'||err?.name==='AbortError'?'Device verification was cancelled. No passkey was added.':(err?.message||'This device could not register a passkey.'));}
+   setPasskeyDisabled(false);setNotice(data?.friendly_name?'Passkey registered: '+data.friendly_name+'. You can now use your device to sign in.':'Passkey registered. You can now use your device to sign in.');
+  }catch(err:any){if(err?.code==='passkey_disabled'||/passkey_disabled/i.test(err?.message||'')){setPasskeyDisabled(true);setError('');setNotice('Device passkeys are not enabled for MatMove yet. Password and Google sign-in remain available.');}else setError(err?.name==='NotAllowedError'||err?.name==='AbortError'?'Device verification was cancelled. No passkey was added.':(err?.message||'This device could not register a passkey.'));}
   finally{setBusy(false);}
  };
 
@@ -146,7 +147,7 @@ function PasskeySecurity({userId}:{userId:string}) {
   </div>
   {!supported?<p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Passkeys require a supported browser and a secure HTTPS connection. You can continue using your password and existing MatMove passcode.</p>:<>
    <div className="mt-4 flex flex-wrap items-center gap-2">
-    <button type="button" onClick={()=>void register()} disabled={busy||loading} className="min-h-11 rounded-xl bg-emerald-800 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy?'Please wait…':'Enable passkey on this device'}</button>
+    <button type="button" onClick={()=>void register()} disabled={busy||loading||passkeyDisabled} className="min-h-11 rounded-xl bg-emerald-800 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy?'Please wait…':passkeyDisabled?'Passkey setup unavailable':'Enable passkey on this device'}</button>
     <button type="button" onClick={()=>void reload()} disabled={busy||loading} className="min-h-11 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50">Refresh devices</button>
    </div>
    <div className="mt-4 space-y-2">
