@@ -56,3 +56,33 @@ test('PWA shell does not cache API, authentication or private user data', async 
   assert.match(worker, /offline\.html/);
   assert.ok(worker.includes("return (await caches.match('/offline.html')) || (await caches.match('/index.html'))"), 'offline navigation must prefer the safe offline page over the cached app shell');
 });
+
+test('customer account uses compact arrow rows and focused profile, referral and policy screens', async () => {
+  const [app, css, profile] = await Promise.all([
+    readFile('src/App.tsx', 'utf8'),
+    readFile('src/index.css', 'utf8'),
+    readFile('src/components/AccountProfile.tsx', 'utf8'),
+  ]);
+  assert.match(app, /setActivePanel\('profile'\)/);
+  assert.match(app, /setActivePanel\('invite'\)/);
+  assert.match(app, /setActivePanel\('policy'\)/);
+  assert.match(app, /className="mm-account-row"/);
+  assert.match(app, /Account & verified details/);
+  assert.match(app, /Verified · Locked/);
+  assert.match(app, /setViewingAnalytics\(true\)/);
+  assert.match(app, /setViewingCartOrders\(true\)/);
+  assert.match(app, /Customer Support/);
+  assert.match(app, /Request Account Deletion/);
+  assert.match(css, /\.mm-account-row/);
+  assert.match(css, /@media\(max-width:420px\)/);
+  assert.match(profile, /<PasskeySecurity userId=\{userId\}\/>/);
+});
+
+test('biometric controls stay on the Account hub while profile editing opens separately', async () => {
+  const app = await readFile('src/App.tsx', 'utf8');
+  const profile = await readFile('src/components/AccountProfile.tsx', 'utf8');
+  assert.ok(app.includes('<PasskeySecurity key={profile.id} userId={profile.id}/>'));
+  assert.ok(app.includes('showPasskey={false}'));
+  assert.ok(profile.includes('export function PasskeySecurity'));
+  assert.ok(profile.includes('{showPasskey&&<PasskeySecurity userId={userId}/>'));
+});

@@ -84,7 +84,7 @@ export async function prepareProfilePhoto(file:File):Promise<Blob>{
 
 type PasskeyEntry = { id: string; friendly_name?: string | null; created_at?: string; last_used_at?: string | null };
 
-function PasskeySecurity({userId}:{userId:string}) {
+export function PasskeySecurity({userId}:{userId:string}) {
  const [supported,setSupported]=useState(false);
  const [passkeys,setPasskeys]=useState<PasskeyEntry[]>([]);
  const [loading,setLoading]=useState(true);
@@ -165,7 +165,7 @@ function PasskeySecurity({userId}:{userId:string}) {
  </section>;
 }
 
-export default function AccountProfile({userId}:{userId:string}){
+export default function AccountProfile({userId,showPasskey=true}:{userId:string;showPasskey?:boolean}){
  const {record,photoUrl,loading,error,photoError,reload}=usePresentation(userId);
  const [name,setName]=useState(''),[version,setVersion]=useState(0),[photo,setPhoto]=useState<Blob|null>(null),[preview,setPreview]=useState('');
  const [removePhoto,setRemovePhoto]=useState(false),[busy,setBusy]=useState(false),[failure,setFailure]=useState(''),[notice,setNotice]=useState('');
@@ -202,7 +202,7 @@ export default function AccountProfile({userId}:{userId:string}){
   finally{mutex.current=false;if(valid())setBusy(false);}
  }
  return <section aria-labelledby="mm-profile-edit-title" className="mb-6 rounded-3xl border border-slate-200 bg-white p-4 sm:p-6">
-  <PasskeySecurity userId={userId}/>
+  {showPasskey&&<PasskeySecurity userId={userId}/>}
   <div className="flex flex-wrap items-center gap-4"><Photo size="large" url={removePhoto?'':preview||photoUrl}/><div><h2 id="mm-profile-edit-title" className="text-lg font-bold text-slate-900">Your profile photo & display name</h2><p className="mt-1 max-w-lg text-sm text-slate-600">Personalize your account here. Your legal name, phone, email and verified identity are managed separately through KYC.</p></div></div>
   {loading?<p role="status" className="mt-4 flex items-center gap-2 text-sm text-slate-600"><Loader2 size={16} className="animate-spin"/>Loading profile…</p>:error?<p role="alert" className="mt-4 text-sm text-red-700">{error}</p>:null}
   {photoError&&!loading&&<p role="status" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{photoError}</p>}
