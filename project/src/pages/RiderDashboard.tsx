@@ -42,6 +42,7 @@ export function RiderDashboard(props: any) {
 function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpenTrips }: any) {
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [rideNotice, setRideNotice] = useState('');
+  const [cashSuccessOpen, setCashSuccessOpen] = useState(false);
   const [walletNotice, setWalletNotice] = useState('');
   const balanceBusy = useRef(false);
   const setupBusy = useRef(false);
@@ -449,7 +450,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       if (activeBooking.payment_method === 'cash') {
         const payment = result.payment;
         if (payment?.status === 'settled' && result.success === true && result.pending === false) {
-          setRideNotice('Both cash confirmations are verified and MatMove has captured its reserved fee. Cash collection is settled.');
+          setRideNotice('');
+          setCashSuccessOpen(true);
           setActiveBooking(null);
         } else {
           setRideNotice(payment?.driverCashConfirmed && payment?.riderCashConfirmed
