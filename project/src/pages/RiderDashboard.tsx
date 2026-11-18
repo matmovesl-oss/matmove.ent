@@ -1,4 +1,5 @@
 import ActiveTripMap from '@/components/ActiveTripMap';
+import { CashMonimeSuccess } from '@/components/CashMonimeSuccess';
 import { ProductGallery, catalogMoney, catalogCheckoutAllowed } from '@/components/ProductCatalog';
 import FareNegotiation from '@/components/FareNegotiation';
 import { useCustomerActiveRide } from '@/lib/useRideNegotiation';
