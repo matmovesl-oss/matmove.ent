@@ -8,11 +8,11 @@ test('Rider and Merchant Trips expose unfinished requests and a real cancellatio
   const source = await read('../src/components/TripHistory.tsx');
   const switcher = await read('../src/components/CustomerTripSwitcher.tsx');
   assert.match(switcher, /onSelect\(b\.id\);onRefresh\?\.\(\)/);
-  assert.match(source, /aria-label="Unfinished requests"/);
+  assert.match(source, /aria-label="Trips"/);
   assert.match(source, /activeRequests = ownedTrips\.filter/);
   assert.match(source, /updateRide\('cancel',t\.id\)/);
-  assert.match(source, /Open request details/);
-  assert.match(source, /Cancel request/);
+  assert.match(source, /View request/);
+  assert.match(source, /'Cancel'/);
   assert.match(source, /refund is still being verified/i);
 });
 
