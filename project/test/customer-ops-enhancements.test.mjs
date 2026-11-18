@@ -85,12 +85,14 @@ test('Customer account closure creates a reviewed request rather than deleting f
 
 test('password recovery is offered at sign-in and passcode recovery remains separate',async()=>{
   const fs=await import('node:fs/promises');
-  const [auth,app,lock,service,recovery]=await Promise.all([
+  const [auth,app,lock,service,recovery,recoveryState,supabase]=await Promise.all([
     fs.readFile('src/pages/AuthPages.tsx','utf8'),
     fs.readFile('src/App.tsx','utf8'),
     fs.readFile('src/components/CustomerPasscode.tsx','utf8'),
     fs.readFile('src/services/authService.ts','utf8'),
-    fs.readFile('src/pages/UpdatePassword.tsx','utf8')
+    fs.readFile('src/pages/UpdatePassword.tsx','utf8'),
+    fs.readFile('src/services/authRecoveryState.ts','utf8'),
+    fs.readFile('src/lib/supabase.ts','utf8')
   ]);
   const login=auth.slice(auth.indexOf('export function LoginPage'),auth.indexOf('export function SignupPage'));
   const signup=auth.slice(auth.indexOf('export function SignupPage'),auth.indexOf('function GoogleButton'));
@@ -113,6 +115,10 @@ test('password recovery is offered at sign-in and passcode recovery remains sepa
   assert.equal(recovery.includes('password.length < 8'),true);
   assert.equal(recovery.includes("type RecoveryMode = 'password' | 'passcode'"),true);
   assert.equal(recovery.includes('recoveryReady'),true);
+  assert.equal(recovery.includes('hasVerifiedPasswordRecovery(userId)'),true);
+  assert.equal(recovery.includes('result.digits > 9'),true);
+  assert.equal(recoveryState.includes("event === 'PASSWORD_RECOVERY'"),true);
+  assert.equal(supabase.includes('observePasswordRecoveryEvent(event, session?.user.id)'),true);
 });
 
 test('Event USD is a display quote and ticket purchases continue to debit the SLE amount',async()=>{
