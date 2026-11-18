@@ -142,16 +142,16 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
   if(!allowed&&!forgotMode&&status&&!busy)pinEntryRef.current?.focus({preventScroll:true});
  },[allowed,forgotMode,status?.userId,activePinField,busy]);
 
- const keypad=<div aria-label="Passcode keypad" className="grid grid-cols-3 gap-2">{['1','2','3','4','5','6','7','8','9'].map(digit=><button key={digit} type="button" disabled={busy} onClick={event=>{event.preventDefault();appendDigit(digit);}} className="h-12 rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-sm active:bg-emerald-50 disabled:opacity-50">{digit}</button>)}<button type="button" aria-label="Delete last digit" disabled={busy} onClick={deleteLastDigit} className="h-12 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 disabled:opacity-50">Delete</button><button type="button" disabled={busy} onClick={event=>{event.preventDefault();appendDigit('0');}} className="h-12 rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-sm active:bg-emerald-50 disabled:opacity-50">0</button><button type="button" disabled={busy} onClick={()=>{if(activePinField==='pin')setPin('');else if(activePinField==='next')setNext('');else setConfirm('');}} className="h-12 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 disabled:opacity-50">Clear</button></div>;
+ const keypad=<div aria-label="Passcode keypad" className="grid grid-cols-3 gap-2">{['1','2','3','4','5','6','7','8','9'].map(digit=><button key={digit} type="button" disabled={busy} onClick={event=>{event.preventDefault();appendDigit(digit);}} className="h-14 rounded-2xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-[0_2px_8px_rgba(15,23,42,.04)] transition hover:border-emerald-300 active:bg-emerald-50 disabled:opacity-50">{digit}</button>)}<button type="button" aria-label="Delete last digit" disabled={busy} onClick={deleteLastDigit} className="h-14 rounded-2xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 disabled:opacity-50">Delete</button><button type="button" disabled={busy} onClick={event=>{event.preventDefault();appendDigit('0');}} className="h-12 rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-sm active:bg-emerald-50 disabled:opacity-50">0</button><button type="button" disabled={busy} onClick={()=>{if(activePinField==='pin')setPin('');else if(activePinField==='next')setNext('');else setConfirm('');}} className="h-12 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 disabled:opacity-50">Clear</button></div>;
 
  return (
    <>
-     <dialog ref={privacyDialog} aria-label="MATMOVE privacy lock" aria-hidden={allowed} onCancel={e=>e.preventDefault()} className="fixed inset-0 m-0 h-[100dvh] max-h-none w-screen max-w-none border-0 bg-slate-100 p-0 backdrop:bg-slate-100">
-       <main className="flex min-h-[100dvh] items-center justify-center bg-slate-100 px-5 py-8">
-         <form aria-label="Customer passcode" onSubmit={e=>{e.preventDefault(); if(forgotMode) void sendPasscodeReset(); else void submit();}} className="w-full max-w-xs space-y-4 rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
+     <dialog ref={privacyDialog} aria-label="MATMOVE privacy lock" aria-hidden={allowed} onCancel={e=>e.preventDefault()} className="fixed inset-0 m-0 h-[100dvh] max-h-none w-screen max-w-none border-0 bg-white p-0 backdrop:bg-white">
+       <main className="flex min-h-[100dvh] items-center justify-center bg-white px-5 py-8">
+         <form aria-label="Customer passcode" onSubmit={e=>{e.preventDefault(); if(forgotMode) void sendPasscodeReset(); else void submit();}} className="w-full max-w-sm space-y-5 rounded-[1.75rem] border border-slate-200 bg-white p-7 text-slate-900 shadow-[0_18px_60px_rgba(15,23,42,.08)]">
            
            <div className="text-center">
-             <p className="text-xs font-bold tracking-[.2em] text-emerald-700">MATMOVE</p>
+             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-xl font-black text-emerald-800 shadow-sm">M</div><p className="text-[11px] font-extrabold tracking-[.24em] text-emerald-800">MATMOVE SECURE ACCESS</p>
              {forgotMode ? (
                 <>
                   <h1 className="mt-2 text-xl font-bold">Reset Passcode</h1>
@@ -172,7 +172,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
                  <input type="email" required autoComplete="email" value={resetEmail} onChange={e=>setResetEmail(e.target.value)} className="mt-2 h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" />
                </label>
                {resetSent&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">Passcode recovery email requested. Open the link in your inbox to create a new MatMove passcode. Your account password will not change.</p>}
-               <button type="submit" disabled={busy||!resetEmail.trim()} className="flex h-11 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:opacity-50">
+               <button type="submit" disabled={busy||!resetEmail.trim()} className="flex h-12 w-full items-center justify-center rounded-2xl bg-emerald-800 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50">
                  {busy?'Sending passcode reset…':'Email me a passcode reset link'}
                </button>
                {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p>}
@@ -186,7 +186,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
                 {!creating&&!upgrade&&<>{pinField(`Current ${status.digits}-digit passcode`,pin,'pin',status.digits)}{pinMirror(`Current ${status.digits}-digit passcode`,pin,'pin',setPin,status.digits)}</>}
                 {(creating||upgrade)&&<>{pinField('New passcode (6–9 digits)',next,'next',9)}{pinMirror('New passcode (6–9 digits)',next,'next',setNext,9)}{pinField('Confirm passcode',confirm,'confirm',9)}{pinMirror('Confirm passcode',confirm,'confirm',setConfirm,9)}</>}
                 {keypad}
-                <button type="submit" disabled={busy} className="h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">{creating||upgrade?'Save passcode':'Unlock'}</button>
+                <button type="submit" disabled={busy} className="h-12 w-full rounded-2xl bg-emerald-800 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50">{creating||upgrade?'Save passcode':'Unlock'}</button>
                </>}
                
                {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p>}

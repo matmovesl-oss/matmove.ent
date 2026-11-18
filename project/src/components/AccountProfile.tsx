@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {Camera,Loader2,RefreshCw,UserCircle} from 'lucide-react';
+import {Camera,Loader2,RefreshCw,UserCircle,Fingerprint} from 'lucide-react';
 import {supabase} from '@/lib/supabase';
 import {beginProfilePhotoPicker} from '@/lib/profilePhotoPicker';
 
@@ -81,6 +81,90 @@ export async function prepareProfilePhoto(file:File):Promise<Blob>{
   return blob;
  }finally{URL.revokeObjectURL(objectUrl);}
 }
+
+type PasskeyEntry = { id: string; friendly_name?: string | null; created_at?: string; last_used_at?: string | null };
+
+function PasskeySecurity({userId}:{userId:string}) {
+ const [supported,setSupported]=useState(false);
+ const [passkeys,setPasskeys]=useState<PasskeyEntry[]>([]);
+ const [loading,setLoading]=useState(true);
+ const [busy,setBusy]=useState(false);
+ const [confirming,setConfirming]=useState('');
+ const [error,setError]=useState('');
+ const [notice,setNotice]=useState('');
+ const [passkeyDisabled,setPasskeyDisabled]=useState(false);
+ const secureBrowser=typeof window!=='undefined'&&window.isSecureContext&&typeof window.PublicKeyCredential!=='undefined'&&!!navigator.credentials;
+
+ const reload=useCallback(async()=>{
+  setLoading(true);setError('');
+  try{
+   const {data:{session},error:sessionError}=await supabase.auth.getSession();
+   if(sessionError||session?.user.id!==userId)throw new Error('Your sign-in changed. Reopen account security.');
+   const {data,error:listError}=await supabase.auth.passkey.list();
+   if(listError)throw listError;
+   setPasskeys(Array.isArray(data)?data as PasskeyEntry[]:[]);
+  }catch(err:any){if(err?.code==='passkey_disabled'||/passkey_disabled/i.test(err?.message||'')){setPasskeyDisabled(true);setError('');setNotice('Device passkeys are not enabled for MatMove yet. Password and Google sign-in remain available.');}else setError(err?.message||'Registered passkeys could not be loaded.');}
+  finally{setLoading(false);}
+ },[userId]);
+
+ useEffect(()=>{
+  setSupported(secureBrowser);
+  if(secureBrowser)void reload();else setLoading(false);
+ },[secureBrowser,reload]);
+
+ const register=async()=>{
+  if(busy||!secureBrowser)return;
+  setBusy(true);setError('');setNotice('');
+  try{
+   const {data,error:registerError}=await supabase.auth.registerPasskey();
+   if(registerError)throw registerError;
+   await reload();
+   setPasskeyDisabled(false);setNotice(data?.friendly_name?'Passkey registered: '+data.friendly_name+'. You can now use your device to sign in.':'Passkey registered. You can now use your device to sign in.');
+  }catch(err:any){if(err?.code==='passkey_disabled'||/passkey_disabled/i.test(err?.message||'')){setPasskeyDisabled(true);setError('');setNotice('Device passkeys are not enabled for MatMove yet. Password and Google sign-in remain available.');}else setError(err?.name==='NotAllowedError'||err?.name==='AbortError'?'Device verification was cancelled. No passkey was added.':(err?.message||'This device could not register a passkey.'));}
+  finally{setBusy(false);}
+ };
+
+ const remove=async(id:string)=>{
+  if(busy)return;
+  setBusy(true);setError('');setNotice('');
+  try{
+   const {data:{session},error:sessionError}=await supabase.auth.getSession();
+   if(sessionError||session?.user.id!==userId)throw new Error('Your sign-in changed. Reopen account security.');
+   const {error:deleteError}=await supabase.auth.passkey.delete({passkeyId:id});
+   if(deleteError)throw deleteError;
+   setConfirming('');await reload();setNotice('This device passkey has been removed. Your password and other sign-in methods are unchanged.');
+  }catch(err:any){setError(err?.message||'This passkey could not be removed.');}
+  finally{setBusy(false);}
+ };
+
+ return <section aria-labelledby="mm-passkey-title" className="my-5 rounded-2xl border border-emerald-100 bg-white p-4 sm:p-5">
+  <div className="flex flex-wrap items-start justify-between gap-3">
+   <div className="min-w-0 flex-1">
+    <h3 id="mm-passkey-title" className="text-base font-bold text-slate-900">Biometric & device sign-in</h3>
+    <p className="mt-1 text-sm leading-5 text-slate-600">Use a passkey stored by your device. Depending on your phone, the system may ask for Face ID, Touch ID, fingerprint or your screen-lock PIN. MatMove never receives your face or fingerprint data.</p>
+   </div>
+   <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">Optional</span>
+  </div>
+  {!supported?<p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Passkeys require a supported browser and a secure HTTPS connection. You can continue using your password and existing MatMove passcode.</p>:<>
+   <div className="mt-4 flex flex-wrap items-center gap-2">
+    <button type="button" onClick={()=>void register()} disabled={busy||loading||passkeyDisabled} className="min-h-11 rounded-xl bg-emerald-800 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy?'Please wait…':passkeyDisabled?'Passkey setup unavailable':'Enable passkey on this device'}</button>
+    <button type="button" onClick={()=>void reload()} disabled={busy||loading} className="min-h-11 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50">Refresh devices</button>
+   </div>
+   <div className="mt-4 space-y-2">
+    <div className="flex items-center justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Registered devices</p><span className="text-xs text-slate-500">{passkeys.length} saved</span></div>
+    {loading?<p role="status" className="text-sm text-slate-500">Checking registered passkeys…</p>:passkeys.length===0?<p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">No passkeys registered yet. Enable one on this device to use biometric or device-based sign-in next time.</p>:passkeys.map(item=><div key={item.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 p-3">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Fingerprint size={20}/></span>
+      <span className="min-w-0 flex-1"><b className="block truncate text-sm text-slate-900">{item.friendly_name||'MatMove passkey'}</b><span className="block text-xs text-slate-500">Added {item.created_at?new Date(item.created_at).toLocaleDateString(): 'date unavailable'}{item.last_used_at?' · Last used '+new Date(item.last_used_at).toLocaleDateString():''}</span></span>
+      {confirming===item.id?<span className="flex gap-2"><button type="button" onClick={()=>void remove(item.id)} disabled={busy} className="min-h-10 rounded-lg bg-red-600 px-3 text-xs font-bold text-white disabled:opacity-50">Remove</button><button type="button" onClick={()=>setConfirming('')} disabled={busy} className="min-h-10 rounded-lg border px-3 text-xs font-bold">Keep</button></span>:<button type="button" onClick={()=>setConfirming(item.id)} disabled={busy} className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700">Remove</button>}
+    </div>)}
+   </div>
+  </>}
+  {error&&<p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+  {notice&&<p role="status" className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
+  <p className="mt-3 text-xs leading-5 text-slate-500">Passkeys are an experimental Supabase Auth feature. Password and Google sign-in remain available as fallback. Device support depends on the browser, operating system, and Supabase project Auth configuration.</p>
+ </section>;
+}
+
 export default function AccountProfile({userId}:{userId:string}){
  const {record,photoUrl,loading,error,photoError,reload}=usePresentation(userId);
  const [name,setName]=useState(''),[version,setVersion]=useState(0),[photo,setPhoto]=useState<Blob|null>(null),[preview,setPreview]=useState('');
@@ -118,6 +202,7 @@ export default function AccountProfile({userId}:{userId:string}){
   finally{mutex.current=false;if(valid())setBusy(false);}
  }
  return <section aria-labelledby="mm-profile-edit-title" className="mb-6 rounded-3xl border border-slate-200 bg-white p-4 sm:p-6">
+  <PasskeySecurity userId={userId}/>
   <div className="flex flex-wrap items-center gap-4"><Photo size="large" url={removePhoto?'':preview||photoUrl}/><div><h2 id="mm-profile-edit-title" className="text-lg font-bold text-slate-900">Your profile photo & display name</h2><p className="mt-1 max-w-lg text-sm text-slate-600">Personalize your account here. Your legal name, phone, email and verified identity are managed separately through KYC.</p></div></div>
   {loading?<p role="status" className="mt-4 flex items-center gap-2 text-sm text-slate-600"><Loader2 size={16} className="animate-spin"/>Loading profile…</p>:error?<p role="alert" className="mt-4 text-sm text-red-700">{error}</p>:null}
   {photoError&&!loading&&<p role="status" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{photoError}</p>}

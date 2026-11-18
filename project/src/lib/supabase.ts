@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { observePasswordRecoveryEvent } from '@/services/authRecoveryState';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey =
@@ -21,3 +22,9 @@ export const supabase = createClient(
     },
   }
 );
+
+// Capture the one-time recovery event as soon as the shared Supabase client
+// initializes, before route components can mount or read the recovery URL.
+supabase.auth.onAuthStateChange((event, session) => {
+  observePasswordRecoveryEvent(event, session?.user.id);
+});

@@ -3,19 +3,41 @@ import {normalizeReferralCode,prepareReferralSignup} from '@/services/referralSi
 
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { CarFront, ArrowRight, Mail, Lock, Phone, Eye, EyeOff, ShieldCheck, Zap } from 'lucide-react';
+import { CarFront, ArrowRight, Mail, Lock, Phone, Eye, EyeOff, ShieldCheck, Zap, Fingerprint } from 'lucide-react';
 import { AuthShell, AuthFormCard, AuthBackButton } from '@/components/AuthShell';
 import { useAuth, customerPath } from '@/context/AuthContext';
-import { signInWithGoogle } from '@/services/authService';
+import { signInWithGoogle, resetPassword } from '@/services/authService';
 
 export function LoginPage() {
-  const { signIn, loading, authError } = useAuth();
+  const { signIn, signInWithPasskey, loading, authError } = useAuth();
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const passkeySupported = typeof window !== 'undefined' && window.isSecureContext && typeof window.PublicKeyCredential !== 'undefined' && !!navigator.credentials;
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetNotice, setResetNotice] = useState('');
+
+  const handlePasskeySignIn = async () => {
+    if (!passkeySupported || passkeyBusy || busy || loading) return;
+    setPasskeyBusy(true); setError('');
+    try { await signInWithPasskey(); }
+    catch (err: any) {
+      const message = err?.code === 'passkey_disabled' || /passkey_disabled/i.test(err?.message || '') ? 'Passkey sign-in is not enabled for MatMove yet. Use your password or Google sign-in instead.' : err?.name === 'AbortError' || err?.name === 'NotAllowedError' ? 'Passkey sign-in was cancelled or not completed. You can sign in with your password instead.' : (err?.message || 'Passkey sign-in could not be completed. Use your password or Google sign-in.');
+      setError(message);
+    } finally { setPasskeyBusy(false); }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!email.trim()) { setError('Enter your account email address first.'); return; }
+    setResetBusy(true); setError(''); setResetNotice('');
+    try { await resetPassword(email); setResetNotice('If an account exists for this email, a secure password reset link has been sent.'); }
+    catch (err: any) { setError(err?.message || 'Could not request a password reset. Try again.'); }
+    finally { setResetBusy(false); }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +55,9 @@ export function LoginPage() {
     <AuthShell>
       <AuthBackButton label="Back to welcome" onClick={() => navigate('/')} />
       <AuthFormCard title="Sign in" subtitle="Welcome back. Let's get you moving.">
-        <GoogleButton disabled={busy || loading} />
+        <GoogleButton disabled={busy || loading || passkeyBusy} />
+        <div className="my-4 flex items-center gap-3 text-xs font-semibold text-slate-400"><span className="h-px flex-1 bg-slate-200"/><span>OR USE YOUR DEVICE</span><span className="h-px flex-1 bg-slate-200"/></div>
+        {passkeySupported ? <button type="button" onClick={() => void handlePasskeySignIn()} disabled={passkeyBusy || busy || loading} className="mb-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-900 transition hover:bg-emerald-100 disabled:opacity-50"><Fingerprint size={19}/>{passkeyBusy ? 'Waiting for device verification…' : 'Sign in with a passkey'}</button> : <p className="mb-5 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Passkey sign-in is not available in this browser or connection. Use your password or Google sign-in instead.</p>}
         {authError && <p role="alert" className="mb-4 text-red-700">{authError}</p>}
         <form onSubmit={handleSubmit} className="auth-form">
           <label className="field"><span>Email address</span>
@@ -51,7 +75,9 @@ export function LoginPage() {
             </div>
           </label>
           
-          {error && <div className="p-3 bg-red-50 text-red-600 text-sm font-medium rounded-lg border border-red-100">{error}</div>}
+          <div className="flex justify-end -mt-2"><button type="button" onClick={() => void handlePasswordReset()} disabled={resetBusy || busy || loading} className="text-sm font-semibold text-[#184f9a] hover:underline disabled:opacity-50">{resetBusy ? 'Sending reset link…' : 'Forgot password?'}</button></div>
+          {resetNotice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{resetNotice}</p>}
+          {error && <div role="alert" className="p-3 bg-red-50 text-red-600 text-sm font-medium rounded-lg border border-red-100">{error}</div>}
           <button className="primary-button full-button" type="submit" disabled={loading || busy}>
             {loading || busy ? <Zap size={17} className="animate-pulse" /> : null}
             {loading || busy ? 'Signing in...' : 'Sign in'}

@@ -1,4 +1,5 @@
 import ActiveTripMap from '@/components/ActiveTripMap';
+import { CashMonimeSuccess } from '@/components/CashMonimeSuccess';
 import { ProductGallery, catalogMoney, catalogCheckoutAllowed } from '@/components/ProductCatalog';
 import FareNegotiation from '@/components/FareNegotiation';
 import { useCustomerActiveRide } from '@/lib/useRideNegotiation';
@@ -42,6 +43,7 @@ export function RiderDashboard(props: any) {
 function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpenTrips }: any) {
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [rideNotice, setRideNotice] = useState('');
+  const [cashSuccessOpen, setCashSuccessOpen] = useState(false);
   const [walletNotice, setWalletNotice] = useState('');
   const balanceBusy = useRef(false);
   const setupBusy = useRef(false);
@@ -449,7 +451,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       if (activeBooking.payment_method === 'cash') {
         const payment = result.payment;
         if (payment?.status === 'settled' && result.success === true && result.pending === false) {
-          setRideNotice('Both cash confirmations are verified and MatMove has captured its reserved fee. Cash collection is settled.');
+          setRideNotice('');
+          setCashSuccessOpen(true);
           setActiveBooking(null);
         } else {
           setRideNotice(payment?.driverCashConfirmed && payment?.riderCashConfirmed
@@ -538,6 +541,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen">
+      <CashMonimeSuccess open={cashSuccessOpen} onClose={() => setCashSuccessOpen(false)} />
       <header className={`bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm ${activeSection === 'wallet' || activeSection === 'home' ? 'hidden' : ''}`}>
         <div>
           <h1 className="text-xl font-bold text-slate-900">
