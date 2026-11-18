@@ -7,7 +7,7 @@ import NotificationBell from '@/components/NotificationBell';
 import PortalHome from '@/components/PortalHome';
 import CustomerHome from '@/components/CustomerHome';
 import PortalGuide from '@/components/PortalGuide';
-import AccountProfile, {AccountIdentity} from '@/components/AccountProfile';
+import AccountProfile, {AccountIdentity, PasskeySecurity} from '@/components/AccountProfile';
 
 
 
@@ -1250,7 +1250,7 @@ function AccountSection({
           <ArrowLeft size={17}/> Back to Account
         </button>
         <h1 className="mb-4 text-2xl font-bold text-slate-900">Profile</h1>
-        <AccountProfile key={profile.id} userId={profile.id}/>
+        <AccountProfile key={profile.id} userId={profile.id} showPasskey={false}/>
         <section aria-labelledby="mm-verified-details-title" className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 id="mm-verified-details-title" className="font-bold text-slate-900">Account & verified details</h2>
@@ -1299,6 +1299,8 @@ function AccountSection({
         <button type="button" onClick={() => setViewingWallet(true)} className="mm-account-link"><span className="mm-account-link-icon bg-emerald-50 text-emerald-700"><Wallet size={19}/></span><span className="min-w-0 flex-1"><b>Wallet & payments</b><small>Balances, transactions, top-ups and transfers</small></span><ArrowRight size={18}/></button>
         <button type="button" onClick={onServices} className="mm-account-link"><span className="mm-account-link-icon bg-slate-100 text-slate-700"><Store size={19}/></span><span className="min-w-0 flex-1"><b>Services & tools</b><small>Shop, business, travel, events and games</small></span><ArrowRight size={18}/></button>
       </div>
+
+      <PasskeySecurity key={profile.id} userId={profile.id}/>
 
       <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white divide-y divide-slate-100">
         <button type="button" onClick={() => setActivePanel('profile')} className="mm-account-row"><span className="mm-account-link-icon bg-blue-50 text-blue-700"><UserCircle size={19}/></span><span className="min-w-0 flex-1"><b>Profile & personal details</b><small>Profile photo, display name, email, phone and verified identity</small></span><ArrowRight size={18}/></button>
