@@ -26,7 +26,7 @@ export function LoginPage() {
     setPasskeyBusy(true); setError('');
     try { await signInWithPasskey(); }
     catch (err: any) {
-      const message = err?.name === 'AbortError' ? 'Passkey sign-in was cancelled. You can sign in with your password instead.' : (err?.message || 'Passkey sign-in could not be completed. Use your password or Google sign-in.');
+      const message = err?.code === 'passkey_disabled' || /passkey_disabled/i.test(err?.message || '') ? 'Passkey sign-in is not enabled for MatMove yet. Use your password or Google sign-in instead.' : err?.name === 'AbortError' || err?.name === 'NotAllowedError' ? 'Passkey sign-in was cancelled or not completed. You can sign in with your password instead.' : (err?.message || 'Passkey sign-in could not be completed. Use your password or Google sign-in.');
       setError(message);
     } finally { setPasskeyBusy(false); }
   };
