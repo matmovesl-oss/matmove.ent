@@ -1,9 +1,9 @@
 export function AccountPolicy() {
   return (
-    <details className="rounded-3xl border border-slate-200 bg-white p-6 mb-6">
-      <summary className="cursor-pointer text-lg font-bold text-slate-900">
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 mb-6">
+      <h2 className="text-lg font-bold text-slate-900">
         MatMove Safety & Compliance Policy
-      </summary>
+      </h2>
 
       <div className="mt-4 text-sm text-slate-600 space-y-4">
         <p>
@@ -44,6 +44,6 @@ export function AccountPolicy() {
           MatMove support.
         </p>
       </div>
-    </details>
+    </section>
   );
 }
