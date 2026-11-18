@@ -31,6 +31,8 @@ test('customer sign-in uses Supabase verified passkeys and keeps password fallba
   assert.match(profile, /supabase\.auth\.passkey\.list\(\)/);
   assert.match(profile, /supabase\.auth\.passkey\.delete\(/);
   assert.match(profile, /Passkeys are an experimental Supabase Auth feature/);
+  assert.match(profile, /Device passkeys are not enabled for MatMove yet/);
+  assert.match(auth, /Passkey sign-in is not enabled for MatMove yet/);
   assert.match(client, /experimental:\s*\{\s*passkey:\s*true\s*\}/);
   assert.match(client, /VITE_SUPABASE_ANON_KEY/);
   assert.doesNotMatch(client, /SERVICE_ROLE|SECRET_KEY/i);
