@@ -39,6 +39,7 @@ export function DriverDashboard(props: any) {
 function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [rideNotice, setRideNotice] = useState('');
+  const [cashSuccessOpen, setCashSuccessOpen] = useState(false);
   const [walletNotice, setWalletNotice] = useState('');
   const balanceBusy = useRef(false);
   const setupBusy = useRef(false);
@@ -336,7 +337,8 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
       const payment = result.payment || booking.cashPayment;
       if (payment?.status === 'settled' && result.success === true && result.pending === false) {
         setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
-        setRideNotice('Your cash receipt and the rider handover are both confirmed. MatMove fee capture is verified and the cash ride is settled.');
+        setRideNotice('');
+        setCashSuccessOpen(true);
       } else {
         setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking, cashPayment: result.payment || item.cashPayment }) : item));
         setRideNotice(result.pending
@@ -361,7 +363,8 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
       radarMutation.current++;
       if (status.payment?.status === 'settled') {
         setActiveRequests(previous=>previous.filter(item=>item.id!==booking.id));
-        setRideNotice('This older cash request is fully settled. Both confirmations and MatMove fee capture are verified.');
+        setRideNotice('');
+        setCashSuccessOpen(true);
       } else {
         setActiveRequests(previous=>previous.map(item=>item.id===booking.id?mergeRideRow(item,{...item,...status.booking,cashPayment:status.payment}):item));
         setRideNotice(status.payment?.riderCashConfirmed?'Customer handover confirmation is recorded. MatMove fee settlement is still being verified.':'Latest server status checked. The customer has not yet confirmed the cash handover. Keep this request open and do not collect again.');
@@ -448,6 +451,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
 
   return (
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
+      <CashMonimeSuccess open={cashSuccessOpen} onClose={() => setCashSuccessOpen(false)} />
       {(rideNotice || walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice && <p>{rideNotice}</p>}{walletNotice && <p>{walletNotice}</p>}</div>}
       <header className={`bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm ${activeSection === 'wallet' ? 'hidden' : ''}`}>
         <div className="flex items-center gap-4">
