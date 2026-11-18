@@ -73,6 +73,7 @@ import {
 
 import {
   UserCircle,
+  Gift,
   LogOut,
   MessageSquare,
   ShieldAlert,
