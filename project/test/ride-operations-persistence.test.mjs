@@ -55,7 +55,7 @@ test('Admin unpaid cash-fare flag distinguishes the physical driver fare from th
 
 test('Driver can resume the exact accepted ride from Trips into the live driver dashboard',()=>{
  assert.match(trips,/onResume\(t\.id\)/);
- assert.match(trips,/Continue this ride/);
+ assert.match(trips,/Continue trip/);
  assert.match(driverDashboard,/DriverTrips profile=\{props\.profile\} onResume=\{props\.onResumeTrip\}/);
  assert.match(driverDashboard,/r\.id===resumeTripId/);
  assert.match(portal,/rememberTrip\(bookingId\);setActiveSection\('ride'\)/);
