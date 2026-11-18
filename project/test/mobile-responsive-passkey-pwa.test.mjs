@@ -77,3 +77,12 @@ test('customer account uses compact arrow rows and focused profile, referral and
   assert.match(css, /@media\(max-width:420px\)/);
   assert.match(profile, /<PasskeySecurity userId=\{userId\}\/>/);
 });
+
+test('biometric controls stay on the Account hub while profile editing opens separately', async () => {
+  const app = await readFile('src/App.tsx', 'utf8');
+  const profile = await readFile('src/components/AccountProfile.tsx', 'utf8');
+  assert.ok(app.includes('<PasskeySecurity key={profile.id} userId={profile.id}/>'));
+  assert.ok(app.includes('showPasskey={false}'));
+  assert.ok(profile.includes('export function PasskeySecurity'));
+  assert.ok(profile.includes('{showPasskey&&<PasskeySecurity userId={userId}/>'));
+});
