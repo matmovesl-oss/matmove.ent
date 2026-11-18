@@ -119,7 +119,7 @@ function PasskeySecurity({userId}:{userId:string}) {
    if(registerError)throw registerError;
    await reload();
    setNotice(data?.friendly_name?'Passkey registered: '+data.friendly_name+'. You can now use your device to sign in.':'Passkey registered. You can now use your device to sign in.');
-  }catch(err:any){setError(/passkey_disabled/i.test(err?.message||'')?'Passkeys are not enabled in MatMove Supabase Auth yet. Enable the Passkeys option in the project Auth settings first.':err?.name==='NotAllowedError'||err?.name==='AbortError'?'Device verification was cancelled. No passkey was added.':(err?.message||'This device could not register a passkey.'));}
+  }catch(err:any){setError((err?.code==='passkey_disabled'||/passkey_disabled/i.test(err?.message||''))?'Passkeys are not enabled in MatMove Supabase Auth yet. Enable the Passkeys option in the project Auth settings first.':err?.name==='NotAllowedError'||err?.name==='AbortError'?'Device verification was cancelled. No passkey was added.':(err?.message||'This device could not register a passkey.'));}
   finally{setBusy(false);}
  };
 
