@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { customerPasscode } from '@/components/CustomerPasscode';
+import { hasVerifiedPasswordRecovery, clearVerifiedPasswordRecovery } from '@/services/authRecoveryState';
 import { LockKeyhole, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 
 type RecoveryMode = 'password' | 'passcode';
@@ -33,7 +34,7 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
-      if (event === 'PASSWORD_RECOVERY' && session?.user) {
+      if (event === 'PASSWORD_RECOVERY' && session?.user && hasVerifiedPasswordRecovery(session.user.id)) {
         setRecoveryReady(true);
         setError('');
       }
@@ -45,7 +46,7 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
         setError(sessionError.message);
         return;
       }
-      if (marker && data.session?.user) {
+      if (marker && data.session?.user && hasVerifiedPasswordRecovery(data.session.user.id)) {
         setRecoveryReady(true);
         setError('');
       } else if (!providerError) {
@@ -83,20 +84,21 @@ export function UpdatePassword({ mode = 'password' }: { mode?: RecoveryMode }) {
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       const userId = sessionData.session?.user.id;
-      if (sessionError || !userId) throw new Error('Recovery session expired. Request a fresh email and try again.');
+      if (sessionError || !userId || !hasVerifiedPasswordRecovery(userId)) throw new Error('Recovery verification expired. Request a fresh recovery email and try again.');
 
       if (mode === 'password') {
         const { error: updateError } = await supabase.auth.updateUser({ password });
         if (updateError) throw updateError;
       } else {
         const result = await customerPasscode(userId, 'recover', null, newPin);
-        if (!result.ok || result.digits < 6 || result.digits > 10 || result.code !== 'saved') {
+        if (!result.ok || result.digits < 6 || result.digits > 9 || result.code !== 'saved') {
           throw new Error(result.code === 'cooldown'
             ? 'Passcode recovery is temporarily locked. Request a fresh recovery email after the cooldown.'
             : 'The passcode reset was not confirmed. Request a fresh recovery email and try again.');
         }
       }
 
+      clearVerifiedPasswordRecovery(userId);
       localStorage.removeItem('matmove_pin');
       localStorage.removeItem('matmove_last_active');
       const { error: signOutError } = await supabase.auth.signOut();
