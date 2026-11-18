@@ -1,4 +1,5 @@
 import ActiveTripMap from '@/components/ActiveTripMap';
+import { CashMonimeSuccess } from '@/components/CashMonimeSuccess';
 import { SkeletonBlock, SkeletonList } from '@/components/Skeleton';
 
 import FareNegotiation from '@/components/FareNegotiation';
