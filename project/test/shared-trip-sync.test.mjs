@@ -84,7 +84,7 @@ test('Trips is the only customer location for unfinished requests and reopens th
   assert.match(source,/useCustomerActiveRide\(profile(\?\.id|\.id), resumeTripId \|\| null\)/);
  }
  assert.match(trips,/onResume\(t\.id\)/);
- assert.match(trips,/Reopen original request/);
+ assert.match(trips,/Continue request/);
  assert.match(hook,/resumeBookingId: string \| null = null/);
  assert.match(hook,/const data = exact \|\| withCash\.find/);
  assert.match(hook,/readSavedActiveBooking\(userId\)/);
@@ -226,7 +226,7 @@ test('customer active ride restores the exact saved booking or newest unfinished
 test('Trips opens customer accounts on Pending and retains Driver Live/Active as its first view',async()=>{
  const trips=await read('../src/components/TripHistory.tsx');
  assert.match(trips,/useState<'active'\|'pending'\|'history'>\(role==='driver'\?'active':'pending'\)/);
- assert.match(trips,/\{id:'pending',label:'Pending'/);
+ assert.match(trips,/label:'Requests'/);
  assert.match(trips,/\{id:'history',label:'History'/);
 });
 
