@@ -101,7 +101,7 @@ function PasskeySecurity({userId}:{userId:string}) {
    if(sessionError||session?.user.id!==userId)throw new Error('Your sign-in changed. Reopen account security.');
    const {data,error:listError}=await supabase.auth.passkey.list();
    if(listError)throw listError;
-   setPasskeys(Array.isArray(data)?data as PasskeyEntry:[]);
+   setPasskeys(Array.isArray(data)?data as PasskeyEntry[]:[]);
   }catch(err:any){setError(/passkey_disabled/i.test(err?.message||'')?'Passkeys are not enabled in MatMove Supabase Auth yet. Enable the Passkeys option in the project Auth settings before registering devices.':(err?.message||'Registered passkeys could not be loaded.'));}
   finally{setLoading(false);}
  },[userId]);
