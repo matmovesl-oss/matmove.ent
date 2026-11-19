@@ -78,3 +78,19 @@ test('Driver can refresh the server-verified cash handover and old requests are 
   assert.match(code,/Older request · over 24 hours/);
   assert.match(code,/Flag this old request with support/);
 });
+
+
+test('both rider and driver show Monime success when settlement arrives through server refresh', async () => {
+  const [rider, driver] = await Promise.all([
+    readFile(riderFile, 'utf8'),
+    readFile(driverFile, 'utf8')
+  ]);
+  assert.match(rider, /activeBooking\?\.cashPayment\?\.status === 'settled'/);
+  assert.match(rider, /payment\.driverCashConfirmed === true/);
+  assert.match(rider, /payment\.riderCashConfirmed === true/);
+  assert.match(rider, /setCashSuccessOpen\(true\)/);
+  assert.match(driver, /activeRequests\.find\(item =>[\s\S]*?item\.cashPayment\?\.status === 'settled'/);
+  assert.match(driver, /item\.cashPayment\?\.driverCashConfirmed === true/);
+  assert.match(driver, /item\.cashPayment\?\.riderCashConfirmed === true/);
+  assert.match(driver, /setCashSuccessOpen\(true\)/);
+});
