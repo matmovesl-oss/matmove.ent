@@ -8,6 +8,7 @@ import { reconcileMerchantPayments } from './merchant-payments.js';
 import { reconcileSpins } from './spin-payments.js';
 import { reconcileArcades } from './arcade-payments.js';
 import { reconcileReferrals } from './referral-api.js';
+import { reconcileLoadingBonanzaBatch } from './loading-bonanza-payments.js';
 
 function validCronAuthorization(req) {
   const secret = process.env.CRON_SECRET;
@@ -79,13 +80,14 @@ export async function reconcileMatMovePayments(
     invokeHandler(payouts, authorization),
     invokeHandler(merchants, authorization),
     invokeHandler(referrals, authorization, { action: 'referral_reconcile' }),
+    reconcileLoadingBonanzaBatch(undefined, { limit: 3 }),
     invokeHandler(spins, authorization),
     invokeHandler(arcades, authorization),
     monime({ limit: 3 }),
     purchases({ limit: 5 })
   ]);
 
-  const names = ['ridePayments', 'withdrawals', 'merchantPayments', 'referrals', 'spinPayments', 'arcadePayments', 'monimeEvents', 'purchasePayments'];
+  const names = ['ridePayments', 'withdrawals', 'merchantPayments', 'referrals', 'loadingBonanza', 'spinPayments', 'arcadePayments', 'monimeEvents', 'purchasePayments'];
   const result = {};
   let unavailable = false;
 
@@ -101,7 +103,7 @@ export async function reconcileMatMovePayments(
       continue;
     }
 
-    if (index < 6) {
+    if (index < 7) {
       const response = item.value;
       const countKeys = ['checked', 'failed'];
       if (
@@ -116,7 +118,7 @@ export async function reconcileMatMovePayments(
         continue;
       }
       result[names[index]] = response.body;
-    } else {
+    } else if (index === 7) {
       const counts = ['checked', 'processed', 'retrying', 'failed'];
       if (!validCounts(item.value, counts)) {
         unavailable = true;
@@ -126,6 +128,12 @@ export async function reconcileMatMovePayments(
       // Failed/quarantined webhook events are durably retained for manual
       // review. They are reported in the result, not hidden as successes.
       result[names[index]] = item.value;
+    } else {
+      const counts = ['checked', 'failed'];
+      if (!validCounts(item.value, counts)) {
+        unavailable = true;
+        result[names[index]] = { unavailable: true };
+      } else result[names[index]] = item.value;
     }
   }
 
