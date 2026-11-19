@@ -10,7 +10,8 @@ import {
 
 const reward = {
   id: '11111111-1111-4111-8111-111111111111',
-  payment_transaction_id: '22222222-2222-4222-8222-222222222222',
+  topup_id: '22222222-2222-4222-8222-222222222222',
+  provider_payment_id: 'pay-123456',
   request_key: '33333333-3333-4333-8333-333333333333',
   source_account: 'fac-referral',
   destination_account: 'fac-customer',
@@ -58,7 +59,8 @@ test('cashback Monime transfer is exact, linked and idempotent', () => {
   assert.deepEqual(body.amount, { currency: 'SLE', value: 100 });
   assert.equal(body.sourceFinancialAccount.id, reward.source_account);
   assert.equal(body.destinationFinancialAccount.id, reward.destination_account);
-  assert.equal(body.metadata.matmovePaymentTransactionId, reward.payment_transaction_id);
+  assert.equal(body.metadata.matmoveLoadingBonanzaTopupId, reward.topup_id);
+  assert.equal(body.metadata.matmoveMonimePaymentId, reward.provider_payment_id);
   assert.equal(matchesLoadingBonanzaReceipt({
     id: 'trn-cashback',
     amount: { currency: 'SLE', value: 100 },
@@ -66,7 +68,8 @@ test('cashback Monime transfer is exact, linked and idempotent', () => {
     destinationFinancialAccount: { id: reward.destination_account },
     metadata: {
       matmoveLoadingBonanzaRewardId: reward.id,
-      matmovePaymentTransactionId: reward.payment_transaction_id,
+      matmoveLoadingBonanzaTopupId: reward.topup_id,
+      matmoveMonimePaymentId: reward.provider_payment_id,
       matmoveRequestKey: reward.request_key
     },
     status: 'completed'
