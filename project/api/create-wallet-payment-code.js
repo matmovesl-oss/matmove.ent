@@ -13,10 +13,45 @@ import {
   publicPaymentCode, topupSettlement, encodeTopupQuote
 } from '../server/payment-code.js';
 
+async function recordVerifiedTopup(context, code, settlement) {
+  if (!settlement || !Number.isSafeInteger(settlement.creditMinor) || settlement.creditMinor <= 0) return;
+  const wallet = context.wallets.find(item =>
+    item.currency === 'SLE' &&
+    (item.monime_account_id || item.metadata?.monime_account_id) === code.financialAccountId
+  );
+  if (!wallet || !context.db || !context.user?.id) {
+    throw new HttpError(503, 'Payment completed, but MatMove could not link its verified wallet receipt. Check this same payment status again; do not create another load.');
+  }
+  const { data, error } = await context.db.rpc('matmove_loading_bonanza_record_topup', {
+    p_user: context.user.id,
+    p_wallet: wallet.id,
+    p_payment_code: code.id,
+    p_provider_payment: settlement.paymentId,
+    p_gross: code.amount.value,
+    p_fee: settlement.feeMinor,
+    p_credit: settlement.creditMinor,
+    p_destination: code.financialAccountId
+  });
+  if (error || data?.user_id !== context.user.id || data?.wallet_id !== wallet.id ||
+      data?.payment_code_id !== code.id || data?.provider_payment_id !== settlement.paymentId ||
+      Number(data?.credit_minor) !== settlement.creditMinor || data?.state !== 'completed') {
+    throw new HttpError(503, 'Payment completed, but MatMove is still recording its verified top-up receipt. Check this same payment status again; do not create another load.');
+  }
+}
+
 async function sendPaymentCode(res,code,context,provider) {
   const result=publicPaymentCode(code,context);
   let settlement=null;
-  if(result.confirmed){try{settlement=await topupSettlement(code,provider);}catch{/* Status remains completed; wallet refresh uses the live provider balance. */}}
+  if(result.confirmed){
+    try {
+      settlement=await topupSettlement(code,provider);
+      if (settlement) await recordVerifiedTopup(context, code, settlement);
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 503) throw error;
+      // A completed Payment Code is not enough to award cashback. Keep the
+      // exact code open for a later provider-payment lookup and retry.
+    }
+  }
   return res.status(200).json({paymentCode:{...result,settlement}});
 }
 
