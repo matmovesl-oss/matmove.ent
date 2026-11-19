@@ -83,22 +83,12 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
 
   const [passengerCount,setPassengerCount]=useState(1);
   const [passengerName,setPassengerName]=useState('');
-  const [bookingSheetExpanded,setBookingSheetExpanded]=useState(true);
   const [routeEditing,setRouteEditing]=useState(true);
   const [paymentMethod,setPaymentMethod]=useState<'digital'|'cash'>('digital');
   const [cashConfigLoading,setCashConfigLoading]=useState(true);
   const [cashEnabled,setCashEnabled]=useState(false);
   const [cashAccountsVerified,setCashAccountsVerified]=useState(false);
-  const [bookingSheetDragDelta,setBookingSheetDragDelta]=useState(0);
-  const [bookingSheetDragging,setBookingSheetDragging]=useState(false);
-  const sheetPointerStart=useRef<number|null>(null);
-  const sheetDragStartHeight=useRef(148);
-  const sheetDragged=useRef(false);
   const { booking: activeBooking, setBooking: setActiveBooking, loading: tripLoading, error: tripError, retry: retryTrip, applySnapshot: applyFareSnapshot, hasUnfinishedBookings, hasCashReviewCases, canCreate: canCreateTrip } = useCustomerActiveRide(profile.id, resumeTripId || null);
-
-  useEffect(() => {
-    if (resumeTripId && activeBooking?.id === resumeTripId) setBookingSheetExpanded(true);
-  }, [resumeTripId, activeBooking?.id]);
 
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
@@ -375,22 +365,11 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
 
   return (
     <div className="min-h-screen flex-1 bg-slate-50">
-      <header className={`sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur ${activeSection === 'wallet' ? 'hidden' : ''}`}>
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="shrink-0 rounded-xl bg-orange-100 p-2 text-orange-600"><Store size={20} /></div>
-            <h2 className="min-w-0 truncate font-bold text-slate-900">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2>
-          </div>
-          {!canTransact ? (
-            <div className="flex w-full justify-center rounded-xl border border-red-200 bg-red-100 px-3 py-3 text-xs font-bold text-red-700 sm:w-auto sm:min-w-[360px]">
-              {isFrozen ? 'Wallet unavailable' : 'Approval pending'}
-            </div>
-          ) : (
-            <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:min-w-[360px]">
-              <button type="button" onClick={() => setIsLoadModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-blue-600 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Load</button>
-              <button type="button" onClick={() => setIsPayoutModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-emerald-600 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Withdraw</button>
-              <button type="button" onClick={() => setIsTransferModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-slate-900 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Transfer</button>
-            </div>
+      <header className={`sticky top-0 z-20 flex flex-nowrap items-center justify-between gap-2 border-b bg-white px-3 py-3 shadow-sm sm:px-6 sm:py-4 ${activeSection === 'wallet' ? 'hidden' : ''}`}>
+        <div className="flex min-w-0 flex-1 items-center gap-2"><div className="shrink-0 rounded-xl bg-orange-100 p-2 text-orange-600"><Store size={18} /></div><h2 className="min-w-0 truncate text-sm font-bold text-slate-900 sm:text-base">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
+        <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+          {!canTransact ? <span className="rounded-xl border border-red-200 bg-red-100 px-4 py-2 text-xs font-bold text-red-700">{isFrozen ? 'Wallet unavailable' : 'Approval pending'}</span> : (
+            <><button onClick={() => setIsLoadModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="shrink-0 whitespace-nowrap rounded-lg bg-blue-600 px-2.5 py-2 text-[11px] font-bold text-white sm:px-3 sm:text-xs">Load</button><button onClick={() => setIsPayoutModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="shrink-0 whitespace-nowrap rounded-lg bg-emerald-600 px-2.5 py-2 text-[11px] font-bold text-white sm:px-3 sm:text-xs">Withdraw</button><button onClick={() => setIsTransferModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="shrink-0 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-2 text-[11px] font-bold text-white sm:px-3 sm:text-xs">Transfer</button></>
           )}
         </div>
       </header>
@@ -407,15 +386,8 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
       )}
       {activeSection === 'home' && (activeBooking || (pickupCoords && destinationCoords && !routeEditing)) && (
         <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
-          <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[58dvh] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6"
-            style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(58dvh,640px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
-            <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded}
-              onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;sheetDragStartHeight.current=bookingSheetExpanded?Math.min(window.innerHeight*.58,640):148;setBookingSheetDragging(true);setBookingSheetDragDelta(0);event.currentTarget.setPointerCapture(event.pointerId);}}
-              onPointerMove={event=>{if(sheetPointerStart.current!==null){const maxHeight=Math.min(window.innerHeight*.66,700),base=sheetDragStartHeight.current,delta=event.clientY-sheetPointerStart.current;setBookingSheetDragDelta(Math.max(base-maxHeight,Math.min(base-148,delta)));}}}
-              onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start,base=sheetDragStartHeight.current,maxHeight=Math.min(window.innerHeight*.66,700),nextHeight=Math.max(148,Math.min(maxHeight,base-delta));if(Math.abs(delta)>6){sheetDragged.current=true;setBookingSheetExpanded(delta < -6 ? true : delta > 80 ? false : bookingSheetExpanded);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}}
-              onPointerCancel={()=>{sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}}
-              onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}}
-              className="mx-auto flex h-6 w-16 touch-none select-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button>
+          <div className="relative z-30 mx-auto w-full max-w-5xl min-w-0 rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-4 shadow-sm space-y-4 sm:px-6">
+
             <div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><h3 className="mt-1 text-lg font-black text-slate-950">{activeBooking ? (activeBooking.status==='accepted'?'Driver accepted · arriving':activeBooking.status==='in_progress'?'Trip in progress':'Your active request') : serviceType==='ride'?'Plan your ride':serviceType==='scheduled'?'Schedule your ride':'Plan your delivery'}</h3><p className="mt-1 text-sm text-slate-500">Choose your service, set your route and review your fare.</p></div>
             {tripError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{tripError}<button type="button" onClick={retryTrip} className="min-h-11 px-2 font-bold underline">Retry active trip</button></p>}
               {tripLoading && !activeBooking ? <div role="status" aria-label="Loading active trip" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4"><SkeletonBlock className="h-4 w-2/5" rounded="rounded-md"/><SkeletonBlock className="h-3 w-4/5" rounded="rounded-md"/><SkeletonBlock className="h-24 w-full" rounded="rounded-lg"/></div> : tripError && !activeBooking ? null : !activeBooking ? (
@@ -507,7 +479,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
         </div>
       )}
 
-      {activeSection === 'home' && (activeBooking && ['accepted','in_progress'].includes(activeBooking.status) ? <ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/> : <RideLocationPicker layout="map-first" key={profile.id} userId={profile.id} onBack={onBack || (() => { setRouteEditing(true); setPickup(''); setDestination(''); setPickupCoords(null); setDestinationCoords(null); setTripDistanceKm(null); setOfferAmount(''); })} bookingReady={Boolean(pickupCoords && destinationCoords && !routeEditing)} bookingSheetExpanded={bookingSheetExpanded} onRouteEditingChange={setRouteEditing} onChange={(selection: TripLocations) => { const ready=Boolean(selection.pickup&&selection.destination);if(ready)setBookingSheetExpanded(true);setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />)}
+      {activeSection === 'home' && (activeBooking && ['accepted','in_progress'].includes(activeBooking.status) ? <ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/> : <RideLocationPicker layout="map-first" key={profile.id} userId={profile.id} onBack={onBack || (() => { setRouteEditing(true); setPickup(''); setDestination(''); setPickupCoords(null); setDestinationCoords(null); setTripDistanceKm(null); setOfferAmount(''); })} bookingReady={Boolean(pickupCoords && destinationCoords && !routeEditing)} onRouteEditingChange={setRouteEditing} onChange={(selection: TripLocations) => { setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />)}
 
       {activeSection === 'wallet' && (
         <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">

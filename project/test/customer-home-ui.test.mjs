@@ -45,28 +45,22 @@ test('homepage feed replaces the decorative route demo with admin-published movi
 });
 
 
-test('ride map fills its own section, preserves single-finger map gestures and allows page scrolling outside it',async()=>{
+test('ride booking uses an inline responsive map and lets the customer page scroll naturally',async()=>{
  const [picker,ride,app]=await Promise.all([
   read('../src/components/RideLocationPicker.tsx'),
   read('../src/pages/RiderDashboard.tsx'),
   read('../src/App.tsx')
  ]);
- assert.ok(picker.includes('className={mapFirst?"relative z-10 min-h-[100dvh] w-full'));
- assert.ok(picker.includes("gestureHandling: 'greedy'"));
- assert.ok(picker.includes('className="absolute left-4 top-4 z-20'));
- assert.ok(picker.includes('className="absolute left-4 right-4 top-20 z-20'));
- assert.ok(!picker.includes('className={mapFirst?"fixed inset-0 z-10'));
- assert.match(picker,/Plan your ride/);
- assert.match(picker,/onPointerMove/);
- assert.match(picker,/onPointerUp/);
- assert.match(picker,/Back to MatMove home/);
- assert.match(picker,/Change locations/);
- assert.match(ride,/bookingReady=\{Boolean\(pickupCoords && destinationCoords && !routeEditing\)\}/);
- assert.match(ride,/onRouteEditingChange=\{setRouteEditing\}/);
- assert.match(ride,/fixed inset-x-0 bottom/);
- assert.match(ride,/min-h-\[148px\]/);
-  assert.match(ride,/max-h-\[min\(66dvh,700px\)\]/);
- assert.match(app,/onBack=\{\(\) => setActiveSection\('home'\)\}/);
+ assert.match(picker,/relative z-10 w-full min-w-0 bg-\[#e9eef1\]/,'map section should be inline and full width');
+ assert.match(picker,/h-\[min\(56dvh,520px\)\]/,'map viewport should be bounded to a responsive height');
+ assert.match(picker,/gestureHandling: 'greedy'/,'map should accept one-finger pan gestures');
+ assert.doesNotMatch(picker,/mapFirst\?"fixed inset-0/,'map must not be fixed over the full viewport');
+ assert.doesNotMatch(picker,/fixed inset-x-0 bottom-\[calc\(64px/,'location form must not be a fixed overlay');
+ assert.match(picker,/Back to MatMove home/,'map back control must remain visible');
+ assert.match(picker,/Change locations/,'location edit action must remain available');
+ assert.match(ride,/bookingReady=\{Boolean\(pickupCoords && destinationCoords && !routeEditing\)\}/,'ride readiness must collapse location editing after route selection');
+ assert.match(ride,/onRouteEditingChange=\{setRouteEditing\}/,'route edit state must remain controlled by the rider page');
+ assert.match(app,/onBack=\{\s*\(\) =>\s*setActiveSection\('home'\)\s*\}/,'map back action must return to the MatMove home section');
 });
 
 test('ride vehicle selector and map pins use branded visual markers instead of plain text or default pins',async()=>{
@@ -120,14 +114,13 @@ test('saved Home and Work addresses render as bordered updateable cards',async()
 });
 
 
-test('ride location panel follows the finger continuously and the map remains full-screen behind it',async()=>{
+test('ride location form flows below the map and has no fixed draggable sheet',async()=>{
  const picker=await read('../src/components/RideLocationPicker.tsx');
- assert.match(picker,/height:'100dvh',minHeight:'100dvh'/);
- assert.match(picker,/const \[locationSheetDragging,setLocationSheetDragging\]=useState\(false\)/);
- assert.match(picker,/calc\(\$\{locationDragStartHeight\.current\}px - \$\{locationDragDelta\}px\)/);
- assert.match(picker,/height 380ms cubic-bezier\(\.22,1,\.36,1\)/);
- assert.match(picker,/setLocationDragDelta\(Math\.max\(base-maxHeight,Math\.min\(base-180,delta\)\)\)/);
- assert.doesNotMatch(picker,/transform:locationDragDelta/);
+ assert.match(picker,/relative z-30 mx-auto w-full max-w-5xl min-w-0/);
+ assert.match(picker,/height:'auto',maxHeight:'none',overflow:'visible'/);
+ assert.doesNotMatch(picker,/locationSheetDragging|locationDragStartHeight|locationDragDelta/);
+ assert.doesNotMatch(picker,/Drag or tap to expand or collapse ride locations/);
+ assert.doesNotMatch(picker,/fixed bottom-\[calc\(82px/);
 });
 test('ride booking sheet height tracks the drag handle and snaps smoothly on release',async()=>{
  const page=await read('../src/pages/RiderDashboard.tsx');

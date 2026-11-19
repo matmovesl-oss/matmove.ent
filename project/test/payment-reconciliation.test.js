@@ -24,6 +24,7 @@ const defaultWorkers = () => ({
   payouts: okHandler,
   merchants: okHandler,
   referrals: okHandler,
+  loadingBonanza: async () => ({ checked: 0, failed: 0 }),
   spins: okHandler,
   arcades: okHandler,
   monime: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 }),
@@ -75,6 +76,7 @@ test('unified scheduler runs ride, withdrawal, merchant, referral, game, webhook
       calls.push(['monime', limit]);
       return { checked: 4, processed: 3, retrying: 1, failed: 0 };
     };
+    const loadingBonanza = async (_unused, { limit }) => { calls.push(['loadingBonanza', limit]); return { checked: 5, failed: 0 }; };
     const purchases = async ({ limit }) => {
       calls.push(['purchases', limit]);
       return { checked: 1, processed: 1, retrying: 0, failed: 0 };
@@ -85,7 +87,7 @@ test('unified scheduler runs ride, withdrawal, merchant, referral, game, webhook
       res,
       {
         rides: handler('rides'), payouts: handler('payouts'), merchants: handler('merchants'),
-        referrals: handler('referrals'), spins: handler('spins'), arcades: handler('arcades'),
+        referrals: handler('referrals'), loadingBonanza, spins: handler('spins'), arcades: handler('arcades'),
         monime, purchases
       }
     );
@@ -96,15 +98,17 @@ test('unified scheduler runs ride, withdrawal, merchant, referral, game, webhook
     assert.deepEqual(res.body.withdrawals, { checked: 2, failed: 0 });
     assert.deepEqual(res.body.merchantPayments, { checked: 6, failed: 0 });
     assert.deepEqual(res.body.referrals, { checked: 1, failed: 0 });
+    assert.deepEqual(res.body.loadingBonanza, { checked: 5, failed: 0 });
     assert.deepEqual(res.body.spinPayments, { checked: 2, failed: 0 });
     assert.deepEqual(res.body.arcadePayments, { checked: 4, failed: 0 });
     assert.deepEqual(res.body.monimeEvents, { checked: 4, processed: 3, retrying: 1, failed: 0 });
     assert.deepEqual(res.body.purchasePayments, { checked: 1, processed: 1, retrying: 0, failed: 0 });
     assert.equal(res.headers['Cache-Control'], 'no-store');
-    assert.equal(calls.length, 8);
+    assert.equal(calls.length, 9);
     assert.equal(calls.find(x => x[0] === 'referrals')[3], 'referral_reconcile');
     assert.deepEqual(calls.filter(x => ['rides','payouts','merchants','referrals','spins','arcades'].includes(x[0])).map(x => x[1]), Array(6).fill('GET'));
     assert.deepEqual(calls.filter(x => ['rides','payouts','merchants','referrals','spins','arcades'].includes(x[0])).map(x => x[2]), Array(6).fill(`Bearer ${secret}`));
+    assert.equal(calls.find(x => x[0] === 'loadingBonanza')[1], 3);
     assert.equal(calls.find(x => x[0] === 'monime')[1], 3);
     assert.equal(calls.find(x => x[0] === 'purchases')[1], 5);
   } finally {

@@ -9,6 +9,8 @@ const withdrawalId = '44444444-4444-4444-8444-444444444444';
 const spinId = '55555555-5555-4555-8555-555555555555';
 const arcadeId = '66666666-6666-4666-8666-666666666666';
 const referralId = '77777777-7777-4777-8777-777777777777';
+const loadingBonanzaId = '88888888-8888-4888-8888-888888888888';
+const loadingBonanzaFundingId = '99999999-9999-4999-8999-999999999999';
 
 function event(eventType = 'internal_transfer.completed', objectType = 'internal_transfer') {
   return { event_type: eventType, object_type: objectType, object_id: 'itr-test' };
@@ -36,6 +38,12 @@ test('routes completed internal transfers to exactly one supported MatMove ledge
   assert.deepEqual(classifyMonimeTransfer(event(), { metadata: { matmoveReferralRewardId: referralId } }), {
     kind: 'referral', id: referralId, resource: 'internal-transfers'
   });
+  assert.deepEqual(classifyMonimeTransfer(event(), { metadata: { matmoveLoadingBonanzaRewardId: loadingBonanzaId } }), {
+    kind: 'loadingBonanza', id: loadingBonanzaId, resource: 'internal-transfers'
+  });
+  assert.deepEqual(classifyMonimeTransfer(event(), { metadata: { matmoveLoadingBonanzaFundingId: loadingBonanzaFundingId } }), {
+    kind: 'loadingBonanzaFunding', id: loadingBonanzaFundingId, resource: 'internal-transfers'
+  });
 });
 
 test('routes only supported terminal payout events to withdrawal reconciliation', () => {
@@ -53,7 +61,7 @@ test('routes only supported terminal payout events to withdrawal reconciliation'
 test('quarantines ambiguous, malformed, unsupported and non-terminal transfer events', () => {
   assert.equal(classifyMonimeTransfer(event(), { metadata: {} }), null);
   assert.equal(classifyMonimeTransfer(event(), {
-    metadata: { bookingId: rideId, merchantPaymentId: merchantId }
+    metadata: { bookingId: rideId, matmoveLoadingBonanzaRewardId: loadingBonanzaId }
   }), null);
   assert.equal(classifyMonimeTransfer(event('internal_transfer.processing'), {
     metadata: { bookingId: rideId }
