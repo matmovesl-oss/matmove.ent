@@ -310,7 +310,7 @@ BEGIN
   );
 
 END;
-$function$
+$function$;
 
 -- Apply the same approved-KYC rule to the current Monime payout engine.
 CREATE OR REPLACE FUNCTION public.matmove_prepare_withdrawal(p_key text, p_user_id uuid, p_wallet_id uuid, p_source text, p_platform text, p_amount bigint, p_monime_fee bigint, p_platform_fee bigint, p_provider text, p_phone text)
@@ -435,4 +435,4 @@ begin
 
   return to_jsonb(v);
 end;
-$function$
+$function$;
