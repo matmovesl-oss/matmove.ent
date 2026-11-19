@@ -41,7 +41,7 @@ async function invokeHandler(handler, authorization) {
     }
   };
 
-  await handler({ headers: { authorization } }, response);
+  await handler({ method: 'GET', headers: { authorization } }, response);
   return response;
 }
 
