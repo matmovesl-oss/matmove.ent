@@ -68,6 +68,11 @@ export function classifyMonimeTransfer(event, transfer) {
   return null;
 }
 
+export function resolveRideLedgerFamily(digitalLeg, cashLeg) {
+  if (Boolean(digitalLeg) === Boolean(cashLeg)) return null;
+  return digitalLeg ? 'digital' : 'cash';
+}
+
 async function readLinkedLeg(db, table, parentColumn, parentId, providerId, providerColumn = 'provider_id') {
   const { data, error } = await db.from(table).select('status')
     .eq(parentColumn, parentId).eq(providerColumn, providerId).maybeSingle();
@@ -90,14 +95,11 @@ async function processLinkedTransfer(db, event, transfer) {
       readLinkedLeg(db, 'ride_payment_transfers', 'booking_id', target.id, transfer.id),
       readLinkedLeg(db, 'matmove_cash_ride_legs', 'booking_id', target.id, transfer.id, 'provider_transfer_id')
     ]);
-    const matches = [
-      digitalLeg ? { family: 'digital', leg: digitalLeg } : null,
-      cashLeg ? { family: 'cash', leg: cashLeg } : null
-    ].filter(Boolean);
-    if (matches.length !== 1) {
+    const family = resolveRideLedgerFamily(digitalLeg, cashLeg);
+    if (!family) {
       throw new ManualReviewError('Provider transfer is not linked to exactly one Ride or Cash Ride ledger leg; manual review required.');
     }
-    const { family, leg } = matches[0];
+    const leg = family === 'cash' ? cashLeg : digitalLeg;
     if (leg.status === 'review_required') {
       throw new ManualReviewError('The linked MatMove ride leg is under review; manual review required.');
     }
