@@ -190,12 +190,13 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
            ) : (
              <>
                {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose a new 6–9 digit passcode.</p>}
-               {!status?<p role="status" className="text-center text-sm text-slate-600">{loadingStatus?'Checking your saved passcode settings…':'Passcode setup unavailable.'}</p>:<>
+               {!status&&<p role="status" className="text-center text-sm text-slate-600">{loadingStatus?'Checking your saved passcode settings…':'Passcode setup unavailable.'}</p>}
+               {status&&<>
                 {!creating&&!upgrade&&<>{pinField(`Current ${status.digits}-digit passcode`,pin,'pin',status.digits)}{pinMirror(`Current ${status.digits}-digit passcode`,pin,'pin',setPin,status.digits)}</>}
                 {(creating||upgrade)&&<>{pinField('New passcode (6–9 digits)',next,'next',9)}{pinMirror('New passcode (6–9 digits)',next,'next',setNext,9)}{pinField('Confirm passcode',confirm,'confirm',9)}{pinMirror('Confirm passcode',confirm,'confirm',setConfirm,9)}</>}
-                {keypad}
-                <button type="submit" disabled={busy||loadingStatus} className="h-12 w-full rounded-2xl bg-emerald-800 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50">{loadingStatus?'Checking settings…':creating||upgrade?'Save passcode':'Unlock'}</button>
                </>}
+               {keypad}
+               <button type="submit" disabled={busy||loadingStatus||!status} className="h-12 w-full rounded-2xl bg-emerald-800 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50">{loadingStatus?'Checking settings…':!status?'Passcode unavailable':creating||upgrade?'Save passcode':'Unlock'}</button>
                
                {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p>}
                
