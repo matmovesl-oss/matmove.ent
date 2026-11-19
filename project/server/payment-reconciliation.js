@@ -31,6 +31,11 @@ async function invokeHandler(handler, authorization) {
   const response = {
     statusCode: 200,
     body: null,
+    headers: {},
+    setHeader(key, value) {
+      this.headers[key] = value;
+      return this;
+    },
     status(code) {
       this.statusCode = code;
       return this;
