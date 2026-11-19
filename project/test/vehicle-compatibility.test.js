@@ -11,6 +11,7 @@ test('normalizes every approved MatMove vehicle category and its onboarding labe
   assert.equal(normalizeMatMoveVehicleType('bike'), 'bike');
   assert.equal(normalizeMatMoveVehicleType('Tricycle (Keke)'), 'keke');
   assert.equal(normalizeMatMoveVehicleType('keke'), 'keke');
+  assert.equal(normalizeMatMoveVehicleType('Kekeh'), 'keke');
   assert.equal(normalizeMatMoveVehicleType('Car'), 'car');
   assert.equal(normalizeMatMoveVehicleType('SUV'), 'car');
   assert.equal(normalizeMatMoveVehicleType('Van / Truck'), 'van');
