@@ -32,7 +32,7 @@ test('customer sign-in uses Supabase verified passkeys and keeps password fallba
   assert.match(profile, /supabase\.auth\.passkey\.delete\(/);
   assert.match(profile, /Biometrics/);
   assert.match(profile, /Face ID or fingerprint on this device/);
-  assert.match(profile, /min-h-\[56px\]/);
+  assert.match(profile, /min-h-\[48px\]/);
   assert.doesNotMatch(profile, /Supabase Auth/);
   assert.match(profile, /Device passkeys are not enabled for MatMove yet/);
   assert.match(auth, /Passkey sign-in is not enabled for MatMove yet/);
