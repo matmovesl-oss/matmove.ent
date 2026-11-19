@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyMonimeTransfer } from '../server/monime-webhook-worker.js';
+import { classifyMonimeTransfer, resolveRideLedgerFamily } from '../server/monime-webhook-worker.js';
 
 const rideId = '11111111-1111-4111-8111-111111111111';
 const merchantId = '22222222-2222-4222-8222-222222222222';
@@ -52,4 +52,12 @@ test('quarantines ambiguous, malformed, unsupported and non-terminal transfer ev
   assert.equal(classifyMonimeTransfer(event(), {
     metadata: { bookingId: 'not-a-uuid' }
   }), null);
+});
+
+
+test('booking transfers must resolve to exactly one digital or cash ride ledger', () => {
+  assert.equal(resolveRideLedgerFamily({ status: 'pending' }, null), 'digital');
+  assert.equal(resolveRideLedgerFamily(null, { status: 'pending' }), 'cash');
+  assert.equal(resolveRideLedgerFamily(null, null), null);
+  assert.equal(resolveRideLedgerFamily({ status: 'pending' }, { status: 'pending' }), null);
 });
