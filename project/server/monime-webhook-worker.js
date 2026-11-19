@@ -90,9 +90,10 @@ async function processLinkedTransfer(db, event, transfer) {
   };
   const route = routes[target.kind];
   const linked = await readLinkedLeg(db, route.table, route.parent, target.id, transfer.id);
-  if (['failed', 'review_required'].includes(linked.status)) {
-    throw new ManualReviewError('The linked MatMove ledger leg is already terminal or under review; manual review required.');
+  if (linked.status === 'review_required') {
+    throw new ManualReviewError('The linked MatMove ledger leg is under review; manual review required.');
   }
+  if (linked.status === 'failed') return 'processed';
 
   await route.reconcile(db, target.id);
   const confirmed = await readLinkedLeg(db, route.table, route.parent, target.id, transfer.id);
