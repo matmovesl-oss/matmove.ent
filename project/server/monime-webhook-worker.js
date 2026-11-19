@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { assertMonimeEnvironment } from './wallet-security.js';
 import { reconcileRide } from './ride-payments.js';
+import { reconcileCashRide } from './cash-ride-payments.js';
 import { reconcileMerchantPayment } from './merchant-payments.js';
 import { reconcileWithdrawal } from './payout-payments.js';
 
@@ -67,12 +68,11 @@ export function classifyMonimeTransfer(event, transfer) {
   return null;
 }
 
-async function readLinkedLeg(db, table, parentColumn, parentId, providerId) {
-  const { data, error } = await db.from(table).select('status,provider_id')
-    .eq(parentColumn, parentId).eq('provider_id', providerId).maybeSingle();
+async function readLinkedLeg(db, table, parentColumn, parentId, providerId, providerColumn = 'provider_id') {
+  const { data, error } = await db.from(table).select('status')
+    .eq(parentColumn, parentId).eq(providerColumn, providerId).maybeSingle();
   if (error) throw new Error('Could not verify the linked MatMove transfer leg.');
-  if (!data) throw new ManualReviewError('Provider transfer is not linked to the recorded MatMove ledger leg; manual review required.');
-  return data;
+  return data || null;
 }
 
 async function processLinkedTransfer(db, event, transfer) {
@@ -83,13 +83,44 @@ async function processLinkedTransfer(db, event, transfer) {
 
   if (target.kind === 'purchase') return processPurchaseTransfer(db, event, transfer);
 
+  if (target.kind === 'ride') {
+    // Digital and cash rides share bookingId metadata. Resolve the provider
+    // transfer ID against both ledgers and require exactly one match.
+    const [digitalLeg, cashLeg] = await Promise.all([
+      readLinkedLeg(db, 'ride_payment_transfers', 'booking_id', target.id, transfer.id),
+      readLinkedLeg(db, 'matmove_cash_ride_legs', 'booking_id', target.id, transfer.id, 'provider_transfer_id')
+    ]);
+    const matches = [
+      digitalLeg ? { family: 'digital', leg: digitalLeg } : null,
+      cashLeg ? { family: 'cash', leg: cashLeg } : null
+    ].filter(Boolean);
+    if (matches.length !== 1) {
+      throw new ManualReviewError('Provider transfer is not linked to exactly one Ride or Cash Ride ledger leg; manual review required.');
+    }
+    const { family, leg } = matches[0];
+    if (leg.status === 'review_required') {
+      throw new ManualReviewError('The linked MatMove ride leg is under review; manual review required.');
+    }
+    if (leg.status === 'failed') return 'processed';
+    const reconcile = family === 'cash' ? reconcileCashRide : reconcileRide;
+    await reconcile(db, target.id);
+    const confirmed = family === 'cash'
+      ? await readLinkedLeg(db, 'matmove_cash_ride_legs', 'booking_id', target.id, transfer.id, 'provider_transfer_id')
+      : await readLinkedLeg(db, 'ride_payment_transfers', 'booking_id', target.id, transfer.id);
+    if (confirmed?.status === 'completed' || confirmed?.status === 'failed') return 'processed';
+    if (confirmed?.status === 'pending' || confirmed?.status === 'processing') return 'pending';
+    throw new ManualReviewError('MatMove ride ledger did not reach a recognized transfer state; manual review required.');
+  }
+
   const routes = {
-    ride: { table: 'ride_payment_transfers', parent: 'booking_id', reconcile: reconcileRide },
     merchant: { table: 'matmove_merchant_payment_legs', parent: 'payment_id', reconcile: reconcileMerchantPayment },
     withdrawal: { table: 'matmove_withdrawal_legs', parent: 'withdrawal_id', reconcile: reconcileWithdrawal }
   };
   const route = routes[target.kind];
   const linked = await readLinkedLeg(db, route.table, route.parent, target.id, transfer.id);
+  if (!linked) {
+    throw new ManualReviewError('Provider transfer is not linked to the recorded MatMove ledger leg; manual review required.');
+  }
   if (linked.status === 'review_required') {
     throw new ManualReviewError('The linked MatMove ledger leg is under review; manual review required.');
   }
@@ -97,8 +128,8 @@ async function processLinkedTransfer(db, event, transfer) {
 
   await route.reconcile(db, target.id);
   const confirmed = await readLinkedLeg(db, route.table, route.parent, target.id, transfer.id);
-  if (confirmed.status === 'completed' || confirmed.status === 'failed') return 'processed';
-  if (confirmed.status === 'pending' || confirmed.status === 'processing') return 'pending';
+  if (confirmed?.status === 'completed' || confirmed?.status === 'failed') return 'processed';
+  if (confirmed?.status === 'pending' || confirmed?.status === 'processing') return 'pending';
   throw new ManualReviewError('MatMove ledger did not reach a recognized transfer state; manual review required.');
 }
 
