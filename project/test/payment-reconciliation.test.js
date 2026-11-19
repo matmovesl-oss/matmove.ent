@@ -18,17 +18,25 @@ function env(key, value) {
   else process.env[key] = value;
 }
 
+const okHandler = async (_req, res) => res.status(200).json({ checked: 0, failed: 0 });
+const defaultWorkers = () => ({
+  rides: okHandler,
+  payouts: okHandler,
+  merchants: okHandler,
+  referrals: okHandler,
+  spins: okHandler,
+  arcades: okHandler,
+  monime: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 }),
+  purchases: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 })
+});
+
 test('unified payment reconciliation rejects missing, weak and incorrect cron credentials before running workers', async () => {
   const previous = process.env.CRON_SECRET;
   const secret = 'matmove-reconcile-test-secret-with-at-least-32-characters';
   let calls = 0;
-  const workers = {
-    rides: async () => { calls++; },
-    payouts: async () => { calls++; },
-    merchants: async () => { calls++; },
-    monime: async () => { calls++; },
-    purchases: async () => { calls++; }
-  };
+  const workers = Object.fromEntries(Object.entries(defaultWorkers()).map(([key, fn]) => [
+    key, async (...args) => { calls++; return fn(...args); }
+  ]));
 
   try {
     delete process.env.CRON_SECRET;
@@ -51,25 +59,17 @@ test('unified payment reconciliation rejects missing, weak and incorrect cron cr
   }
 });
 
-test('unified payment reconciliation runs ride, withdrawal and verified Monime inbox workers', async () => {
+test('unified scheduler runs ride, withdrawal, merchant, referral, game, webhook and purchase reconciliation', async () => {
   const previous = process.env.CRON_SECRET;
   const secret = 'matmove-reconcile-test-secret-with-at-least-32-characters';
   process.env.CRON_SECRET = secret;
   const calls = [];
-
   try {
-    const rides = async (req, res) => {
-      calls.push(['rides', req.headers.authorization]);
-      return res.status(200).json({ checked: 3, failed: 0 });
-    };
-    const payouts = async (req, res) => {
-      calls.push(['payouts', req.headers.authorization]);
-      return res.status(200).json({ checked: 2, failed: 0 });
-    };
-    const merchants = async (_req, res) => {
+    const handler = name => async (req, res) => {
       res.setHeader('Cache-Control', 'no-store');
-      calls.push(['merchants', _req.headers.authorization]);
-      return res.status(200).json({ checked: 6, failed: 0 });
+      calls.push([name, req.method, req.headers.authorization, req.query?.action || null]);
+      const counts = { rides: 3, payouts: 2, merchants: 6, referrals: 1, spins: 2, arcades: 4 };
+      return res.status(200).json({ checked: counts[name], failed: 0 });
     };
     const monime = async ({ limit }) => {
       calls.push(['monime', limit]);
@@ -79,12 +79,15 @@ test('unified payment reconciliation runs ride, withdrawal and verified Monime i
       calls.push(['purchases', limit]);
       return { checked: 1, processed: 1, retrying: 0, failed: 0 };
     };
-
     const res = response();
     await reconcileMatMovePayments(
       { headers: { authorization: `Bearer ${secret}` } },
       res,
-      { rides, payouts, merchants, monime, purchases }
+      {
+        rides: handler('rides'), payouts: handler('payouts'), merchants: handler('merchants'),
+        referrals: handler('referrals'), spins: handler('spins'), arcades: handler('arcades'),
+        monime, purchases
+      }
     );
 
     assert.equal(res.statusCode, 200);
@@ -92,21 +95,18 @@ test('unified payment reconciliation runs ride, withdrawal and verified Monime i
     assert.deepEqual(res.body.ridePayments, { checked: 3, failed: 0 });
     assert.deepEqual(res.body.withdrawals, { checked: 2, failed: 0 });
     assert.deepEqual(res.body.merchantPayments, { checked: 6, failed: 0 });
-    assert.deepEqual(res.body.monimeEvents, {
-      checked: 4, processed: 3, retrying: 1, failed: 0
-    });
-    assert.deepEqual(res.body.purchasePayments, {
-      checked: 1, processed: 1, retrying: 0, failed: 0
-    });
+    assert.deepEqual(res.body.referrals, { checked: 1, failed: 0 });
+    assert.deepEqual(res.body.spinPayments, { checked: 2, failed: 0 });
+    assert.deepEqual(res.body.arcadePayments, { checked: 4, failed: 0 });
+    assert.deepEqual(res.body.monimeEvents, { checked: 4, processed: 3, retrying: 1, failed: 0 });
+    assert.deepEqual(res.body.purchasePayments, { checked: 1, processed: 1, retrying: 0, failed: 0 });
     assert.equal(res.headers['Cache-Control'], 'no-store');
-    assert.equal(calls.length, 5);
+    assert.equal(calls.length, 8);
+    assert.equal(calls.find(x => x[0] === 'referrals')[3], 'referral_reconcile');
+    assert.deepEqual(calls.filter(x => ['rides','payouts','merchants','referrals','spins','arcades'].includes(x[0])).map(x => x[1]), Array(6).fill('GET'));
+    assert.deepEqual(calls.filter(x => ['rides','payouts','merchants','referrals','spins','arcades'].includes(x[0])).map(x => x[2]), Array(6).fill(`Bearer ${secret}`));
     assert.equal(calls.find(x => x[0] === 'monime')[1], 3);
     assert.equal(calls.find(x => x[0] === 'purchases')[1], 5);
-    assert.deepEqual(calls.filter(x => ['rides', 'payouts', 'merchants'].includes(x[0])).map(x => x[1]), [
-      `Bearer ${secret}`,
-      `Bearer ${secret}`,
-      `Bearer ${secret}`
-    ]);
   } finally {
     env('CRON_SECRET', previous);
   }
@@ -116,21 +116,13 @@ test('unified reconciliation returns 503 if any money reconciliation worker is u
   const previous = process.env.CRON_SECRET;
   const secret = 'matmove-reconcile-test-secret-with-at-least-32-characters';
   process.env.CRON_SECRET = secret;
-
   try {
     const res = response();
     await reconcileMatMovePayments(
       { headers: { authorization: `Bearer ${secret}` } },
       res,
-      {
-        rides: async (_req, response) => response.status(503).json({ error: 'Ride reconciliation unavailable.' }),
-        payouts: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        merchants: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        monime: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 }),
-        purchases: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 })
-      }
+      { ...defaultWorkers(), rides: async (_req, out) => out.status(503).json({ error: 'Ride reconciliation unavailable.' }) }
     );
-
     assert.equal(res.statusCode, 503);
     assert.equal(res.body.success, false);
     assert.deepEqual(res.body.ridePayments, { unavailable: true });
@@ -143,21 +135,13 @@ test('durably quarantined Monime events are reported for review without treating
   const previous = process.env.CRON_SECRET;
   const secret = 'matmove-reconcile-test-secret-with-at-least-32-characters';
   process.env.CRON_SECRET = secret;
-
   try {
     const res = response();
     await reconcileMatMovePayments(
       { headers: { authorization: `Bearer ${secret}` } },
       res,
-      {
-        rides: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        payouts: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        merchants: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        monime: async () => ({ checked: 2, processed: 0, retrying: 0, failed: 2 }),
-        purchases: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 })
-      }
+      { ...defaultWorkers(), monime: async () => ({ checked: 2, processed: 0, retrying: 0, failed: 2 }) }
     );
-
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.success, true);
     assert.equal(res.body.monimeEvents.failed, 2);
@@ -166,26 +150,17 @@ test('durably quarantined Monime events are reported for review without treating
   }
 });
 
-
 test('unified reconciliation fails closed when a money worker returns no structured result', async () => {
   const previous = process.env.CRON_SECRET;
   const secret = 'matmove-reconcile-test-secret-with-at-least-32-characters';
   process.env.CRON_SECRET = secret;
-
   try {
     const res = response();
     await reconcileMatMovePayments(
       { headers: { authorization: `Bearer ${secret}` } },
       res,
-      {
-        rides: async () => undefined,
-        payouts: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        merchants: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        monime: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 }),
-        purchases: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 })
-      }
+      { ...defaultWorkers(), rides: async () => undefined }
     );
-
     assert.equal(res.statusCode, 503);
     assert.equal(res.body.success, false);
     assert.deepEqual(res.body.ridePayments, { unavailable: true });
@@ -198,21 +173,13 @@ test('unified reconciliation fails closed when the Monime worker returns malform
   const previous = process.env.CRON_SECRET;
   const secret = 'matmove-reconcile-test-secret-with-at-least-32-characters';
   process.env.CRON_SECRET = secret;
-
   try {
     const res = response();
     await reconcileMatMovePayments(
       { headers: { authorization: `Bearer ${secret}` } },
       res,
-      {
-        rides: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        payouts: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        merchants: async (_req, response) => response.status(200).json({ checked: 0, failed: 0 }),
-        monime: async () => ({ checked: 'none', processed: 0, retrying: 0, failed: 0 }),
-        purchases: async () => ({ checked: 0, processed: 0, retrying: 0, failed: 0 })
-      }
+      { ...defaultWorkers(), monime: async () => ({ checked: 'none', processed: 0, retrying: 0, failed: 0 }) }
     );
-
     assert.equal(res.statusCode, 503);
     assert.equal(res.body.success, false);
     assert.deepEqual(res.body.monimeEvents, { unavailable: true });
@@ -220,7 +187,6 @@ test('unified reconciliation fails closed when the Monime worker returns malform
     env('CRON_SECRET', previous);
   }
 });
-
 
 test('Hobby-compatible Vercel daily cron targets the unified payment reconciler', async () => {
   const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
