@@ -4,6 +4,9 @@ import { reconcileRide } from './ride-payments.js';
 import { reconcileCashRide } from './cash-ride-payments.js';
 import { reconcileMerchantPayment } from './merchant-payments.js';
 import { reconcileWithdrawal } from './payout-payments.js';
+import { reconcileSpinRound } from './spin-payments.js';
+import { reconcileArcadeRound } from './arcade-payments.js';
+import { runReferralLeg } from './referral-payments.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ATTEMPTS = 12;
@@ -53,7 +56,10 @@ export function classifyMonimeTransfer(event, transfer) {
       ['purchase', metadata.matmovePurchasePaymentId],
       ['ride', metadata.bookingId],
       ['merchant', metadata.merchantPaymentId],
-      ['withdrawal', metadata.matmoveWithdrawalId]
+      ['withdrawal', metadata.matmoveWithdrawalId],
+      ['spin', metadata.matmoveSpinRoundId],
+      ['arcade', metadata.matmoveArcadeRoundId],
+      ['referral', metadata.matmoveReferralRewardId]
     ].filter(([, id]) => typeof id === 'string' && UUID.test(id));
     return candidates.length === 1 ? { kind: candidates[0][0], id: candidates[0][1], resource: 'internal-transfers' } : null;
   }
@@ -73,11 +79,11 @@ export function resolveRideLedgerFamily(digitalLeg, cashLeg) {
   return digitalLeg ? 'digital' : 'cash';
 }
 
-async function readLinkedLeg(db, table, parentColumn, parentId, providerId, providerColumn = 'provider_id') {
-  const { data, error } = await db.from(table).select('status')
+async function readLinkedLeg(db, table, parentColumn, parentId, providerId, providerColumn = 'provider_id', statusColumn = 'status') {
+  const { data, error } = await db.from(table).select(statusColumn)
     .eq(parentColumn, parentId).eq(providerColumn, providerId).maybeSingle();
   if (error) throw new Error('Could not verify the linked MatMove transfer leg.');
-  return data || null;
+  return data ? { status: data[statusColumn] } : null;
 }
 
 async function processLinkedTransfer(db, event, transfer) {
@@ -116,10 +122,13 @@ async function processLinkedTransfer(db, event, transfer) {
 
   const routes = {
     merchant: { table: 'matmove_merchant_payment_legs', parent: 'payment_id', reconcile: reconcileMerchantPayment },
-    withdrawal: { table: 'matmove_withdrawal_legs', parent: 'withdrawal_id', reconcile: reconcileWithdrawal }
+    withdrawal: { table: 'matmove_withdrawal_legs', parent: 'withdrawal_id', reconcile: reconcileWithdrawal },
+    spin: { table: 'matmove_spin_legs', parent: 'round_id', reconcile: reconcileSpinRound },
+    arcade: { table: 'matmove_arcade_legs', parent: 'round_id', reconcile: reconcileArcadeRound },
+    referral: { table: 'matmove_referral_rewards', parent: 'id', reconcile: runReferralLeg, statusColumn: 'state' }
   };
   const route = routes[target.kind];
-  const linked = await readLinkedLeg(db, route.table, route.parent, target.id, transfer.id);
+  const linked = await readLinkedLeg(db, route.table, route.parent, target.id, transfer.id, 'provider_id', route.statusColumn || 'status');
   if (!linked) {
     throw new ManualReviewError('Provider transfer is not linked to the recorded MatMove ledger leg; manual review required.');
   }
@@ -129,7 +138,7 @@ async function processLinkedTransfer(db, event, transfer) {
   if (linked.status === 'failed') return 'processed';
 
   await route.reconcile(db, target.id);
-  const confirmed = await readLinkedLeg(db, route.table, route.parent, target.id, transfer.id);
+  const confirmed = await readLinkedLeg(db, route.table, route.parent, target.id, transfer.id, 'provider_id', route.statusColumn || 'status');
   if (confirmed?.status === 'completed' || confirmed?.status === 'failed') return 'processed';
   if (confirmed?.status === 'pending' || confirmed?.status === 'processing') return 'pending';
   throw new ManualReviewError('MatMove ledger did not reach a recognized transfer state; manual review required.');
