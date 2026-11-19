@@ -28,6 +28,9 @@ test('Loading Bonanza is fixed at one percent and requires a separate referral t
   assert.match(migration, /new.credit_minor/);
   assert.match(migration, /new.provider_payment_id/);
   assert.match(migration, /on conflict\(topup_id\) do nothing/);
+  assert.doesNotMatch(migration, /on public\.payment_transactions/);
+  assert.match(migration, /payment_code_id text not null unique/);
+  assert.match(migration, /provider_payment_id text not null unique/);
   assert.match(migration, /matmove_loading_bonanza_claim/);
   assert.match(migration, /matmove_loading_bonanza_record/);
   assert.match(migration, /matmove_loading_bonanza_funding_claim/);
