@@ -29,7 +29,8 @@ create or replace function public.matmove_set_driver_presence(
   p_action text,
   p_latitude double precision default null,
   p_longitude double precision default null,
-  p_accuracy_m double precision default null
+  p_accuracy_m double precision default null,
+  p_observed_at timestamptz default null
 ) returns jsonb
 language plpgsql security definer
 set search_path=pg_catalog,public
@@ -59,9 +60,11 @@ begin
   if v_profile.kyc_status::text is distinct from 'approved' or coalesce(v_profile.is_wallet_frozen,false) then
     raise exception 'FORBIDDEN: Approved, unfrozen driver account required.';
   end if;
-  if p_latitude is null or p_longitude is null or p_accuracy_m is null
+  if nullif(trim(v_profile.vehicle_type),'') is null then raise exception 'FORBIDDEN: Complete your verified vehicle category before going online.'; end if;
+  if p_latitude is null or p_longitude is null or p_accuracy_m is null or p_observed_at is null
      or p_latitude not between -90 and 90 or p_longitude not between -180 and 180
-     or p_accuracy_m < 0 or p_accuracy_m > 150 then
+     or p_accuracy_m < 0 or p_accuracy_m > 150
+     or p_observed_at < now()-interval '30 seconds' or p_observed_at > now()+interval '10 seconds' then
     raise exception 'INVALID_LOCATION: A fresh GPS fix with accuracy of 150 metres or better is required.';
   end if;
   if not exists(select 1 from public.wallets w where w.user_id=v_actor and w.currency='SLE' and coalesce(w.is_frozen,false)=false) then
@@ -77,7 +80,7 @@ begin
   return jsonb_build_object('online',not v_busy,'busy',v_busy,'serverTime',now());
 end;
 $fn$;
-revoke all on function public.matmove_set_driver_presence(text,double precision,double precision,double precision) from public,anon;
+revoke all on function public.matmove_set_driver_presence(text,double precision,double precision,double precision,timestamptz) from public,anon;
 grant execute on function public.matmove_set_driver_presence(text,double precision,double precision,double precision) to authenticated;
 
 create or replace function public.matmove_driver_presence_snapshot()
