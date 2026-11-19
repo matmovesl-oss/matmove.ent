@@ -1,6 +1,5 @@
--- Hybrid vehicle fallback: matching category first, then approved alternatives after 2 minutes.
--- Fare offers snapshot the driver's KYC-approved vehicle; customers explicitly approve
--- the alternative category and fare before payment can be prepared.
+-- Hybrid vehicle safeguards: strict category matching until trusted online driver presence
+-- is available. Fare offers snapshot the driver's KYC-approved vehicle.
 begin;
 alter table public.bookings add column if not exists matmove_confirmed_vehicle_type text;
 alter table public.matmove_ride_fare_offers add column if not exists vehicle_type text;
@@ -21,9 +20,8 @@ begin
  if exists(select 1 from public.wallets where user_id=new.driver_id and coalesce(is_frozen,false)) then
    raise exception 'FORBIDDEN: Wallet is frozen. Contact support.';
  end if;
- if lower(trim(p.vehicle_type))<>lower(trim(coalesce(b.vehicle_type,'')))
-   and now()<b.created_at+interval '2 minutes' then
-   raise exception 'VEHICLE_MATCH_REQUIRED: Matching vehicles get the first 2 minutes. Alternative vehicles can offer after that.';
+ if lower(trim(p.vehicle_type))<>lower(trim(coalesce(b.vehicle_type,''))) then
+   raise exception 'VEHICLE_MATCH_REQUIRED: Only the requested verified vehicle category can offer until MatMove verifies matching-driver unavailability.';
  end if;
  new.vehicle_type:=p.vehicle_type;
  new.vehicle_plate:=p.plate_number;
