@@ -51,7 +51,10 @@ test('ride map fills its own section, preserves single-finger map gestures and a
   read('../src/pages/RiderDashboard.tsx'),
   read('../src/App.tsx')
  ]);
- assert.match(picker,/className=\{mapFirst\?"relative z-10 min-h-\[100dvh\] w-full/);\n assert.match(picker,/gestureHandling: 'greedy'/);\n assert.match(picker,/className="absolute left-4 top-4 z-20/);\n assert.doesNotMatch(picker,/className=\{mapFirst\?"fixed inset-0 z-10/);
+ assert.ok(picker.includes('className={mapFirst?"relative z-10 min-h-[100dvh] w-full'));
+ assert.ok(picker.includes("gestureHandling: 'greedy'"));
+ assert.ok(picker.includes('className="absolute left-4 top-4 z-20'));
+ assert.ok(!picker.includes('className={mapFirst?"fixed inset-0 z-10'));
  assert.match(picker,/Plan your ride/);
  assert.match(picker,/onPointerMove/);
  assert.match(picker,/onPointerUp/);
