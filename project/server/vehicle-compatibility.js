@@ -15,7 +15,7 @@ export function normalizeMatMoveVehicleType(value) {
     .trim();
 
   if (/motorbike|motorcycle|okada|\bbike\b/.test(type)) return 'bike';
-  if (/tricycle|\bkeke\b/.test(type)) return 'keke';
+  if (/tricycle|\bkeke\b|\bkekeh\b/.test(type)) return 'keke';
   if (/van|truck|minibus/.test(type)) return 'van';
   if (/\bcar\b|sedan|saloon|suv/.test(type)) return 'car';
   return null;
