@@ -4,6 +4,7 @@
 begin;
 alter table public.bookings add column if not exists matmove_confirmed_vehicle_type text;
 alter table public.matmove_ride_fare_offers add column if not exists vehicle_type text;
+alter table public.matmove_ride_fare_offers add column if not exists vehicle_plate text;
 update public.matmove_ride_fare_offers o set vehicle_type=p.vehicle_type from public.profiles p where p.id=o.driver_id and o.vehicle_type is null and p.vehicle_type is not null;
 
 create or replace function public.matmove_validate_fare_offer_vehicle()
@@ -25,6 +26,7 @@ begin
    raise exception 'VEHICLE_MATCH_REQUIRED: Matching vehicles get the first 2 minutes. Alternative vehicles can offer after that.';
  end if;
  new.vehicle_type:=p.vehicle_type;
+ new.vehicle_plate:=p.plate_number;
  return new;
 end;
 $fn$;
@@ -62,7 +64,7 @@ begin
  end if;
  select coalesce(jsonb_agg(jsonb_build_object(
   'id',o.id,'driverId',o.driver_id,'driverName',coalesce(nullif(p.full_name,''),'Driver'),
-  'vehicleType',coalesce(o.vehicle_type,p.vehicle_type,'Vehicle details unavailable'),'amountMinor',o.amount_minor,'fareVersion',o.fare_version,'agreedVersion',o.agreed_version,
+  'vehicleType',coalesce(o.vehicle_type,p.vehicle_type,'Vehicle details unavailable'),'vehiclePlate',coalesce(o.vehicle_plate,p.plate_number),'amountMinor',o.amount_minor,'fareVersion',o.fare_version,'agreedVersion',o.agreed_version,
   'status',case when o.status='pending' and (o.expires_at<=now() or o.fare_version<>b.matmove_fare_version) then 'expired' else o.status end,
   'expiresAt',o.expires_at,'createdAt',o.created_at
  ) order by o.created_at desc,o.id),'[]'::jsonb) into v_offers
