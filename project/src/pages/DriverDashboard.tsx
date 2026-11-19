@@ -147,6 +147,25 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
     try { assertDriverFare(snapshot, booking, profile.id); return ''; }
     catch (error: any) { return error.message; }
   };
+  const vehicleBlockReason = (booking: any) => {
+    const normalize = (value: unknown) => {
+      const type = String(value || '').normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      if (/motorbike|motorcycle|okada|\bbike\b/.test(type)) return 'bike';
+      if (/tricycle|\bkeke\b|\bkekeh\b/.test(type)) return 'keke';
+      if (/van|truck|minibus/.test(type)) return 'van';
+      if (/\bcar\b|sedan|saloon|suv/.test(type)) return 'car';
+      return '';
+    };
+    const requested = normalize(booking.vehicle_type);
+    const registered = normalize(profile?.vehicle_type);
+    if (!requested) return 'This request has no recorded vehicle category and cannot be accepted.';
+    if (!registered) return 'Your registered vehicle category is missing. Update your driver details before accepting.';
+    if (requested !== registered) {
+      const labels: Record<string,string> = { bike: 'motorbike (Okada)', keke: 'tricycle (Keke)', car: 'car', van: 'van / truck' };
+      return `This request requires a ${labels[requested]} vehicle. Your registered vehicle is ${labels[registered]}.`;
+    }
+    return '';
+  };
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [requestsLoading, setRequestsLoading] = useState(false);
   const requestsLoadedOwner = useRef('');
@@ -582,6 +601,8 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
                       </div>
                     </div>
 
+                    <div className="flex items-center gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900"><Car size={14} className="shrink-0"/><span>Requested vehicle: {String(r.vehicle_type||'Not recorded').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</span></div>
+
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs space-y-2">
                       <div className="flex items-center gap-2 font-semibold text-slate-800"><MapPin size={14} className="text-emerald-500 shrink-0" /> Pickup: {r.pickup_location}</div>
                       <div className="flex items-center gap-2 font-semibold text-slate-800"><Navigation size={14} className="text-blue-500 shrink-0" /> Dropoff: {r.destination_location}</div>
@@ -599,10 +620,11 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
                     {r.driver_id===profile.id&&['pending','pending_admin'].includes(r.status)&&<p className="rounded-xl bg-indigo-50 p-3 text-xs text-indigo-800">Assigned to you. Review the fare and use Accept to continue the verified payment flow.</p>}
                     {['pending', 'pending_admin'].includes(r.status) && (
                       <>
-                        <button type="button" onClick={() => void handleAcceptBooking(r)} disabled={!!acceptingId || !canTransact || !!fareBlockReason(r)} className="w-full rounded-xl bg-slate-900 py-3 font-bold text-white disabled:opacity-50">
+                        <button type="button" onClick={() => void handleAcceptBooking(r)} disabled={!!acceptingId || !canTransact || !!fareBlockReason(r) || !!vehicleBlockReason(r)} className="w-full rounded-xl bg-slate-900 py-3 font-bold text-white disabled:opacity-50">
                           {acceptingId === r.id ? <span className="flex items-center justify-center gap-2"><Loader2 size={18} className="animate-spin"/> Checking request…</span> : Number.isFinite(Number(r.fare_amount))&&Number(r.fare_amount)>0?`Accept SLE ${Number(r.fare_amount).toFixed(2)}`:'Awaiting fare confirmation'}
                         </button>
                         {fareBlockReason(r) && <p role="status" className="text-xs text-amber-900">{fareBlockReason(r)}</p>}
+                        {vehicleBlockReason(r) && <p role="status" className="text-xs text-amber-900">{vehicleBlockReason(r)}</p>}
                         {!r.driver_id && r.payment_method !== 'cash' && ['ride', 'delivery'].includes(r.service_type) && <button type="button" disabled={!!acceptingId || !canTransact || !Number.isFinite(Number(r.fare_amount)) || Number(r.fare_amount)<=0} onClick={() => setNegotiatingId(previous => previous === r.id ? null : r.id)} className="min-h-11 w-full rounded-xl border px-3 py-2 text-sm font-bold disabled:opacity-50">{negotiatingId === r.id ? 'Hide fare offers' : 'Negotiate fare'}</button>}
                         {!r.driver_id && r.payment_method !== 'cash' && negotiatingId === r.id && <FareNegotiation key={`${profile.id}:${r.id}`} userId={profile.id} bookingId={r.id} role="driver" vehicleType={profile.vehicle_type || ''} onFareChange={applyDriverFare} />}
                       </>

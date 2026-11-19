@@ -6,6 +6,7 @@ import {
   monimeEnvironment,
   assertMonimeEnvironment
 } from './wallet-security.js';
+import { assertRideVehicleCompatibility } from './vehicle-compatibility.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const accountId = /^fac-[A-Za-z0-9_-]+$/;
@@ -54,7 +55,7 @@ function validAccountId(value) {
 async function readBooking(db, bookingId) {
   const { data, error } = await db
     .from('bookings')
-    .select('id,rider_id,driver_id,service_type,status,payment_method,fare_amount,started_at,completed_at')
+    .select('id,rider_id,driver_id,service_type,vehicle_type,status,payment_method,fare_amount,started_at,completed_at')
     .eq('id', bookingId)
     .maybeSingle();
 
@@ -481,6 +482,7 @@ export async function cashRideAction(
     if (profile.role !== 'driver' || isRider) {
       throw new HttpError(403, 'Only an approved driver can accept a cash ride.');
     }
+    assertRideVehicleCompatibility(booking, profile);
     const result = await cashRpc(db, 'matmove_cash_ride_assign_driver', {
       p_booking_id: bookingId,
       p_driver_id: user.id

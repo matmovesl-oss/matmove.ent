@@ -143,7 +143,22 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
   const [isProcessingPayout, setIsProcessingPayout] = useState(false);
 
+
+
+
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isLoadModalOpen && !isPayoutModalOpen && !isTransferModalOpen) return;
+    const rootOverflow = document.documentElement.style.overflow;
+    const bodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.documentElement.style.overflow = rootOverflow;
+      document.body.style.overflow = bodyOverflow;
+    };
+  }, [isLoadModalOpen, isPayoutModalOpen, isTransferModalOpen]);
   const [transferAmount, setTransferAmount] = useState('');
   const [transferCurrency, setTransferCurrency] = useState<'SLE' | 'USD'>('SLE');
   const [transferError, setTransferError] = useState('');

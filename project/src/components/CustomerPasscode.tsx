@@ -119,6 +119,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  
  const creating=status&&!status.configured;
  useEffect(()=>{setActivePinField(creating||upgrade?'next':'pin');},[creating,upgrade]);
+ useEffect(()=>{if(status&&!status.configured&&pin){setNext(value=>value||pin.slice(0,9));setPin('');setActivePinField('next');}},[status?.configured]);
 
  const pinField=(label:string,value:string,key:'pin'|'next'|'confirm',length:number)=><button type="button" aria-label={label} aria-pressed={activePinField===key} disabled={busy} onClick={()=>setActivePinField(key)} className={`block w-full rounded-xl border p-3 text-left transition ${activePinField===key?'border-emerald-500 bg-emerald-50':'border-slate-200 bg-slate-50'}`}><span className="block text-xs font-semibold text-slate-600">{label}:</span><span className="mt-2 flex min-h-8 items-center justify-center gap-3" aria-label={`${value.length} of ${length} digits entered`} aria-live="polite" data-passcode-length={value.length}>{Array.from({length},(_,i)=><span key={i} className={`h-2.5 w-2.5 rounded-full ${i<value.length?'bg-emerald-700':'bg-slate-300'}`}/>)}</span></button>;
  const pinMirror=(label:string,value:string,key:'pin'|'next'|'confirm',set:(v:string)=>void,length:number)=><input
@@ -190,12 +191,15 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
            ) : (
              <>
                {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose a new 6–9 digit passcode.</p>}
-               {!status?<p role="status" className="text-center text-sm text-slate-600">{loadingStatus?'Checking your saved passcode settings…':'Passcode setup unavailable.'}</p>:<>
+               {!status&&<p role="status" className="text-center text-sm text-slate-600">{loadingStatus?'Checking your saved passcode settings…':'Passcode setup unavailable.'}</p>}
+               {!status&&pinField('Passcode',pin,'pin',9)}
+               {!status&&pinMirror('Passcode',pin,'pin',setPin,9)}
+               {status&&<>
                 {!creating&&!upgrade&&<>{pinField(`Current ${status.digits}-digit passcode`,pin,'pin',status.digits)}{pinMirror(`Current ${status.digits}-digit passcode`,pin,'pin',setPin,status.digits)}</>}
                 {(creating||upgrade)&&<>{pinField('New passcode (6–9 digits)',next,'next',9)}{pinMirror('New passcode (6–9 digits)',next,'next',setNext,9)}{pinField('Confirm passcode',confirm,'confirm',9)}{pinMirror('Confirm passcode',confirm,'confirm',setConfirm,9)}</>}
-                {keypad}
-                <button type="submit" disabled={busy||loadingStatus} className="h-12 w-full rounded-2xl bg-emerald-800 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50">{loadingStatus?'Checking settings…':creating||upgrade?'Save passcode':'Unlock'}</button>
                </>}
+               {keypad}
+               <button type="submit" disabled={busy||loadingStatus||!status} className="h-12 w-full rounded-2xl bg-emerald-800 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50">{loadingStatus?'Checking settings…':!status?'Passcode unavailable':creating||upgrade?'Save passcode':'Unlock'}</button>
                
                {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p>}
                

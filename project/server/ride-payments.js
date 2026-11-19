@@ -7,6 +7,7 @@ import {
   monime
 } from './wallet-security.js';
 import { cashRideAction } from './cash-ride-payments.js';
+import { assertRideVehicleCompatibility } from './vehicle-compatibility.js';
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -401,6 +402,8 @@ export async function rideAction(
         'You cannot drive your own booking.'
       );
     }
+
+    assertRideVehicleCompatibility(booking, profile);
 
     if (!payment) {
       const [payer, driver, platform] = await Promise.all([

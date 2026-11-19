@@ -39,7 +39,7 @@ export function MerchantDashboard(props: any) {
   return <MerchantMain key={props.profile.id} {...props} />;
 }
 
-function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrips }: any) {
+function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrips, onBack }: any) {
   const [sleWallet, setSleWallet] = useState<any>(wallet);
   const [rideNotice, setRideNotice] = useState('');
   const [walletNotice, setWalletNotice] = useState('');
@@ -107,7 +107,22 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
   const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
   const [isProcessingPayout, setIsProcessingPayout] = useState(false);
 
+
+
+
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isLoadModalOpen && !isPayoutModalOpen && !isTransferModalOpen) return;
+    const rootOverflow = document.documentElement.style.overflow;
+    const bodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.documentElement.style.overflow = rootOverflow;
+      document.body.style.overflow = bodyOverflow;
+    };
+  }, [isLoadModalOpen, isPayoutModalOpen, isTransferModalOpen]);
   const [transferAmount, setTransferAmount] = useState('');
   const [transferCurrency, setTransferCurrency] = useState<'SLE' | 'USD'>('SLE');
   const [transferError, setTransferError] = useState('');
@@ -481,7 +496,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
         </div>
       )}
 
-      {activeSection === 'home' && (activeBooking && ['accepted','in_progress'].includes(activeBooking.status) ? <ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/> : <RideLocationPicker layout="map-first" key={profile.id} userId={profile.id} onBack={() => { setRouteEditing(true); setPickup(''); setDestination(''); setPickupCoords(null); setDestinationCoords(null); setTripDistanceKm(null); setOfferAmount(''); }} bookingReady={Boolean(pickupCoords && destinationCoords && !routeEditing)} bookingSheetExpanded={bookingSheetExpanded} onRouteEditingChange={setRouteEditing} onChange={(selection: TripLocations) => { const ready=Boolean(selection.pickup&&selection.destination);if(ready)setBookingSheetExpanded(true);setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />)}
+      {activeSection === 'home' && (activeBooking && ['accepted','in_progress'].includes(activeBooking.status) ? <ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/> : <RideLocationPicker layout="map-first" key={profile.id} userId={profile.id} onBack={onBack || (() => { setRouteEditing(true); setPickup(''); setDestination(''); setPickupCoords(null); setDestinationCoords(null); setTripDistanceKm(null); setOfferAmount(''); })} bookingReady={Boolean(pickupCoords && destinationCoords && !routeEditing)} bookingSheetExpanded={bookingSheetExpanded} onRouteEditingChange={setRouteEditing} onChange={(selection: TripLocations) => { const ready=Boolean(selection.pickup&&selection.destination);if(ready)setBookingSheetExpanded(true);setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />)}
 
       {activeSection === 'wallet' && (
         <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">

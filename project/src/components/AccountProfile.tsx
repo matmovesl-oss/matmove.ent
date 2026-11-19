@@ -137,14 +137,14 @@ export function PasskeySecurity({userId}:{userId:string}) {
   finally{setBusy(false);}
  };
 
- return <section aria-labelledby="mm-passkey-title" className="my-2 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-  <button type="button" onClick={toggleSecurity} aria-expanded={expanded} className="flex min-h-[56px] w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600">
-   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Fingerprint size={18}/></span>
-   <span className="min-w-0 flex-1"><b id="mm-passkey-title" className="block text-sm font-bold text-slate-900">Biometrics & Face ID</b><small className="mt-0.5 block text-xs text-slate-500">Face ID or fingerprint on this device</small></span>
+ return <section aria-labelledby="mm-passkey-title" className="mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+  <button type="button" onClick={toggleSecurity} aria-expanded={expanded} className="flex min-h-[48px] w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600">
+   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Fingerprint size={17}/></span>
+   <span className="min-w-0 flex-1"><b id="mm-passkey-title" className="block text-sm font-bold text-slate-900">Biometrics</b><small className="mt-0.5 block text-xs text-slate-500">Face ID or fingerprint on this device</small></span>
    <span className="text-xs font-bold text-emerald-800">{expanded?'Close':'Set up'}</span>
   </button>
   {expanded&&<div className="border-t border-slate-100 p-4">
-   <p className="text-sm leading-5 text-slate-600">Use your device's secure sign-in. MatMove never receives your face or fingerprint data.</p>
+   <p className="text-sm leading-5 text-slate-600">Enable Face ID or fingerprint for faster sign-in. Your biometric data stays on this device.</p>
    {!supported?<p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">This browser or device does not support passkeys here. You can still use your MatMove passcode and normal sign-in.</p>:<>
     <div className="mt-3 flex flex-wrap items-center gap-2">
      <button type="button" onClick={()=>void register()} disabled={busy||loading||passkeyDisabled} className="min-h-10 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busy?'Please wait…':passkeyDisabled?'Not available':'Enable on this device'}</button>
