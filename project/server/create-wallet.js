@@ -6,12 +6,12 @@ import {
 } from './wallet-security.js';
 
 export function monimeWalletDisplayName(profile, currency) {
-  const role = String(profile?.role || '').toLowerCase();
   const roleLabels = { rider: 'Rider', driver: 'Driver', merchant: 'Merchant' };
-  if (!roleLabels[role]) throw new HttpError(403, 'A verified MatMove customer role is required.');
-  const fullName = String(profile?.full_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'MatMove User').trim().replace(/\\s+/g, ' ');
-  const suffix = ` · ${roleLabels[role]} · ${currency}`;
-  return `${fullName.slice(0, Math.max(1, 100 - suffix.length)).trim()}${suffix}`;
+  const roles = [...new Set((Array.isArray(profile?.roles) ? profile.roles : [profile?.role]).map(role => String(role || '').toLowerCase()).filter(role => roleLabels[role]))];
+  if (!roles.length) throw new HttpError(403, 'A verified MatMove customer role is required.');
+  const fullName = String(profile?.full_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'MatMove User').trim().replace(/\s+/g, ' ');
+  const suffix = \` · \${roles.map(role => roleLabels[role]).join('/') } · \${currency}\`;
+  return \`\${fullName.slice(0, Math.max(1, 100 - suffix.length)).trim()}\${suffix}\`;
 }
 
 async function labelExistingAccount(account, profile, currency) {
@@ -286,4 +286,20 @@ export async function createWallet(
     wallet: result.data,
     accountLabelSyncPending: req.matmove.accountLabelSyncPending === true
   });
+}
+
+export async function syncMonimeWalletLabels(context) {
+  const results = [];
+  for (const wallet of context.wallets || []) {
+    const currency = String(wallet?.currency || '').toUpperCase();
+    if (!['SLE', 'USD'].includes(currency) || !(wallet.monime_account_id || wallet.metadata?.monime_account_id)) continue;
+    try {
+      const account = await verifiedAccount(context.db, wallet);
+      const labelled = await labelExistingAccount(account, context.profile, currency);
+      results.push({ currency, synced: !labelled.pending });
+    } catch {
+      results.push({ currency, synced: false });
+    }
+  }
+  return { labelsUpdated: results.filter(item => item.synced).length, pending: results.filter(item => !item.synced).map(item => item.currency) };
 }
