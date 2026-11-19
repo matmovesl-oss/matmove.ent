@@ -359,7 +359,7 @@ export async function authorize(
 
   const role=resolveCustomerRole(profileResult.data,rolesResult.data||[]);
   if(!role)throw new HttpError(403,'Customer account required. Complete your account setup.','CUSTOMER_SETUP_REQUIRED');
-  profileResult.data={...profileResult.data,role};
+  profileResult.data={...profileResult.data,role,roles:[...new Set((rolesResult.data||[]).map(row=>row.role))]};
 
   assertAllowed(
     profileResult.data,

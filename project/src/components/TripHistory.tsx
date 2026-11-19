@@ -27,7 +27,7 @@ export function tripShareText(t: any) {
     `Fare: SLE ${Number(t.fare_amount || 0).toFixed(2)}`,
     ...(t.driver?.full_name ? [`Driver: ${t.driver.full_name}`] : []),
     ...(t.rider?.full_name ? [`Customer: ${t.rider.full_name}`] : []),
-    ...(t.vehicle_type ? [`Vehicle: ${t.vehicle_type}`] : []),
+    ...((t.matmove_confirmed_vehicle_type || t.driver?.vehicle_type || t.vehicle_type) ? [`Vehicle: ${t.matmove_confirmed_vehicle_type || t.driver?.vehicle_type || t.vehicle_type}`] : []),
   ].join('\n');
 }
 
@@ -47,7 +47,7 @@ function tripReceiptFields(t: any, role: Props['role']) {
     { label: 'Passenger', value: t.passenger_name },
     { label: 'Customer', value: t.rider?.full_name },
     { label: 'Driver', value: t.driver?.full_name },
-    { label: 'Vehicle', value: t.vehicle_type },
+    { label: 'Vehicle', value: [t.matmove_confirmed_vehicle_type || t.driver?.vehicle_type || t.vehicle_type].filter(Boolean).join(' · ') || 'Not recorded' },
     { label: 'Fare', value: `SLE ${Number(t.fare_amount || 0).toFixed(2)}` },
     ...(role === 'driver' ? [{
       label: t.paymentInfo?.adminSettlement ? 'Admin dispute driver award (5%)' : 'Expected driver share (85%)',
@@ -242,7 +242,7 @@ export default function TripHistory({ userId, role, onResume, accountLabel, acco
         const statusLabel=t.status==='pending'&&Array.isArray(t.matmove_excluded_driver_ids)&&t.matmove_excluded_driver_ids.length>0?'Finding another driver':String(t.status||'requested').replace(/_/g,' ');
         return <article key={t.id} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm font-extrabold capitalize text-slate-900">{t.service_type||'Ride'}</strong><span className={`rounded-full px-2 py-1 text-[11px] font-bold capitalize ${paid?'bg-emerald-50 text-emerald-800':live?'bg-amber-50 text-amber-800':'bg-slate-100 text-slate-600'}`}>{paid?'Payment confirmed':statusLabel}</span></div>{t.status==='cash_review_required'&&<p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-900">Live dispatch is closed for this old cash request. No cash settlement or refund has been recorded; the verified MatMove fee reserve is awaiting support reconciliation. MatMove Support will review it.</p>}{t.status==='in_progress'&&t.cashReturn&&<p className="mt-2 text-xs text-slate-600">{t.cashReturn.returnStatus==='driver_confirmed'?'The driver recorded returning the physical cash. Waiting for customer confirmation.':t.cashReturn.returnStatus==='rider_confirmed'?'The customer confirmed the cash return. Waiting for driver confirmation.':t.cashReturn.returnStatus==='both_confirmed'?'Both parties confirmed the cash return.':t.cashReturn.returnStatus==='not_requested'?'No cash return has been requested.':''}</p>}
+            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm font-extrabold capitalize text-slate-900">{t.service_type||'Ride'}</strong><span className={`rounded-full px-2 py-1 text-[11px] font-bold capitalize ${paid?'bg-emerald-50 text-emerald-800':live?'bg-amber-50 text-amber-800':'bg-slate-100 text-slate-600'}`}>{paid?'Payment confirmed':statusLabel}</span></div>{t.status==='cash_review_required'&&<span className="mt-2 inline-flex rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-900">Needs payment review</span>}{t.status==='in_progress'&&t.cashReturn&&t.cashReturn.returnStatus!=='not_requested'&&<span className="mt-2 inline-flex rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600">Cash return: {t.cashReturn.returnStatus==='driver_confirmed'?'Driver confirmed':t.cashReturn.returnStatus==='rider_confirmed'?'Customer confirmed':t.cashReturn.returnStatus==='both_confirmed'?'Both confirmed':String(t.cashReturn.returnStatus).replace(/_/g,' ')}</span>}
               <p className="mt-2 truncate text-sm font-semibold text-slate-800">{t.pickup_location||'Pickup not recorded'}</p><p className="text-xs text-slate-500">to {t.destination_location||'Destination not recorded'}</p>
               <p className="mt-1 text-[11px] text-slate-400">{date(t.completed_at||t.created_at)}</p>
             </div>

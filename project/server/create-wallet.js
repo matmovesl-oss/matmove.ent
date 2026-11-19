@@ -5,6 +5,33 @@ import {
   HttpError
 } from './wallet-security.js';
 
+export function monimeWalletDisplayName(profile, currency) {
+  const roleLabels = { rider: 'Rider', driver: 'Driver', merchant: 'Merchant' };
+  const roles = [...new Set((Array.isArray(profile?.roles) ? profile.roles : [profile?.role]).map(role => String(role || '').toLowerCase()).filter(role => roleLabels[role]))];
+  if (!roles.length) throw new HttpError(403, 'A verified MatMove customer role is required.');
+  const fullName = String(profile?.full_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'MatMove User').trim().replace(/\s+/g, ' ');
+  const suffix = ' · ' + roles.map(role => roleLabels[role]).join('/') + ' · ' + currency;
+  return fullName.slice(0, Math.max(1, 100 - suffix.length)).trim() + suffix;
+}
+
+async function labelExistingAccount(account, profile, currency) {
+  const name = monimeWalletDisplayName(profile, currency);
+  if (account?.name === name) return { account, pending: false };
+  try {
+    const updated = await monime(`financial-accounts/${encodeURIComponent(account.id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name })
+    });
+    if (!updated?.id || updated.id !== account.id || updated.currency !== currency || updated.name !== name) {
+      return { account, pending: true };
+    }
+    return { account: updated, pending: false };
+  } catch {
+    // Label sync must never block a valid wallet or any money operation.
+    return { account, pending: true };
+  }
+}
+
 export async function createWallet(
   req,
   res,
@@ -26,16 +53,12 @@ export async function createWallet(
     existing?.monime_account_id ||
     existing?.metadata?.monime_account_id
   ) {
-    const account = await verifiedAccount(
-      db,
-      existing
-    );
+    const account = await verifiedAccount(db, existing);
+    const labelled = await labelExistingAccount(account, req.matmove.profile, currency);
 
     return res.status(200).json({
-      wallet: {
-        ...existing,
-        monime_account_id: account.id
-      }
+      wallet: { ...existing, monime_account_id: labelled.account.id },
+      accountLabelSyncPending: labelled.pending
     });
   }
 
@@ -140,7 +163,8 @@ export async function createWallet(
     after = next;
   }
 
-  const account =
+  const displayName = monimeWalletDisplayName(req.matmove.profile, currency);
+  let account =
     found ||
     await monime(
       'financial-accounts',
@@ -153,12 +177,18 @@ export async function createWallet(
         },
 
         body: JSON.stringify({
-          name: `MatMove ${currency} Wallet`,
+          name: displayName,
           currency,
           reference
         })
       }
     );
+
+  if (found) {
+    const labelled = await labelExistingAccount(account, req.matmove.profile, currency);
+    account = labelled.account;
+    req.matmove.accountLabelSyncPending = labelled.pending;
+  }
 
   if (
     !account.id ||
@@ -253,6 +283,23 @@ export async function createWallet(
   }
 
   return res.status(200).json({
-    wallet: result.data
+    wallet: result.data,
+    accountLabelSyncPending: req.matmove.accountLabelSyncPending === true
   });
+}
+
+export async function syncMonimeWalletLabels(context) {
+  const results = [];
+  for (const wallet of context.wallets || []) {
+    const currency = String(wallet?.currency || '').toUpperCase();
+    if (!['SLE', 'USD'].includes(currency) || !(wallet.monime_account_id || wallet.metadata?.monime_account_id)) continue;
+    try {
+      const account = await verifiedAccount(context.db, wallet);
+      const labelled = await labelExistingAccount(account, context.profile, currency);
+      results.push({ currency, synced: !labelled.pending });
+    } catch {
+      results.push({ currency, synced: false });
+    }
+  }
+  return { labelsUpdated: results.filter(item => item.synced).length, pending: results.filter(item => !item.synced).map(item => item.currency) };
 }

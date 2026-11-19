@@ -338,8 +338,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     return (
       <main className="mm-portal-morph flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[#f6faf8] px-5 py-10">
         <div role="status" aria-label="Opening MatMove" className="w-full max-w-sm animate-[mm-home-arrive_.45s_ease-out_both] text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.35rem] bg-[#0b2236] text-2xl font-black tracking-tight text-white shadow-xl">M</div>
-          <p className="mt-5 text-xs font-black uppercase tracking-[.24em] text-emerald-700">MatMove</p>
+          <div className="text-3xl font-black tracking-tight text-[#0b2236]">MatMove</div>
           <div className="mx-auto mt-7 h-1.5 w-36 overflow-hidden rounded-full bg-emerald-100"><span className="block h-full w-1/2 animate-[mm-loading-sweep_1s_ease-in-out_infinite] rounded-full bg-emerald-600"/></div>
         </div>
       </main>

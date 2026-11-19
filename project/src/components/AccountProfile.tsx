@@ -87,7 +87,9 @@ type PasskeyEntry = { id: string; friendly_name?: string | null; created_at?: st
 export function PasskeySecurity({userId}:{userId:string}) {
  const [supported,setSupported]=useState(false);
  const [passkeys,setPasskeys]=useState<PasskeyEntry[]>([]);
- const [loading,setLoading]=useState(true);
+ const [loading,setLoading]=useState(false);
+ const [expanded,setExpanded]=useState(false);
+ const [loaded,setLoaded]=useState(false);
  const [busy,setBusy]=useState(false);
  const [confirming,setConfirming]=useState('');
  const [error,setError]=useState('');
@@ -104,13 +106,11 @@ export function PasskeySecurity({userId}:{userId:string}) {
    if(listError)throw listError;
    setPasskeys(Array.isArray(data)?data as PasskeyEntry[]:[]);
   }catch(err:any){if(err?.code==='passkey_disabled'||/passkey_disabled/i.test(err?.message||'')){setPasskeyDisabled(true);setError('');setNotice('Device passkeys are not enabled for MatMove yet. Password and Google sign-in remain available.');}else setError(err?.message||'Registered passkeys could not be loaded.');}
-  finally{setLoading(false);}
+  finally{setLoading(false);setLoaded(true);}
  },[userId]);
 
- useEffect(()=>{
-  setSupported(secureBrowser);
-  if(secureBrowser)void reload();else setLoading(false);
- },[secureBrowser,reload]);
+ useEffect(()=>{setSupported(secureBrowser);},[secureBrowser]);
+ const toggleSecurity=()=>{const next=!expanded;setExpanded(next);if(next&&secureBrowser&&!loaded)void reload();};
 
  const register=async()=>{
   if(busy||!secureBrowser)return;
@@ -137,31 +137,31 @@ export function PasskeySecurity({userId}:{userId:string}) {
   finally{setBusy(false);}
  };
 
- return <section aria-labelledby="mm-passkey-title" className="my-5 rounded-2xl border border-emerald-100 bg-white p-4 sm:p-5">
-  <div className="flex flex-wrap items-start justify-between gap-3">
-   <div className="min-w-0 flex-1">
-    <h3 id="mm-passkey-title" className="text-base font-bold text-slate-900">Biometric & device sign-in</h3>
-    <p className="mt-1 text-sm leading-5 text-slate-600">Use a passkey stored by your device. Depending on your phone, the system may ask for Face ID, Touch ID, fingerprint or your screen-lock PIN. MatMove never receives your face or fingerprint data.</p>
-   </div>
-   <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">Optional</span>
-  </div>
-  {!supported?<p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Passkeys require a supported browser and a secure HTTPS connection. You can continue using your password and existing MatMove passcode.</p>:<>
-   <div className="mt-4 flex flex-wrap items-center gap-2">
-    <button type="button" onClick={()=>void register()} disabled={busy||loading||passkeyDisabled} className="min-h-11 rounded-xl bg-emerald-800 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy?'Please wait…':passkeyDisabled?'Passkey setup unavailable':'Enable passkey on this device'}</button>
-    <button type="button" onClick={()=>void reload()} disabled={busy||loading} className="min-h-11 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50">Refresh devices</button>
-   </div>
-   <div className="mt-4 space-y-2">
-    <div className="flex items-center justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Registered devices</p><span className="text-xs text-slate-500">{passkeys.length} saved</span></div>
-    {loading?<p role="status" className="text-sm text-slate-500">Checking registered passkeys…</p>:passkeys.length===0?<p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">No passkeys registered yet. Enable one on this device to use biometric or device-based sign-in next time.</p>:passkeys.map(item=><div key={item.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 p-3">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Fingerprint size={20}/></span>
-      <span className="min-w-0 flex-1"><b className="block truncate text-sm text-slate-900">{item.friendly_name||'MatMove passkey'}</b><span className="block text-xs text-slate-500">Added {item.created_at?new Date(item.created_at).toLocaleDateString(): 'date unavailable'}{item.last_used_at?' · Last used '+new Date(item.last_used_at).toLocaleDateString():''}</span></span>
-      {confirming===item.id?<span className="flex gap-2"><button type="button" onClick={()=>void remove(item.id)} disabled={busy} className="min-h-10 rounded-lg bg-red-600 px-3 text-xs font-bold text-white disabled:opacity-50">Remove</button><button type="button" onClick={()=>setConfirming('')} disabled={busy} className="min-h-10 rounded-lg border px-3 text-xs font-bold">Keep</button></span>:<button type="button" onClick={()=>setConfirming(item.id)} disabled={busy} className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700">Remove</button>}
-    </div>)}
-   </div>
-  </>}
-  {error&&<p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-  {notice&&<p role="status" className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
-  <p className="mt-3 text-xs leading-5 text-slate-500">Passkeys are an experimental Supabase Auth feature. Password and Google sign-in remain available as fallback. Device support depends on the browser, operating system, and Supabase project Auth configuration.</p>
+ return <section aria-labelledby="mm-passkey-title" className="my-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+  <button type="button" onClick={toggleSecurity} aria-expanded={expanded} className="flex min-h-[68px] w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600">
+   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Fingerprint size={20}/></span>
+   <span className="min-w-0 flex-1"><b id="mm-passkey-title" className="block text-sm font-bold text-slate-900">Biometrics & passkeys</b><small className="mt-0.5 block text-xs text-slate-500">Face ID, fingerprint or device unlock</small></span>
+   <span className="text-xs font-bold text-emerald-800">{expanded?'Close':'Manage'}</span>
+  </button>
+  {expanded&&<div className="border-t border-slate-100 p-4">
+   <p className="text-sm leading-5 text-slate-600">Use your device's secure sign-in. MatMove never receives your face or fingerprint data.</p>
+   {!supported?<p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">This browser or device does not support passkeys here. You can still use your MatMove passcode and normal sign-in.</p>:<>
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+     <button type="button" onClick={()=>void register()} disabled={busy||loading||passkeyDisabled} className="min-h-10 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busy?'Please wait…':passkeyDisabled?'Not available':'Enable on this device'}</button>
+     <button type="button" onClick={()=>void reload()} disabled={busy||loading} className="min-h-10 rounded-xl border border-slate-200 px-3 text-sm font-bold text-slate-700 disabled:opacity-50">Refresh</button>
+    </div>
+    <div className="mt-3 space-y-2">
+     <div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Saved devices</p><span className="text-xs text-slate-500">{passkeys.length}</span></div>
+     {loading?<p role="status" className="text-sm text-slate-500">Checking devices…</p>:passkeys.length===0?<p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">No device sign-in has been enabled yet.</p>:passkeys.map(item=><div key={item.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 p-3">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-800"><Fingerprint size={18}/></span>
+      <span className="min-w-0 flex-1"><b className="block truncate text-sm text-slate-900">{item.friendly_name||'MatMove device'}</b><span className="block text-xs text-slate-500">Added {item.created_at?new Date(item.created_at).toLocaleDateString():'date unavailable'}</span></span>
+      {confirming===item.id?<span className="flex gap-2"><button type="button" onClick={()=>void remove(item.id)} disabled={busy} className="min-h-9 rounded-lg bg-red-600 px-3 text-xs font-bold text-white disabled:opacity-50">Remove</button><button type="button" onClick={()=>setConfirming('')} disabled={busy} className="min-h-9 rounded-lg border px-3 text-xs font-bold">Keep</button></span>:<button type="button" onClick={()=>setConfirming(item.id)} disabled={busy} className="min-h-9 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700">Remove</button>}
+     </div>)}
+    </div>
+   </>}
+   {error&&<p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+   {notice&&<p role="status" className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
+  </div>}
  </section>;
 }
 

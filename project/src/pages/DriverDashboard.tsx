@@ -215,6 +215,11 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
     }
   };
 
+  useEffect(() => {
+    if (!profile?.id) return;
+    void walletFetch('/api/get-live-wallet', { action: 'sync_account_labels' }).catch(() => {});
+  }, [profile?.id]);
+
   const hasSleAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || ''));
   const setupSleWallet = async () => {
     if (!canTransact || setupBusy.current) return;

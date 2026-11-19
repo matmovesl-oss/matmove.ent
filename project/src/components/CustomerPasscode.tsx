@@ -6,6 +6,12 @@ import {profilePhotoPickerOpen,onProfilePhotoPickerEnd,clearProfilePhotoPicker} 
 
 type Receipt={userId:string;configured:boolean;digits:4|6|7|8|9|10;ok:boolean;code:string;attemptsRemaining:number;retryAfterSeconds:number};
 const codes=['status','cooldown','already_configured','saved','setup_required','upgrade_required','verified','incorrect'];
+function readPasscodeUiCache(userId:string):Receipt|null{
+ try{const raw=localStorage.getItem(`matmove:passcode-ui:v1:${userId}`);if(!raw)return null;const value=JSON.parse(raw);if(value?.userId!==userId||typeof value.configured!=='boolean'||![4,6,7,8,9,10].includes(value.digits))return null;return{userId,configured:value.configured,digits:value.digits,ok:false,code:value.configured?'status':'setup_required',attemptsRemaining:5,retryAfterSeconds:0};}catch{return null;}
+}
+function writePasscodeUiCache(value:Receipt){
+ try{localStorage.setItem(`matmove:passcode-ui:v1:${value.userId}`,JSON.stringify({userId:value.userId,configured:value.configured,digits:value.digits}));}catch{/* UI cache is optional; server verification remains authoritative. */}
+}
 
 export async function customerPasscode(userId:string,action:'status'|'create'|'verify'|'change'|'recover',pin:string|null=null,newPin:string|null=null):Promise<Receipt>{
  if(!userId||!['status','create','verify','change','recover'].includes(action))throw Error('Invalid passcode request.');
@@ -47,7 +53,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const privacyDialog=useRef<HTMLDialogElement|null>(null),workspace=useRef<HTMLDivElement|null>(null),pinEntryRef=useRef<HTMLInputElement|null>(null);
  const [enteredUser,setEnteredUser]=useState('');
  const [status,setStatus]=useState<Receipt|null>(null),[unlocked,setUnlocked]=useState(false),[upgrade,setUpgrade]=useState(false);
- const [pin,setPin]=useState(''),[next,setNext]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [pin,setPin]=useState(''),[next,setNext]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[loadingStatus,setLoadingStatus]=useState(true),[error,setError]=useState('');
  const [activePinField,setActivePinField]=useState<'pin'|'next'|'confirm'>('pin');
  const [forgotMode, setForgotMode] = useState(false);
  const [resetEmail, setResetEmail] = useState('');
@@ -58,11 +64,13 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const clear=()=>{setPin('');setNext('');setConfirm('');setActivePinField('pin');};
  const valid=(id:string,n:number)=>mounted.current&&current.current===id&&revision.current===n;
  
- function lock(){setPortalUnlocked(userId,false);unlockedNow.current=false;clearProfilePhotoPicker(userId);revision.current++;mutex.current=false;setBusy(false);setUnlocked(false);setUpgrade(false);setForgotMode(false);setResetEmail('');setResetSent(false);clear();setError('');}
+ function lock(){setPortalUnlocked(userId,false);unlockedNow.current=false;clearProfilePhotoPicker(userId);revision.current++;mutex.current=false;setBusy(false);setLoadingStatus(false);setUnlocked(false);setUpgrade(false);setForgotMode(false);setResetEmail('');setResetSent(false);clear();setError('');}
  
- async function load(){if(mutex.current)return;mutex.current=true;const n=++revision.current,id=userId;setBusy(true);setError('');clear();unlockedNow.current=false;setUnlocked(false);setUpgrade(false);setForgotMode(false);
-  try{const d=await customerPasscode(id,'status');if(valid(id,n))setStatus(d);}catch(e){if(valid(id,n)){setStatus(null);setError(e instanceof Error?e.message:'Passcode service unavailable.');}}
-  finally{if(valid(id,n)){mutex.current=false;setBusy(false);}}
+ async function load(){if(mutex.current)return;mutex.current=true;const n=++revision.current,id=userId;const cached=readPasscodeUiCache(id);setLoadingStatus(true);setError('');clear();unlockedNow.current=false;setUnlocked(false);setUpgrade(false);setForgotMode(false);
+  if(cached&&valid(id,n))setStatus(cached);
+  try{const d=await customerPasscode(id,'status');if(valid(id,n)){if(cached&&(cached.configured!==d.configured||cached.digits!==d.digits))clear();setStatus(d);writePasscodeUiCache(d);}}
+  catch(e){if(valid(id,n)){if(!cached)setStatus(null);setError(e instanceof Error?e.message:'Passcode service unavailable.');}}
+  finally{if(valid(id,n)){mutex.current=false;setLoadingStatus(false);}}
  }
  
  useEffect(()=>{mounted.current=true;setStatus(null);lock();void load();const stop=watchPasscodeBackground(lock,userId,()=>unlockedNow.current);const resume=()=>{if(document.visibilityState==='visible'&&!statusNow.current&&!mutex.current)void load();};document.addEventListener('visibilitychange',resume);return()=>{document.removeEventListener('visibilitychange',resume);mounted.current=false;revision.current++;mutex.current=false;stop();};},[userId]);
@@ -80,14 +88,14 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  }
 
  async function submit(){
-  if(mutex.current||!status)return;
+  if(mutex.current||!status||loadingStatus)return;
   const creating=!status.configured,changing=upgrade;
   if((creating||changing)&&(!/^\d{6,9}$/.test(next)||next!==confirm)){setError('Enter the same 6–9 digit passcode in both new passcode fields.');return;}
   if(!creating&&!new RegExp(`^[0-9]{${status.digits}}$`).test(pin)){setError(`Enter your current ${status.digits}-digit passcode.`);return;}
   mutex.current=true;setBusy(true);setError('');const id=userId,n=++revision.current;
   try{
    const d=await customerPasscode(id,creating?'create':changing?'change':'verify',creating?null:pin,creating||changing?next:null);
-   if(!valid(id,n))return;setStatus(d);
+   if(!valid(id,n))return;setStatus(d);writePasscodeUiCache(d);
    if(d.ok&&d.digits>=6&&['saved','verified'].includes(d.code)){clear();setUpgrade(false);setPortalUnlocked(id,true);unlockedNow.current=true;setEnteredUser(id);setUnlocked(true);}
    else if(d.ok&&d.code==='upgrade_required'){setUpgrade(true);setNext('');setConfirm('');}
    else{clear();setUpgrade(false);setError(d.code==='cooldown'?`Too many attempts. Try again in ${d.retryAfterSeconds} seconds.`:d.code==='already_configured'?'A passcode is already saved. Enter it to continue.':d.code==='setup_required'?'Create your 6–9 digit passcode.':`Incorrect passcode. ${d.attemptsRemaining} attempts remaining.`);}
@@ -142,7 +150,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
   if(!allowed&&!forgotMode&&status&&!busy)pinEntryRef.current?.focus({preventScroll:true});
  },[allowed,forgotMode,status?.userId,activePinField,busy]);
 
- const keypad=<div aria-label="Passcode keypad" className="grid grid-cols-3 gap-2">{['1','2','3','4','5','6','7','8','9'].map(digit=><button key={digit} type="button" disabled={busy} onClick={event=>{event.preventDefault();appendDigit(digit);}} className="h-14 rounded-2xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-[0_2px_8px_rgba(15,23,42,.04)] transition hover:border-emerald-300 active:bg-emerald-50 disabled:opacity-50">{digit}</button>)}<button type="button" aria-label="Delete last digit" disabled={busy} onClick={deleteLastDigit} className="h-14 rounded-2xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 disabled:opacity-50">Delete</button><button type="button" disabled={busy} onClick={event=>{event.preventDefault();appendDigit('0');}} className="h-12 rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-sm active:bg-emerald-50 disabled:opacity-50">0</button><button type="button" disabled={busy} onClick={()=>{if(activePinField==='pin')setPin('');else if(activePinField==='next')setNext('');else setConfirm('');}} className="h-12 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 disabled:opacity-50">Clear</button></div>;
+ const keypad=<div aria-label="Passcode keypad" className="grid grid-cols-3 gap-2">{['1','2','3','4','5','6','7','8','9'].map(digit=><button key={digit} type="button" disabled={busy} onClick={event=>{event.preventDefault();appendDigit(digit);}} className="h-14 touch-manipulation select-none rounded-2xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-[0_2px_8px_rgba(15,23,42,.04)] transition hover:border-emerald-300 active:bg-emerald-50 disabled:opacity-50">{digit}</button>)}<button type="button" aria-label="Delete last digit" disabled={busy} onClick={deleteLastDigit} className="h-14 touch-manipulation select-none rounded-2xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 disabled:opacity-50">Delete</button><button type="button" disabled={busy} onClick={event=>{event.preventDefault();appendDigit('0');}} className="h-12 touch-manipulation select-none rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-900 shadow-sm active:bg-emerald-50 disabled:opacity-50">0</button><button type="button" disabled={busy} onClick={()=>{if(activePinField==='pin')setPin('');else if(activePinField==='next')setNext('');else setConfirm('');}} className="h-12 touch-manipulation select-none rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 disabled:opacity-50">Clear</button></div>;
 
  return (
    <>
@@ -151,7 +159,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
          <form aria-label="Customer passcode" onSubmit={e=>{e.preventDefault(); if(forgotMode) void sendPasscodeReset(); else void submit();}} className="w-full max-w-sm space-y-5 rounded-[1.75rem] border border-slate-200 bg-white p-7 text-slate-900 shadow-[0_18px_60px_rgba(15,23,42,.08)]">
            
            <div className="text-center">
-             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-xl font-black text-emerald-800 shadow-sm">M</div><p className="text-[11px] font-extrabold tracking-[.24em] text-emerald-800">MATMOVE SECURE ACCESS</p>
+             <div className="mb-4 text-center text-2xl font-black tracking-tight text-slate-950">MatMove</div><p className="text-[11px] font-extrabold tracking-[.24em] text-emerald-800">SECURE ACCESS</p>
              {forgotMode ? (
                 <>
                   <h1 className="mt-2 text-xl font-bold">Reset Passcode</h1>
@@ -182,17 +190,17 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
            ) : (
              <>
                {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose a new 6–9 digit passcode.</p>}
-               {!status?<p role="status" className="text-center text-sm text-slate-600">Passcode setup unavailable.</p>:<>
+               {!status?<p role="status" className="text-center text-sm text-slate-600">{loadingStatus?'Checking your saved passcode settings…':'Passcode setup unavailable.'}</p>:<>
                 {!creating&&!upgrade&&<>{pinField(`Current ${status.digits}-digit passcode`,pin,'pin',status.digits)}{pinMirror(`Current ${status.digits}-digit passcode`,pin,'pin',setPin,status.digits)}</>}
                 {(creating||upgrade)&&<>{pinField('New passcode (6–9 digits)',next,'next',9)}{pinMirror('New passcode (6–9 digits)',next,'next',setNext,9)}{pinField('Confirm passcode',confirm,'confirm',9)}{pinMirror('Confirm passcode',confirm,'confirm',setConfirm,9)}</>}
                 {keypad}
-                <button type="submit" disabled={busy} className="h-12 w-full rounded-2xl bg-emerald-800 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50">{creating||upgrade?'Save passcode':'Unlock'}</button>
+                <button type="submit" disabled={busy||loadingStatus} className="h-12 w-full rounded-2xl bg-emerald-800 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50">{loadingStatus?'Checking settings…':creating||upgrade?'Save passcode':'Unlock'}</button>
                </>}
                
                {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p>}
                
                <div className="flex justify-between gap-3">
-                 <button type="button" disabled={busy} onClick={()=>void load()} className="min-h-11 text-xs text-slate-600 underline">Reload passcode setup</button>
+                 <button type="button" disabled={busy||loadingStatus} onClick={()=>void load()} className="min-h-11 text-xs text-slate-600 underline">Reload passcode setup</button>
                  <button type="button" onClick={()=>{lock();void onLogout();}} className="min-h-11 text-xs text-slate-600 underline">Sign out</button>
                </div>
                

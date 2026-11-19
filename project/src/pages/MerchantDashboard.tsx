@@ -164,6 +164,11 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
     } catch (err: any) { setWalletNotice(err.message || 'Wallet refresh failed.'); setSleWallet((previous: any) => previous ? { ...previous, balanceAvailable: false } : null); } finally { balanceBusy.current = false; setIsRefreshing(false); }
   };
 
+  useEffect(() => {
+    if (!profile?.id) return;
+    void walletFetch('/api/get-live-wallet', { action: 'sync_account_labels' }).catch(() => {});
+  }, [profile?.id]);
+
   const hasSleAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || ''));
   const setupSleWallet = async () => {
     if (!canTransact || setupBusy.current) return;
@@ -437,6 +442,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
                     <div className="my-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-left">
                       <p className="text-xs font-bold uppercase text-emerald-700">{activeBooking.status==='in_progress'?'Your driver':'Your driver is arriving'}</p>
                       <p className="mt-1 font-bold">{activeBooking.driver?.full_name || 'Driver details syncing…'}</p>
+                      <p className="mt-1 text-xs font-semibold text-emerald-900">Vehicle: {String(activeBooking.matmove_confirmed_vehicle_type||activeBooking.driver?.vehicle_type||activeBooking.vehicle_type||'Vehicle details syncing').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</p>
                       {String(activeBooking.driver?.phone||activeBooking.driver?.phone_number||'').trim()
                         ? <a href={`tel:${String(activeBooking.driver.phone||activeBooking.driver.phone_number).replace(/[^+0-9]/g,'')}`} className="mt-2 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-bold text-emerald-800 underline"><Smartphone size={14}/>{activeBooking.driver.phone||activeBooking.driver.phone_number}</a>
                         : <p className="mt-2 text-xs text-amber-800">Driver phone is syncing. Pull to refresh in a moment.</p>}
@@ -531,10 +537,10 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
       )}
 
       {isTransferModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-slate-900/60 p-2 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="mm-merchant-transfer-title" className="relative max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl bg-white p-5 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-6">
             <button onClick={closeModals} disabled={isProcessingTransfer} className="absolute right-4 top-4 p-2 text-slate-400"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Account Transfer</h2>
+            <h2 id="mm-merchant-transfer-title" className="text-2xl font-bold mb-1">Account Transfer</h2>
             <label className="my-4 block text-sm font-bold">Send from<select value={transferCurrency} disabled={isProcessingTransfer} onChange={e => { setTransferCurrency(e.target.value as 'SLE' | 'USD'); setTransferError(''); setTransferNotice(''); }} className="mt-2 block w-full rounded-xl border p-3"><option value="SLE">SLE wallet → SLE account</option><option value="USD">USD wallet → USD account</option></select></label>
             {transferError && <p role="alert" className="mb-3 text-sm text-red-700">{transferError}</p>}
             {transferNotice && <p role="status" className="mb-3 text-sm text-blue-700">{transferNotice}</p>}

@@ -257,6 +257,11 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
     }
   };
 
+  useEffect(() => {
+    if (!profile?.id) return;
+    void walletFetch('/api/get-live-wallet', { action: 'sync_account_labels' }).catch(() => {});
+  }, [profile?.id]);
+
   const hasSleAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || ''));
   const setupSleWallet = async () => {
     if (!canLoad || setupBusy.current) return;
@@ -771,6 +776,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
                       <div className="mt-4 mb-4 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-left">
                         <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-700">{activeBooking.status==='in_progress'?'Your driver':'Your driver is arriving'}</span>
                         <span className="mt-1 block text-sm font-bold text-slate-900">{activeBooking.driver?.full_name||'Driver details syncing…'}</span>
+                        <span className="mt-1 block text-xs font-semibold text-emerald-900">Vehicle: {String(activeBooking.matmove_confirmed_vehicle_type||activeBooking.driver?.vehicle_type||activeBooking.vehicle_type||'Vehicle details syncing').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</span>
                         {String(activeBooking.driver?.phone||activeBooking.driver?.phone_number||'').trim()
                           ? <a href={`tel:${String(activeBooking.driver.phone||activeBooking.driver.phone_number).replace(/[^+0-9]/g,'')}`} className="mt-2 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-emerald-800 underline"><Smartphone size={13}/>{activeBooking.driver.phone||activeBooking.driver.phone_number}</a>
                           : <span className="mt-1 block text-xs text-amber-800">Driver phone is syncing. Rechecking live trip details…</span>}
@@ -920,10 +926,10 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       )}
 
       {isTransferModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-slate-900/60 p-2 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="mm-rider-transfer-title" className="relative max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl bg-white p-5 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-8">
             <button onClick={closeModals} disabled={isProcessingTransfer} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Account Transfer</h2>
+            <h2 id="mm-rider-transfer-title" className="text-2xl font-bold mb-1">Account Transfer</h2>
             <label className="block my-4 text-sm font-bold">
               Send from
               <select
