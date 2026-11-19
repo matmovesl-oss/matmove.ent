@@ -203,7 +203,7 @@ test('Trip History distinguishes a returned cash handover from an old reserved d
  assert.match(trips,/rider_confirmed: 'Customer confirmed'/);
  assert.match(trips,/both_confirmed: 'Both parties confirmed'/);
  assert.doesNotMatch(trips,/Needs payment review/);
- assert.match(trips,/Needs payment review/);
+ assert.match(trips,/Payment review/);
  assert.match(trips,/Driver confirmed/);
  assert.match(trips,/Customer confirmed/);
  assert.match(trips,/Both confirmed/);
