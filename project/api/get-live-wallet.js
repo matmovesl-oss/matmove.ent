@@ -4,6 +4,7 @@ export const config = {maxDuration:60};
 
 import { protectedWallet, dbClient } from '../server/wallet-security.js';
 import { liveWallet } from '../server/live-wallet.js';
+import { syncMonimeWalletLabels } from '../server/create-wallet.js';
 import { activityAnalyticsAction } from '../server/activity-analytics.js';
 import { reconcileMatMovePayments } from '../server/payment-reconciliation.js';
 import { spinAction, reconcileSpins } from '../server/spin-payments.js';
@@ -13,6 +14,7 @@ const spinActions = new Set(['spin_config','spin_enter','spin_status','spin_draw
 const arcadeActions = new Set(['arcade_config','arcade_quote','arcade_enter','arcade_cancel','arcade_status','arcade_draw']);
 const customer = protectedWallet('read', async (req, res) => {
   const action = req.body.action;
+  if (action === 'sync_account_labels') return res.status(200).json(await syncMonimeWalletLabels(req.matmove));
   if (action === 'activity_analytics') return activityAnalyticsAction(req, res);
   if (spinActions.has(action)) return spinAction(req, res);
   if (arcadeActions.has(action)) return arcadeAction(req, res);
