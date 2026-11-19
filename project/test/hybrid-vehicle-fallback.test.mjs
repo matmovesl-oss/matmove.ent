@@ -24,7 +24,7 @@ test('customer approval records the selected vehicle and payment must use that c
 
 
 test('fare read RPC binds the supplied identity to the authenticated session and limits booking access',()=>{
- assert.match(migration,/v_actor uuid := auth\\.uid\\(\\)/);
+ assert.match(migration,/v_actor uuid := auth\.uid\(\)/);
  assert.match(migration,/p_user_id is distinct from v_actor/);
  assert.match(migration,/v_owner:=b\\.rider_id is not distinct from v_actor/);
  assert.match(migration,/Request access denied/);
