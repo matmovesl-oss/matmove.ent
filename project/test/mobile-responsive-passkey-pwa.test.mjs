@@ -52,7 +52,7 @@ test('passcode keypad appends digits locally and only verifies after submission'
 test('customer home uses the MatMove wordmark instead of the M-only logo', async () => {
   const home = await readFile('src/components/PortalHome.tsx', 'utf8');
   assert.match(home, /className="mm-brand"><span>MatMove/);
-  assert.doesNotMatch(home, /className="mm-brand"><img src="\\/logo\\.jpg"/);
+  assert.equal(home.includes('<div className="mm-brand"><img src="/logo.jpg"'), false);
 });
 
 test('PWA shell does not cache API, authentication or private user data', async () => {
