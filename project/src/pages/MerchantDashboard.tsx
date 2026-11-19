@@ -437,6 +437,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
                     <div className="my-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-left">
                       <p className="text-xs font-bold uppercase text-emerald-700">{activeBooking.status==='in_progress'?'Your driver':'Your driver is arriving'}</p>
                       <p className="mt-1 font-bold">{activeBooking.driver?.full_name || 'Driver details syncing…'}</p>
+                      <p className="mt-1 text-xs font-semibold text-emerald-900">Vehicle: {String(activeBooking.matmove_confirmed_vehicle_type||activeBooking.driver?.vehicle_type||activeBooking.vehicle_type||'Vehicle details syncing').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}{activeBooking.driver?.plate_number ? ' · '+activeBooking.driver.plate_number : ''}</p>
                       {String(activeBooking.driver?.phone||activeBooking.driver?.phone_number||'').trim()
                         ? <a href={`tel:${String(activeBooking.driver.phone||activeBooking.driver.phone_number).replace(/[^+0-9]/g,'')}`} className="mt-2 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-bold text-emerald-800 underline"><Smartphone size={14}/>{activeBooking.driver.phone||activeBooking.driver.phone_number}</a>
                         : <p className="mt-2 text-xs text-amber-800">Driver phone is syncing. Pull to refresh in a moment.</p>}
