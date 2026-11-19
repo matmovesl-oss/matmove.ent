@@ -113,10 +113,12 @@ test('review-only cash bookings stay in Trips but are excluded from the Rider an
  assert.match(hook,/row\.status!=='cash_review_required'/);
  assert.match(hook,/hasCashReviewCases:bookings\.some/);
  assert.doesNotMatch(trips,/\['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'\]\.includes\(t\.status\)&&<button[^]*?onResume/);
- assert.match(trips,/Needs payment review/);
+ assert.match(trips,/Payment review/);
  assert.doesNotMatch(trips,/No cash settlement or refund has been recorded/);
  assert.match(trips,/t\.status==='in_progress'&&t\.cashReturn/);
- assert.match(trips,/String\(t\.cashReturn\.returnStatus\)\.replace/);
+ assert.match(trips,/cashReturnLabel/);
+ assert.match(trips,/Physical cash return/);
+ assert.doesNotMatch(trips,/Needs payment review/);
 });
 test('scheduled stale cash return quarantine closes dispatch without settling or refunding money',async()=>{
  const migration=await read('../supabase/migrations/20261117033000_matmove_stale_cash_handover_quarantine_v1.sql');
@@ -196,8 +198,11 @@ test('stale cash requests with an exact verified fee reserve are closed from liv
 
 test('Trip History distinguishes a returned cash handover from an old reserved duplicate',async()=>{
  const trips=await read('../src/components/TripHistory.tsx');
- assert.match(trips,/t\.cashReturn\.returnStatus==='driver_confirmed'/);
- assert.match(trips,/t\.cashReturn\.returnStatus!=='not_requested'/);
+ assert.match(trips,/cashReturnLabel/);
+ assert.match(trips,/driver_confirmed: 'Driver confirmed'/);
+ assert.match(trips,/rider_confirmed: 'Customer confirmed'/);
+ assert.match(trips,/both_confirmed: 'Both parties confirmed'/);
+ assert.doesNotMatch(trips,/Needs payment review/);
  assert.match(trips,/Needs payment review/);
  assert.match(trips,/Driver confirmed/);
  assert.match(trips,/Customer confirmed/);
