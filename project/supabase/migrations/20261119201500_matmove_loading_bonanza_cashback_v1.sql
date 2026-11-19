@@ -344,11 +344,9 @@ returns jsonb language plpgsql security definer set search_path to 'pg_catalog',
 as $function$
 declare f public.matmove_loading_bonanza_fundings%rowtype; matches boolean; next_state text;
 begin
-  if not exists(select 1 from public.matmove_staff_access where id=p_actor and is_active and is_owner and removed_at is null) then
-    raise exception 'FORBIDDEN: Only the active owner may record referral treasury funding.';
-  end if;
   select * into f from public.matmove_loading_bonanza_fundings where id=p_request for update;
   if not found then raise exception 'NOT_FOUND: Referral treasury funding request not found.'; end if;
+  if f.actor_id is distinct from p_actor then raise exception 'FORBIDDEN: Funding receipt actor does not match the original owner request.'; end if;
   matches:=coalesce(p_receipt->>'id' ~ '^trn-[A-Za-z0-9_-]+$',false)
     and (f.provider_id is null or f.provider_id=p_receipt->>'id')
     and p_receipt#>>'{amount,currency}'='SLE' and p_receipt#>>'{amount,value}'=f.amount_minor::text
