@@ -68,7 +68,7 @@ begin
  select * into b from public.bookings where id=p_booking_id;
  if not found then raise exception 'NOT_FOUND: Request not found.'; end if;
  v_owner:=b.rider_id is not distinct from v_actor;
- if not v_owner and not (v_role='driver' and (b.driver_id=v_actor or (b.status in ('pending','pending_admin') and b.driver_id is null and exists(select 1 from public.profiles where id=v_actor and kyc_status::text='approved'))) then
+ if not v_owner and not (v_role='driver' and (b.driver_id=v_actor or (b.status in ('pending','pending_admin') and b.driver_id is null and exists(select 1 from public.profiles where id=v_actor and kyc_status::text='approved')))) then
    raise exception 'FORBIDDEN: Request access denied.';
  end if;
  select coalesce(jsonb_agg(jsonb_build_object(
