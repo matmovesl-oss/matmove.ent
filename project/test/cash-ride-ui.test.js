@@ -85,7 +85,7 @@ test('both rider and driver show Monime success when settlement arrives through 
     readFile(riderFile, 'utf8'),
     readFile(driverFile, 'utf8')
   ]);
-  assert.match(rider, /activeBooking\?\.cashPayment\?\.status === 'settled'/);
+  assert.match(rider, /payment\?\.status === 'settled'/);
   assert.match(rider, /payment\.driverCashConfirmed === true/);
   assert.match(rider, /payment\.riderCashConfirmed === true/);
   assert.match(rider, /setCashSuccessOpen\(true\)/);
