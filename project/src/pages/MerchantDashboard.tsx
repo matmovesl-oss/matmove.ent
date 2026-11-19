@@ -532,10 +532,10 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
       )}
 
       {isTransferModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-slate-900/60 p-2 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="mm-merchant-transfer-title" className="relative max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl bg-white p-5 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-6">
             <button onClick={closeModals} disabled={isProcessingTransfer} className="absolute right-4 top-4 p-2 text-slate-400"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Account Transfer</h2>
+            <h2 id="mm-merchant-transfer-title" className="text-2xl font-bold mb-1">Account Transfer</h2>
             <label className="my-4 block text-sm font-bold">Send from<select value={transferCurrency} disabled={isProcessingTransfer} onChange={e => { setTransferCurrency(e.target.value as 'SLE' | 'USD'); setTransferError(''); setTransferNotice(''); }} className="mt-2 block w-full rounded-xl border p-3"><option value="SLE">SLE wallet → SLE account</option><option value="USD">USD wallet → USD account</option></select></label>
             {transferError && <p role="alert" className="mb-3 text-sm text-red-700">{transferError}</p>}
             {transferNotice && <p role="status" className="mb-3 text-sm text-blue-700">{transferNotice}</p>}
