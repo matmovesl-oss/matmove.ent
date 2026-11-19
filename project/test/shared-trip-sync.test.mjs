@@ -24,12 +24,13 @@ test('Driver radar restores assigned rides on foreground and resolves rider cont
  assert.match(driver,/driver_id===profile\.id/);
 });
 
-test('Merchant starts in the Rider-style ride flow with the same draggable full-screen map sheet and vehicle cards',async()=>{
+test('Merchant starts in the Rider-style ride flow with an inline booking panel and vehicle cards',async()=>{
  const merchant=await read('../src/pages/MerchantDashboard.tsx');
  assert.match(merchant,/useState<ServiceType>\('ride'\)/);
- assert.match(merchant,/fixed inset-x-0 bottom-\[calc\(76px\+env\(safe-area-inset-bottom\)\)\]/);
- assert.match(merchant,/Drag or tap to expand or collapse ride booking panel/);
- assert.match(merchant,/bookingSheetDragging/);
+ assert.match(merchant,/relative z-30 mx-auto w-full max-w-5xl min-w-0/);
+ assert.doesNotMatch(merchant,/fixed inset-x-0 bottom-\[calc\(76px\+env\(safe-area-inset-bottom\)\)\]/);
+ assert.doesNotMatch(merchant,/Drag or tap to expand or collapse ride booking panel/);
+ assert.doesNotMatch(merchant,/bookingSheetDragging/);
  assert.match(merchant,/Who is travelling\?/);
  assert.match(merchant,/matmove-keke\.svg/);
  assert.match(merchant,/matmove-bike\.svg/);
@@ -167,8 +168,9 @@ test('Rider and Merchant route editing use one synchronized sheet and wait for a
   assert.match(source,/bookingReady=\{Boolean\(pickupCoords && destinationCoords && !routeEditing\)\}/);
   assert.doesNotMatch(source,/setRouteEditing\(!ready\)/);
  }
- assert.match(picker,/setEditingRoute\(true\);\s*setLocationPanelExpanded\(true\);\s*onRouteEditingChange\?\.\(true\)/);
- assert.match(picker,/setEditingRoute\(false\);\s*setLocationPanelExpanded\(false\);\s*onRouteEditingChange\?\.\(false\)/);
+ assert.match(picker,/setEditingRoute\(true\);\s*onRouteEditingChange\?\.\(true\)/);
+ assert.doesNotMatch(picker,/setLocationPanelExpanded/);
+ assert.match(picker,/setEditingRoute\(false\);\s*onRouteEditingChange\?\.\(false\)/);
  assert.match(picker,/status === 'OK'[\s\S]*setEditingRoute\(false\)/);
 });
 

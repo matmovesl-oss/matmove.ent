@@ -8,6 +8,7 @@ import { reconcileMerchantPayments } from './merchant-payments.js';
 import { reconcileSpins } from './spin-payments.js';
 import { reconcileArcades } from './arcade-payments.js';
 import { reconcileReferrals } from './referral-api.js';
+import { reconcileLoadingBonanzaBatch } from './loading-bonanza-payments.js';
 
 function validCronAuthorization(req) {
   const secret = process.env.CRON_SECRET;
@@ -63,6 +64,7 @@ export async function reconcileMatMovePayments(
     purchases = reconcilePurchasePayments,
     merchants = reconcileMerchantPayments,
     referrals = reconcileReferrals,
+    loadingBonanza = reconcileLoadingBonanzaBatch,
     spins = reconcileSpins,
     arcades = reconcileArcades
   } = {}
@@ -79,13 +81,14 @@ export async function reconcileMatMovePayments(
     invokeHandler(payouts, authorization),
     invokeHandler(merchants, authorization),
     invokeHandler(referrals, authorization, { action: 'referral_reconcile' }),
+    loadingBonanza(undefined, { limit: 3 }),
     invokeHandler(spins, authorization),
     invokeHandler(arcades, authorization),
     monime({ limit: 3 }),
     purchases({ limit: 5 })
   ]);
 
-  const names = ['ridePayments', 'withdrawals', 'merchantPayments', 'referrals', 'spinPayments', 'arcadePayments', 'monimeEvents', 'purchasePayments'];
+  const names = ['ridePayments', 'withdrawals', 'merchantPayments', 'referrals', 'loadingBonanza', 'spinPayments', 'arcadePayments', 'monimeEvents', 'purchasePayments'];
   const result = {};
   let unavailable = false;
 
@@ -101,7 +104,7 @@ export async function reconcileMatMovePayments(
       continue;
     }
 
-    if (index < 6) {
+    if (index < 4 || index === 5 || index === 6) {
       const response = item.value;
       const countKeys = ['checked', 'failed'];
       if (
@@ -116,6 +119,11 @@ export async function reconcileMatMovePayments(
         continue;
       }
       result[names[index]] = response.body;
+    } else if (index === 4) {
+      if (!validCounts(item.value, ['checked', 'failed'])) {
+        unavailable = true;
+        result[names[index]] = { unavailable: true };
+      } else result[names[index]] = item.value;
     } else {
       const counts = ['checked', 'processed', 'retrying', 'failed'];
       if (!validCounts(item.value, counts)) {
@@ -123,8 +131,7 @@ export async function reconcileMatMovePayments(
         result[names[index]] = { unavailable: true };
         continue;
       }
-      // Failed/quarantined webhook events are durably retained for manual
-      // review. They are reported in the result, not hidden as successes.
+      // Failed/quarantined webhook and purchase events are durably retained for review.
       result[names[index]] = item.value;
     }
   }
