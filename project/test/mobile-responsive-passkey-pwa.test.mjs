@@ -41,6 +41,12 @@ test('customer sign-in uses Supabase verified passkeys and keeps password fallba
   assert.doesNotMatch(client, /SERVICE_ROLE|SECRET_KEY/i);
 });
 
+test('customer home uses the MatMove wordmark instead of the M-only logo', async () => {
+  const home = await readFile('src/components/PortalHome.tsx', 'utf8');
+  assert.match(home, /className="mm-brand"><span>MatMove/);
+  assert.doesNotMatch(home, /className="mm-brand"><img src="\\/logo\\.jpg"/);
+});
+
 test('PWA shell does not cache API, authentication or private user data', async () => {
   const [html, manifest, worker] = await Promise.all([
     readFile('index.html', 'utf8'),
