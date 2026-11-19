@@ -43,7 +43,7 @@ test('customer sign-in uses Supabase verified passkeys and keeps password fallba
 
 test('passcode keypad appends digits locally and only verifies after submission', async () => {
   const keypad = await readFile('src/components/CustomerPasscode.tsx', 'utf8');
-  assert.match(keypad, /const appendDigit =/);
+  assert.match(keypad, /const appendDigit=/);
   assert.match(keypad, /setPin\(value=>value\.length<limit\?value\+digit:value\)/);
   assert.match(keypad, /appendDigit\(digit\)/);
   assert.match(keypad, /customerPasscode\(id,creating\?'create':changing\?'change':'verify'/);
