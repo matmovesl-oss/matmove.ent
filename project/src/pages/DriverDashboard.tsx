@@ -56,9 +56,9 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
   const [isOnline, setIsOnline] = useState(false);
   const presenceBusy = useRef(false);
   const lastPresenceSent = useRef(0);
-  const publishPresence = useCallback(async (action: 'online'|'heartbeat'|'offline', latitude?: number, longitude?: number, accuracy?: number) => {
+  const publishPresence = useCallback(async (action: 'online'|'heartbeat'|'offline', latitude?: number, longitude?: number, accuracy?: number, observedAt?: string) => {
     const { data, error } = await supabase.rpc('matmove_set_driver_presence', {
-      p_action: action, p_latitude: latitude ?? null, p_longitude: longitude ?? null, p_accuracy_m: accuracy ?? null
+      p_action: action, p_latitude: latitude ?? null, p_longitude: longitude ?? null, p_accuracy_m: accuracy ?? null, p_observed_at: observedAt ?? null
     });
     if (error) throw new Error(error.message || 'Driver availability could not be confirmed.');
     return data;
@@ -79,7 +79,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
       );
       const { latitude, longitude, accuracy } = position.coords;
       if (!Number.isFinite(accuracy) || accuracy > 150) throw new Error('GPS accuracy is too low. Move to a clearer location and try again.');
-      const result = await publishPresence('online', latitude, longitude, accuracy);
+      const result = await publishPresence('online', latitude, longitude, accuracy, new Date(position.timestamp).toISOString());
       if (!result?.online) throw new Error(result?.busy ? 'Finish your active trip before going online for new requests.' : 'MatMove could not confirm your online status.');
       lastPresenceSent.current = Date.now();
       setIsOnline(true);
@@ -103,7 +103,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
       const { latitude, longitude, accuracy } = position.coords;
       if (!Number.isFinite(accuracy) || accuracy > 150 || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
       sending = true;
-      void publishPresence('heartbeat', latitude, longitude, accuracy)
+      void publishPresence('heartbeat', latitude, longitude, accuracy, new Date(position.timestamp).toISOString())
         .then(result => { if (live && result?.online) lastPresenceSent.current = Date.now(); else if (live) { setIsOnline(false); setRideNotice('You were taken offline because MatMove could not confirm driver eligibility.'); } })
         .catch(() => { if (live && Date.now() - lastPresenceSent.current > 45000) { setIsOnline(false); setRideNotice('Your driver heartbeat expired. Go online again when your connection and GPS are stable.'); } })
         .finally(() => { sending = false; });
