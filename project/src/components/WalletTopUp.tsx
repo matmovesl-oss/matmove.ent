@@ -216,8 +216,8 @@ export function WalletTopUp({userId, allowed, onClose, onPaid}: {
 
   const canDial = code && verified && code.status === 'pending' && code.ussdCode && code.expireTime && Date.parse(code.expireTime) > Date.now();
   const discrepancy = completion?.settlement && completion.quote?.netMode && completion.settlement.creditMinor !== completion.quote.walletCreditMinor;
-  return <section className="fixed inset-0 z-50 overflow-y-auto bg-slate-50 p-4 sm:p-8" aria-label="MatMove wallet top-up">
-    <div className="mx-auto max-w-lg space-y-5 rounded-3xl bg-white p-6 shadow-lg">
+  return <section className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-slate-950/35 p-2 sm:p-4" aria-label="MatMove wallet top-up">
+    <div role="dialog" aria-modal="true" aria-label="Load your MatMove wallet" className="max-h-[calc(100dvh-1rem)] w-full max-w-lg space-y-4 overflow-y-auto overscroll-contain rounded-3xl bg-white p-4 shadow-lg sm:max-h-[calc(100dvh-2rem)] sm:p-6">
       <div className="flex items-center justify-between"><h2 className="text-2xl font-bold">Load your wallet</h2><button type="button" onClick={() => void closeLoad()} disabled={closing} aria-label="Close top-up" className="rounded-xl p-2"><X size={22}/></button></div>
       {closing && <p role="status" className="rounded-xl bg-slate-100 p-3 text-sm">Closing the previous load safely…</p>}
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
