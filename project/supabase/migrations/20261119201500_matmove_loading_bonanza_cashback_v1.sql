@@ -329,6 +329,9 @@ begin
   if exists(select 1 from public.wallets where monime_account_id=p_destination or metadata->>'monime_account_id'=p_destination) then
     raise exception 'INVALID: Referral treasury must be a separate business account, not a customer wallet.';
   end if;
+  if exists(select 1 from public.wallets where monime_account_id=p_source or metadata->>'monime_account_id'=p_source) then
+    raise exception 'INVALID: MatMove funding source must be a separate business account, not a customer wallet.';
+  end if;
   insert into public.matmove_loading_bonanza_fundings(id,actor_id,amount_minor,source_account,destination_account,request_key,claimed_at,state)
   values(p_request,p_actor,p_amount,p_source,p_destination,p_request,clock_timestamp(),'processing')
   returning * into f;
