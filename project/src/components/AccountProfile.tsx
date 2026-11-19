@@ -144,7 +144,7 @@ export function PasskeySecurity({userId}:{userId:string}) {
    <span className="text-xs font-bold text-emerald-800">{expanded?'Close':'Set up'}</span>
   </button>
   {expanded&&<div className="border-t border-slate-100 p-4">
-   <p className="text-sm leading-5 text-slate-600">Use your device's secure sign-in. MatMove never receives your face or fingerprint data.</p>
+   <p className="text-sm leading-5 text-slate-600">Enable Face ID or fingerprint for faster sign-in. Your biometric data stays on this device.</p>
    {!supported?<p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">This browser or device does not support passkeys here. You can still use your MatMove passcode and normal sign-in.</p>:<>
     <div className="mt-3 flex flex-wrap items-center gap-2">
      <button type="button" onClick={()=>void register()} disabled={busy||loading||passkeyDisabled} className="min-h-10 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busy?'Please wait…':passkeyDisabled?'Not available':'Enable on this device'}</button>
