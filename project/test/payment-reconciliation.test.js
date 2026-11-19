@@ -90,7 +90,7 @@ test('unified payment reconciliation runs ride, withdrawal and verified Monime i
     assert.deepEqual(res.body.ridePayments, { checked: 3, failed: 0 });
     assert.deepEqual(res.body.withdrawals, { checked: 2, failed: 0 });
     assert.deepEqual(res.body.merchantPayments, { checked: 6, failed: 0 });
-    assert.deepEqual(res.body.monimePurchaseEvents, {
+    assert.deepEqual(res.body.monimeEvents, {
       checked: 4, processed: 3, retrying: 1, failed: 0
     });
     assert.deepEqual(res.body.purchasePayments, {
@@ -158,7 +158,7 @@ test('durably quarantined Monime events are reported for review without treating
 
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.success, true);
-    assert.equal(res.body.monimePurchaseEvents.failed, 2);
+    assert.equal(res.body.monimeEvents.failed, 2);
   } finally {
     env('CRON_SECRET', previous);
   }
@@ -213,7 +213,7 @@ test('unified reconciliation fails closed when the Monime worker returns malform
 
     assert.equal(res.statusCode, 503);
     assert.equal(res.body.success, false);
-    assert.deepEqual(res.body.monimePurchaseEvents, { unavailable: true });
+    assert.deepEqual(res.body.monimeEvents, { unavailable: true });
   } finally {
     env('CRON_SECRET', previous);
   }
