@@ -1,4 +1,5 @@
 import { HttpError, dbClient, monime } from './wallet-security.js';
+import { topupSettlement } from './payment-code.js';
 
 const accountId = value => typeof value === 'string' && /^fac-[A-Za-z0-9_-]+$/.test(value);
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -117,14 +118,86 @@ export async function reconcileLoadingBonanzaReward(db, rewardId, provider = mon
   });
 }
 
+export async function reconcileLoadingBonanzaPendingCodes(db = dbClient(), { provider = monime, limit = 3 } = {}) {
+  const result = await db.from('matmove_loading_bonanza_pending_codes')
+    .select('*').eq('state', 'pending').order('created_at', { ascending: true })
+    .limit(Math.max(1, Math.min(10, Number.isInteger(limit) ? limit : 3)));
+  if (result.error || !Array.isArray(result.data)) throw new HttpError(503, 'Pending Monime Payment Code queue is unavailable.');
+  let checked = 0, failed = 0;
+  for (const row of result.data) {
+    try {
+      const code = await provider(`payment-codes/${encodeURIComponent(row.payment_code_id)}`);
+      const validCode = code?.id === row.payment_code_id && code.status === 'completed' &&
+        code.financialAccountId === row.destination_account && code.amount?.currency === 'SLE' &&
+        code.amount?.value === Number(row.gross_minor) &&
+        code.metadata?.matmoveUserId === row.user_id && code.metadata?.purpose === 'wallet_topup' &&
+        (!row.reference || code.reference === row.reference);
+      if (!validCode) {
+        await db.from('matmove_loading_bonanza_pending_codes').update({
+          state: 'review_required', attempts: Number(row.attempts || 0) + 1,
+          last_checked_at: new Date().toISOString(),
+          error: 'Monime Payment Code no longer matches its original completed MatMove request.',
+          updated_at: new Date().toISOString()
+        }).eq('id', row.id).eq('state', 'pending');
+        failed++;
+        continue;
+      }
+      const settlement = await topupSettlement(code, provider);
+      if (!settlement) {
+        await db.from('matmove_loading_bonanza_pending_codes').update({
+          attempts: Number(row.attempts || 0) + 1,
+          last_checked_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }).eq('id', row.id).eq('state', 'pending');
+        checked++;
+        continue;
+      }
+      const topup = await rpc(db, 'matmove_loading_bonanza_record_topup', {
+        p_user: row.user_id, p_wallet: row.wallet_id, p_payment_code: row.payment_code_id,
+        p_provider_payment: settlement.paymentId, p_gross: code.amount.value,
+        p_fee: settlement.feeMinor, p_credit: settlement.creditMinor, p_destination: code.financialAccountId
+      });
+      if (topup?.user_id !== row.user_id || topup?.wallet_id !== row.wallet_id ||
+          topup?.payment_code_id !== row.payment_code_id || topup?.provider_payment_id !== settlement.paymentId ||
+          Number(topup?.credit_minor) !== settlement.creditMinor || topup?.state !== 'completed') {
+        throw new HttpError(503, 'Verified top-up receipt could not be linked to the pending Payment Code.');
+      }
+      const { error: updateError } = await db.from('matmove_loading_bonanza_pending_codes').update({
+        state: 'recorded', topup_id: topup.id, attempts: Number(row.attempts || 0) + 1,
+        last_checked_at: new Date().toISOString(), error: null, updated_at: new Date().toISOString()
+      }).eq('id', row.id).eq('state', 'pending');
+      if (updateError) throw new HttpError(503, 'Pending Payment Code receipt could not be finalized.');
+      checked++;
+    } catch (error) {
+      if (error?.code === 'CONFLICT' || error?.code === 'INVALID') {
+        await db.from('matmove_loading_bonanza_pending_codes').update({
+          state: 'review_required', attempts: Number(row.attempts || 0) + 1,
+          last_checked_at: new Date().toISOString(),
+          error: 'Verified Monime Payment Code receipt needs manual review.',
+          updated_at: new Date().toISOString()
+        }).eq('id', row.id).eq('state', 'pending');
+      } else {
+        await db.from('matmove_loading_bonanza_pending_codes').update({
+          attempts: Number(row.attempts || 0) + 1,
+          last_checked_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }).eq('id', row.id).eq('state', 'pending');
+      }
+      failed++;
+    }
+  }
+  return { checked, failed };
+}
+
 export async function reconcileLoadingBonanzaBatch(db = dbClient(), { provider = monime, env = process.env, limit = 3 } = {}) {
+  const pendingCodes = await reconcileLoadingBonanzaPendingCodes(db, { provider, limit });
   const result = await db.from('matmove_loading_bonanza_rewards')
     .select('id')
     .in('state', ['pending', 'processing'])
     .order('updated_at', { ascending: true })
     .limit(Math.max(1, Math.min(10, Number.isInteger(limit) ? limit : 3)));
   if (result.error || !Array.isArray(result.data)) throw new HttpError(503, 'Loading Bonanza reconciliation queue is unavailable.');
-  let checked = 0, failed = 0;
+  let checked = pendingCodes.checked, failed = pendingCodes.failed;
   for (const row of result.data) {
     try {
       await reconcileLoadingBonanzaReward(db, row.id, provider, env);
