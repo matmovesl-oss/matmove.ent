@@ -81,7 +81,7 @@ begin
 end;
 $fn$;
 revoke all on function public.matmove_set_driver_presence(text,double precision,double precision,double precision,timestamptz) from public,anon;
-grant execute on function public.matmove_set_driver_presence(text,double precision,double precision,double precision) to authenticated;
+grant execute on function public.matmove_set_driver_presence(text,double precision,double precision,double precision,timestamptz) to authenticated;
 
 create or replace function public.matmove_driver_presence_snapshot()
 returns jsonb
