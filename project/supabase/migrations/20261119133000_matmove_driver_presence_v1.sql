@@ -42,7 +42,7 @@ begin
   if v_actor is null then raise exception 'AUTH: Sign in to manage driver availability.'; end if;
   if p_action not in ('online','heartbeat','offline') then raise exception 'INVALID: Unknown availability action.'; end if;
   select * into v_profile from public.profiles where id=v_actor for update;
-  if not found or v_profile.role <> 'driver' then raise exception 'FORBIDDEN: Driver account required.'; end if;
+  if not found or v_profile.role is distinct from 'driver' then raise exception 'FORBIDDEN: Driver account required.'; end if;
 
   if p_action='offline' then
     update public.matmove_driver_presence set is_online=false,last_seen_at=now(),updated_at=now()
@@ -50,7 +50,7 @@ begin
     return jsonb_build_object('online',false,'serverTime',now());
   end if;
 
-  if v_profile.kyc_status::text <> 'approved' or coalesce(v_profile.is_wallet_frozen,false) then
+  if v_profile.kyc_status::text is distinct from 'approved' or coalesce(v_profile.is_wallet_frozen,false) then
     raise exception 'FORBIDDEN: Approved, unfrozen driver account required.';
   end if;
   if p_latitude is null or p_longitude is null or p_accuracy_m is null
@@ -58,7 +58,7 @@ begin
      or p_accuracy_m < 0 or p_accuracy_m > 150 then
     raise exception 'INVALID_LOCATION: A fresh GPS fix with accuracy of 150 metres or better is required.';
   end if;
-  if not exists(select 1 from public.wallets w where w.user_id=v_actor and coalesce(w.is_frozen,false)=false) then
+  if not exists(select 1 from public.wallets w where w.user_id=v_actor and w.currency='SLE' and coalesce(w.is_frozen,false)=false) then
     raise exception 'FORBIDDEN: An active, unfrozen driver wallet is required.';
   end if;
   select exists(select 1 from public.bookings b where b.driver_id=v_actor and b.status in ('accepted','in_progress')) into v_busy;
