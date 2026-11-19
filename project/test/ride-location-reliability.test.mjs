@@ -25,7 +25,13 @@ test('active-trip GPS sharing explains permission failures and browser backgroun
 test('rider and merchant ride-map back arrows return to the customer home screen', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   const merchant = readFileSync(new URL('../src/pages/MerchantDashboard.tsx', import.meta.url), 'utf8');
+  const rider = readFileSync(new URL('../src/pages/RiderDashboard.tsx', import.meta.url), 'utf8');
   assert.match(app, /onBack=\{\(\) => setActiveSection\('home'\)\}/);
   assert.match(merchant, /function MerchantMain\(\{ profile, wallet, activeSection, resumeTripId, onOpenTrips, onBack \}: any\)/);
   assert.match(merchant, /onBack=\{onBack \|\| \(\(\) => \{ setRouteEditing\(true\)/);
+  for (const source of [rider, merchant]) {
+    assert.match(source, /document\.documentElement\.style\.overflow = 'hidden'/);
+    assert.match(source, /document\.body\.style\.overflow = 'hidden'/);
+    assert.match(source, /isLoadModalOpen, isPayoutModalOpen, isTransferModalOpen/);
+  }
 });
