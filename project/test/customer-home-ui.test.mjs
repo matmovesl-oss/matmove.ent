@@ -51,16 +51,16 @@ test('ride booking uses an inline responsive map and lets the customer page scro
   read('../src/pages/RiderDashboard.tsx'),
   read('../src/App.tsx')
  ]);
- assert.match(picker,/relative z-10 w-full min-w-0 bg-\[#e9eef1\]/);
- assert.match(picker,/h-\[min\(56dvh,520px\)\]/);
- assert.match(picker,/gestureHandling: 'greedy'/);
- assert.doesNotMatch(picker,/mapFirst\?"fixed inset-0/);
- assert.doesNotMatch(picker,/fixed inset-x-0 bottom-\[calc\(64px/);
- assert.match(picker,/Back to MatMove home/);
- assert.match(picker,/Change locations/);
- assert.match(ride,/bookingReady=\{Boolean\(pickupCoords && destinationCoords && !routeEditing\)\}/);
- assert.match(ride,/onRouteEditingChange=\{setRouteEditing\}/);
- assert.match(app,/onBack=\{\s*\(\) =>\s*setActiveSection\('home'\)\s*\}/);
+ assert.match(picker,/relative z-10 w-full min-w-0 bg-\[#e9eef1\]/,'map section should be inline and full width');
+ assert.match(picker,/h-\[min\(56dvh,520px\)\]/,'map viewport should be bounded to a responsive height');
+ assert.match(picker,/gestureHandling: 'greedy'/,'map should accept one-finger pan gestures');
+ assert.doesNotMatch(picker,/mapFirst\?"fixed inset-0/,'map must not be fixed over the full viewport');
+ assert.doesNotMatch(picker,/fixed inset-x-0 bottom-\[calc\(64px/,'location form must not be a fixed overlay');
+ assert.match(picker,/Back to MatMove home/,'map back control must remain visible');
+ assert.match(picker,/Change locations/,'location edit action must remain available');
+ assert.match(ride,/bookingReady=\{Boolean\(pickupCoords && destinationCoords && !routeEditing\)\}/,'ride readiness must collapse location editing after route selection');
+ assert.match(ride,/onRouteEditingChange=\{setRouteEditing\}/,'route edit state must remain controlled by the rider page');
+ assert.match(app,/onBack=\{\s*\(\) =>\s*setActiveSection\('home'\)\s*\}/,'map back action must return to the MatMove home section');
 });
 
 test('ride vehicle selector and map pins use branded visual markers instead of plain text or default pins',async()=>{
