@@ -4,7 +4,7 @@ export type FareOffer = {
   id: string; driverId: string; driverName: string; amountMinor: number;
   fareVersion: number; agreedVersion: number | null;
   status: 'pending' | 'accepted' | 'declined' | 'withdrawn' | 'superseded' | 'expired';
-  expiresAt: string; createdAt: string; vehicleType: string;
+  expiresAt: string; createdAt: string; vehicleType: string; vehiclePlate: string | null;
 };
 export type FareSnapshot = {
   bookingId: string; viewerId: string; fareMinor: number; fareVersion: number;
@@ -31,7 +31,7 @@ async function request(userId: string,name: string,args: Record<string,unknown>)
 }
 export async function readRideFares(userId: string,bookingId: string): Promise<FareSnapshot> {
   const data=await request(userId,'matmove_read_ride_fares',{p_booking_id:bookingId});
-  if(data?.viewerId!==userId||data?.bookingId!==bookingId||!Number.isSafeInteger(data.fareMinor)||data.fareMinor<1||!Number.isSafeInteger(data.fareVersion)||!Array.isArray(data.offers)||data.offers.some((o:any)=>typeof o.vehicleType!=='string')||!Number.isFinite(Date.parse(data.serverTime))||typeof data.requestedVehicleType!=='string'||!Number.isFinite(Date.parse(data.requestCreatedAt)))throw new Error('Fare details could not be verified. Refresh this request.');
+  if(data?.viewerId!==userId||data?.bookingId!==bookingId||!Number.isSafeInteger(data.fareMinor)||data.fareMinor<1||!Number.isSafeInteger(data.fareVersion)||!Array.isArray(data.offers)||data.offers.some((o:any)=>typeof o.vehicleType!=='string'||(o.vehiclePlate!==null&&typeof o.vehiclePlate!=='string'))||!Number.isFinite(Date.parse(data.serverTime))||typeof data.requestedVehicleType!=='string'||!Number.isFinite(Date.parse(data.requestCreatedAt)))throw new Error('Fare details could not be verified. Refresh this request.');
   return data;
 }
 export async function proposeRideFare(userId: string,bookingId: string,requestId: string,amountMinor: number,fareVersion: number) {
