@@ -206,7 +206,7 @@ test('Trip History distinguishes a returned cash handover from an old reserved d
  assert.match(trips,/Payment review/);
  assert.match(trips,/Driver confirmed/);
  assert.match(trips,/Customer confirmed/);
- assert.match(trips,/Both confirmed/);
+ assert.match(trips,/Both parties confirmed/);
  assert.doesNotMatch(trips,/verified MatMove fee reserve is awaiting support reconciliation/);
  assert.doesNotMatch(trips,/driver recorded returning the physical cash/);
 });
