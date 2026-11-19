@@ -54,6 +54,7 @@ test('ride map fills its own section, preserves single-finger map gestures and a
  assert.ok(picker.includes('className={mapFirst?"relative z-10 min-h-[100dvh] w-full'));
  assert.ok(picker.includes("gestureHandling: 'greedy'"));
  assert.ok(picker.includes('className="absolute left-4 top-4 z-20'));
+ assert.ok(picker.includes('className="absolute left-4 right-4 top-20 z-20'));
  assert.ok(!picker.includes('className={mapFirst?"fixed inset-0 z-10'));
  assert.match(picker,/Plan your ride/);
  assert.match(picker,/onPointerMove/);
