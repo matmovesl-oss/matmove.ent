@@ -67,6 +67,7 @@ test('unified payment reconciliation runs ride, withdrawal and verified Monime i
       return res.status(200).json({ checked: 2, failed: 0 });
     };
     const merchants = async (_req, res) => {
+      res.setHeader('Cache-Control', 'no-store');
       calls.push(['merchants', _req.headers.authorization]);
       return res.status(200).json({ checked: 6, failed: 0 });
     };
