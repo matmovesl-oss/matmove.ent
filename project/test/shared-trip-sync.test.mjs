@@ -197,7 +197,7 @@ test('stale cash requests with an exact verified fee reserve are closed from liv
 test('Trip History distinguishes a returned cash handover from an old reserved duplicate',async()=>{
  const trips=await read('../src/components/TripHistory.tsx');
  assert.match(trips,/t\.cashReturn\.returnStatus==='driver_confirmed'/);
- assert.match(trips,/t\\.cashReturn\\.returnStatus!=='not_requested'/);
+ assert.match(trips,/t\.cashReturn\.returnStatus!=='not_requested'/);
  assert.match(trips,/verified MatMove fee reserve is awaiting support reconciliation/);
  assert.match(trips,/driver recorded returning the physical cash/);
 });
