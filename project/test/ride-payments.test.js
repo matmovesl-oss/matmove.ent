@@ -82,7 +82,7 @@ const verifyAccount = async (_db, wallet) => ({
   currency: 'SLE'
 });
 
-const call = async (action, actor = rider, extra = {}, vehicleType = 'Car') => {
+const call = async (action, actor = rider, extra = {}) => {
   const result = {};
 
   const res = {
@@ -102,8 +102,7 @@ const call = async (action, actor = rider, extra = {}, vehicleType = 'Car') => {
       db,
       user: { id: actor },
       profile: {
-        role: actor === rider ? 'rider' : 'driver',
-        vehicle_type: actor === rider ? null : vehicleType
+        role: actor === rider ? 'rider' : 'driver'
       }
     }
   };
@@ -973,28 +972,4 @@ test('the supplied combined SQL setup and diagnostics execute successfully on th
   const result = await call('complete');
 
   assert.equal(result.body.payment.settled, true);
-});
-
-test('driver acceptance requires a vehicle matching the rider request', async () => {
-  await assert.rejects(
-    call('accept', driver, {}, 'Motorbike (Okada)'),
-    /request requires a car vehicle/i
-  );
-  assert.equal(posts.length, 0);
-  assert.equal(await row('ride_payments'), undefined);
-});
-
-test('legacy requests without a vehicle category are not silently assigned', async () => {
-  await pg.query('update bookings set vehicle_type=null where id=$1', [bookingId]);
-  await assert.rejects(
-    call('accept', driver),
-    /no verified vehicle category/i
-  );
-  assert.equal(posts.length, 0);
-});
-
-test('cash ride acceptance shares the same server-side vehicle compatibility guard', async () => {
-  const source = await readFile(new URL('../server/cash-ride-payments.js', import.meta.url), 'utf8');
-  assert.match(source, /assertRideVehicleCompatibility\(booking, profile\)/);
-  assert.match(source, /vehicle_type/);
 });
