@@ -49,6 +49,12 @@ test('passcode keypad appends digits locally and only verifies after submission'
   assert.match(keypad, /customerPasscode\(id,creating\?'create':changing\?'change':'verify'/);
 });
 
+test('wallet cards use a wallet symbol instead of the M-only artwork', async () => {
+  const wallets = await readFile('src/components/WalletCards.tsx', 'utf8');
+  assert.match(wallets, /<Wallet className="text-emerald-700" size=\{27\} \/>/);
+  assert.doesNotMatch(wallets, /wallet-icon\.png/);
+});
+
 test('customer home uses the MatMove wordmark instead of the M-only logo', async () => {
   const home = await readFile('src/components/PortalHome.tsx', 'utf8');
   assert.match(home, /className="mm-brand"><span>MatMove/);
