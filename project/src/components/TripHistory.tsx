@@ -33,7 +33,8 @@ export function tripShareText(t: any) {
     ...(t.driver?.full_name ? [`Driver: ${t.driver.full_name}`] : []),
     ...(t.rider?.full_name ? [`Customer: ${t.rider.full_name}`] : []),
     ...(t.vehicle_type ? [`Requested vehicle: ${t.vehicle_type}`] : []),
-    ...((t.matmove_confirmed_vehicle_type || t.driver?.vehicle_type) ? [`Driver vehicle: ${t.matmove_confirmed_vehicle_type || t.driver?.vehicle_type}`] : []),
+    ...(t.matmove_confirmed_vehicle_type ? [`Vehicle at acceptance: ${t.matmove_confirmed_vehicle_type}`] : [`Vehicle at acceptance: Not recorded`]),
+    ...(t.driver?.vehicle_type ? [`Driver's registered vehicle: ${t.driver.vehicle_type}`] : []),
     ...(t.cashReturn?.returnStatus ? [`Physical cash return: ${cashReturnLabel(t.cashReturn.returnStatus)}`] : []),
   ].join('\n');
 }
@@ -55,7 +56,8 @@ function tripReceiptFields(t: any, role: Props['role']) {
     { label: 'Customer', value: t.rider?.full_name },
     { label: 'Driver', value: t.driver?.full_name },
     { label: 'Requested vehicle', value: t.vehicle_type || 'Not recorded' },
-    { label: 'Driver vehicle', value: t.matmove_confirmed_vehicle_type || t.driver?.vehicle_type || 'Not recorded' },
+    { label: 'Vehicle at acceptance', value: t.matmove_confirmed_vehicle_type || 'Not recorded at acceptance' },
+    { label: "Driver's registered vehicle", value: t.driver?.vehicle_type || 'Not available' },
     { label: 'Physical cash return', value: cashReturnLabel(t.cashReturn?.returnStatus) },
     { label: 'Fare', value: `SLE ${Number(t.fare_amount || 0).toFixed(2)}` },
     ...(role === 'driver' ? [{
@@ -204,7 +206,7 @@ export default function TripHistory({ userId, role, onResume, accountLabel, acco
     ['Pickup area', selected.pickup_location], ['Destination area', selected.destination_location],
     ['Requested', date(selected.created_at)], ['Scheduled', selected.scheduled_time?date(selected.scheduled_time):selected.service_type==='scheduled'?'Not recorded':'Not scheduled'],
     ['Accepted', date(selected.accepted_at)], ['Started', date(selected.started_at)],
-    ['Completed', date(selected.completed_at)], ['Requested vehicle', selected.vehicle_type], ['Driver vehicle', selected.matmove_confirmed_vehicle_type || selected.driver?.vehicle_type],
+    ['Completed', date(selected.completed_at)], ['Requested vehicle', selected.vehicle_type], ['Vehicle at acceptance', selected.matmove_confirmed_vehicle_type || 'Not recorded at acceptance'], ["Driver's registered vehicle", selected.driver?.vehicle_type || 'Not available'],
     ['Fare', `SLE ${Number(selected.fare_amount || 0).toFixed(2)}`], ['Payment method',selected.payment_method], ['Cash handover status',selected.cashPayment?.status], ['Physical cash return',cashReturnLabel(selected.cashReturn?.returnStatus)], ['Driver cash confirmed',selected.cashPayment?.driverCashConfirmed?'Yes':'No'], ['Customer cash confirmed',selected.cashPayment?.riderCashConfirmed?'Yes':'No'],
     ...(role === 'driver' ? [[selected.paymentInfo?.adminSettlement ? 'Admin dispute driver award (5%)' : 'Expected driver share (85%)', selected.paymentInfo?.adminSettlement ? `SLE ${(Number(selected.paymentInfo.adminSettlement.driverAwardMinor || 0) / 100).toFixed(2)}` : `SLE ${(Number(selected.fare_amount || 0) * 0.85).toFixed(2)}`]] : []),
     ...(selected.paymentInfo?.adminSettlement ? [
