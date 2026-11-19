@@ -108,4 +108,7 @@ test('Trips uses compact cards and only exposes full receipts after verified pay
   assert.doesNotMatch(trips, /Unfinished requests/);
   assert.doesNotMatch(trips, /Time period/);
   assert.match(trips, /Download \/ Share full receipt PDF/);
+  assert.match(trips, /Physical cash return/);
+  assert.doesNotMatch(trips, /Needs payment review/);
+  assert.doesNotMatch(trips, /Cash return: \{t\.cashReturn/);
 });
