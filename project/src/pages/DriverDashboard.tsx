@@ -534,7 +534,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
                         </button>
                         {fareBlockReason(r) && <p role="status" className="text-xs text-amber-900">{fareBlockReason(r)}</p>}
                         {!r.driver_id && r.payment_method !== 'cash' && ['ride', 'delivery'].includes(r.service_type) && <button type="button" disabled={!!acceptingId || !canTransact || !Number.isFinite(Number(r.fare_amount)) || Number(r.fare_amount)<=0} onClick={() => setNegotiatingId(previous => previous === r.id ? null : r.id)} className="min-h-11 w-full rounded-xl border px-3 py-2 text-sm font-bold disabled:opacity-50">{negotiatingId === r.id ? 'Hide fare offers' : 'Negotiate fare'}</button>}
-                        {!r.driver_id && r.payment_method !== 'cash' && negotiatingId === r.id && <FareNegotiation key={`${profile.id}:${r.id}`} userId={profile.id} bookingId={r.id} role="driver" onFareChange={applyDriverFare} />}
+                        {!r.driver_id && r.payment_method !== 'cash' && negotiatingId === r.id && <FareNegotiation key={`${profile.id}:${r.id}`} userId={profile.id} bookingId={r.id} role="driver" vehicleType={profile.vehicle_type || ''} onFareChange={applyDriverFare} />}
                       </>
                     )}
 
