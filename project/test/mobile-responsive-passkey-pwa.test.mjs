@@ -41,6 +41,14 @@ test('customer sign-in uses Supabase verified passkeys and keeps password fallba
   assert.doesNotMatch(client, /SERVICE_ROLE|SECRET_KEY/i);
 });
 
+test('passcode keypad appends digits locally and only verifies after submission', async () => {
+  const keypad = await readFile('src/components/CustomerPasscode.tsx', 'utf8');
+  assert.match(keypad, /const appendDigit =/);
+  assert.match(keypad, /setPin\(value=>value\.length<limit\?value\+digit:value\)/);
+  assert.match(keypad, /appendDigit\(digit\)/);
+  assert.match(keypad, /customerPasscode\(id,creating\?'create':changing\?'change':'verify'/);
+});
+
 test('customer home uses the MatMove wordmark instead of the M-only logo', async () => {
   const home = await readFile('src/components/PortalHome.tsx', 'utf8');
   assert.match(home, /className="mm-brand"><span>MatMove/);
