@@ -10,7 +10,7 @@ test('driver presence is server-owned and protected by RLS and authenticated RPC
  assert.match(migration,/enable row level security/i);
  assert.match(migration,/revoke all on public\.matmove_driver_presence from anon, authenticated/i);
  assert.match(migration,/auth\.uid\(\)/i);
- assert.match(migration,/kyc_status::text <> 'approved'/i);
+ assert.match(migration,/kyc_status::text is distinct from 'approved'/i);
  assert.match(migration,/is_wallet_frozen/i);
  assert.match(migration,/is_frozen/i);
  assert.match(migration,/last_seen_at>now\(\)-interval '45 seconds'/i);
