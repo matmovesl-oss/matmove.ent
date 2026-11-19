@@ -8,6 +8,7 @@ import {
 } from '../server/wallet-security.js';
 
 import { topupQuote } from '../server/topup-fees.js';
+import { reconcileLoadingBonanzaBatch } from '../server/loading-bonanza-payments.js';
 
 import {
   publicPaymentCode, topupSettlement, encodeTopupQuote
@@ -36,6 +37,14 @@ async function recordVerifiedTopup(context, code, settlement) {
       data?.payment_code_id !== code.id || data?.provider_payment_id !== settlement.paymentId ||
       Number(data?.credit_minor) !== settlement.creditMinor || data?.state !== 'completed') {
     throw new HttpError(503, 'Payment completed, but MatMove is still recording its verified top-up receipt. Check this same payment status again; do not create another load.');
+  }
+  // Kick the cashback queue immediately after its verified top-up record is committed.
+  // A queue/treasury issue never reverses or misreports the customer's completed top-up.
+  try {
+    const outcome = await reconcileLoadingBonanzaBatch(context.db, { limit: 1 });
+    if (outcome.failed > 0) console.error('Loading Bonanza immediate settlement needs review.');
+  } catch {
+    console.error('Loading Bonanza immediate settlement deferred to scheduled reconciliation.');
   }
 }
 
