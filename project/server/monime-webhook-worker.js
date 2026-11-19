@@ -47,7 +47,7 @@ async function getTransfer(id) {
 
 export function classifyMonimeTransfer(event, transfer) {
   const metadata = transfer?.metadata || {};
-  if (event?.object_type === 'internal_transfer' && event?.event_type === 'internal_transfer.completed') {
+  if (event?.object_type === 'internal_transfer' && ['internal_transfer.completed', 'internal_transfer.failed'].includes(event?.event_type)) {
     const candidates = [
       ['purchase', metadata.matmovePurchasePaymentId],
       ['ride', metadata.bookingId],
@@ -105,7 +105,7 @@ async function processPurchaseTransfer(db, event, existingTransfer = null) {
   // The purchase worker is deliberately restricted to the completed internal
   // transfer event. A signed event of another kind must not enter fulfilment
   // merely because its object happens to reference an internal transfer.
-  if (event.event_type !== 'internal_transfer.completed') {
+  if (!['internal_transfer.completed', 'internal_transfer.failed'].includes(event.event_type)) {
     throw new ManualReviewError('Unsupported Monime event type for purchase fulfilment; manual review required.');
   }
 
