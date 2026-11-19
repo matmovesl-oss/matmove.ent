@@ -45,13 +45,13 @@ test('homepage feed replaces the decorative route demo with admin-published movi
 });
 
 
-test('ride booking uses a full-screen map and draggable Uber-style location sheet',async()=>{
+test('ride map fills its own section, preserves single-finger map gestures and allows page scrolling outside it',async()=>{
  const [picker,ride,app]=await Promise.all([
   read('../src/components/RideLocationPicker.tsx'),
   read('../src/pages/RiderDashboard.tsx'),
   read('../src/App.tsx')
  ]);
- assert.match(picker,/fixed inset-0 z-10/);
+ assert.match(picker,/className=\{mapFirst\?"relative z-10 min-h-\[100dvh\] w-full/);\n assert.match(picker,/gestureHandling: 'greedy'/);\n assert.match(picker,/className="absolute left-4 top-4 z-20/);\n assert.doesNotMatch(picker,/className=\{mapFirst\?"fixed inset-0 z-10/);
  assert.match(picker,/Plan your ride/);
  assert.match(picker,/onPointerMove/);
  assert.match(picker,/onPointerUp/);
