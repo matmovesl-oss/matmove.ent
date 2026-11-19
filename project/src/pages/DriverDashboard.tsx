@@ -122,19 +122,6 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
   }, [isOnline, profile?.id, publishPresence]);
   const [activeRequests, setActiveRequests] = useState<any[]>([]);
 
-  // Also observe settlement arriving from the server poll, not only the
-  // driver's button response, so both parties see the same verified receipt.
-  useEffect(() => {
-    const settled = activeRequests.find(item =>
-      item.payment_method === 'cash' &&
-      item.cashPayment?.status === 'settled' &&
-      item.cashPayment?.driverCashConfirmed === true &&
-      item.cashPayment?.riderCashConfirmed === true
-    );
-    if (!settled) return;
-    setActiveRequests(previous => previous.filter(item => item.id !== settled.id));
-    setCashSuccessOpen(true);
-  }, [activeRequests]);
   const [negotiatingId, setNegotiatingId] = useState<string | null>(null);
   const [fareSnapshots, setFareSnapshots] = useState<Record<string, FareSnapshot>>({});
   const tripMutex = useRef(false);
