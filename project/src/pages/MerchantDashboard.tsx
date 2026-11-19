@@ -375,11 +375,22 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
 
   return (
     <div className="min-h-screen flex-1 bg-slate-50">
-      <header className={`sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b bg-white px-4 py-4 shadow-sm sm:px-6 ${activeSection === 'wallet' ? 'hidden' : ''}`}>
-        <div className="flex items-center gap-3"><div className="rounded-xl bg-orange-100 p-2 text-orange-600"><Store size={20} /></div><h2 className="font-bold text-slate-900">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
-        <div className="flex gap-2">
-          {!canTransact ? <span className="rounded-xl border border-red-200 bg-red-100 px-4 py-2 text-xs font-bold text-red-700">{isFrozen ? 'Wallet unavailable' : 'Approval pending'}</span> : (
-            <><button onClick={() => setIsLoadModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">Load</button><button onClick={() => setIsPayoutModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Withdraw</button><button onClick={() => setIsTransferModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Transfer</button></>
+      <header className={`sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur ${activeSection === 'wallet' ? 'hidden' : ''}`}>
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="shrink-0 rounded-xl bg-orange-100 p-2 text-orange-600"><Store size={20} /></div>
+            <h2 className="min-w-0 truncate font-bold text-slate-900">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2>
+          </div>
+          {!canTransact ? (
+            <div className="flex w-full justify-center rounded-xl border border-red-200 bg-red-100 px-3 py-3 text-xs font-bold text-red-700 sm:w-auto sm:min-w-[360px]">
+              {isFrozen ? 'Wallet unavailable' : 'Approval pending'}
+            </div>
+          ) : (
+            <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:min-w-[360px]">
+              <button type="button" onClick={() => setIsLoadModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-blue-600 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Load</button>
+              <button type="button" onClick={() => setIsPayoutModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-emerald-600 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Withdraw</button>
+              <button type="button" onClick={() => setIsTransferModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-slate-900 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Transfer</button>
+            </div>
           )}
         </div>
       </header>
