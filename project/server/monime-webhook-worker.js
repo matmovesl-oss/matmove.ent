@@ -193,23 +193,32 @@ async function processPurchaseTransfer(db, event, existingTransfer = null) {
   return 'processed';
 }
 
-export async function processMonimeWebhookBatch({ db = client(), limit = 3 } = {}) {
+export async function processMonimeWebhookBatch({ db = client(), limit = 3, eventId = null } = {}) {
   // Validate Live/Test mode before claiming any durable inbox event.
   assertMonimeEnvironment();
   const staleCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const batchLimit = Math.max(1, Math.min(25, limit));
+  let pendingQuery = db.from('matmove_monime_webhook_events')
+    .select('event_id,event_type,object_id,object_type,payload,attempts,status,updated_at,signature_verified,last_error')
+    .eq('status', 'pending')
+    .order('received_at', { ascending: true })
+    .limit(batchLimit);
+  let staleQuery = db.from('matmove_monime_webhook_events')
+    .select('event_id,event_type,object_id,object_type,payload,attempts,status,updated_at,signature_verified,last_error')
+    .eq('status', 'processing')
+    .lt('updated_at', staleCutoff)
+    .order('updated_at', { ascending: true })
+    .limit(batchLimit);
+  if (eventId !== null) {
+    if (typeof eventId !== 'string' || !/^wke-[A-Za-z0-9_-]{1,120}$/.test(eventId)) {
+      throw new Error('Invalid targeted Monime event identifier.');
+    }
+    pendingQuery = pendingQuery.eq('event_id', eventId);
+    staleQuery = staleQuery.eq('event_id', eventId);
+  }
   const [pendingResult, staleResult] = await Promise.all([
-    db.from('matmove_monime_webhook_events')
-      .select('event_id,event_type,object_id,object_type,payload,attempts,status,updated_at,signature_verified,last_error')
-      .eq('status', 'pending')
-      .order('received_at', { ascending: true })
-      .limit(batchLimit),
-    db.from('matmove_monime_webhook_events')
-      .select('event_id,event_type,object_id,object_type,payload,attempts,status,updated_at,signature_verified,last_error')
-      .eq('status', 'processing')
-      .lt('updated_at', staleCutoff)
-      .order('updated_at', { ascending: true })
-      .limit(batchLimit)
+    pendingQuery,
+    staleQuery
   ]);
 
   if (pendingResult.error || staleResult.error) throw new Error('Could not read Monime webhook inbox.');
