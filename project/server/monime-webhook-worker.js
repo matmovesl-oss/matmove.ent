@@ -7,7 +7,7 @@ import { reconcileWithdrawal } from './payout-payments.js';
 import { reconcileSpinRound } from './spin-payments.js';
 import { reconcileArcadeRound } from './arcade-payments.js';
 import { runReferralLeg } from './referral-payments.js';
-import { reconcileLoadingBonanzaReward } from './loading-bonanza-payments.js';
+import { reconcileLoadingBonanzaReward, reconcileLoadingBonanzaBatch } from './loading-bonanza-payments.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ATTEMPTS = 12;
@@ -61,7 +61,8 @@ export function classifyMonimeTransfer(event, transfer) {
       ['spin', metadata.matmoveSpinRoundId],
       ['arcade', metadata.matmoveArcadeRoundId],
       ['referral', metadata.matmoveReferralRewardId],
-      ['loadingBonanza', metadata.matmoveLoadingBonanzaRewardId]
+      ['loadingBonanza', metadata.matmoveLoadingBonanzaRewardId],
+      ['loadingBonanzaFunding', metadata.matmoveLoadingBonanzaFundingId]
     ].filter(([, id]) => typeof id === 'string' && UUID.test(id));
     return candidates.length === 1 ? { kind: candidates[0][0], id: candidates[0][1], resource: 'internal-transfers' } : null;
   }
@@ -86,6 +87,29 @@ async function readLinkedLeg(db, table, parentColumn, parentId, providerId, prov
     .eq(parentColumn, parentId).eq(providerColumn, providerId).maybeSingle();
   if (error) throw new Error('Could not verify the linked MatMove transfer leg.');
   return data ? { status: data[statusColumn] } : null;
+}
+
+
+async function reconcileLoadingBonanzaFunding(db, fundingId) {
+  const { data: funding, error } = await db.from('matmove_loading_bonanza_fundings')
+    .select('*').eq('id', fundingId).maybeSingle();
+  if (error || !funding || !funding.provider_id || !funding.actor_id) {
+    throw new Error('The linked referral treasury funding record is unavailable.');
+  }
+  const receipt = await getTransfer(funding.provider_id);
+  const { data: saved, error: saveError } = await db.rpc('matmove_loading_bonanza_funding_record', {
+    p_actor: funding.actor_id, p_request: funding.id, p_receipt: receipt
+  });
+  if (saveError || saved?.id !== funding.id || !['processing','completed','failed','review_required'].includes(saved.state)) {
+    throw new ManualReviewError('The referral treasury funding receipt could not be confirmed.');
+  }
+  if (saved.state === 'completed') {
+    await reconcileLoadingBonanzaBatch(db, { limit: 3 });
+    return 'processed';
+  }
+  if (saved.state === 'failed') return 'processed';
+  if (saved.state === 'review_required') throw new ManualReviewError('The referral treasury funding receipt needs manual review.');
+  return 'pending';
 }
 
 async function processLinkedTransfer(db, event, transfer) {
@@ -131,7 +155,8 @@ async function processLinkedTransfer(db, event, transfer) {
     spin: { table: 'matmove_spin_legs', parent: 'round_id', reconcile: reconcileSpinRound },
     arcade: { table: 'matmove_arcade_legs', parent: 'round_id', reconcile: reconcileArcadeRound },
     referral: { table: 'matmove_referral_rewards', parent: 'id', reconcile: runReferralLeg, statusColumn: 'state' },
-    loadingBonanza: { table: 'matmove_loading_bonanza_rewards', parent: 'id', reconcile: reconcileLoadingBonanzaReward, statusColumn: 'state' }
+    loadingBonanza: { table: 'matmove_loading_bonanza_rewards', parent: 'id', reconcile: reconcileLoadingBonanzaReward, statusColumn: 'state' },
+    loadingBonanzaFunding: { table: 'matmove_loading_bonanza_fundings', parent: 'id', reconcile: reconcileLoadingBonanzaFunding, statusColumn: 'state' }
   };
   const route = routes[target.kind];
   const linked = await readLinkedLeg(db, route.table, route.parent, target.id, transfer.id, 'provider_id', route.statusColumn || 'status');
