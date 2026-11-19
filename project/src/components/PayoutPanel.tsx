@@ -253,20 +253,20 @@ export default function PayoutPanel({
   const breakdown = withdrawal || quote;
 
   return (
-    <dialog ref={modal} aria-labelledby="mm-payout-title" aria-describedby="mm-payout-help" onCancel={event=>{event.preventDefault();if(!inFlight.current)onClose();}} className="m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-lg overflow-y-auto rounded-2xl border-0 bg-white p-0 shadow-2xl backdrop:bg-slate-950/60">
+    <dialog ref={modal} aria-labelledby="mm-payout-title" aria-describedby="mm-payout-help" onCancel={event=>{event.preventDefault();if(!inFlight.current)onClose();}} className="m-auto max-h-[calc(100dvh-1rem)] w-[calc(100%_-_1rem)] max-w-lg overflow-y-auto overscroll-contain rounded-2xl border-0 bg-white p-0 shadow-2xl backdrop:bg-slate-950/60 sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100%_-_2rem)]">
     <div
       ref={panel}
       className="rounded-2xl bg-white p-4 sm:p-6"
     >
-      <div className="flex items-center justify-between gap-4">
-        <h2 id="mm-payout-title" className="text-xl font-bold">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <h2 id="mm-payout-title" className="min-w-0 text-lg font-bold leading-tight sm:text-xl">
           Withdraw to Mobile Money
         </h2>
 
         <button
           disabled={busy}
           onClick={() => { if (!inFlight.current) onClose(); }}
-          className="rounded-lg border px-3 py-2 disabled:opacity-50"
+          className="shrink-0 whitespace-nowrap rounded-lg border px-3 py-2 text-sm leading-none disabled:opacity-50"
         >
           Close
         </button>
