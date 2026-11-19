@@ -73,7 +73,7 @@ export default function ActiveTripMap({userId,bookingId,driver=false}:{userId:st
   map.current=instance;
   instance.addControl(new mapboxgl.NavigationControl({showCompass:true}),'top-right');
   instance.once('load',()=>{if(live)setMapReady(true);});
-  instance.on('error',()=>{if(live&&!mapReady)setMapError('Mapbox could not load the map. Check token permissions and allowed origins.');});
+  instance.on('error',()=>{if(live&&!instance.loaded())setMapError('Mapbox could not load the map. Check token permissions and allowed origins.');});
   return()=>{live=false;for(const m of Object.values(markers.current))m.remove();markers.current={};routeAttempt.current++;if(routeTimer.current)clearTimeout(routeTimer.current);if(map.current===instance)map.current=null;instance.remove();};
  },[bookingId,mapRetry]);
  useEffect(()=>{if(!map.current||!mapReady)return;
@@ -93,7 +93,7 @@ export default function ActiveTripMap({userId,bookingId,driver=false}:{userId:st
    if(map.current?.getSource('matmove-active-route')){map.current.removeLayer('matmove-active-route');map.current.removeSource('matmove-active-route');}
    lastRoute.current={key:'',time:0};setRouteSteps([]);setRouteText(navigating?'Waiting for a fresh shared GPS location and saved trip pins.':'');return;
   }
-  const key=`${bookingId}:${trip.status}:${position.lat}:${position.lng}:${target.lat}:${target.lng}`;
+  const key=`${bookingId}:${trip.status}:${target.lat}:${target.lng}`;
   if(lastRoute.current.key===key&&Date.now()-lastRoute.current.time<30000)return;
   lastRoute.current={key,time:Date.now()};const attempt=++routeAttempt.current;
   if(routeTimer.current)clearTimeout(routeTimer.current);setRouteText('Loading your Mapbox route inside MatMove…');
