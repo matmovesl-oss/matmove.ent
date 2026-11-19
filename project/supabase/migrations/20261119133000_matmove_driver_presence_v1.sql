@@ -50,6 +50,12 @@ begin
     return jsonb_build_object('online',false,'serverTime',now());
   end if;
 
+  if p_action='heartbeat' and not exists (
+    select 1 from public.matmove_driver_presence d
+    where d.driver_id=v_actor and d.is_online=true and d.last_seen_at>now()-interval '45 seconds'
+  ) then
+    raise exception 'PRESENCE_EXPIRED: Go online again to restart your driver availability.';
+  end if;
   if v_profile.kyc_status::text is distinct from 'approved' or coalesce(v_profile.is_wallet_frozen,false) then
     raise exception 'FORBIDDEN: Approved, unfrozen driver account required.';
   end if;
