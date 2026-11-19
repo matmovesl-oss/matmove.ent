@@ -59,7 +59,7 @@ async function queueCompletedCode(context, code) {
   const { data, error } = await context.db.rpc('matmove_loading_bonanza_queue_completed_code', {
     p_user: context.user.id, p_wallet: wallet.id, p_payment_code: code.id,
     p_gross: code.amount.value, p_destination: code.financialAccountId,
-    p_reference: typeof code.reference === 'string' ? code.reference : null
+    p_reference: typeof code.reference === 'string' && code.reference.length > 0 ? code.reference : null
   });
   if (error || data?.user_id !== context.user.id || data?.wallet_id !== wallet.id ||
       data?.payment_code_id !== code.id || Number(data?.gross_minor) !== code.amount.value ||
