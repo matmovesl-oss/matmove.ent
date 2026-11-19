@@ -130,7 +130,7 @@ async function processLinkedTransfer(db, event, transfer) {
   const route = routes[target.kind];
   const linked = await readLinkedLeg(db, route.table, route.parent, target.id, transfer.id, 'provider_id', route.statusColumn || 'status');
   if (!linked) {
-    throw new ManualReviewError('Provider transfer is not linked to the recorded MatMove ledger leg; manual review required.');
+    throw new Error('Provider transfer is not linked yet; retry reconciliation after the ledger records its provider ID.');
   }
   if (linked.status === 'review_required') {
     throw new ManualReviewError('The linked MatMove ledger leg is under review; manual review required.');
