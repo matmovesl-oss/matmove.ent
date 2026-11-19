@@ -48,17 +48,40 @@ async function recordVerifiedTopup(context, code, settlement) {
   }
 }
 
+async function queueCompletedCode(context, code) {
+  const wallet = context.wallets.find(item =>
+    item.currency === 'SLE' &&
+    (item.monime_account_id || item.metadata?.monime_account_id) === code.financialAccountId
+  );
+  if (!wallet || !context.db || !context.user?.id) {
+    throw new HttpError(503, 'Payment completed, but MatMove could not queue its verified Payment Code for settlement. Check this same payment status again; do not create another load.');
+  }
+  const { data, error } = await context.db.rpc('matmove_loading_bonanza_queue_completed_code', {
+    p_user: context.user.id, p_wallet: wallet.id, p_payment_code: code.id,
+    p_gross: code.amount.value, p_destination: code.financialAccountId,
+    p_reference: typeof code.reference === 'string' ? code.reference : null
+  });
+  if (error || data?.user_id !== context.user.id || data?.wallet_id !== wallet.id ||
+      data?.payment_code_id !== code.id || Number(data?.gross_minor) !== code.amount.value ||
+      !['pending','recorded','review_required'].includes(data?.state)) {
+    throw new HttpError(503, 'Payment completed, but MatMove could not safely queue its verified Payment Code. Check this same payment status again; do not create another load.');
+  }
+}
+
 async function sendPaymentCode(res,code,context,provider) {
   const result=publicPaymentCode(code,context);
   let settlement=null;
   if(result.confirmed){
+    try { settlement=await topupSettlement(code,provider); } catch { /* Keep the exact completed code queued for later provider settlement. */ }
+    if (settlement) await recordVerifiedTopup(context, code, settlement);
+    else await queueCompletedCode(context, code);
+    // Records the exact provider payment when available, then starts the cashback
+    // worker. A delayed Monime payment-list entry remains durably queued for retry.
     try {
-      settlement=await topupSettlement(code,provider);
-      if (settlement) await recordVerifiedTopup(context, code, settlement);
-    } catch (error) {
-      if (error instanceof HttpError && error.status === 503) throw error;
-      // A completed Payment Code is not enough to award cashback. Keep the
-      // exact code open for a later provider-payment lookup and retry.
+      const outcome = await reconcileLoadingBonanzaBatch(context.db, { limit: 1 });
+      if (outcome.failed > 0) console.error('Loading Bonanza settlement needs reconciliation.');
+    } catch {
+      console.error('Loading Bonanza settlement deferred to scheduled reconciliation.');
     }
   }
   return res.status(200).json({paymentCode:{...result,settlement}});
