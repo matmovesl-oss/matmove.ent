@@ -53,9 +53,66 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedTx, setSelectedTx] = useState<any>(null);
 
-  const onlineKey=`matmove:driver-online:v1:${profile.id}`;
-  const [isOnline, setIsOnline] = useState(()=>{try{return localStorage.getItem(onlineKey)==='online';}catch{return false;}});
-  const toggleOnline=()=>{const next=!isOnline;try{localStorage.setItem(onlineKey,next?'online':'offline');}catch{setRideNotice('This browser cannot remember your online preference.');}setIsOnline(next);};
+  const [isOnline, setIsOnline] = useState(false);
+  const presenceBusy = useRef(false);
+  const lastPresenceSent = useRef(0);
+  const publishPresence = async (action: 'online'|'heartbeat'|'offline', latitude?: number, longitude?: number, accuracy?: number) => {
+    const { data, error } = await supabase.rpc('matmove_set_driver_presence', {
+      p_action: action, p_latitude: latitude ?? null, p_longitude: longitude ?? null, p_accuracy_m: accuracy ?? null
+    });
+    if (error) throw new Error(error.message || 'Driver availability could not be confirmed.');
+    return data;
+  };
+  const toggleOnline = async () => {
+    if (presenceBusy.current) return;
+    presenceBusy.current = true;
+    try {
+      if (isOnline) {
+        await publishPresence('offline');
+        setIsOnline(false);
+        setRideNotice('You are offline. New requests will no longer be sent to your driver radar.');
+        return;
+      }
+      if (!navigator.geolocation) throw new Error('Location services are unavailable. Enable GPS to go online.');
+      const position = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 })
+      );
+      const { latitude, longitude, accuracy } = position.coords;
+      if (!Number.isFinite(accuracy) || accuracy > 150) throw new Error('GPS accuracy is too low. Move to a clearer location and try again.');
+      const result = await publishPresence('online', latitude, longitude, accuracy);
+      if (!result?.online) throw new Error(result?.busy ? 'Finish your active trip before going online for new requests.' : 'MatMove could not confirm your online status.');
+      lastPresenceSent.current = Date.now();
+      setIsOnline(true);
+      setRideNotice('You are online. MatMove is receiving your verified availability and GPS heartbeat.');
+    } catch (error: any) {
+      setRideNotice(error?.code === 1 ? 'Location permission is required to go online. Enable location access and retry.' : error.message || 'Could not update your availability.');
+    } finally { presenceBusy.current = false; }
+  };
+  useEffect(() => {
+    if (!isOnline || !profile?.id) return;
+    let live = true, sending = false;
+    const send = (position: GeolocationPosition) => {
+      if (!live || sending || Date.now() - lastPresenceSent.current < 10000) return;
+      const { latitude, longitude, accuracy } = position.coords;
+      if (!Number.isFinite(accuracy) || accuracy > 150 || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+      sending = true;
+      void publishPresence('heartbeat', latitude, longitude, accuracy)
+        .then(result => { if (live && result?.online) lastPresenceSent.current = Date.now(); else if (live) { setIsOnline(false); setRideNotice('You were taken offline because MatMove could not confirm driver eligibility.'); } })
+        .catch(() => { if (live && Date.now() - lastPresenceSent.current > 45000) { setIsOnline(false); setRideNotice('Your driver heartbeat expired. Go online again when your connection and GPS are stable.'); } })
+        .finally(() => { sending = false; });
+    };
+    if (!navigator.geolocation) { setIsOnline(false); setRideNotice('Location services are unavailable. You have been taken offline.'); return; }
+    const watch = navigator.geolocation.watchPosition(send, () => {
+      if (live && Date.now() - lastPresenceSent.current > 45000) { setIsOnline(false); setRideNotice('GPS heartbeat was lost. You have been taken offline.'); }
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 });
+    const heartbeat = window.setInterval(() => {
+      if (document.visibilityState !== 'visible' || sending || Date.now() - lastPresenceSent.current < 10000) return;
+      navigator.geolocation.getCurrentPosition(send, () => {
+        if (live && Date.now() - lastPresenceSent.current > 45000) { setIsOnline(false); setRideNotice('GPS heartbeat expired. You have been taken offline.'); }
+      }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 });
+    }, 10000);
+    return () => { live = false; navigator.geolocation.clearWatch(watch); window.clearInterval(heartbeat); };
+  }, [isOnline, profile?.id]);
   const [activeRequests, setActiveRequests] = useState<any[]>([]);
   const [negotiatingId, setNegotiatingId] = useState<string | null>(null);
   const [fareSnapshots, setFareSnapshots] = useState<Record<string, FareSnapshot>>({});
