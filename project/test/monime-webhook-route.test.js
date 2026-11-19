@@ -92,4 +92,6 @@ test('signed webhook delivery durably stores the event before targeted immediate
   const acknowledge = source.indexOf("return res.status(200).json({ received: true })");
   assert.ok(store >= 0 && worker > store && acknowledge > worker);
   assert.match(source, /Monime webhook immediate processing deferred/);
+  assert.match(source, /result\.retrying > 0/);
+  assert.match(source, /Webhook event stored; settlement is pending\./);
 });
