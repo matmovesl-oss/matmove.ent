@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Bike, Car, ChevronLeft, ChevronRight, MapPin, Package, Store, Truck, Navigation, Sparkles } from 'lucide-react';
 
@@ -20,9 +21,25 @@ const services=[
 export function LandingPage(){
  const navigate=useNavigate();
  const [journey,setJourney]=useState(0);
+ const [posts,setPosts]=useState<any[]>([]);
+ const [postsLoading,setPostsLoading]=useState(true);
  useEffect(()=>{
   const timer=window.setInterval(()=>setJourney(current=>(current+1)%journeys.length),5200);
   return()=>window.clearInterval(timer);
+ },[]);
+ useEffect(()=>{
+  let live=true;
+  void (async()=>{
+   try{
+    const {data,error}=await supabase.from('matmove_public_homepage_posts')
+     .select('id,title,summary,body,image_path,starts_at,expires_at,display_order,price_amount,price_currency,created_at')
+     .order('display_order',{ascending:true}).order('created_at',{ascending:false}).limit(12);
+    if(error)throw error;
+    if(live)setPosts(Array.isArray(data)?data:[]);
+   }catch{if(live)setPosts([]);}
+   finally{if(live)setPostsLoading(false);}
+  })();
+  return()=>{live=false;};
  },[]);
  const item=journeys[journey];
  const change=(step:number)=>setJourney(current=>(current+step+journeys.length)%journeys.length);
@@ -70,6 +87,7 @@ export function LandingPage(){
    </div>
   </section>
 
+  {(postsLoading||posts.length>0)&&<section aria-label="MatMove updates and promotions" className="border-y border-emerald-100 bg-white py-12 sm:py-16"><div className="mx-auto max-w-7xl px-5 sm:px-8"><div className="mb-7 flex items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-700">From MatMove</p><h2 className="font-display mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Updates, offers and announcements.</h2><p className="mt-2 max-w-2xl text-sm text-slate-500">The latest news and promotions published by the MatMove team.</p></div></div>{postsLoading?<div role="status" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><div className="h-56 animate-pulse rounded-3xl bg-slate-100"/><div className="h-56 animate-pulse rounded-3xl bg-slate-100"/><div className="hidden h-56 animate-pulse rounded-3xl bg-slate-100 lg:block"/></div>:<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{posts.map(post=>{const imageUrl=post.image_path?supabase.storage.from('matmove-homepage-posts').getPublicUrl(post.image_path).data.publicUrl:null;const price=post.price_amount!==null&&post.price_currency?post.price_currency+' '+Number(post.price_amount).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):null;return <article key={post.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-[#fbfdfc] shadow-sm">{imageUrl?<img src={imageUrl} alt="" loading="lazy" className="h-48 w-full object-cover"/>:<div className="flex h-36 items-center justify-center bg-gradient-to-br from-emerald-50 to-sky-50"><img src="/logo.jpg" alt="" className="h-14 w-auto object-contain opacity-70"/></div>}<div className="space-y-3 p-5"><div className="flex flex-wrap items-center justify-between gap-2"><span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-800">MatMove update</span>{price&&<span className="text-xs font-extrabold text-emerald-700">{price}</span>}</div><h3 className="text-lg font-black leading-snug text-slate-950">{post.title}</h3>{post.summary&&<p className="text-sm font-semibold leading-6 text-slate-600">{post.summary}</p>}{post.body&&<p className="whitespace-pre-line text-sm leading-6 text-slate-500">{post.body}</p>}</div></article>;})}</div>}</div></section>}
   <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8"><div className="mb-5"><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-700">MatMove fleet</p><h2 className="font-display mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Choose your way to move.</h2><p className="mt-2 text-sm text-slate-500">A ride for every road and every day.</p></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[{label:'Keke',src:'/matmove-keke.svg',detail:'Easy city trips'},{label:'Bike',src:'/matmove-bike.svg',detail:'Quick solo rides'},{label:'Car',src:'/matmove-car.svg',detail:'Comfortable journeys'},{label:'Van',src:'/matmove-van.svg',detail:'Extra room' }].map(item=><div key={item.label} className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"><div className="flex h-28 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-50 via-white to-emerald-50"><img src={item.src} alt={`MatMove ${item.label}`} className="h-24 w-full object-contain"/></div><p className="mt-3 text-sm font-black text-slate-950">{item.label}</p><p className="mt-1 text-xs text-slate-500">{item.detail}</p></div>)}</div></section>
   <section className="border-y border-slate-200 bg-white py-16 sm:py-20">
    <div className="mx-auto max-w-7xl px-5 sm:px-8"><div className="mb-9 max-w-2xl"><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-700">One platform, many ways to move</p><h2 className="font-display mt-3 text-3xl font-black tracking-tight sm:text-4xl">More than a ride. A whole city connected.</h2><p className="mt-3 leading-7 text-slate-500">Start with what you need today. Your MatMove account brings your services and activity together.</p></div>
