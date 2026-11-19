@@ -294,3 +294,110 @@ grant execute on function public.matmove_loading_bonanza_admin_overview(uuid) to
 grant execute on function public.matmove_loading_bonanza_admin_save(uuid,uuid,bigint,boolean,bigint,bigint,text,text) to service_role;
 grant execute on function public.matmove_loading_bonanza_claim(uuid,bigint,timestamptz) to service_role;
 grant execute on function public.matmove_loading_bonanza_record(uuid,jsonb) to service_role;
+
+-- Owner-authorized transfers that fund the referral treasury from the configured MatMove main account.
+create table if not exists public.matmove_loading_bonanza_fundings (
+  id uuid primary key,
+  actor_id uuid not null references public.profiles(id),
+  amount_minor bigint not null check (amount_minor > 0),
+  source_account text not null,
+  destination_account text not null,
+  request_key uuid not null unique,
+  provider_id text unique,
+  state text not null default 'pending' check (state in ('pending','processing','completed','review_required','failed')),
+  claimed_at timestamptz,
+  receipt jsonb,
+  error text,
+  created_at timestamptz not null default clock_timestamp(),
+  updated_at timestamptz not null default clock_timestamp(),
+  check (source_account ~ '^fac-[A-Za-z0-9_-]+$'),
+  check (destination_account ~ '^fac-[A-Za-z0-9_-]+$'),
+  check (source_account <> destination_account)
+);
+alter table public.matmove_loading_bonanza_fundings enable row level security;
+revoke all on public.matmove_loading_bonanza_fundings from anon, authenticated;
+grant select, insert, update on public.matmove_loading_bonanza_fundings to service_role;
+
+create or replace function public.matmove_loading_bonanza_funding_claim(
+  p_actor uuid,p_request uuid,p_amount bigint,p_source text,p_destination text
+) returns jsonb
+language plpgsql
+security definer
+set search_path to 'pg_catalog','public'
+as $function$
+declare f public.matmove_loading_bonanza_fundings%rowtype;
+begin
+  if not exists(select 1 from public.matmove_staff_access where id=p_actor and is_active and is_owner and removed_at is null) then
+    raise exception 'FORBIDDEN: Only the active owner may fund the referral treasury.';
+  end if;
+  if p_request is null or p_amount is null or p_amount<=0 or p_amount>9000000000000000
+     or p_source is null or p_source !~ '^fac-[A-Za-z0-9_-]+$'
+     or p_destination is null or p_destination !~ '^fac-[A-Za-z0-9_-]+$'
+     or p_source=p_destination then
+    raise exception 'INVALID: Enter a valid funding amount and distinct Monime accounts.';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_request::text,0));
+  select * into f from public.matmove_loading_bonanza_fundings where id=p_request for update;
+  if found then
+    if f.actor_id<>p_actor or f.amount_minor<>p_amount or f.source_account<>p_source or f.destination_account<>p_destination then
+      raise exception 'CONFLICT: This funding request ID was already used for different details.';
+    end if;
+    if f.claimed_at is not null and f.provider_id is null and f.state='pending' then
+      update public.matmove_loading_bonanza_fundings set state='review_required',error='Original Monime response unavailable. Attach the original transfer receipt; never resend.',updated_at=clock_timestamp() where id=f.id returning * into f;
+    end if;
+    return to_jsonb(f)||jsonb_build_object('can_create',false);
+  end if;
+  if exists(select 1 from public.wallets where monime_account_id=p_destination or metadata->>'monime_account_id'=p_destination) then
+    raise exception 'INVALID: Referral treasury must be a separate business account, not a customer wallet.';
+  end if;
+  insert into public.matmove_loading_bonanza_fundings(id,actor_id,amount_minor,source_account,destination_account,request_key,claimed_at,state)
+  values(p_request,p_actor,p_amount,p_source,p_destination,p_request,clock_timestamp(),'processing')
+  returning * into f;
+  return to_jsonb(f)||jsonb_build_object('can_create',true);
+end
+$function$;
+
+create or replace function public.matmove_loading_bonanza_funding_record(
+  p_actor uuid,p_request uuid,p_receipt jsonb
+) returns jsonb
+language plpgsql
+security definer
+set search_path to 'pg_catalog','public'
+as $function$
+declare f public.matmove_loading_bonanza_fundings%rowtype; matches boolean; next_state text;
+begin
+  if not exists(select 1 from public.matmove_staff_access where id=p_actor and is_active and is_owner and removed_at is null) then
+    raise exception 'FORBIDDEN: Only the active owner may record referral treasury funding.';
+  end if;
+  select * into f from public.matmove_loading_bonanza_fundings where id=p_request for update;
+  if not found then raise exception 'NOT_FOUND: Referral treasury funding request not found.'; end if;
+  matches:=coalesce(p_receipt->>'id' ~ '^trn-[A-Za-z0-9_-]+$',false)
+    and (f.provider_id is null or f.provider_id=p_receipt->>'id')
+    and p_receipt#>>'{amount,currency}'='SLE'
+    and p_receipt#>>'{amount,value}'=f.amount_minor::text
+    and p_receipt#>>'{sourceFinancialAccount,id}'=f.source_account
+    and p_receipt#>>'{destinationFinancialAccount,id}'=f.destination_account
+    and p_receipt#>>'{metadata,matmoveLoadingBonanzaFundingId}'=f.id::text
+    and p_receipt#>>'{metadata,matmoveRequestKey}'=f.request_key::text
+    and p_receipt->>'status' in ('pending','processing','completed','failed');
+  if f.state='completed' then
+    if not coalesce(matches,false) then raise exception 'CONFLICT: Completed funding receipt cannot be replaced.'; end if;
+    return to_jsonb(f);
+  end if;
+  if f.state in ('failed','review_required') then return to_jsonb(f); end if;
+  if not coalesce(matches,false) then
+    update public.matmove_loading_bonanza_fundings set state='review_required',error='Monime receipt unavailable or does not match the exact funding transfer. Never resend.',updated_at=clock_timestamp() where id=f.id returning * into f;
+  else
+    next_state:=case when p_receipt->>'status' in ('completed','failed') then p_receipt->>'status' else 'processing' end;
+    update public.matmove_loading_bonanza_fundings set provider_id=p_receipt->>'id',state=next_state,receipt=p_receipt,
+      error=case when next_state='failed' then 'Monime confirmed the original funding transfer failed.' else null end,
+      updated_at=clock_timestamp() where id=f.id returning * into f;
+  end if;
+  return to_jsonb(f);
+end
+$function$;
+
+revoke all on function public.matmove_loading_bonanza_funding_claim(uuid,uuid,bigint,text,text) from public,anon,authenticated;
+revoke all on function public.matmove_loading_bonanza_funding_record(uuid,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.matmove_loading_bonanza_funding_claim(uuid,uuid,bigint,text,text) to service_role;
+grant execute on function public.matmove_loading_bonanza_funding_record(uuid,uuid,jsonb) to service_role;
