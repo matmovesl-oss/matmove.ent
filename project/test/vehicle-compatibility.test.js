@@ -47,11 +47,14 @@ test('fails closed when either side has no verified vehicle category', () => {
 });
 
 test('digital and cash ride acceptance both use the shared server guard', async () => {
-  const [digital, cash] = await Promise.all([
+  const [digital, cash, driver] = await Promise.all([
     readFile(new URL('../server/ride-payments.js', import.meta.url), 'utf8'),
     readFile(new URL('../server/cash-ride-payments.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/pages/DriverDashboard.tsx', import.meta.url), 'utf8'),
   ]);
   assert.match(digital, /assertRideVehicleCompatibility\(booking, profile\)/);
   assert.match(cash, /assertRideVehicleCompatibility\(booking, profile\)/);
   assert.match(cash, /vehicle_type/);
+  assert.match(driver, /const vehicleBlockReason =/);
+  assert.match(driver, /vehicleBlockReason\(r\)/);
 });
