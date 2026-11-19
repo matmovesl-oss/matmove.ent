@@ -282,7 +282,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
       <header className="mm-home-heading">
         <div className="flex min-w-0 items-center gap-2">
           {mode==='services'&&<button className="mm-icon-button shrink-0" type="button" aria-label="Back to Home" onClick={() => onNavigate('home')}><ArrowLeft size={21}/></button>}
-          <div className="mm-brand"><img src="/logo.jpg" alt="MatMove" width="40" height="40"/><span>Wi dey move<span className="mm-muted">Your everyday, connected.</span></span></div>
+          <div className="mm-brand"><span className="mm-brand-wordmark">MatMove</span><span className="mm-brand-tagline">Wi dey move<span className="mm-muted">Your everyday, connected.</span></span></div>
         </div>
         <button className="mm-icon-button shrink-0" type="button" aria-label="Open your account" onClick={() => onNavigate('account')}><ShieldCheck size={22}/></button>
       </header>
@@ -429,7 +429,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
               {events.slice(0, 2).map(evt => (
                 <div key={evt.id} className="rounded-2xl border border-slate-200 overflow-hidden flex flex-col justify-between p-3 bg-slate-50">
                   <div>
-                    <img src={evt.flyer_url || '/logo.jpg'} alt={`${evt.title} event flyer`} loading="lazy" className="mb-3 h-28 w-full rounded-xl bg-slate-100 object-cover" />
+                    {evt.flyer_url ? <img src={evt.flyer_url} alt={`${evt.title} event flyer`} loading="lazy" className="mb-3 h-28 w-full rounded-xl bg-slate-100 object-cover" /> : <div aria-label="MatMove event" className="mb-3 flex h-28 w-full items-center justify-center rounded-xl bg-emerald-50 text-xl font-black tracking-tight text-emerald-800">MatMove</div>}
                     <h4 className="font-bold text-slate-900 text-sm line-clamp-1">{evt.title}</h4>
                     <p className="text-xs text-slate-500 mt-1">{evt.venue} · {new Date(evt.event_date).toLocaleDateString()}</p>
                   </div>
