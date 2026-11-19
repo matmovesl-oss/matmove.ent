@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 
-type Participant = { id?: string; full_name?: string; phone?: string; phone_number?: string };
+type Participant = { id?: string; full_name?: string; phone?: string; phone_number?: string; vehicle_type?: string | null; plate_number?: string | null };
 type TripContactCard = { bookingId: string; status?: string; rider?: Participant | null; driver?: Participant | null; payment?: any; investigation?: any };
 
 function mergeParticipant(previous: any, incoming: Participant | null | undefined) {
