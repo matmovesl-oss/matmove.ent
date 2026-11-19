@@ -7,6 +7,7 @@ const service=await readFile(new URL('../src/services/fareNegotiationService.ts'
 const ui=await readFile(new URL('../src/components/FareNegotiation.tsx',import.meta.url),'utf8');
 const driver=await readFile(new URL('../src/pages/DriverDashboard.tsx',import.meta.url),'utf8');
 const rider=await readFile(new URL('../src/pages/RiderDashboard.tsx',import.meta.url),'utf8');
+const merchant=await readFile(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
 
 test('fare offers snapshot only the KYC-approved driver vehicle and enforce strict category matching',()=>{
  assert.match(migration,/select \* into p from public\.profiles where id=new\.driver_id/i);
