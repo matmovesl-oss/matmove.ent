@@ -24,7 +24,7 @@ test('customer approval records the selected vehicle and payment must use that c
 
 test('fare read payload includes requested and offered vehicle details with strict client validation',()=>{
  assert.match(migration,/'requestedVehicleType',b\.vehicle_type/);
- assert.match(migration,/'vehicleType',o\.vehicle_type/);
+ assert.match(migration,/'vehicleType',coalesce\(o\.vehicle_type/);
  assert.match(service,/requestedVehicleType/);
  assert.match(service,/o\.vehicleType/);
 });
