@@ -84,3 +84,14 @@ test('scheduled payment reconciliation includes Loading Bonanza with bounded cou
   assert.match(source, /index === 4/);
   assert.match(source, /validCounts\(item\.value, \['checked', 'failed'\]\)/);
 });
+
+test('only the verified completed Payment Code receipt is recorded for cashback', async () => {
+  const api = await readFile(new URL('../api/create-wallet-payment-code.js', import.meta.url), 'utf8');
+  assert.match(api, /if \(result\.confirmed\)/);
+  assert.match(api, /topupSettlement\(code,provider\)/);
+  assert.match(api, /matmove_loading_bonanza_record_topup/);
+  assert.match(api, /settlement\.paymentId/);
+  assert.match(api, /settlement\.creditMinor/);
+  assert.match(api, /code\.financialAccountId/);
+  assert.match(api, /do not create another load/);
+});
