@@ -23,8 +23,8 @@ test('merchant wallet actions stay in one compact row without wrapping or shrink
 });
 
 test('merchant ride booking panel stays in normal page flow and map keeps one-finger gestures', async () => {
-  const merchant = await read(new URL('../src/pages/MerchantDashboard.tsx', import.meta.url));
-  const picker = await read(new URL('../src/components/RideLocationPicker.tsx', import.meta.url));
+  const merchant = await readFile(new URL('../src/pages/MerchantDashboard.tsx', import.meta.url));
+  const picker = await readFile(new URL('../src/components/RideLocationPicker.tsx', import.meta.url));
   assert.match(merchant, /relative z-30 mx-auto w-full max-w-5xl min-w-0/, 'merchant booking details should be inline');
   assert.doesNotMatch(merchant, /fixed inset-x-0 bottom-\[calc\(76px/, 'merchant booking details must not be fixed over the map');
   assert.doesNotMatch(merchant, /Drag or tap to expand or collapse ride booking panel/, 'merchant booking panel must not trap page scrolling');
