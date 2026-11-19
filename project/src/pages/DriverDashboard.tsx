@@ -150,10 +150,10 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
   const vehicleBlockReason = (booking: any) => {
     const normalize = (value: unknown) => {
       const type = String(value || '').normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-      if (/motorbike|motorcycle|okada|\\bbike\\b/.test(type)) return 'bike';
-      if (/tricycle|\\bkeke\\b|\\bkekeh\\b/.test(type)) return 'keke';
+      if (/motorbike|motorcycle|okada|\bbike\b/.test(type)) return 'bike';
+      if (/tricycle|\bkeke\b|\bkekeh\b/.test(type)) return 'keke';
       if (/van|truck|minibus/.test(type)) return 'van';
-      if (/\\bcar\\b|sedan|saloon|suv/.test(type)) return 'car';
+      if (/\bcar\b|sedan|saloon|suv/.test(type)) return 'car';
       return '';
     };
     const requested = normalize(booking.vehicle_type);
