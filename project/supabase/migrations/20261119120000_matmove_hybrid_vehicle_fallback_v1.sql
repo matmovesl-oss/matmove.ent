@@ -5,7 +5,7 @@ begin;
 alter table public.bookings add column if not exists matmove_confirmed_vehicle_type text;
 alter table public.matmove_ride_fare_offers add column if not exists vehicle_type text;
 alter table public.matmove_ride_fare_offers add column if not exists vehicle_plate text;
-update public.matmove_ride_fare_offers o set vehicle_type=p.vehicle_type from public.profiles p where p.id=o.driver_id and o.vehicle_type is null and p.vehicle_type is not null;
+update public.matmove_ride_fare_offers o set vehicle_type=coalesce(o.vehicle_type,p.vehicle_type), vehicle_plate=coalesce(o.vehicle_plate,p.plate_number) from public.profiles p where p.id=o.driver_id and (o.vehicle_type is null or o.vehicle_plate is null);
 
 create or replace function public.matmove_validate_fare_offer_vehicle()
 returns trigger language plpgsql security definer set search_path=pg_catalog,public as $fn$
