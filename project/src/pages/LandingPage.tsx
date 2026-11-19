@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Bike, Car, ChevronLeft, ChevronRight, MapPin, Package, Store, Truck, Navigation, Sparkles } from 'lucide-react';
+import PublicHomepagePosts from '@/components/PublicHomepagePosts';
 
 const journeys=[
  {from:'Freetown',via:'Aberdeen · Lumley',to:'Central Freetown',label:'CITY RIDES',detail:'Move across the capital with a ride that meets you where you are.'},
@@ -69,6 +70,8 @@ export function LandingPage(){
     </section>
    </div>
   </section>
+
+  <PublicHomepagePosts/>
 
   <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8"><div className="mb-5"><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-700">MatMove fleet</p><h2 className="font-display mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Choose your way to move.</h2><p className="mt-2 text-sm text-slate-500">A ride for every road and every day.</p></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[{label:'Keke',src:'/matmove-keke.svg',detail:'Easy city trips'},{label:'Bike',src:'/matmove-bike.svg',detail:'Quick solo rides'},{label:'Car',src:'/matmove-car.svg',detail:'Comfortable journeys'},{label:'Van',src:'/matmove-van.svg',detail:'Extra room' }].map(item=><div key={item.label} className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"><div className="flex h-28 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-50 via-white to-emerald-50"><img src={item.src} alt={`MatMove ${item.label}`} className="h-24 w-full object-contain"/></div><p className="mt-3 text-sm font-black text-slate-950">{item.label}</p><p className="mt-1 text-xs text-slate-500">{item.detail}</p></div>)}</div></section>
   <section className="border-y border-slate-200 bg-white py-16 sm:py-20">

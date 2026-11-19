@@ -108,12 +108,12 @@ export function TransactionModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="transaction-receipt-title"
-        className="relative max-h-[85vh] w-full max-w-md space-y-5 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"
+        className="relative max-h-[calc(100dvh-2rem)] w-full max-w-md min-w-0 space-y-4 overflow-y-auto rounded-3xl bg-white p-4 shadow-2xl sm:p-6"
       >
         <button
           onClick={onClose}
           aria-label="Close transaction details"
-          className="absolute right-4 top-4 rounded-full bg-slate-50 p-2 text-slate-400 hover:text-slate-600"
+          className="absolute right-3 top-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-50 p-2 text-slate-400 hover:text-slate-600"
         >
           <X size={20} />
         </button>
@@ -224,16 +224,16 @@ export function TransactionModal({
         <div className="space-y-3 border-t pt-4">
           <button
             onClick={() => void shareReceipt()}
-            className="w-full rounded-xl border py-3 font-bold"
+            className="w-full whitespace-nowrap rounded-xl border py-3 font-bold leading-none"
           >
             Share receipt
           </button>
 
           <button
             onClick={onClose}
-            className="w-full rounded-xl bg-slate-900 py-3.5 font-bold text-white"
+            className="w-full whitespace-nowrap rounded-xl bg-slate-900 py-3 font-bold leading-none text-white"
           >
-            Close details
+            Close
           </button>
         </div>
       </div>

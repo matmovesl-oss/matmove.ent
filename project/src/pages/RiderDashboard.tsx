@@ -568,17 +568,18 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   return (
     <div className="flex-1 bg-slate-50 min-h-screen">
       <CashMonimeSuccess open={cashSuccessOpen} onClose={() => setCashSuccessOpen(false)} />
-      <header className={`bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm ${activeSection === 'wallet' || activeSection === 'home' ? 'hidden' : ''}`}>
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">
-            Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋
-          </h1>
-        </div>
-
-        <div className="flex gap-2">
-          <button onClick={() => setIsLoadModalOpen(true)} disabled={!canLoad || !hasSleAccount || isSettingUpWallet} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Load</button>
-          <button onClick={() => setIsPayoutModalOpen(true)} disabled={!canSend || !hasSleAccount} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Payout</button>
-          <button onClick={() => setIsTransferModalOpen(true)} disabled={!canSend || !hasSleAccount} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold disabled:opacity-50">Transfer</button>
+      <header className={`sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur ${activeSection === 'wallet' || activeSection === 'home' ? 'hidden' : ''}`}>
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-bold text-slate-900 sm:text-xl">
+              Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋
+            </h1>
+          </div>
+          <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:min-w-[360px]">
+            <button type="button" onClick={() => setIsLoadModalOpen(true)} disabled={!canLoad || !hasSleAccount || isSettingUpWallet} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-blue-600 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Load</button>
+            <button type="button" onClick={() => setIsPayoutModalOpen(true)} disabled={!canSend || !hasSleAccount} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-emerald-600 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Withdraw</button>
+            <button type="button" onClick={() => setIsTransferModalOpen(true)} disabled={!canSend || !hasSleAccount} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-slate-900 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Transfer</button>
+          </div>
         </div>
       </header>
 
