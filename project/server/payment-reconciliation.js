@@ -4,6 +4,10 @@ import { reconcileRidePayments } from './ride-api.js';
 import { reconcileWithdrawals } from './payout-payments.js';
 import { processMonimeWebhookBatch } from './monime-webhook-worker.js';
 import { reconcilePurchasePayments } from './travel-event-payments.js';
+import { reconcileMerchantPayments } from './merchant-payments.js';
+import { reconcileSpins } from './spin-payments.js';
+import { reconcileArcades } from './arcade-payments.js';
+import { reconcileReferrals } from './referral-api.js';
 
 function validCronAuthorization(req) {
   const secret = process.env.CRON_SECRET;
@@ -26,10 +30,15 @@ function validCounts(value, keys) {
   );
 }
 
-async function invokeHandler(handler, authorization) {
+async function invokeHandler(handler, authorization, query = {}) {
   const response = {
     statusCode: 200,
     body: null,
+    headers: {},
+    setHeader(key, value) {
+      this.headers[key] = value;
+      return this;
+    },
     status(code) {
       this.statusCode = code;
       return this;
@@ -40,7 +49,7 @@ async function invokeHandler(handler, authorization) {
     }
   };
 
-  await handler({ headers: { authorization } }, response);
+  await handler({ method: 'GET', headers: { authorization }, query }, response);
   return response;
 }
 
@@ -51,7 +60,11 @@ export async function reconcileMatMovePayments(
     rides = reconcileRidePayments,
     payouts = reconcileWithdrawals,
     monime = processMonimeWebhookBatch,
-    purchases = reconcilePurchasePayments
+    purchases = reconcilePurchasePayments,
+    merchants = reconcileMerchantPayments,
+    referrals = reconcileReferrals,
+    spins = reconcileSpins,
+    arcades = reconcileArcades
   } = {}
 ) {
   res.setHeader?.('Cache-Control', 'no-store');
@@ -64,11 +77,15 @@ export async function reconcileMatMovePayments(
   const work = await Promise.allSettled([
     invokeHandler(rides, authorization),
     invokeHandler(payouts, authorization),
+    invokeHandler(merchants, authorization),
+    invokeHandler(referrals, authorization, { action: 'referral_reconcile' }),
+    invokeHandler(spins, authorization),
+    invokeHandler(arcades, authorization),
     monime({ limit: 3 }),
     purchases({ limit: 5 })
   ]);
 
-  const names = ['ridePayments', 'withdrawals', 'monimePurchaseEvents', 'purchasePayments'];
+  const names = ['ridePayments', 'withdrawals', 'merchantPayments', 'referrals', 'spinPayments', 'arcadePayments', 'monimeEvents', 'purchasePayments'];
   const result = {};
   let unavailable = false;
 
@@ -84,7 +101,7 @@ export async function reconcileMatMovePayments(
       continue;
     }
 
-    if (index < 2) {
+    if (index < 6) {
       const response = item.value;
       const countKeys = ['checked', 'failed'];
       if (

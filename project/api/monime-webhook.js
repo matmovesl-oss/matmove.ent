@@ -95,7 +95,22 @@ async function receiveWebhook(req, res) {
       return res.status(503).json({ error: 'Webhook storage unavailable.' });
     }
 
-    // Acknowledge only after the signed event is durably stored.
+    // The signed event is durable before any settlement work begins. Process this
+    // exact event inline for prompt synchronization; the scheduled reconciler is
+    // the recovery path if provider access or worker configuration is unavailable.
+    try {
+      const result = await processMonimeWebhookBatch({ limit: 1, eventId: normalized.eventId });
+      if (result.retrying > 0) {
+        console.error('Monime webhook immediate processing deferred', { failure: 'settlement_pending' });
+        return res.status(503).json({ error: 'Webhook event stored; settlement is pending.' });
+      }
+    } catch {
+      console.error('Monime webhook immediate processing deferred', { failure: 'worker_unavailable' });
+      return res.status(503).json({ error: 'Webhook event stored; settlement is pending.' });
+    }
+
+    // Acknowledge only after the signed event is durably stored and processed
+    // or safely quarantined for manual review.
     return res.status(200).json({ received: true });
   } catch (error) {
     console.error('Monime webhook inbox unavailable', { failure: 'inbox_unavailable' });

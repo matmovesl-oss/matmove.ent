@@ -121,6 +121,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
     return () => { live = false; navigator.geolocation.clearWatch(watch); window.clearInterval(heartbeat); };
   }, [isOnline, profile?.id, publishPresence]);
   const [activeRequests, setActiveRequests] = useState<any[]>([]);
+
   const [negotiatingId, setNegotiatingId] = useState<string | null>(null);
   const [fareSnapshots, setFareSnapshots] = useState<Record<string, FareSnapshot>>({});
   const tripMutex = useRef(false);

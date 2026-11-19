@@ -47,7 +47,7 @@
   ],
   "crons": [
     {
-      "path": "/api/reconcile-ride-payments",
+      "path": "/api/reconcile-all-payments",
       "schedule": "0 0 * * *"
     }
   ]

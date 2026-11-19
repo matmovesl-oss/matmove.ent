@@ -106,6 +106,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
     if (resumeTripId && activeBooking?.id === resumeTripId) setViewMode('active');
   }, [resumeTripId, activeBooking?.id]);
   const tripRequest = useTripRequest(profile?.id || '');
+
   const [cancellingRequestId,setCancellingRequestId]=useState<string|null>(null);
   const handleCancelCustomerRequest=async(id:string)=>{
     if(cancellingRequestId)return;
@@ -511,7 +512,12 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
       if (!response.ok) throw new Error(data.error || 'Transfer could not be submitted.');
 
-      const status = String(data?.status || data?.data?.status || 'completed').toLowerCase();
+      const status = String(data?.status || data?.data?.status || 'unknown').toLowerCase();
+      if (status === 'unknown' || status === 'review_required') {
+        setTransferError(data?.error || 'Transfer status could not be verified. Do not submit another transfer.');
+        await fetchLiveBalance();
+        return;
+      }
       setTransferNotice(status === 'completed' ? 'Transfer completed successfully.' : `Transfer ${status}.`);
 
       if (status === 'completed' || status === 'failed') {

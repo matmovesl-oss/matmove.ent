@@ -37,7 +37,7 @@ test('Admin cancellation is dispatch-authorized, idempotent and keeps paid booki
   assert.match(migration, /matmove_cash_ride_payments where booking_id=b\.id/);
 });
 
-test('Supabase Cron calls the protected reconciliation worker every minute using the Vault-held bearer secret', async () => {
+test('Supabase stale-request Cron remains protected and Vercel schedules the unified payment reconciler daily', async () => {
   const api = await read('../server/ride-api.js');
   const migration = await read('../supabase/migrations/20261114150000_matmove_admin_cancel_refund_workflow_v1.sql');
   const cronMigration = await read('../supabase/migrations/20261114151000_matmove_stale_request_sweep_cron_v2.sql');
@@ -47,7 +47,7 @@ test('Supabase Cron calls the protected reconciliation worker every minute using
   assert.match(migration, /matmove-ride-reconciliation-v1/);
   assert.match(cronMigration, /matmove-stale-request-sweep-v1/);
   assert.match(cronMigration, /\*\/5 \* \* \* \*/);
-  assert.match(routes, /"path": "\/api\/reconcile-ride-payments"/);
+  assert.match(routes, /"path": "\/api\/reconcile-all-payments"/);
   assert.match(routes, /"schedule": "0 0 \* \* \*"/);
 });
 

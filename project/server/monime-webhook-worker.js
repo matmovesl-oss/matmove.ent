@@ -1,5 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { assertMonimeEnvironment } from './wallet-security.js';
+import { reconcileRide } from './ride-payments.js';
+import { reconcileCashRide } from './cash-ride-payments.js';
+import { reconcileMerchantPayment } from './merchant-payments.js';
+import { reconcileWithdrawal } from './payout-payments.js';
+import { reconcileSpinRound } from './spin-payments.js';
+import { reconcileArcadeRound } from './arcade-payments.js';
+import { runReferralLeg } from './referral-payments.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ATTEMPTS = 12;
@@ -18,12 +25,12 @@ function client() {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-async function getTransfer(id) {
+async function getProviderObject(id, resource = 'internal-transfers') {
   const token = process.env.MONIME_API_KEY;
   const space = process.env.MONIME_SPACE_ID;
   if (!token || !space) throw new Error('Monime worker configuration missing.');
 
-  const response = await fetch(`https://api.monime.io/v1/internal-transfers/${encodeURIComponent(id)}`, {
+  const response = await fetch(`https://api.monime.io/v1/${resource}/${encodeURIComponent(id)}`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -38,11 +45,113 @@ async function getTransfer(id) {
   return body.result;
 }
 
-async function processPurchaseTransfer(db, event) {
+async function getTransfer(id) {
+  return getProviderObject(id, 'internal-transfers');
+}
+
+export function classifyMonimeTransfer(event, transfer) {
+  const metadata = transfer?.metadata || {};
+  if (event?.object_type === 'internal_transfer' && ['internal_transfer.completed', 'internal_transfer.failed'].includes(event?.event_type)) {
+    const candidates = [
+      ['purchase', metadata.matmovePurchasePaymentId],
+      ['ride', metadata.bookingId],
+      ['merchant', metadata.merchantPaymentId],
+      ['withdrawal', metadata.matmoveWithdrawalId],
+      ['spin', metadata.matmoveSpinRoundId],
+      ['arcade', metadata.matmoveArcadeRoundId],
+      ['referral', metadata.matmoveReferralRewardId]
+    ].filter(([, id]) => typeof id === 'string' && UUID.test(id));
+    return candidates.length === 1 ? { kind: candidates[0][0], id: candidates[0][1], resource: 'internal-transfers' } : null;
+  }
+  if (
+    event?.object_type === 'payout' &&
+    ['payout.completed', 'payout.failed'].includes(event?.event_type) &&
+    typeof metadata.matmoveWithdrawalId === 'string' &&
+    UUID.test(metadata.matmoveWithdrawalId)
+  ) {
+    return { kind: 'withdrawal', id: metadata.matmoveWithdrawalId, resource: 'payouts' };
+  }
+  return null;
+}
+
+export function resolveRideLedgerFamily(digitalLeg, cashLeg) {
+  if (Boolean(digitalLeg) === Boolean(cashLeg)) return null;
+  return digitalLeg ? 'digital' : 'cash';
+}
+
+async function readLinkedLeg(db, table, parentColumn, parentId, providerId, providerColumn = 'provider_id', statusColumn = 'status') {
+  const { data, error } = await db.from(table).select(statusColumn)
+    .eq(parentColumn, parentId).eq(providerColumn, providerId).maybeSingle();
+  if (error) throw new Error('Could not verify the linked MatMove transfer leg.');
+  return data ? { status: data[statusColumn] } : null;
+}
+
+async function processLinkedTransfer(db, event, transfer) {
+  const target = classifyMonimeTransfer(event, transfer);
+  if (!target || transfer?.id !== event.object_id) {
+    throw new ManualReviewError('Monime event does not identify one supported MatMove ledger operation; manual review required.');
+  }
+
+  if (target.kind === 'purchase') return processPurchaseTransfer(db, event, transfer);
+
+  if (target.kind === 'ride') {
+    // Digital and cash rides share bookingId metadata. Resolve the provider
+    // transfer ID against both ledgers and require exactly one match.
+    const [digitalLeg, cashLeg] = await Promise.all([
+      readLinkedLeg(db, 'ride_payment_transfers', 'booking_id', target.id, transfer.id),
+      readLinkedLeg(db, 'matmove_cash_ride_legs', 'booking_id', target.id, transfer.id, 'provider_transfer_id')
+    ]);
+    if (!digitalLeg && !cashLeg) {
+      throw new Error('Provider transfer is not linked yet; retry reconciliation after the ledger records its provider ID.');
+    }
+    if (digitalLeg && cashLeg) {
+      throw new ManualReviewError('Provider transfer is linked to multiple Ride or Cash Ride ledger legs; manual review required.');
+    }
+    const family = resolveRideLedgerFamily(digitalLeg, cashLeg);
+    const leg = family === 'cash' ? cashLeg : digitalLeg;
+    if (leg.status === 'review_required') {
+      throw new ManualReviewError('The linked MatMove ride leg is under review; manual review required.');
+    }
+    if (leg.status === 'failed') return 'processed';
+    const reconcile = family === 'cash' ? reconcileCashRide : reconcileRide;
+    await reconcile(db, target.id);
+    const confirmed = family === 'cash'
+      ? await readLinkedLeg(db, 'matmove_cash_ride_legs', 'booking_id', target.id, transfer.id, 'provider_transfer_id')
+      : await readLinkedLeg(db, 'ride_payment_transfers', 'booking_id', target.id, transfer.id);
+    if (confirmed?.status === 'completed' || confirmed?.status === 'failed') return 'processed';
+    if (confirmed?.status === 'pending' || confirmed?.status === 'processing') return 'pending';
+    throw new ManualReviewError('MatMove ride ledger did not reach a recognized transfer state; manual review required.');
+  }
+
+  const routes = {
+    merchant: { table: 'matmove_merchant_payment_legs', parent: 'payment_id', reconcile: reconcileMerchantPayment },
+    withdrawal: { table: 'matmove_withdrawal_legs', parent: 'withdrawal_id', reconcile: reconcileWithdrawal },
+    spin: { table: 'matmove_spin_legs', parent: 'round_id', reconcile: reconcileSpinRound },
+    arcade: { table: 'matmove_arcade_legs', parent: 'round_id', reconcile: reconcileArcadeRound },
+    referral: { table: 'matmove_referral_rewards', parent: 'id', reconcile: runReferralLeg, statusColumn: 'state' }
+  };
+  const route = routes[target.kind];
+  const linked = await readLinkedLeg(db, route.table, route.parent, target.id, transfer.id, 'provider_id', route.statusColumn || 'status');
+  if (!linked) {
+    throw new Error('Provider transfer is not linked yet; retry reconciliation after the ledger records its provider ID.');
+  }
+  if (linked.status === 'review_required') {
+    throw new ManualReviewError('The linked MatMove ledger leg is under review; manual review required.');
+  }
+  if (linked.status === 'failed') return 'processed';
+
+  await route.reconcile(db, target.id);
+  const confirmed = await readLinkedLeg(db, route.table, route.parent, target.id, transfer.id, 'provider_id', route.statusColumn || 'status');
+  if (confirmed?.status === 'completed' || confirmed?.status === 'failed') return 'processed';
+  if (confirmed?.status === 'pending' || confirmed?.status === 'processing') return 'pending';
+  throw new ManualReviewError('MatMove ledger did not reach a recognized transfer state; manual review required.');
+}
+
+async function processPurchaseTransfer(db, event, existingTransfer = null) {
   // The purchase worker is deliberately restricted to the completed internal
   // transfer event. A signed event of another kind must not enter fulfilment
   // merely because its object happens to reference an internal transfer.
-  if (event.event_type !== 'internal_transfer.completed') {
+  if (!['internal_transfer.completed', 'internal_transfer.failed'].includes(event.event_type)) {
     throw new ManualReviewError('Unsupported Monime event type for purchase fulfilment; manual review required.');
   }
 
@@ -52,7 +161,7 @@ async function processPurchaseTransfer(db, event) {
     throw new ManualReviewError('Unsupported Monime event object type; manual review required.');
   }
 
-  const transfer = await getTransfer(object.id);
+  const transfer = existingTransfer || await getTransfer(object.id);
   if (transfer.id !== object.id) throw new ManualReviewError('Monime returned a different transfer identifier; manual review required.');
 
   const paymentId = transfer.metadata?.matmovePurchasePaymentId;
@@ -129,23 +238,32 @@ async function processPurchaseTransfer(db, event) {
   return 'processed';
 }
 
-export async function processMonimeWebhookBatch({ db = client(), limit = 3 } = {}) {
+export async function processMonimeWebhookBatch({ db = client(), limit = 3, eventId = null } = {}) {
   // Validate Live/Test mode before claiming any durable inbox event.
   assertMonimeEnvironment();
   const staleCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const batchLimit = Math.max(1, Math.min(25, limit));
+  let pendingQuery = db.from('matmove_monime_webhook_events')
+    .select('event_id,event_type,object_id,object_type,payload,attempts,status,updated_at,signature_verified,last_error')
+    .eq('status', 'pending')
+    .order('received_at', { ascending: true })
+    .limit(batchLimit);
+  let staleQuery = db.from('matmove_monime_webhook_events')
+    .select('event_id,event_type,object_id,object_type,payload,attempts,status,updated_at,signature_verified,last_error')
+    .eq('status', 'processing')
+    .lt('updated_at', staleCutoff)
+    .order('updated_at', { ascending: true })
+    .limit(batchLimit);
+  if (eventId !== null) {
+    if (typeof eventId !== 'string' || !/^wke-[A-Za-z0-9_-]{1,120}$/.test(eventId)) {
+      throw new Error('Invalid targeted Monime event identifier.');
+    }
+    pendingQuery = pendingQuery.eq('event_id', eventId);
+    staleQuery = staleQuery.eq('event_id', eventId);
+  }
   const [pendingResult, staleResult] = await Promise.all([
-    db.from('matmove_monime_webhook_events')
-      .select('event_id,event_type,object_id,object_type,payload,attempts,status,updated_at,signature_verified,last_error')
-      .eq('status', 'pending')
-      .order('received_at', { ascending: true })
-      .limit(batchLimit),
-    db.from('matmove_monime_webhook_events')
-      .select('event_id,event_type,object_id,object_type,payload,attempts,status,updated_at,signature_verified,last_error')
-      .eq('status', 'processing')
-      .lt('updated_at', staleCutoff)
-      .order('updated_at', { ascending: true })
-      .limit(batchLimit)
+    pendingQuery,
+    staleQuery
   ]);
 
   if (pendingResult.error || staleResult.error) throw new Error('Could not read Monime webhook inbox.');
@@ -188,7 +306,20 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 3 } = {
       ) {
         throw new ManualReviewError('Stored webhook payload failed its event and object identity check; manual review required.');
       }
-      const result = await processPurchaseTransfer(db, event);
+      const supportedEnvelope = (
+        event.object_type === 'internal_transfer' &&
+        ['internal_transfer.completed', 'internal_transfer.failed'].includes(event.event_type)
+      ) || (
+        event.object_type === 'payout' &&
+        ['payout.completed', 'payout.failed'].includes(event.event_type)
+      );
+      if (!supportedEnvelope) {
+        throw new ManualReviewError('Unsupported Monime event type or object for MatMove ledger reconciliation; manual review required.');
+      }
+      const resource = event.object_type === 'payout' ? 'payouts' : 'internal-transfers';
+      const providerObject = await getProviderObject(event.object_id, resource);
+      if (providerObject.id !== event.object_id) throw new ManualReviewError('Monime returned a different provider object identifier; manual review required.');
+      const result = await processLinkedTransfer(db, event, providerObject);
       if (result === 'pending') {
         const { error: queueError } = await db.from('matmove_monime_webhook_events')
           .update({ status: 'pending', updated_at: new Date().toISOString(), last_error: 'Monime transfer is not final yet.' })

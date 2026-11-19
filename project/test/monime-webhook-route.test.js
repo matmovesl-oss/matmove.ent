@@ -82,3 +82,16 @@ test('webhook route logs fixed diagnostic codes rather than raw backend exceptio
   assert.match(source, /failure:\s*'inbox_unavailable'/);
   assert.equal(source.includes('error?.message'), false);
 });
+
+
+test('signed webhook delivery durably stores the event before targeted immediate reconciliation', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../api/monime-webhook.js', import.meta.url), 'utf8');
+  const store = source.indexOf(".upsert({");
+  const worker = source.indexOf("processMonimeWebhookBatch({ limit: 1, eventId: normalized.eventId })");
+  const acknowledge = source.indexOf("return res.status(200).json({ received: true })");
+  assert.ok(store >= 0 && worker > store && acknowledge > worker);
+  assert.match(source, /Monime webhook immediate processing deferred/);
+  assert.match(source, /result\.retrying > 0/);
+  assert.match(source, /Webhook event stored; settlement is pending\./);
+});

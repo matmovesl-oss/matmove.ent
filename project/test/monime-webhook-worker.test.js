@@ -353,3 +353,15 @@ test('customer webhook worker rejects a Test Monime token in Production before c
     }
   }
 });
+
+
+test('targeted webhook processing claims only the requested durable event', async t => {
+  const { event, payment, transfer, db } = fixture('completed', true);
+  await withProvider(t, transfer, async fetchCount => {
+    const result = await processMonimeWebhookBatch({ db, limit: 1, eventId: event.event_id });
+    assert.deepEqual(result, { checked: 1, processed: 1, retrying: 0, failed: 0 });
+    assert.equal(fetchCount(), 1);
+    assert.equal(event.status, 'processed');
+    assert.ok(payment.fulfilled_at);
+  });
+});
