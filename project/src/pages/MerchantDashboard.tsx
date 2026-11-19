@@ -108,6 +108,10 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
   const [isProcessingPayout, setIsProcessingPayout] = useState(false);
 
 
+
+
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+
   useEffect(() => {
     if (!isLoadModalOpen && !isPayoutModalOpen && !isTransferModalOpen) return;
     const rootOverflow = document.documentElement.style.overflow;
@@ -119,8 +123,6 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
       document.body.style.overflow = bodyOverflow;
     };
   }, [isLoadModalOpen, isPayoutModalOpen, isTransferModalOpen]);
-
-  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferAmount, setTransferAmount] = useState('');
   const [transferCurrency, setTransferCurrency] = useState<'SLE' | 'USD'>('SLE');
   const [transferError, setTransferError] = useState('');
