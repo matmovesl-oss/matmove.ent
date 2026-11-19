@@ -53,13 +53,22 @@ revoke all on function public.matmove_record_confirmed_fare_vehicle() from publi
 
 create or replace function public.matmove_read_ride_fares(p_user_id uuid,p_booking_id uuid)
 returns jsonb language plpgsql security definer set search_path=pg_catalog,public as $fn$
-declare b public.bookings%rowtype; v_role text; v_owner boolean; v_offers jsonb;
+declare
+ v_actor uuid := auth.uid();
+ b public.bookings%rowtype;
+ v_role text;
+ v_owner boolean;
+ v_offers jsonb;
 begin
- v_role:=public.matmove_preferences_role(p_user_id);
+ -- Preserve caller binding: SECURITY DEFINER must never trust a supplied profile ID.
+ if v_actor is null then raise exception 'AUTH: Sign in to continue.'; end if;
+ if p_user_id is distinct from v_actor then raise exception 'FORBIDDEN: Caller identity mismatch.'; end if;
+ if p_booking_id is null then raise exception 'INVALID: Booking ID is required.'; end if;
+ v_role:=public.matmove_preferences_role(v_actor);
  select * into b from public.bookings where id=p_booking_id;
  if not found then raise exception 'NOT_FOUND: Request not found.'; end if;
- v_owner:=b.rider_id is not distinct from p_user_id;
- if not v_owner and (v_role='driver' and (b.driver_id=p_user_id or (b.status in ('pending','pending_admin') and b.driver_id is null and exists(select 1 from public.profiles where id=p_user_id and kyc_status::text='approved'))) is not true then
+ v_owner:=b.rider_id is not distinct from v_actor;
+ if not v_owner and not (v_role='driver' and (b.driver_id=v_actor or (b.status in ('pending','pending_admin') and b.driver_id is null and exists(select 1 from public.profiles where id=v_actor and kyc_status::text='approved'))) then
    raise exception 'FORBIDDEN: Request access denied.';
  end if;
  select coalesce(jsonb_agg(jsonb_build_object(
@@ -69,9 +78,9 @@ begin
   'expiresAt',o.expires_at,'createdAt',o.created_at
  ) order by o.created_at desc,o.id),'[]'::jsonb) into v_offers
  from public.matmove_ride_fare_offers o join public.profiles p on p.id=o.driver_id
- where o.booking_id=b.id and (v_owner or o.driver_id=p_user_id)
+ where o.booking_id=b.id and (v_owner or o.driver_id=v_actor)
    and (o.status in ('pending','accepted') or o.created_at>now()-interval '1 day');
- return jsonb_build_object('bookingId',b.id,'viewerId',p_user_id,'fareMinor',round(b.fare_amount*100),
+ return jsonb_build_object('bookingId',b.id,'viewerId',v_actor,'fareMinor',round(b.fare_amount*100),
   'fareVersion',b.matmove_fare_version,'bookingStatus',b.status,'requestedVehicleType',b.vehicle_type,
   'confirmedVehicleType',b.matmove_confirmed_vehicle_type,'requestCreatedAt',b.created_at,
   'paymentStarted',exists(select 1 from public.ride_payments where booking_id=b.id),
