@@ -252,6 +252,16 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 3 } = {
       ) {
         throw new ManualReviewError('Stored webhook payload failed its event and object identity check; manual review required.');
       }
+      const supportedEnvelope = (
+        event.object_type === 'internal_transfer' &&
+        ['internal_transfer.completed', 'internal_transfer.failed'].includes(event.event_type)
+      ) || (
+        event.object_type === 'payout' &&
+        ['payout.completed', 'payout.failed'].includes(event.event_type)
+      );
+      if (!supportedEnvelope) {
+        throw new ManualReviewError('Unsupported Monime event type or object for MatMove ledger reconciliation; manual review required.');
+      }
       const resource = event.object_type === 'payout' ? 'payouts' : 'internal-transfers';
       const providerObject = await getProviderObject(event.object_id, resource);
       if (providerObject.id !== event.object_id) throw new ManualReviewError('Monime returned a different provider object identifier; manual review required.');
