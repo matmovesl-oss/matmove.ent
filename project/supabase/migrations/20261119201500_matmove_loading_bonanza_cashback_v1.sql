@@ -175,7 +175,7 @@ begin
   end if;
   if p_request is null or p_expected is null or p_expected<0 or p_enabled is null
      or p_minimum is null or p_minimum<=0 or p_minimum>9000000000000000
-     or p_budget is null or p_budget<0 or p_budget>9000000000000000
+     or p_budget is null or p_budget<0 or p_budget>9000000000000000 or (p_enabled and p_budget=0)
      or length(btrim(coalesce(p_reason,''))) not between 3 and 500
      or p_source is null or p_source !~ '^fac-[A-Za-z0-9_-]+$'
      or exists(select 1 from public.wallets where monime_account_id=p_source or metadata->>'monime_account_id'=p_source) then
