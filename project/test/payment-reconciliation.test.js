@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { reconcileMatMovePayments } from '../server/payment-reconciliation.js';
@@ -217,4 +218,10 @@ test('unified reconciliation fails closed when the Monime worker returns malform
   } finally {
     env('CRON_SECRET', previous);
   }
+});
+
+
+test('Hobby-compatible Vercel daily cron targets the unified payment reconciler', async () => {
+  const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
+  assert.deepEqual(config.crons, [{ path: '/api/reconcile-all-payments', schedule: '0 0 * * *' }]);
 });
