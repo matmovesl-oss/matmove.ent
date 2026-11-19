@@ -167,8 +167,9 @@ test('Rider and Merchant route editing use one synchronized sheet and wait for a
   assert.match(source,/bookingReady=\{Boolean\(pickupCoords && destinationCoords && !routeEditing\)\}/);
   assert.doesNotMatch(source,/setRouteEditing\(!ready\)/);
  }
- assert.match(picker,/setEditingRoute\(true\);\s*setLocationPanelExpanded\(true\);\s*onRouteEditingChange\?\.\(true\)/);
- assert.match(picker,/setEditingRoute\(false\);\s*setLocationPanelExpanded\(false\);\s*onRouteEditingChange\?\.\(false\)/);
+ assert.match(picker,/setEditingRoute\(true\);\s*onRouteEditingChange\?\.\(true\)/);
+ assert.doesNotMatch(picker,/setLocationPanelExpanded/);
+ assert.match(picker,/setEditingRoute\(false\);\s*onRouteEditingChange\?\.\(false\)/);
  assert.match(picker,/status === 'OK'[\s\S]*setEditingRoute\(false\)/);
 });
 
