@@ -51,5 +51,7 @@ test('customer approval records category and fare together; mismatched drivers a
 test('rider and merchant see actual driver vehicle separately from requested category',()=>{
  assert.match(rider,/Driver vehicle: \{String\(activeBooking\.matmove_confirmed_vehicle_type\|\|activeBooking\.driver\?\.vehicle_type\|\|'Awaiting vehicle verification'\)/);
  assert.match(rider,/Requested vehicle: \{String\(activeBooking\.vehicle_type/);
+ assert.match(merchant,/Driver vehicle: \\{String\\(activeBooking\\.matmove_confirmed_vehicle_type\\|\\|activeBooking\\.driver\\?\\.vehicle_type\\|\\|'Awaiting vehicle verification'\\)/);
+ assert.match(merchant,/Requested vehicle: \\{String\\(activeBooking\\.vehicle_type/);
  assert.doesNotMatch(rider,/Driver vehicle: \{String\(activeBooking\.matmove_confirmed_vehicle_type\|\|activeBooking\.driver\?\.vehicle_type\|\|activeBooking\.vehicle_type/);
 });
