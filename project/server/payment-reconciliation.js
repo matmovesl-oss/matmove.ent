@@ -64,6 +64,7 @@ export async function reconcileMatMovePayments(
     purchases = reconcilePurchasePayments,
     merchants = reconcileMerchantPayments,
     referrals = reconcileReferrals,
+    loadingBonanza = reconcileLoadingBonanzaBatch,
     spins = reconcileSpins,
     arcades = reconcileArcades
   } = {}
@@ -80,7 +81,7 @@ export async function reconcileMatMovePayments(
     invokeHandler(payouts, authorization),
     invokeHandler(merchants, authorization),
     invokeHandler(referrals, authorization, { action: 'referral_reconcile' }),
-    reconcileLoadingBonanzaBatch(undefined, { limit: 3 }),
+    loadingBonanza(undefined, { limit: 3 }),
     invokeHandler(spins, authorization),
     invokeHandler(arcades, authorization),
     monime({ limit: 3 }),
