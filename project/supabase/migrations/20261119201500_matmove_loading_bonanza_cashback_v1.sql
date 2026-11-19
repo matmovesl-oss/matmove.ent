@@ -29,6 +29,7 @@ create table if not exists public.matmove_loading_bonanza_topups (
   check (destination_account ~ '^fac-[A-Za-z0-9_-]+
   id uuid primary key default gen_random_uuid(),
   topup_id uuid not null unique references public.matmove_loading_bonanza_topups(id),
+  provider_payment_id text not null,
   user_id uuid not null references public.profiles(id),
   wallet_id uuid not null references public.wallets(id),
   topup_minor bigint not null check (topup_minor > 0),
@@ -133,9 +134,9 @@ begin
   if not found or c.treasury_account is null or c.treasury_account !~ '^fac-[A-Za-z0-9_-]+$'
      or c.treasury_account=new.destination_account then return new; end if;
   insert into public.matmove_loading_bonanza_rewards(
-    topup_id,user_id,wallet_id,topup_minor,cashback_minor,source_account,destination_account,state
+    topup_id,provider_payment_id,user_id,wallet_id,topup_minor,cashback_minor,source_account,destination_account,state
   ) values(
-    new.id,new.user_id,new.wallet_id,new.credit_minor,v_cashback_minor,c.treasury_account,new.destination_account,
+    new.id,new.provider_payment_id,new.user_id,new.wallet_id,new.credit_minor,v_cashback_minor,c.treasury_account,new.destination_account,
     case when c.budget_minor >= (select coalesce(sum(cashback_minor),0)+v_cashback_minor
       from public.matmove_loading_bonanza_rewards where reserved_at is not null)
       then 'pending' else 'budget_exhausted' end
@@ -297,7 +298,7 @@ begin
     and p_receipt#>>'{destinationFinancialAccount,id}'=r.destination_account
     and p_receipt#>>'{metadata,matmoveLoadingBonanzaRewardId}'=r.id::text
     and p_receipt#>>'{metadata,matmoveLoadingBonanzaTopupId}'=r.topup_id::text
-    and p_receipt#>>'{metadata,matmoveMonimePaymentId}'=(select provider_payment_id from public.matmove_loading_bonanza_topups where id=r.topup_id)
+    and p_receipt#>>'{metadata,matmoveMonimePaymentId}'=r.provider_payment_id
     and p_receipt#>>'{metadata,matmoveRequestKey}'=r.request_key::text
     and p_receipt->>'status' in ('pending','processing','completed','failed');
   if r.state='completed' then
