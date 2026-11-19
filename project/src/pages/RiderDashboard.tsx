@@ -257,6 +257,11 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
     }
   };
 
+  useEffect(() => {
+    if (!profile?.id) return;
+    void walletFetch('/api/get-live-wallet', { action: 'sync_account_labels' }).catch(() => {});
+  }, [profile?.id]);
+
   const hasSleAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || ''));
   const setupSleWallet = async () => {
     if (!canLoad || setupBusy.current) return;
