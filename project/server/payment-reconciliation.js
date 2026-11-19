@@ -103,7 +103,7 @@ export async function reconcileMatMovePayments(
       continue;
     }
 
-    if (index < 7) {
+    if (index < 4 || index === 5 || index === 6) {
       const response = item.value;
       const countKeys = ['checked', 'failed'];
       if (
@@ -118,22 +118,20 @@ export async function reconcileMatMovePayments(
         continue;
       }
       result[names[index]] = response.body;
-    } else if (index === 7) {
+    } else if (index === 4) {
+      if (!validCounts(item.value, ['checked', 'failed'])) {
+        unavailable = true;
+        result[names[index]] = { unavailable: true };
+      } else result[names[index]] = item.value;
+    } else {
       const counts = ['checked', 'processed', 'retrying', 'failed'];
       if (!validCounts(item.value, counts)) {
         unavailable = true;
         result[names[index]] = { unavailable: true };
         continue;
       }
-      // Failed/quarantined webhook events are durably retained for manual
-      // review. They are reported in the result, not hidden as successes.
+      // Failed/quarantined webhook and purchase events are durably retained for review.
       result[names[index]] = item.value;
-    } else {
-      const counts = ['checked', 'failed'];
-      if (!validCounts(item.value, counts)) {
-        unavailable = true;
-        result[names[index]] = { unavailable: true };
-      } else result[names[index]] = item.value;
     }
   }
 
