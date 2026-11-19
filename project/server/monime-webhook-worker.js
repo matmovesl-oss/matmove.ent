@@ -7,6 +7,7 @@ import { reconcileWithdrawal } from './payout-payments.js';
 import { reconcileSpinRound } from './spin-payments.js';
 import { reconcileArcadeRound } from './arcade-payments.js';
 import { runReferralLeg } from './referral-payments.js';
+import { reconcileLoadingBonanzaReward } from './loading-bonanza-payments.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ATTEMPTS = 12;
@@ -59,7 +60,8 @@ export function classifyMonimeTransfer(event, transfer) {
       ['withdrawal', metadata.matmoveWithdrawalId],
       ['spin', metadata.matmoveSpinRoundId],
       ['arcade', metadata.matmoveArcadeRoundId],
-      ['referral', metadata.matmoveReferralRewardId]
+      ['referral', metadata.matmoveReferralRewardId],
+      ['loadingBonanza', metadata.matmoveLoadingBonanzaRewardId]
     ].filter(([, id]) => typeof id === 'string' && UUID.test(id));
     return candidates.length === 1 ? { kind: candidates[0][0], id: candidates[0][1], resource: 'internal-transfers' } : null;
   }
@@ -128,7 +130,8 @@ async function processLinkedTransfer(db, event, transfer) {
     withdrawal: { table: 'matmove_withdrawal_legs', parent: 'withdrawal_id', reconcile: reconcileWithdrawal },
     spin: { table: 'matmove_spin_legs', parent: 'round_id', reconcile: reconcileSpinRound },
     arcade: { table: 'matmove_arcade_legs', parent: 'round_id', reconcile: reconcileArcadeRound },
-    referral: { table: 'matmove_referral_rewards', parent: 'id', reconcile: runReferralLeg, statusColumn: 'state' }
+    referral: { table: 'matmove_referral_rewards', parent: 'id', reconcile: runReferralLeg, statusColumn: 'state' },
+    loadingBonanza: { table: 'matmove_loading_bonanza_rewards', parent: 'id', reconcile: reconcileLoadingBonanzaReward, statusColumn: 'state' }
   };
   const route = routes[target.kind];
   const linked = await readLinkedLeg(db, route.table, route.parent, target.id, transfer.id, 'provider_id', route.statusColumn || 'status');
