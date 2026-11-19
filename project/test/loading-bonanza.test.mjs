@@ -25,6 +25,8 @@ test('Loading Bonanza is fixed at one percent and requires a separate referral t
   assert.match(migration, /minimum_topup_minor bigint/);
   assert.match(migration, /after insert on public.matmove_loading_bonanza_topups/);
   assert.match(migration, /matmove_loading_bonanza_record_topup/);
+  assert.match(migration, /matmove_loading_bonanza_queue_completed_code/);
+  assert.match(migration, /matmove_loading_bonanza_pending_codes/);
   assert.match(migration, /new.credit_minor/);
   assert.match(migration, /new.provider_payment_id/);
   assert.match(migration, /on conflict\(topup_id\) do nothing/);
@@ -93,6 +95,8 @@ test('only the verified completed Payment Code receipt is recorded for cashback'
   assert.match(api, /if\(result\.confirmed\)/);
   assert.match(api, /topupSettlement\(code,provider\)/);
   assert.match(api, /matmove_loading_bonanza_record_topup/);
+  assert.match(api, /matmove_loading_bonanza_queue_completed_code/);
+  assert.match(api, /reconcileLoadingBonanzaBatch/);
   assert.match(api, /settlement\.paymentId/);
   assert.match(api, /settlement\.creditMinor/);
   assert.match(api, /code\.financialAccountId/);
