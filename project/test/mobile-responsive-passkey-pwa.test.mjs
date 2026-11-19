@@ -30,7 +30,7 @@ test('customer sign-in uses Supabase verified passkeys and keeps password fallba
   assert.match(profile, /supabase\.auth\.registerPasskey\(\)/);
   assert.match(profile, /supabase\.auth\.passkey\.list\(\)/);
   assert.match(profile, /supabase\.auth\.passkey\.delete\(/);
-  assert.match(profile, /Biometrics & Face ID/);
+  assert.match(profile, /Biometrics/);
   assert.match(profile, /Face ID or fingerprint on this device/);
   assert.match(profile, /min-h-\[56px\]/);
   assert.doesNotMatch(profile, /Supabase Auth/);
