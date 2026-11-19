@@ -16,9 +16,8 @@ test('merchant wallet actions stay in one compact row without wrapping or shrink
   const source = await readFile(new URL('../src/pages/MerchantDashboard.tsx', import.meta.url), 'utf8');
   assert.match(source, /flex flex-nowrap items-center justify-between gap-2/);
   assert.match(source, /flex shrink-0 items-center gap-1\.5 whitespace-nowrap/);
-  for (const label of ['Load','Withdraw','Transfer']) {
-    const index = source.indexOf(`>{label}</button>`);
-    assert.notEqual(index, -1, 'Missing wallet action');
-    assert.match(source.slice(Math.max(0,index-260),index), /shrink-0 whitespace-nowrap/);
-  }
+  assert.ok((source.match(/shrink-0 whitespace-nowrap rounded-lg/g) || []).length >= 3, 'All three wallet actions must remain compact and non-wrapping');
+  assert.match(source, />Load<\/button>/);
+  assert.match(source, />Withdraw<\/button>/);
+  assert.match(source, />Transfer<\/button>/);
 });
