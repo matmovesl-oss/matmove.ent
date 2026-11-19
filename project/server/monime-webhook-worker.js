@@ -101,10 +101,13 @@ async function processLinkedTransfer(db, event, transfer) {
       readLinkedLeg(db, 'ride_payment_transfers', 'booking_id', target.id, transfer.id),
       readLinkedLeg(db, 'matmove_cash_ride_legs', 'booking_id', target.id, transfer.id, 'provider_transfer_id')
     ]);
-    const family = resolveRideLedgerFamily(digitalLeg, cashLeg);
-    if (!family) {
-      throw new ManualReviewError('Provider transfer is not linked to exactly one Ride or Cash Ride ledger leg; manual review required.');
+    if (!digitalLeg && !cashLeg) {
+      throw new Error('Provider transfer is not linked yet; retry reconciliation after the ledger records its provider ID.');
     }
+    if (digitalLeg && cashLeg) {
+      throw new ManualReviewError('Provider transfer is linked to multiple Ride or Cash Ride ledger legs; manual review required.');
+    }
+    const family = resolveRideLedgerFamily(digitalLeg, cashLeg);
     const leg = family === 'cash' ? cashLeg : digitalLeg;
     if (leg.status === 'review_required') {
       throw new ManualReviewError('The linked MatMove ride leg is under review; manual review required.');
