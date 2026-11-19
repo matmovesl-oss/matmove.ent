@@ -71,7 +71,7 @@ async function rpc(db, name, args) {
   return result.data;
 }
 
-async function runReward(db, rewardId, provider = monime, env = process.env) {
+export async function reconcileLoadingBonanzaReward(db, rewardId, provider = monime, env = process.env) {
   if (!uuid(rewardId)) throw new HttpError(400, 'A valid cashback reward ID is required.');
   const existing = await db.from('matmove_loading_bonanza_rewards').select('*').eq('id', rewardId).single();
   if (existing.error || !existing.data) throw new HttpError(503, 'Loading Bonanza reward could not be read.');
