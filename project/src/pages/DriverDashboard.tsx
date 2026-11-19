@@ -582,6 +582,8 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
                       </div>
                     </div>
 
+                    <div className="flex items-center gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900"><Car size={14} className="shrink-0"/><span>Requested vehicle: {String(r.vehicle_type||'Not recorded').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</span></div>
+
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs space-y-2">
                       <div className="flex items-center gap-2 font-semibold text-slate-800"><MapPin size={14} className="text-emerald-500 shrink-0" /> Pickup: {r.pickup_location}</div>
                       <div className="flex items-center gap-2 font-semibold text-slate-800"><Navigation size={14} className="text-blue-500 shrink-0" /> Dropoff: {r.destination_location}</div>
