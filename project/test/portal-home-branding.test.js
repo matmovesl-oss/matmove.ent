@@ -5,5 +5,5 @@ import { readFile } from 'node:fs/promises';
 test('customer portal header shows the MatMove wordmark instead of the M logo', async () => {
   const source = await readFile(new URL('../src/components/PortalHome.tsx', import.meta.url), 'utf8');
   assert.match(source, /className="mm-brand-wordmark">MatMove/);
-  assert.doesNotMatch(source, /<img src="\/logo\.jpg"/);
+  assert.doesNotMatch(source, /logo\.jpg/);
 });
