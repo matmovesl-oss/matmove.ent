@@ -60,7 +60,7 @@ test('ride booking uses an inline responsive map and lets the customer page scro
  assert.match(picker,/Change locations/);
  assert.match(ride,/bookingReady=\{Boolean\(pickupCoords && destinationCoords && !routeEditing\)\}/);
  assert.match(ride,/onRouteEditingChange=\{setRouteEditing\}/);
- assert.match(app,/onBack=\{\(\) => setActiveSection\('home'\)\}/);
+ assert.match(app,/onBack=\{\s*\(\) =>\s*setActiveSection\('home'\)\s*\}/);
 });
 
 test('ride vehicle selector and map pins use branded visual markers instead of plain text or default pins',async()=>{
