@@ -176,6 +176,62 @@ test('MatMove rider-withdrawal and Loading Bonanza migrations apply in an isolat
       ),
       /KYC approval is required/
     );
+    await db.query("update public.profiles set kyc_status='approved' where id=$1", [riderId]);
+
+    const monimeWithdrawal = await db.query(
+      'select public.matmove_prepare_withdrawal($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) as result',
+      ['a'.repeat(64), riderId, walletId, 'fac-rider-wallet', 'fac-platform', 5000, 50, 29, 'mobile_money', '+23276543210']
+    );
+    assert.equal(monimeWithdrawal.rows[0].result.user_id, riderId);
+    assert.equal(monimeWithdrawal.rows[0].result.state, 'fee_pending');
+    const legs = await db.query(
+      'select kind,amount_minor from public.matmove_withdrawal_legs order by kind'
+    );
+    assert.deepEqual(legs.rows, [
+      { kind: 'fee', amount_minor: 29 },
+      { kind: 'payout', amount_minor: 5000 }
+    ]);
+
+    await db.query(
+      "update public.matmove_loading_bonanza_campaign set enabled=true, minimum_topup_minor=5000, budget_minor=100000, treasury_account='fac-referral' where singleton=true"
+    );
+    await db.query(
+      "select set_config('request.jwt.claims','{\"role\":\"service_role\"}',false)"
+    );
+    const topup = await db.query(
+      'select public.matmove_loading_bonanza_record_topup($1,$2,$3,$4,$5,$6,$7,$8) as result',
+      [riderId, walletId, 'code-rider-001', 'pay-rider-topup', 10000, 100, 9900, 'fac-rider-wallet']
+    );
+    const topupId = topup.rows[0].result.id;
+    const reward = await db.query(
+      'select * from public.matmove_loading_bonanza_rewards where topup_id=$1',
+      [topupId]
+    );
+    assert.equal(reward.rows.length, 1);
+    assert.equal(Number(reward.rows[0].cashback_minor), 99);
+    const claimed = await db.query(
+      'select public.matmove_loading_bonanza_claim($1,$2,clock_timestamp()) as result',
+      [reward.rows[0].id, 100000]
+    );
+    assert.equal(claimed.rows[0].result.can_create, true);
+    const receipt = {
+      id: 'trn-rider-cashback',
+      amount: { currency: 'SLE', value: '99' },
+      sourceFinancialAccount: { id: 'fac-referral' },
+      destinationFinancialAccount: { id: 'fac-rider-wallet' },
+      metadata: {
+        matmoveLoadingBonanzaRewardId: reward.rows[0].id,
+        matmoveLoadingBonanzaTopupId: topupId,
+        matmoveMonimePaymentId: 'pay-rider-topup',
+        matmoveRequestKey: reward.rows[0].request_key
+      },
+      status: 'completed'
+    };
+    const recorded = await db.query(
+      'select public.matmove_loading_bonanza_record($1,$2::jsonb) as result',
+      [reward.rows[0].id, JSON.stringify(receipt)]
+    );
+    assert.equal(recorded.rows[0].result.state, 'completed');
   } finally {
     await db.close();
   }
