@@ -460,6 +460,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
             resumeTripId={resumeTripId}
             onResumeTrip={(bookingId:string)=>{rememberTrip(bookingId);setActiveSection('ride');}}
             onOpenTrips={(bookingId?:string|null)=>{if(bookingId)rememberTrip(bookingId);setActiveSection('trips');}}
+            onBack={() => setActiveSection('home')}
           />
         )}
       </div>
