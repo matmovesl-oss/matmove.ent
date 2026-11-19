@@ -27,6 +27,10 @@ test('Loading Bonanza is fixed at one percent and requires a separate referral t
   assert.match(migration, /on conflict\(payment_transaction_id\) do nothing/);
   assert.match(migration, /matmove_loading_bonanza_claim/);
   assert.match(migration, /matmove_loading_bonanza_record/);
+  assert.match(migration, /matmove_loading_bonanza_funding_claim/);
+  assert.match(migration, /matmove_loading_bonanza_funding_record/);
+  assert.match(migration, /matmove_loading_bonanza_fundings/);
+  assert.match(migration, /p_enabled and p_budget=0/);
 });
 
 test('only a completed Monime SLE top-up can create a cashback reward', async () => {
@@ -66,4 +70,12 @@ test('cashback Monime transfer is exact, linked and idempotent', () => {
     status: 'completed'
   }, reward), true);
   assert.equal(matchesLoadingBonanzaReceipt({ status: 'completed' }, reward), false);
+});
+
+test('scheduled payment reconciliation includes Loading Bonanza with bounded counters', async () => {
+  const source = await readFile(new URL('../server/payment-reconciliation.js', import.meta.url), 'utf8');
+  assert.match(source, /reconcileLoadingBonanzaBatch/);
+  assert.match(source, /'loadingBonanza'/);
+  assert.match(source, /index === 4/);
+  assert.match(source, /validCounts\(item\.value, \['checked', 'failed'\]\)/);
 });
