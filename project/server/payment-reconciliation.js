@@ -4,6 +4,7 @@ import { reconcileRidePayments } from './ride-api.js';
 import { reconcileWithdrawals } from './payout-payments.js';
 import { processMonimeWebhookBatch } from './monime-webhook-worker.js';
 import { reconcilePurchasePayments } from './travel-event-payments.js';
+import { reconcileMerchantPayments } from './merchant-payments.js';
 
 function validCronAuthorization(req) {
   const secret = process.env.CRON_SECRET;
@@ -51,7 +52,8 @@ export async function reconcileMatMovePayments(
     rides = reconcileRidePayments,
     payouts = reconcileWithdrawals,
     monime = processMonimeWebhookBatch,
-    purchases = reconcilePurchasePayments
+    purchases = reconcilePurchasePayments,
+    merchants = reconcileMerchantPayments
   } = {}
 ) {
   res.setHeader?.('Cache-Control', 'no-store');
@@ -64,11 +66,12 @@ export async function reconcileMatMovePayments(
   const work = await Promise.allSettled([
     invokeHandler(rides, authorization),
     invokeHandler(payouts, authorization),
+    invokeHandler(merchants, authorization),
     monime({ limit: 3 }),
     purchases({ limit: 5 })
   ]);
 
-  const names = ['ridePayments', 'withdrawals', 'monimePurchaseEvents', 'purchasePayments'];
+  const names = ['ridePayments', 'withdrawals', 'merchantPayments', 'monimeEvents', 'purchasePayments'];
   const result = {};
   let unavailable = false;
 
@@ -84,7 +87,7 @@ export async function reconcileMatMovePayments(
       continue;
     }
 
-    if (index < 2) {
+    if (index < 3) {
       const response = item.value;
       const countKeys = ['checked', 'failed'];
       if (
