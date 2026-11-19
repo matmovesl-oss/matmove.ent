@@ -106,6 +106,27 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
     if (resumeTripId && activeBooking?.id === resumeTripId) setViewMode('active');
   }, [resumeTripId, activeBooking?.id]);
   const tripRequest = useTripRequest(profile?.id || '');
+
+  // The other party may complete the final cash confirmation. Observe the
+  // server-verified settled state so this rider also sees the Monime receipt.
+  useEffect(() => {
+    const payment = activeBooking?.cashPayment;
+    if (
+      activeBooking?.payment_method === 'cash' &&
+      payment?.status === 'settled' &&
+      payment.driverCashConfirmed === true &&
+      payment.riderCashConfirmed === true
+    ) {
+      setActiveBooking(null);
+      setCashSuccessOpen(true);
+    }
+  }, [
+    activeBooking?.id,
+    activeBooking?.payment_method,
+    activeBooking?.cashPayment?.status,
+    activeBooking?.cashPayment?.driverCashConfirmed,
+    activeBooking?.cashPayment?.riderCashConfirmed
+  ]);
   const [cancellingRequestId,setCancellingRequestId]=useState<string|null>(null);
   const handleCancelCustomerRequest=async(id:string)=>{
     if(cancellingRequestId)return;
