@@ -282,7 +282,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
       <header className="mm-home-heading">
         <div className="flex min-w-0 items-center gap-2">
           {mode==='services'&&<button className="mm-icon-button shrink-0" type="button" aria-label="Back to Home" onClick={() => onNavigate('home')}><ArrowLeft size={21}/></button>}
-          <div className="mm-brand"><span className="mm-brand-wordmark">MatMove</span><span>Wi dey move<span className="mm-muted">Your everyday, connected.</span></span></div>
+          <div className="mm-brand"><span className="mm-brand-wordmark">MatMove</span><span className="mm-brand-tagline">Wi dey move<span className="mm-muted">Your everyday, connected.</span></span></div>
         </div>
         <button className="mm-icon-button shrink-0" type="button" aria-label="Open your account" onClick={() => onNavigate('account')}><ShieldCheck size={22}/></button>
       </header>
