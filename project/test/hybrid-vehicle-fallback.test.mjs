@@ -7,11 +7,12 @@ const service=await readFile(new URL('../src/services/fareNegotiationService.ts'
 const ui=await readFile(new URL('../src/components/FareNegotiation.tsx',import.meta.url),'utf8');
 const driver=await readFile(new URL('../src/pages/DriverDashboard.tsx',import.meta.url),'utf8');
 
-test('alternative vehicle offers snapshot only the KYC-approved driver vehicle and wait two minutes for a category mismatch',()=>{
+test('fare offers snapshot only the KYC-approved driver vehicle and enforce strict category matching',()=>{
  assert.match(migration,/select \* into p from public\.profiles where id=new\.driver_id/i);
  assert.match(migration,/p\.kyc_status::text<>'approved'/);
  assert.match(migration,/p\.vehicle_type/);
- assert.match(migration,/b\.created_at\+interval '2 minutes'/);
+ assert.match(migration,/Only the requested verified vehicle category can offer/);
+ assert.doesNotMatch(migration,/created_at\+interval '2 minutes'/);
  assert.match(migration,/new\.vehicle_type:=p\.vehicle_type/);
 });
 
@@ -37,9 +38,10 @@ test('fare read payload includes requested and offered vehicle details with stri
  assert.match(service,/o\.vehicleType/);
 });
 
-test('customer sees alternative vehicle and confirms category and fare together',()=>{
+test('customer approval records category and fare together; mismatched drivers are blocked in UI',()=>{
  assert.match(ui,/Approve <b>\{confirm\.vehicleType\}<\/b>/);
  assert.match(ui,/confirms both the vehicle category and total fare/);
- assert.match(ui,/Alternative vehicle/);
+ assert.match(ui,/Alternative categories stay unavailable until MatMove can verify/);
+ assert.match(ui,/!!vehicleType&&matchingVehicle/);
  assert.match(driver,/vehicleType=\{profile\.vehicle_type \|\| ''\}/);
 });
