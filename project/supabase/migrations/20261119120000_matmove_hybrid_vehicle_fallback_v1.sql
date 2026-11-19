@@ -4,6 +4,7 @@
 begin;
 alter table public.bookings add column if not exists matmove_confirmed_vehicle_type text;
 alter table public.matmove_ride_fare_offers add column if not exists vehicle_type text;
+update public.matmove_ride_fare_offers o set vehicle_type=p.vehicle_type from public.profiles p where p.id=o.driver_id and o.vehicle_type is null and p.vehicle_type is not null;
 
 create or replace function public.matmove_validate_fare_offer_vehicle()
 returns trigger language plpgsql security definer set search_path=pg_catalog,public as $fn$
@@ -61,7 +62,7 @@ begin
  end if;
  select coalesce(jsonb_agg(jsonb_build_object(
   'id',o.id,'driverId',o.driver_id,'driverName',coalesce(nullif(p.full_name,''),'Driver'),
-  'vehicleType',o.vehicle_type,'amountMinor',o.amount_minor,'fareVersion',o.fare_version,'agreedVersion',o.agreed_version,
+  'vehicleType',coalesce(o.vehicle_type,p.vehicle_type,'Vehicle details unavailable'),'amountMinor',o.amount_minor,'fareVersion',o.fare_version,'agreedVersion',o.agreed_version,
   'status',case when o.status='pending' and (o.expires_at<=now() or o.fare_version<>b.matmove_fare_version) then 'expired' else o.status end,
   'expiresAt',o.expires_at,'createdAt',o.created_at
  ) order by o.created_at desc,o.id),'[]'::jsonb) into v_offers
@@ -85,8 +86,12 @@ declare b public.bookings%rowtype; p public.profiles%rowtype;
 begin
  select * into b from public.bookings where id=new.booking_id;
  select * into p from public.profiles where id=new.driver_id;
- if b.matmove_confirmed_vehicle_type is not null and lower(trim(b.matmove_confirmed_vehicle_type))<>lower(trim(coalesce(p.vehicle_type,''))) then
-   raise exception 'INVALID_VEHICLE: Payment driver does not match the customer-approved vehicle category.';
+ if b.matmove_confirmed_vehicle_type is not null then
+   if lower(trim(b.matmove_confirmed_vehicle_type))<>lower(trim(coalesce(p.vehicle_type,''))) then
+     raise exception 'INVALID_VEHICLE: Payment driver does not match the customer-approved vehicle category.';
+   end if;
+ elsif lower(trim(coalesce(b.vehicle_type,'')))<>lower(trim(coalesce(p.vehicle_type,''))) then
+   raise exception 'VEHICLE_MATCH_REQUIRED: An alternative vehicle must be offered and approved by the customer before acceptance.';
  end if;
  return new;
 end;
