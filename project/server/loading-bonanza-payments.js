@@ -20,7 +20,7 @@ export function loadingBonanzaBalance(account, id) {
 }
 
 export function loadingBonanzaTransfer(reward) {
-  if (!reward || ![reward.id, reward.payment_transaction_id, reward.request_key].every(uuid) ||
+  if (!reward || ![reward.id, reward.topup_id, reward.provider_payment_id, reward.request_key].every(uuid) ||
       !accountId(reward.source_account) || !accountId(reward.destination_account) ||
       reward.source_account === reward.destination_account ||
       !Number.isSafeInteger(Number(reward.cashback_minor)) || Number(reward.cashback_minor) <= 0 ||
@@ -37,7 +37,8 @@ export function loadingBonanzaTransfer(reward) {
       description: 'MatMove Loading Bonanza cashback',
       metadata: {
         matmoveLoadingBonanzaRewardId: reward.id,
-        matmovePaymentTransactionId: reward.payment_transaction_id,
+        matmoveLoadingBonanzaTopupId: reward.topup_id,
+        matmoveMonimePaymentId: reward.provider_payment_id,
         matmoveRequestKey: reward.request_key
       }
     })
@@ -52,7 +53,8 @@ export function matchesLoadingBonanzaReceipt(receipt, reward) {
     receipt.sourceFinancialAccount?.id === reward.source_account &&
     receipt.destinationFinancialAccount?.id === reward.destination_account &&
     receipt.metadata?.matmoveLoadingBonanzaRewardId === reward.id &&
-    receipt.metadata?.matmovePaymentTransactionId === reward.payment_transaction_id &&
+    receipt.metadata?.matmoveLoadingBonanzaTopupId === reward.topup_id &&
+    receipt.metadata?.matmoveMonimePaymentId === reward.provider_payment_id &&
     receipt.metadata?.matmoveRequestKey === reward.request_key &&
     ['pending', 'processing', 'completed', 'failed'].includes(receipt.status);
 }
