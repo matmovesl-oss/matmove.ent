@@ -27,7 +27,7 @@ export function tripShareText(t: any) {
     `Fare: SLE ${Number(t.fare_amount || 0).toFixed(2)}`,
     ...(t.driver?.full_name ? [`Driver: ${t.driver.full_name}`] : []),
     ...(t.rider?.full_name ? [`Customer: ${t.rider.full_name}`] : []),
-    ...(t.vehicle_type ? [`Vehicle: ${t.vehicle_type}`] : []),
+    ...((t.matmove_confirmed_vehicle_type || t.driver?.vehicle_type || t.vehicle_type) ? [`Vehicle: ${t.matmove_confirmed_vehicle_type || t.driver?.vehicle_type || t.vehicle_type}${t.driver?.plate_number ? ` · ${t.driver.plate_number}` : ''}`] : []),
   ].join('\n');
 }
 
@@ -47,7 +47,7 @@ function tripReceiptFields(t: any, role: Props['role']) {
     { label: 'Passenger', value: t.passenger_name },
     { label: 'Customer', value: t.rider?.full_name },
     { label: 'Driver', value: t.driver?.full_name },
-    { label: 'Vehicle', value: t.vehicle_type },
+    { label: 'Vehicle', value: [t.matmove_confirmed_vehicle_type || t.driver?.vehicle_type || t.vehicle_type, t.driver?.plate_number].filter(Boolean).join(' · ') || 'Not recorded' },
     { label: 'Fare', value: `SLE ${Number(t.fare_amount || 0).toFixed(2)}` },
     ...(role === 'driver' ? [{
       label: t.paymentInfo?.adminSettlement ? 'Admin dispute driver award (5%)' : 'Expected driver share (85%)',
