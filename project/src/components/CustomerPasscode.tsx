@@ -151,7 +151,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
          <form aria-label="Customer passcode" onSubmit={e=>{e.preventDefault(); if(forgotMode) void sendPasscodeReset(); else void submit();}} className="w-full max-w-sm space-y-5 rounded-[1.75rem] border border-slate-200 bg-white p-7 text-slate-900 shadow-[0_18px_60px_rgba(15,23,42,.08)]">
            
            <div className="text-center">
-             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-xl font-black text-emerald-800 shadow-sm">M</div><p className="text-[11px] font-extrabold tracking-[.24em] text-emerald-800">MATMOVE SECURE ACCESS</p>
+             <div className="mb-4 text-center text-2xl font-black tracking-tight text-slate-950">MatMove</div><p className="text-[11px] font-extrabold tracking-[.24em] text-emerald-800">SECURE ACCESS</p>
              {forgotMode ? (
                 <>
                   <h1 className="mt-2 text-xl font-bold">Reset Passcode</h1>
