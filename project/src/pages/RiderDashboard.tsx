@@ -921,10 +921,10 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       )}
 
       {isTransferModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-slate-900/60 p-2 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="mm-rider-transfer-title" className="relative max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl bg-white p-5 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-8">
             <button onClick={closeModals} disabled={isProcessingTransfer} className="absolute top-4 right-4 text-slate-400"><X size={20} /></button>
-            <h2 className="text-2xl font-bold mb-1">Account Transfer</h2>
+            <h2 id="mm-rider-transfer-title" className="text-2xl font-bold mb-1">Account Transfer</h2>
             <label className="block my-4 text-sm font-bold">
               Send from
               <select
