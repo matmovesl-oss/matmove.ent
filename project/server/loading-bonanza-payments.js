@@ -20,7 +20,8 @@ export function loadingBonanzaBalance(account, id) {
 }
 
 export function loadingBonanzaTransfer(reward) {
-  if (!reward || ![reward.id, reward.topup_id, reward.provider_payment_id, reward.request_key].every(uuid) ||
+  if (!reward || ![reward.id, reward.topup_id, reward.request_key].every(uuid) ||
+      typeof reward.provider_payment_id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(reward.provider_payment_id) ||
       !accountId(reward.source_account) || !accountId(reward.destination_account) ||
       reward.source_account === reward.destination_account ||
       !Number.isSafeInteger(Number(reward.cashback_minor)) || Number(reward.cashback_minor) <= 0 ||
