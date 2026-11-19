@@ -84,7 +84,7 @@ test('Trips is the only customer location for unfinished requests and reopens th
   assert.match(source,/useCustomerActiveRide\(profile(\?\.id|\.id), resumeTripId \|\| null\)/);
  }
  assert.match(trips,/onResume\(t\.id\)/);
- assert.match(trips,/Reopen original request/);
+ assert.match(trips,/Continue request/);
  assert.match(hook,/resumeBookingId: string \| null = null/);
  assert.match(hook,/const data = exact \|\| withCash\.find/);
  assert.match(hook,/readSavedActiveBooking\(userId\)/);
@@ -195,8 +195,8 @@ test('stale cash requests with an exact verified fee reserve are closed from liv
 
 test('Trip History distinguishes a returned cash handover from an old reserved duplicate',async()=>{
  const trips=await read('../src/components/TripHistory.tsx');
- assert.match(trips,/t\.cashReturn\?\.returnStatus==='driver_confirmed'/);
- assert.match(trips,/t\.cashReturn\?\.returnStatus==='not_requested'/);
+ assert.match(trips,/t\.cashReturn\.returnStatus==='driver_confirmed'/);
+ assert.match(trips,/t\.cashReturn\.returnStatus==='not_requested'/);
  assert.match(trips,/verified MatMove fee reserve is awaiting support reconciliation/);
  assert.match(trips,/driver recorded returning the physical cash/);
 });
@@ -226,7 +226,7 @@ test('customer active ride restores the exact saved booking or newest unfinished
 test('Trips opens customer accounts on Pending and retains Driver Live/Active as its first view',async()=>{
  const trips=await read('../src/components/TripHistory.tsx');
  assert.match(trips,/useState<'active'\|'pending'\|'history'>\(role==='driver'\?'active':'pending'\)/);
- assert.match(trips,/\{id:'pending',label:'Pending'/);
+ assert.match(trips,/label:'Requests'/);
  assert.match(trips,/\{id:'history',label:'History'/);
 });
 

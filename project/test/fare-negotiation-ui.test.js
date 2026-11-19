@@ -9,7 +9,7 @@ const uid='11111111-1111-4111-8111-111111111111',booking='55555555-5555-4555-855
 function nodes(n){if(!n||typeof n!=='object')return[];if(Array.isArray(n))return n.flatMap(nodes);return[n,...nodes(n.props?.children)];}
 function text(n){if(n==null||typeof n==='boolean')return'';if(typeof n!=='object')return String(n);if(Array.isArray(n))return n.map(text).join('');return text(n.props?.children);}
 const clone=x=>JSON.parse(JSON.stringify(x));
-function snapshot(role='rider') {return{bookingId:booking,viewerId:uid,fareMinor:2000,fareVersion:1,bookingStatus:'pending',paymentStarted:false,selectedDriverId:null,serverTime:new Date().toISOString(),offers:role==='driver'?[]:[{id:offerId,driverId:driver,driverName:'Driver One',amountMinor:2500,fareVersion:1,agreedVersion:null,status:'pending',expiresAt:new Date(Date.now()+300000).toISOString(),createdAt:new Date().toISOString()}]};}
+function snapshot(role='rider') {return{bookingId:booking,viewerId:uid,fareMinor:2000,fareVersion:1,bookingStatus:'pending',paymentStarted:false,selectedDriverId:null,serverTime:new Date().toISOString(),requestedVehicleType:'Tricycle (Keke)',confirmedVehicleType:null,requestCreatedAt:new Date(Date.now()-180000).toISOString(),offers:role==='driver'?[]:[{id:offerId,driverId:driver,driverName:'Driver One',vehicleType:'Car',amountMinor:2500,fareVersion:1,agreedVersion:null,status:'pending',expiresAt:new Date(Date.now()+300000).toISOString(),createdAt:new Date().toISOString()}]};}
 async function bundled(controlled=true,entry='src/components/FareNegotiation.tsx'){
  const dir=await mkdtemp(join(process.cwd(),'.fare-ui-test-'));const out=join(dir,'ui.mjs');
  try{await build({entryPoints:[entry],tsconfig:'tsconfig.app.json',outfile:out,bundle:true,platform:'node',format:'esm',jsx:'automatic',external:['react','react/*','lucide-react'],plugins:[{name:'fare-mocks',setup(b){
@@ -43,6 +43,16 @@ async function withUI(role,fn,{handler}={}){
  };
  try{await settle();await fn(h);}finally{for(const s of slots)s?.cleanup?.();await b.close();delete globalThis.__fareDb;delete globalThis.__fareHooks;for(const k of ['window','document','fetch']){if(original[k]===undefined)delete globalThis[k];else globalThis[k]=original[k];}}
 }
+
+
+test('Alternative vehicle offer is labelled and customer confirmation explicitly approves vehicle and fare',()=>withUI('rider',async h=>{
+ assert.match(h.text,/Alternative vehicle/);
+ await h.click('Review SLE 25.00');
+ assert.match(h.text,/Approve Car and agree to SLE 25.00/);
+ assert.match(h.text,/confirms both the vehicle category and total fare/);
+ await h.click('Confirm SLE 25.00');
+ assert.equal(h.calls.filter(c=>c.name==='matmove_decide_ride_fare').length,1);
+}));
 
 test('Customer reviews before confirming, double clicks authorize one decision, and agreement never sends a payment',()=>{
  let release;

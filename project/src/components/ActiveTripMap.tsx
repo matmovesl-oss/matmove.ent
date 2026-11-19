@@ -1,7 +1,8 @@
 import {useEffect,useRef,useState} from 'react';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import {supabase} from '@/lib/supabase';
 import {portalIsUnlocked,onPortalPrivacyChange} from '@/lib/portalPrivacy';
-import {loadGoogleMaps} from '@/components/RideLocationPicker';
 type Point={lat:number;lng:number};
 type Snapshot={bookingId:string;viewerId:string;riderId:string;driverId:string;status:'accepted'|'in_progress';pickup:Point|null;destination:Point|null;position:(Point&{accuracy:number;observedAt:string;receivedAt:string})|null;locationState:'fresh'|'waiting'|'stale';serverTime:string};
 const pageVisible=(userId?:string)=>document.visibilityState!=='hidden'&&(!userId||portalIsUnlocked(userId));
@@ -28,10 +29,10 @@ export default function ActiveTripMap({userId,bookingId,driver=false}:{userId:st
  const [customerSnapshot,setCustomerSnapshot]=useState<Snapshot|null>(null),[customerLocationError,setCustomerLocationError]=useState('');
  const wantsSharing=useRef(false);
  const [navigating,setNavigating]=useState(false),[routeText,setRouteText]=useState(''),[routeSteps,setRouteSteps]=useState<string[]>([]);
- const routeRenderer=useRef<google.maps.DirectionsRenderer|null>(null),routeAttempt=useRef(0),routeTimer=useRef<ReturnType<typeof setTimeout>|null>(null),lastRoute=useRef({key:'',time:0});
+ const routeAttempt=useRef(0),routeTimer=useRef<ReturnType<typeof setTimeout>|null>(null),routeController=useRef<AbortController|null>(null),lastRoute=useRef({key:'',time:0});
  const snapshotNow=useRef<Snapshot|null>(null);
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[retry,setRetry]=useState(0),[sharing,setSharing]=useState(false),[gpsError,setGpsError]=useState(''),[mapError,setMapError]=useState(''),[mapReady,setMapReady]=useState(false),[mapRetry,setMapRetry]=useState(0);
- const host=useRef<HTMLDivElement>(null),map=useRef<google.maps.Map|null>(null),markers=useRef<Record<string,google.maps.Marker>>({}),centered=useRef(false),latest=useRef({userId,bookingId});latest.current={userId,bookingId};
+ const host=useRef<HTMLDivElement>(null),map=useRef<mapboxgl.Map|null>(null),markers=useRef<Record<string,mapboxgl.Marker>>({}),centered=useRef(false),latest=useRef({userId,bookingId});latest.current={userId,bookingId};
  snapshotNow.current=snapshot;
  const acceptSnapshot=(d:Snapshot)=>setSnapshot(old=>!old||Date.parse(d.serverTime)>=Date.parse(old.serverTime)?d:old);
  useEffect(()=>{let live=true,busy=false,epoch=0;setSnapshot(null);setError('');setLoading(true);setSharing(false);wantsSharing.current=false;setGpsError('');setCustomerSnapshot(null);setCustomerLocationError('');
@@ -65,41 +66,56 @@ export default function ActiveTripMap({userId,bookingId,driver=false}:{userId:st
   return()=>{live=false;if(watch!==undefined)navigator.geolocation.clearWatch(watch);if(shareKey)void tripLocationRpc(userId,bookingId,'clear',undefined,shareKey,!driver).catch(()=>{});};
  },[userId,bookingId,driver,sharing]);
  useEffect(()=>{let live=true;setMapReady(false);setMapError('');centered.current=false;
-  void loadGoogleMaps(import.meta.env.VITE_GOOGLE_MAPS_API_KEY||'').then(()=>{if(!live||!host.current)return;map.current=new google.maps.Map(host.current,{center:{lat:8.4808,lng:-13.2290},zoom:14,disableDefaultUI:true,zoomControl:true,gestureHandling:'greedy'});setMapReady(true);}).catch(()=>{if(live)setMapError('Could not load the trip map. Retry when connected.');});
-  return()=>{live=false;for(const m of Object.values(markers.current)){google.maps.event.clearInstanceListeners(m);m.setMap(null);}markers.current={};routeAttempt.current++;if(routeTimer.current)clearTimeout(routeTimer.current);routeRenderer.current?.setMap(null);routeRenderer.current=null;if(map.current)google.maps.event.clearInstanceListeners(map.current);map.current=null;};
+  const token=import.meta.env.VITE_MAPBOX_TOKEN||'';
+  if(!token){setMapError('Mapbox is not configured for this deployment.');return;}
+  mapboxgl.accessToken=token;
+  const instance=new mapboxgl.Map({container:host.current!,style:'mapbox://styles/mapbox/streets-v12',center:[-13.2290,8.4808],zoom:13,attributionControl:true});
+  map.current=instance;
+  instance.addControl(new mapboxgl.NavigationControl({showCompass:true}),'top-right');
+  instance.once('load',()=>{if(live)setMapReady(true);});
+  instance.on('error',()=>{if(live&&!instance.loaded())setMapError('Mapbox could not load the map. Check token permissions and allowed origins.');});
+  return()=>{live=false;for(const m of Object.values(markers.current))m.remove();markers.current={};routeAttempt.current++;routeController.current?.abort();routeController.current=null;if(routeTimer.current)clearTimeout(routeTimer.current);if(map.current===instance)map.current=null;instance.remove();};
  },[bookingId,mapRetry]);
  useEffect(()=>{if(!map.current||!mapReady)return;
   const positions:Record<string,Point|null>={pickup:snapshot?.pickup||null,destination:snapshot?.destination||null,driver:snapshot?.position||null,customer:customerSnapshot?.position||null};
-  for(const name of Object.keys(positions)){const p=positions[name];if(!p){markers.current[name]?.setMap(null);continue;}
-   if(!markers.current[name])markers.current[name]=new google.maps.Marker({position:p,map:map.current,title:name==='driver'?'Assigned driver':name==='customer'?'Trip customer':name==='pickup'?'Pickup':'Destination',label:name==='driver'?'D':name==='customer'?'C':name==='pickup'?'A':'B'});
-   else{markers.current[name].setMap(map.current);markers.current[name].setPosition(p);}
+  const colors:Record<string,string>={pickup:'#16a34a',destination:'#dc2626',driver:'#2563eb',customer:'#7c3aed'};
+  for(const name of Object.keys(positions)){const p=positions[name];if(!p){markers.current[name]?.remove();delete markers.current[name];continue;}
+   if(!markers.current[name])markers.current[name]=new mapboxgl.Marker({color:colors[name]}).setLngLat([p.lng,p.lat]).setPopup(new mapboxgl.Popup({offset:22}).setText(name==='driver'?'Assigned driver':name==='customer'?'Trip customer':name==='pickup'?'Pickup':'Destination')).addTo(map.current);
+   else markers.current[name].setLngLat([p.lng,p.lat]);
   }
-  if(snapshot&&!centered.current){const p=snapshot.position||snapshot.pickup||snapshot.destination;if(p){map.current.panTo(p);centered.current=true;}}
+  if(snapshot&&!centered.current){const p=snapshot.position||snapshot.pickup||snapshot.destination;if(p){map.current.easeTo({center:[p.lng,p.lat],duration:500});centered.current=true;}}
  },[snapshot,customerSnapshot,mapReady]);
  useEffect(()=>{
   const trip=snapshot,position=trip?.locationState==='fresh'?trip.position:null;
   const target=trip?.status==='accepted'?trip.pickup:trip?.destination;
   if(!trip||!navigating||!driver||!mapReady||!position||!target||!pageVisible(userId)){
-   routeAttempt.current++;if(routeTimer.current)clearTimeout(routeTimer.current);routeRenderer.current?.setMap(null);lastRoute.current={key:'',time:0};setRouteSteps([]);setRouteText(navigating?'Waiting for a fresh shared GPS location and saved trip pins.':'');return;
+   routeAttempt.current++;routeController.current?.abort();routeController.current=null;if(routeTimer.current)clearTimeout(routeTimer.current);
+   if(map.current?.getSource('matmove-active-route')){map.current.removeLayer('matmove-active-route');map.current.removeSource('matmove-active-route');}
+   lastRoute.current={key:'',time:0};setRouteSteps([]);setRouteText(navigating?'Waiting for a fresh shared GPS location and saved trip pins.':'');return;
   }
   const key=`${bookingId}:${trip.status}:${target.lat}:${target.lng}`;
   if(lastRoute.current.key===key&&Date.now()-lastRoute.current.time<30000)return;
   lastRoute.current={key,time:Date.now()};const attempt=++routeAttempt.current;
-  if(routeTimer.current)clearTimeout(routeTimer.current);setRouteText('Loading your route inside MatMove…');
-  routeTimer.current=setTimeout(()=>{if(routeAttempt.current===attempt){routeAttempt.current++;setRouteText('Route request timed out. Stop and restart navigation to retry.');}},15000);
-  try{
-   new google.maps.DirectionsService().route({origin:{lat:position.lat,lng:position.lng},destination:target,travelMode:google.maps.TravelMode.DRIVING},(result,status)=>{
-    if(routeAttempt.current!==attempt||latest.current.userId!==userId||latest.current.bookingId!==bookingId||!pageVisible(userId)||snapshotNow.current?.status!==trip.status)return;
-    if(routeTimer.current)clearTimeout(routeTimer.current);
-    const leg=result?.routes?.[0]?.legs?.[0];if(status!=='OK'||!result||!leg){setRouteText('Route unavailable. Check your connection and restart navigation.');return;}
-    if(!routeRenderer.current)routeRenderer.current=new google.maps.DirectionsRenderer({suppressMarkers:true,preserveViewport:true});
-    routeRenderer.current.setMap(map.current);routeRenderer.current.setDirections(result);
-    setRouteText(`${leg.distance?.text||'Distance unavailable'} · ${leg.duration?.text||'Time unavailable'} to ${trip.status==='accepted'?'pickup':'destination'}`);
-    setRouteSteps((leg.steps||[]).slice(0,30).map(step=>String(step.instructions||'').replace(/<[^>]*>/g,' ').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/\s+/g,' ').trim()).filter(Boolean));
-   });
-  }catch{if(routeTimer.current)clearTimeout(routeTimer.current);setRouteText('Route guidance is unavailable. Check the map service configuration.');}
+  if(routeTimer.current)clearTimeout(routeTimer.current);setRouteText('Loading your Mapbox route inside MatMove…');
+  const token=import.meta.env.VITE_MAPBOX_TOKEN||'';
+  const url=`https://api.mapbox.com/directions/v5/mapbox/driving/${position.lng},${position.lat};${target.lng},${target.lat}?alternatives=false&geometries=geojson&overview=full&steps=true&access_token=${encodeURIComponent(token)}`;
+  routeController.current?.abort();const controller=new AbortController();routeController.current=controller;
+  routeTimer.current=setTimeout(()=>{controller.abort();if(routeAttempt.current===attempt){routeAttempt.current++;setRouteText('Route request timed out. Stop and restart navigation to retry.');}},15000);
+  void fetch(url,{signal:controller.signal}).then(async response=>{if(!response.ok)throw new Error('Route request failed');return response.json();}).then(data=>{
+   if(routeAttempt.current!==attempt||latest.current.userId!==userId||latest.current.bookingId!==bookingId||!pageVisible(userId)||snapshotNow.current?.status!==trip.status)return;
+   if(routeTimer.current)clearTimeout(routeTimer.current);if(routeController.current===controller)routeController.current=null;
+   const route=data?.routes?.[0],leg=route?.legs?.[0],coordinates=route?.geometry?.coordinates;
+   if(!route||!leg||!Array.isArray(coordinates)||coordinates.length<2)throw new Error('No route returned');
+   const feature={type:'Feature',properties:{},geometry:{type:'LineString',coordinates}} as const;
+   if(map.current?.getSource('matmove-active-route'))(map.current.getSource('matmove-active-route') as mapboxgl.GeoJSONSource).setData(feature as any);
+   else if(map.current){map.current.addSource('matmove-active-route',{type:'geojson',data:feature as any});map.current.addLayer({id:'matmove-active-route',type:'line',source:'matmove-active-route',layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#2563eb','line-width':5,'line-opacity':0.85}});}
+   setRouteText(`${(route.distance/1000).toFixed(1)} km · about ${Math.max(1,Math.round(route.duration/60))} min to ${trip.status==='accepted'?'pickup':'destination'}`);
+   setRouteSteps((leg.steps||[]).slice(0,30).map((step:any)=>String(step.maneuver?.instruction||step.name||'').replace(/<[^>]*>/g,' ').replace(/\\s+/g,' ').trim()).filter(Boolean));
+   const bounds=coordinates.reduce((b:any,c:any)=>b.extend(c),new mapboxgl.LngLatBounds(coordinates[0],coordinates[0]));
+   map.current?.fitBounds(bounds,{padding:48,maxZoom:16,duration:500});
+  }).catch(()=>{if(routeTimer.current)clearTimeout(routeTimer.current);if(routeController.current===controller)routeController.current=null;if(routeAttempt.current===attempt)setRouteText('Mapbox route unavailable. Check connection, token permissions and Directions API access.');});
  },[navigating,driver,mapReady,snapshot,userId,bookingId]);
- useEffect(()=>{if(navigating&&snapshot?.locationState==='fresh'&&snapshot.position&&map.current)map.current.panTo(snapshot.position);},[navigating,snapshot]);
+ useEffect(()=>{if(navigating&&snapshot?.locationState==='fresh'&&snapshot.position&&map.current)map.current.easeTo({center:[snapshot.position.lng,snapshot.position.lat],duration:400});},[navigating,snapshot]);
  const fresh=snapshot?.locationState==='fresh'&&snapshot.position;
  const destination=driver?(snapshot?.status==='accepted'?snapshot.pickup:snapshot?.destination):null;
  return <section aria-label="Active trip map" className="min-w-0 space-y-3 rounded-2xl border bg-white p-3">

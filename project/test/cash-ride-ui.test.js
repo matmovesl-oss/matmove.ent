@@ -65,7 +65,7 @@ test('Rider keeps existing requests in Trips and reopens the exact request befor
   assert.match(code,/onOpenTrips/);
   assert.match(code,/useCustomerActiveRide\(profile\?\.id, resumeTripId \|\| null\)/);
   assert.match(trips,/onResume\(t\.id\)/);
-  assert.match(trips,/Reopen cash confirmation/);
+  assert.match(trips,/Confirm cash handover/);
   assert.match(hook,/const exact = selection\.current/);
   assert.match(hook,/const data = exact \|\| withCash\.find/);
   assert.match(hook,/row\.status!=='cash_review_required'/);

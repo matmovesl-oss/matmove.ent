@@ -86,3 +86,17 @@ test('biometric controls stay on the Account hub while profile editing opens sep
   assert.ok(profile.includes('export function PasskeySecurity'));
   assert.ok(profile.includes('{showPasskey&&<PasskeySecurity userId={userId}/>'));
 });
+
+test('Trips uses compact cards and only exposes full receipts after verified payment settlement', async () => {
+  const trips = await readFile('src/components/TripHistory.tsx', 'utf8');
+  assert.match(trips, /<h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Trips<\/h1>/);
+  assert.match(trips, /View full receipt/);
+  assert.match(trips, /info\.status!=='settled'/);
+  assert.match(trips, /driverConfirmed && customerConfirmed/);
+  assert.match(trips, /return t\.status==='completed'/);
+  assert.match(trips, /paymentConfirmed\(t\)/);
+  assert.match(trips, /max-w-3xl/);
+  assert.doesNotMatch(trips, /Unfinished requests/);
+  assert.doesNotMatch(trips, /Time period/);
+  assert.match(trips, /Download \/ Share full receipt PDF/);
+});

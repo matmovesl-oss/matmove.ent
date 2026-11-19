@@ -212,76 +212,59 @@ export default function TripHistory({ userId, role, onResume, accountLabel, acco
     ...(selected.paymentInfo?.cashReturnStatus ? [['Physical cash return',selected.paymentInfo.cashReturnStatus]] : []),
     ...(selected.paymentIssue ? [['Admin review',selected.paymentIssue.reasonCode==='admin_unpaid_payment_review'?'Unpaid payment review':'Investigation open']] : []),
   ] : [];
-  return <section className="mx-auto max-w-4xl space-y-4 p-4 pb-24 sm:p-6">
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-bold">Trips & Deliveries</h1>
-          <p className="mt-1 text-sm text-slate-500">Your unfinished rides stay here until the server confirms completion or cancellation. You can reopen the same request after signing back in.</p>
-          <p className="mt-2 text-xs font-semibold text-slate-600">Signed in as: <span className="text-slate-900">{accountLabel || 'MatMove account'}</span>{accountEmail&&<span className="block break-all font-normal text-slate-500">{accountEmail}</span>} · Account reference: <span className="font-mono">{userId.slice(-8).toUpperCase()}</span></p>
-        </div>
-        <button className="min-h-11 rounded-xl border bg-white px-4 py-2 font-semibold" onClick={() => void refresh()}>Refresh</button>
-      </div>
-      <div role="tablist" aria-label="Trips categories" className="grid grid-cols-3 gap-2 rounded-2xl border bg-white p-2">
-        {([{id:'active',label:'Live / Active',count:ownedTrips.filter(t=>['accepted','in_progress'].includes(t.status)).length},{id:'pending',label:'Pending',count:ownedTrips.filter(t=>['pending','pending_admin','cash_reserve_pending','cash_review_required'].includes(t.status)).length},{id:'history',label:'History',count:ownedTrips.filter(t=>['completed','cancelled'].includes(t.status)).length}] as const).map(tab=><button key={tab.id} type="button" role="tab" aria-selected={tripView===tab.id} onClick={()=>setTripView(tab.id)} className={`min-h-12 rounded-xl px-2 text-sm font-bold ${tripView===tab.id?'bg-indigo-600 text-white':'text-slate-700 hover:bg-slate-50'}`}>{tab.label}<span className="ml-1 opacity-80">({tab.count})</span></button>)}
-      </div>
-      <div className="grid gap-3 rounded-2xl border bg-white p-3 sm:grid-cols-2">
-        <label className="block text-sm font-semibold text-slate-700">Time period
-          <select aria-label="Filter trips by time period" value={period} onChange={e=>setPeriod(e.target.value as '30'|'90'|'all')} className="mt-1 min-h-11 w-full rounded-xl border p-3">
-            <option value="30">Recent — last 30 days</option><option value="90">Last 90 days</option><option value="all">All history</option>
-          </select>
-        </label>
-        <label className="block text-sm font-semibold text-slate-700">Trip status
-          <select aria-label="Filter trips by status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value as typeof statusFilter)} className="mt-1 min-h-11 w-full rounded-xl border p-3">
-            <option value="all">All statuses</option><option value="pending">Pending</option><option value="pending_admin">Pending Admin review</option><option value="cash_reserve_pending">Cash reserve pending</option><option value="cash_review_required">Cash review required</option><option value="accepted">Accepted</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>
-          </select>
-        </label>
-        <p className="text-xs text-slate-500 sm:col-span-2">Showing {filteredTrips.length} {tripView==='active'?'live or accepted':tripView==='pending'?'pending':'historical'} trips. Unfinished requests are never hidden by the history date filter.</p>
-      </div>
+  const paymentConfirmed = (t:any) => {
+    const info=t.paymentInfo||{};
+    if(info.status!=='settled') return false;
+    if(t.payment_method==='cash' || info.method==='cash') {
+      const driverConfirmed=Boolean(t.cashPayment?.driverCashConfirmed ?? info.driverCashConfirmed);
+      const customerConfirmed=Boolean(t.cashPayment?.riderCashConfirmed ?? info.customerCashConfirmed ?? info.riderCashConfirmed);
+      return driverConfirmed && customerConfirmed;
+    }
+    return t.status==='completed';
+  };
+  const methodLabel=(t:any)=>t.payment_method==='cash'||t.paymentInfo?.method==='cash'?'Cash':t.payment_method==='wallet'||t.paymentInfo?.method==='wallet'?'MatMove Wallet':'Digital payment';
+  return <section className="mx-auto w-full max-w-3xl space-y-3 px-3 py-4 pb-24 sm:px-5 sm:py-6">
+    <header className="flex items-center justify-between gap-3">
+      <div className="min-w-0"><h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Trips</h1><p className="mt-1 text-sm text-slate-500">Your requests, active trips and confirmed receipts in one place.</p></div>
+      <button type="button" aria-label="Refresh trips" className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700" onClick={()=>void refresh()}><span aria-hidden="true">↻</span><span className="hidden sm:inline">Refresh</span></button>
+    </header>
+    <div role="tablist" aria-label="Trips" className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-white p-1">
+      {([{id:'active',label:'Active',count:ownedTrips.filter(t=>['accepted','in_progress'].includes(t.status)).length},{id:'pending',label:'Requests',count:ownedTrips.filter(t=>['pending','pending_admin','cash_reserve_pending','cash_review_required'].includes(t.status)).length},{id:'history',label:'History',count:ownedTrips.filter(t=>['completed','cancelled'].includes(t.status)).length}] as const).map(tab=><button key={tab.id} type="button" role="tab" aria-selected={tripView===tab.id} onClick={()=>setTripView(tab.id)} className={`min-h-10 rounded-lg px-2 text-sm font-bold ${tripView===tab.id?'bg-slate-900 text-white':'text-slate-600 hover:bg-slate-50'}`}>{tab.label}<span className="ml-1 text-xs opacity-75">{tab.count}</span></button>)}
     </div>
-    {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
-    {actionError&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{actionError}</p>}
-    {actionNotice&&<p role="status" className="rounded-xl bg-blue-50 p-3 text-blue-900">{actionNotice}</p>}
-    <section aria-label="Unfinished requests" className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
-      <div><h2 className="text-lg font-bold">Unfinished requests</h2><p className="text-sm text-slate-600">Requests still awaiting a driver, confirmation, completion or payment verification.</p></div>
-      {loading?<p className="text-sm text-slate-500">Checking unfinished requests…</p>:activeRequests.length===0?<p className="rounded-xl bg-white p-4 text-sm text-slate-600">No unfinished requests are linked to {accountLabel || 'this signed-in account'} (account reference {userId.slice(-8).toUpperCase()}). Switch to the original account that created the request. MatMove keeps trips private to the account that submitted them; matching names or phone contacts do not merge account histories. {role==='merchant'?'Customer product orders are shown separately under Inventory & Orders.':'Only requests submitted by this Rider account appear here.'}</p>:activeRequests.map(t=><article key={`active-${t.id}`} className="rounded-xl border bg-white p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2"><strong className="capitalize">{t.service_type||'Ride'} request</strong><span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{t.status==='pending' && Array.isArray(t.matmove_excluded_driver_ids) && t.matmove_excluded_driver_ids.length>0 ? 'Finding another driver' : t.status.replace(/_/g,' ')}</span></div>
-        <p className="mt-2 text-sm">{t.pickup_location||'Pickup not recorded'} → {t.destination_location||'Destination not recorded'}</p>
-        <p className="mt-1 text-xs text-slate-500">Reference: {t.id}</p>
-        {t.paymentInfo?.method==='digital'&&<p className="mt-2 text-xs text-slate-600">Escrow: {t.paymentInfo.status||'not started'} · Driver payout: {t.paymentInfo.driverPayoutStatus||'not yet released'}</p>}{t.paymentInfo?.adminSettlement&&<p className="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-900">Admin dispute settlement · {t.paymentInfo.adminSettlement.status} · Customer refund: SLE {(Number(t.paymentInfo.adminSettlement.customerRefundMinor || 0)/100).toFixed(2)} · Driver award: SLE {(Number(t.paymentInfo.adminSettlement.driverAwardMinor || 0)/100).toFixed(2)} · MatMove share: SLE {(Number(t.paymentInfo.adminSettlement.platformShareMinor || 0)/100).toFixed(2)}</p>}
-        {t.paymentInfo?.method==='cash'&&<p className="mt-2 text-xs text-slate-600">Cash ledger: {t.paymentInfo.status} · Driver confirmed: {t.paymentInfo.driverCashConfirmed?'Yes':'No'} · Customer confirmed: {t.paymentInfo.customerCashConfirmed?'Yes':'No'} · Fee reserve: {t.paymentInfo.reserveStatus||'not recorded'}</p>}
-        {t.status==='cash_review_required'&&<p role="status" className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-950">{t.cashReturn?.returnStatus==='driver_confirmed' ? 'Live dispatch is closed for this old cash request. The driver recorded returning the physical cash, but the Rider has not confirmed receipt. The original fee reserve and both parties’ confirmation history are preserved for MatMove Support. No cash settlement or refund has been recorded.' : t.cashReturn?.returnStatus==='rider_confirmed' ? 'Live dispatch is closed for this old cash request. The Rider recorded receiving the physical cash, but the Driver has not confirmed the return. The original fee reserve and both parties’ confirmation history are preserved for MatMove Support. No cash settlement or refund has been recorded.' : t.cashReturn?.returnStatus==='not_requested' ? 'This old duplicate cash request is closed to live matching because its verified MatMove fee reserve is awaiting support reconciliation. No driver was assigned and no physical cash handover, fee capture or refund was recorded. The original reserve and payment history are preserved.' : 'This old cash request is closed to live matching and is awaiting MatMove Support review. Its original fee reserve and payment history are preserved. No cash settlement or refund has been recorded.'} This request cannot be reopened as a live ride from this screen. You can make a fresh request while the case remains visible in Trips.</p>}
-        {t.paymentIssue&&<p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Admin review: {t.paymentIssue.reasonCode==='admin_unpaid_payment_review'?'Unpaid payment flagged for review':t.paymentIssue.reasonCode==='admin_unpaid_cash_fare_review'?'Unpaid cash fare flagged for review':'This request is under investigation'} · {t.paymentIssue.status}</p>}
-        <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={()=>setSelectedId(t.id)} className="min-h-10 rounded-lg border px-3 text-sm font-semibold">Open request details</button>
-        {onResume&&(role!=='driver'||t.driver_id===userId)&&['pending','pending_admin','cash_reserve_pending','accepted','in_progress'].includes(t.status)&&<button type="button" onClick={()=>onResume(t.id)} className="min-h-10 rounded-lg bg-indigo-600 px-3 text-sm font-semibold text-white">{role==='driver'?(['accepted','in_progress'].includes(t.status)?'Continue this ride':'Open driver dashboard'):t.payment_method==='cash'&&t.status==='in_progress'?'Reopen cash confirmation':t.payment_method!=='cash'&&t.status==='in_progress'?'Continue & confirm payment':'Reopen original request'}</button>}
-        {t.status==='in_progress'&&t.cashReturn&&['requested','driver_confirmed','rider_confirmed'].includes(t.cashReturn.returnStatus)&&<button type="button" disabled={!!cancellingId||((role==='driver'&&t.cashReturn.driverConfirmed)||(role!=='driver'&&t.cashReturn.riderConfirmed))} onClick={()=>void confirmCashReturn(t)} className="min-h-10 rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 disabled:opacity-50">{cancellingId===t.id?'Recording…':role==='driver'?(t.cashReturn.driverConfirmed?'You confirmed return':'Confirm cash returned to customer'):(t.cashReturn.riderConfirmed?'You confirmed receipt':'Confirm cash returned to you')}</button>}
-        {['pending','pending_admin','cash_reserve_pending'].includes(t.status)&&<button type="button" disabled={!!cancellingId} onClick={()=>void cancelRequest(t)} className="min-h-10 rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-700 disabled:opacity-50">{cancellingId===t.id?'Cancelling…':'Cancel request'}</button>}
-        </div>
-        {t.cashReturn&&t.cashReturn.returnStatus!=='not_requested'&&<p className="mt-2 text-xs text-emerald-800">Physical cash return: {t.cashReturn.returnStatus.replace(/_/g,' ')} · Driver confirmed: {t.cashReturn.driverConfirmed?'Yes':'No'} · Customer confirmed: {t.cashReturn.riderConfirmed?'Yes':'No'}</p>}
-        {['accepted','in_progress','cash_review_required'].includes(t.status)&&<p className="mt-2 text-xs text-slate-600">This request has progressed beyond the self-cancellation stage. Contact MatMove support or ask Admin to review it; any cancellation must pass the refund checks.</p>}
-      </article>)}
-    </section>
-    {!selectedId && notice && <p role="status" className="rounded-xl bg-emerald-50 p-3">{notice}</p>}
-    {loading ? <SkeletonList count={4} /> : !ownedTrips.length && !error ? <p className="rounded-2xl border bg-white py-10 text-center text-slate-500">No trips or deliveries yet.</p> : null}
-    {!loading&&filteredTrips.length===0&&<p className="rounded-2xl border bg-white p-6 text-center text-sm text-slate-600">{tripView==='active'?'No accepted or in-progress trips.':tripView==='pending'?'No pending requests assigned to this account.':'No completed or cancelled trips match this history filter.'}</p>}
-    {filteredTrips.map(t => <article key={t.id} className="rounded-2xl border bg-white p-4 shadow-sm">
-      <button onClick={() => { setNotice(''); setSelectedId(t.id); }} className="w-full text-left">
-        <div className="flex justify-between gap-3"><strong className="capitalize">{t.service_type || 'Ride'}</strong><span>{t.status==='pending' && Array.isArray(t.matmove_excluded_driver_ids) && t.matmove_excluded_driver_ids.length>0 ? 'Finding another driver' : t.status}</span></div>
-        <p className="mt-2 text-sm text-slate-500">{date(t.created_at)}</p>
-        <p className="mt-2 truncate">{t.pickup_location} → {t.destination_location}</p>
-        <p className="mt-2 font-bold">SLE {Number(t.fare_amount || 0).toFixed(2)}</p>
-        {role === 'driver' && <p className="mt-1 text-sm text-emerald-700">{t.paymentInfo?.adminSettlement?'Admin dispute award (5%)':'Expected driver share (85%)'}: SLE {t.paymentInfo?.adminSettlement?(Number(t.paymentInfo.adminSettlement.driverAwardMinor || 0)/100).toFixed(2):(Number(t.fare_amount || 0) * 0.85).toFixed(2)}</p>}
-        {t.paymentInfo?.adminSettlement && <p className="mt-2 rounded-lg bg-indigo-50 p-2 text-xs text-indigo-900">Admin dispute settlement · {t.paymentInfo.adminSettlement.status} · Customer refund: SLE {(Number(t.paymentInfo.adminSettlement.customerRefundMinor || 0)/100).toFixed(2)} · Driver award: SLE {(Number(t.paymentInfo.adminSettlement.driverAwardMinor || 0)/100).toFixed(2)} · MatMove share: SLE {(Number(t.paymentInfo.adminSettlement.platformShareMinor || 0)/100).toFixed(2)}</p>}
-        <p className="mt-2 text-sm text-blue-700">View full trip details</p>
-      </button>
-      <button className="mt-3 rounded-lg border px-3 py-2 text-sm" onClick={() => void share(t)}>Share PDF receipt</button>
-    </article>)}
-    <dialog ref={dialog} onClose={() => { setSelectedId(null); setNotice(''); }} className="max-h-[85vh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-2xl p-6 backdrop:bg-slate-950/60">
-      {selected && <><div className="flex justify-between gap-3"><h2 className="text-xl font-bold">Trip details</h2><button autoFocus onClick={() => dialog.current?.close()} className="rounded-lg border px-3 py-2">Close</button></div>
-        <dl className="my-4 space-y-3">{fields.map(([label, value]) => <div key={label} className="border-b pb-2"><dt className="text-sm text-slate-500">{label}</dt><dd className="break-words font-medium">{value || 'Not recorded'}</dd></div>)}</dl>
-        {notice && <p role="status" className="mb-3 rounded-lg bg-emerald-50 p-3">{notice}</p>}
-        <button onClick={() => void share(selected)} className="rounded-xl bg-blue-600 px-4 py-3 font-bold text-white">Share PDF receipt</button>
-        <p className="mt-3 text-xs text-slate-500">Sharing includes your trip areas, fare and times. Only recorded times are shown.</p>
+    {error&&<p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+    {actionError&&<p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{actionError}</p>}
+    {actionNotice&&<p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{actionNotice}</p>}
+    {notice&&<p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
+    {loading?<SkeletonList count={3}/>:filteredTrips.length===0?<div className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center"><p className="font-semibold text-slate-800">{tripView==='active'?'No active trips':tripView==='pending'?'No pending requests':'No trip history yet'}</p><p className="mt-1 text-sm text-slate-500">{tripView==='history'?'Completed and cancelled trips will appear here.':'Your trip updates will appear here automatically.'}</p></div>:<div className="space-y-2">
+      {filteredTrips.map(t=>{
+        const paid=paymentConfirmed(t);
+        const live=['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(t.status);
+        const statusLabel=t.status==='pending'&&Array.isArray(t.matmove_excluded_driver_ids)&&t.matmove_excluded_driver_ids.length>0?'Finding another driver':String(t.status||'requested').replace(/_/g,' ');
+        return <article key={t.id} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm font-extrabold capitalize text-slate-900">{t.service_type||'Ride'}</strong><span className={`rounded-full px-2 py-1 text-[11px] font-bold capitalize ${paid?'bg-emerald-50 text-emerald-800':live?'bg-amber-50 text-amber-800':'bg-slate-100 text-slate-600'}`}>{paid?'Payment confirmed':statusLabel}</span></div>{t.status==='cash_review_required'&&<p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-900">Live dispatch is closed for this old cash request. No cash settlement or refund has been recorded; the verified MatMove fee reserve is awaiting support reconciliation. MatMove Support will review it.</p>}{t.status==='in_progress'&&t.cashReturn&&<p className="mt-2 text-xs text-slate-600">{t.cashReturn.returnStatus==='driver_confirmed'?'The driver recorded returning the physical cash. Waiting for customer confirmation.':t.cashReturn.returnStatus==='rider_confirmed'?'The customer confirmed the cash return. Waiting for driver confirmation.':t.cashReturn.returnStatus==='both_confirmed'?'Both parties confirmed the cash return.':t.cashReturn.returnStatus==='not_requested'?'No cash return has been requested.':''}</p>}
+              <p className="mt-2 truncate text-sm font-semibold text-slate-800">{t.pickup_location||'Pickup not recorded'}</p><p className="text-xs text-slate-500">to {t.destination_location||'Destination not recorded'}</p>
+              <p className="mt-1 text-[11px] text-slate-400">{date(t.completed_at||t.created_at)}</p>
+            </div>
+            <div className="shrink-0 text-right"><p className="text-base font-extrabold tabular-nums text-slate-900">SLE {Number(t.fare_amount||0).toFixed(2)}</p><p className="mt-1 text-[11px] text-slate-500">{methodLabel(t)}</p></div>
+          </div>
+          {paid&&<div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3"><span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><span aria-hidden="true">✓</span> Confirmed by both parties</span><button type="button" onClick={()=>{setNotice('');setSelectedId(t.id);}} className="min-h-9 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">View full receipt <span aria-hidden="true">→</span></button></div>}
+          {!paid&&<div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+            <button type="button" onClick={()=>{setNotice('');setSelectedId(t.id);}} className="min-h-9 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700">View request</button>
+            {onResume&&(role!=='driver'||t.driver_id===userId)&&['pending','pending_admin','cash_reserve_pending','accepted','in_progress'].includes(t.status)&&<button type="button" onClick={()=>onResume(t.id)} className="min-h-9 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white">{role==='driver'?(['accepted','in_progress'].includes(t.status)?'Continue trip':'Open request'):t.payment_method==='cash'&&t.status==='in_progress'?'Confirm cash handover':'Continue request'}</button>}
+            {['pending','pending_admin','cash_reserve_pending'].includes(t.status)&&<button type="button" disabled={!!cancellingId} onClick={()=>void cancelRequest(t)} className="min-h-9 rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50">{cancellingId===t.id?'Cancelling…':'Cancel'}</button>}
+            {t.status==='in_progress'&&t.cashReturn&&['requested','driver_confirmed','rider_confirmed'].includes(t.cashReturn.returnStatus)&&<button type="button" disabled={!!cancellingId||((role==='driver'&&t.cashReturn.driverConfirmed)||(role!=='driver'&&t.cashReturn.riderConfirmed))} onClick={()=>void confirmCashReturn(t)} className="min-h-9 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 disabled:opacity-50">{cancellingId===t.id?'Recording…':role==='driver'?(t.cashReturn.driverConfirmed?'Return confirmed':'Confirm cash returned'):(t.cashReturn.riderConfirmed?'Receipt confirmed':'Confirm cash returned')}</button>}
+          </div>}
+        </article>;
+      })}
+    </div>}
+    <dialog ref={dialog} onClose={()=>{setSelectedId(null);setNotice('');}} className="m-auto max-h-[88dvh] w-[calc(100%-1.5rem)] max-w-lg overflow-y-auto rounded-2xl border-0 p-4 shadow-2xl backdrop:bg-slate-950/60 sm:p-6">
+      {selected&&<><div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">{paymentConfirmed(selected)?'Trip receipt':'Request details'}</h2><p className="mt-1 text-xs text-slate-500">Reference {selected.id}</p></div><button type="button" autoFocus onClick={()=>dialog.current?.close()} className="min-h-10 rounded-lg border px-3 text-sm font-semibold">Close</button></div>
+        {paymentConfirmed(selected)&&<div className="my-4 rounded-xl bg-emerald-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Payment confirmed</p><p className="mt-1 text-2xl font-extrabold tabular-nums text-slate-900">SLE {Number(selected.fare_amount||0).toFixed(2)}</p><p className="mt-1 text-xs text-emerald-800">{methodLabel(selected)} · Both parties confirmed</p></div>}
+        <dl className="my-4 space-y-3">{fields.map(([label,value])=><div key={label} className="border-b border-slate-100 pb-2"><dt className="text-xs text-slate-500">{label}</dt><dd className="break-words text-sm font-semibold text-slate-800">{value||'Not recorded'}</dd></div>)}</dl>
+        {notice&&<p role="status" className="mb-3 rounded-lg bg-emerald-50 p-3 text-sm">{notice}</p>}
+        <button type="button" onClick={()=>void share(selected)} className="min-h-11 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white">Download / Share full receipt PDF</button>
+        <p className="mt-3 text-xs text-slate-500">The receipt contains recorded trip, fare and payment information only.</p>
       </>}
     </dialog>
   </section>;

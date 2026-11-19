@@ -1,0 +1,113 @@
+-- Hybrid vehicle safeguards: strict category matching until trusted online driver presence
+-- is available. Fare offers snapshot the driver's KYC-approved vehicle.
+begin;
+alter table public.bookings add column if not exists matmove_confirmed_vehicle_type text;
+alter table public.matmove_ride_fare_offers add column if not exists vehicle_type text;
+alter table public.matmove_ride_fare_offers add column if not exists vehicle_plate text;
+update public.matmove_ride_fare_offers o set vehicle_type=coalesce(o.vehicle_type,p.vehicle_type), vehicle_plate=coalesce(o.vehicle_plate,p.plate_number) from public.profiles p where p.id=o.driver_id and (o.vehicle_type is null or o.vehicle_plate is null);
+
+create or replace function public.matmove_validate_fare_offer_vehicle()
+returns trigger language plpgsql security definer set search_path=pg_catalog,public as $fn$
+declare b public.bookings%rowtype; p public.profiles%rowtype;
+begin
+ select * into b from public.bookings where id=new.booking_id for update;
+ if not found then raise exception 'NOT_FOUND: Request not found.'; end if;
+ select * into p from public.profiles where id=new.driver_id;
+ if not found or p.role::text<>'driver' or p.kyc_status::text<>'approved'
+   or coalesce(p.is_wallet_frozen,false) or nullif(trim(p.vehicle_type),'') is null then
+   raise exception 'FORBIDDEN: An approved driver with a verified vehicle is required.';
+ end if;
+ if exists(select 1 from public.wallets where user_id=new.driver_id and coalesce(is_frozen,false)) then
+   raise exception 'FORBIDDEN: Wallet is frozen. Contact support.';
+ end if;
+ if lower(trim(p.vehicle_type))<>lower(trim(coalesce(b.vehicle_type,''))) then
+   raise exception 'VEHICLE_MATCH_REQUIRED: Only the requested verified vehicle category can offer until MatMove verifies matching-driver unavailability.';
+ end if;
+ new.vehicle_type:=p.vehicle_type;
+ new.vehicle_plate:=p.plate_number;
+ return new;
+end;
+$fn$;
+drop trigger if exists matmove_validate_fare_offer_vehicle on public.matmove_ride_fare_offers;
+create trigger matmove_validate_fare_offer_vehicle before insert on public.matmove_ride_fare_offers
+for each row execute function public.matmove_validate_fare_offer_vehicle();
+revoke all on function public.matmove_validate_fare_offer_vehicle() from public,anon,authenticated;
+
+create or replace function public.matmove_record_confirmed_fare_vehicle()
+returns trigger language plpgsql security definer set search_path=pg_catalog,public as $fn$
+begin
+ if new.status='accepted' and old.status is distinct from 'accepted' then
+   update public.bookings set matmove_confirmed_vehicle_type=new.vehicle_type
+   where id=new.booking_id and status in ('pending','pending_admin') and driver_id is null;
+   if not found then raise exception 'INVALID_STATE: Request changed before vehicle approval could be recorded.'; end if;
+ end if;
+ return new;
+end;
+$fn$;
+drop trigger if exists matmove_record_confirmed_fare_vehicle on public.matmove_ride_fare_offers;
+create trigger matmove_record_confirmed_fare_vehicle after update of status on public.matmove_ride_fare_offers
+for each row execute function public.matmove_record_confirmed_fare_vehicle();
+revoke all on function public.matmove_record_confirmed_fare_vehicle() from public,anon,authenticated;
+
+create or replace function public.matmove_read_ride_fares(p_user_id uuid,p_booking_id uuid)
+returns jsonb language plpgsql security definer set search_path=pg_catalog,public as $fn$
+declare
+ v_actor uuid := auth.uid();
+ b public.bookings%rowtype;
+ v_role text;
+ v_owner boolean;
+ v_offers jsonb;
+begin
+ -- Preserve caller binding: SECURITY DEFINER must never trust a supplied profile ID.
+ if v_actor is null then raise exception 'AUTH: Sign in to continue.'; end if;
+ if p_user_id is distinct from v_actor then raise exception 'FORBIDDEN: Caller identity mismatch.'; end if;
+ if p_booking_id is null then raise exception 'INVALID: Booking ID is required.'; end if;
+ v_role:=public.matmove_preferences_role(v_actor);
+ select * into b from public.bookings where id=p_booking_id;
+ if not found then raise exception 'NOT_FOUND: Request not found.'; end if;
+ v_owner:=b.rider_id is not distinct from v_actor;
+ if not v_owner and not (v_role='driver' and (b.driver_id=v_actor or (b.status in ('pending','pending_admin') and b.driver_id is null and exists(select 1 from public.profiles where id=v_actor and kyc_status::text='approved')))) then
+   raise exception 'FORBIDDEN: Request access denied.';
+ end if;
+ select coalesce(jsonb_agg(jsonb_build_object(
+  'id',o.id,'driverId',o.driver_id,'driverName',coalesce(nullif(p.full_name,''),'Driver'),
+  'vehicleType',coalesce(o.vehicle_type,p.vehicle_type,'Vehicle details unavailable'),'vehiclePlate',coalesce(o.vehicle_plate,p.plate_number),'amountMinor',o.amount_minor,'fareVersion',o.fare_version,'agreedVersion',o.agreed_version,
+  'status',case when o.status='pending' and (o.expires_at<=now() or o.fare_version<>b.matmove_fare_version) then 'expired' else o.status end,
+  'expiresAt',o.expires_at,'createdAt',o.created_at
+ ) order by o.created_at desc,o.id),'[]'::jsonb) into v_offers
+ from public.matmove_ride_fare_offers o join public.profiles p on p.id=o.driver_id
+ where o.booking_id=b.id and (v_owner or o.driver_id=v_actor)
+   and (o.status in ('pending','accepted') or o.created_at>now()-interval '1 day');
+ return jsonb_build_object('bookingId',b.id,'viewerId',v_actor,'fareMinor',round(b.fare_amount*100),
+  'fareVersion',b.matmove_fare_version,'bookingStatus',b.status,'requestedVehicleType',b.vehicle_type,
+  'confirmedVehicleType',b.matmove_confirmed_vehicle_type,'requestCreatedAt',b.created_at,
+  'paymentStarted',exists(select 1 from public.ride_payments where booking_id=b.id),
+  'selectedDriverId',(select driver_id from public.matmove_ride_fare_offers where booking_id=b.id and status='accepted'),
+  'serverTime',now(),'offers',v_offers);
+end;
+$fn$;
+revoke all on function public.matmove_read_ride_fares(uuid,uuid) from public,anon;
+grant execute on function public.matmove_read_ride_fares(uuid,uuid) to authenticated;
+
+create or replace function public.matmove_enforce_confirmed_vehicle_payment()
+returns trigger language plpgsql security definer set search_path=pg_catalog,public as $fn$
+declare b public.bookings%rowtype; p public.profiles%rowtype;
+begin
+ select * into b from public.bookings where id=new.booking_id;
+ select * into p from public.profiles where id=new.driver_id;
+ if b.matmove_confirmed_vehicle_type is not null then
+   if lower(trim(b.matmove_confirmed_vehicle_type))<>lower(trim(coalesce(p.vehicle_type,''))) then
+     raise exception 'INVALID_VEHICLE: Payment driver does not match the customer-approved vehicle category.';
+   end if;
+ elsif lower(trim(coalesce(b.vehicle_type,'')))<>lower(trim(coalesce(p.vehicle_type,''))) then
+   raise exception 'VEHICLE_MATCH_REQUIRED: An alternative vehicle must be offered and approved by the customer before acceptance.';
+ end if;
+ return new;
+end;
+$fn$;
+drop trigger if exists matmove_enforce_confirmed_vehicle_payment on public.ride_payments;
+create trigger matmove_enforce_confirmed_vehicle_payment before insert on public.ride_payments
+for each row execute function public.matmove_enforce_confirmed_vehicle_payment();
+revoke all on function public.matmove_enforce_confirmed_vehicle_payment() from public,anon,authenticated;
+notify pgrst,'reload schema';
+commit;
