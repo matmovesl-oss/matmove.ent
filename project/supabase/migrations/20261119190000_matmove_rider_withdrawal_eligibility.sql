@@ -311,3 +311,128 @@ BEGIN
 
 END;
 $function$
+
+-- Apply the same approved-KYC rule to the current Monime payout engine.
+CREATE OR REPLACE FUNCTION public.matmove_prepare_withdrawal(p_key text, p_user_id uuid, p_wallet_id uuid, p_source text, p_platform text, p_amount bigint, p_monime_fee bigint, p_platform_fee bigint, p_provider text, p_phone text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+declare
+  w public.wallets%rowtype;
+  v public.matmove_withdrawals%rowtype;
+begin
+  select *
+  into w
+  from public.wallets
+  where id = p_wallet_id and user_id = p_user_id
+  for update;
+
+  if not found then
+    raise exception 'FORBIDDEN: Wallet not found.';
+  end if;
+
+  select *
+  into v
+  from public.matmove_withdrawals
+  where request_key = p_key;
+
+  if found then
+    if v.user_id <> p_user_id
+      or v.wallet_id <> p_wallet_id
+      or v.source_account <> p_source
+      or v.amount_minor <> p_amount
+      or v.provider <> p_provider
+      or v.phone <> p_phone
+    then
+      raise exception
+        'CONFLICT: This request key was already used for a different withdrawal.';
+    end if;
+
+    return to_jsonb(v);
+  end if;
+
+  if p_key !~ '^[a-f0-9]{64}$'
+    or p_phone !~ '^\+232[0-9]{8}$'
+    or p_source !~ '^fac-[A-Za-z0-9_-]+$'
+    or p_platform !~ '^fac-[A-Za-z0-9_-]+$'
+    or p_source = p_platform
+  then
+    raise exception 'INVALID: Invalid withdrawal accounts or request.';
+  end if;
+
+  if w.currency <> 'SLE'
+    or coalesce(
+      nullif(to_jsonb(w)->>'monime_account_id', ''),
+      w.metadata->>'monime_account_id'
+    ) is distinct from p_source
+  then
+    raise exception 'CONFLICT: Wallet link changed.';
+  end if;
+
+  if exists(
+    select 1
+    from public.wallets
+    where user_id = p_user_id and coalesce(is_frozen, false)
+  )
+  or not exists(
+    select 1
+    from public.profiles
+    where id = p_user_id
+      and not coalesce(is_wallet_frozen, false)
+      and role in ('rider', 'driver', 'merchant')
+      and kyc_status = 'approved'
+  )
+  then
+    raise exception
+      'FORBIDDEN: Your wallet must be unfrozen and approved before withdrawing.';
+  end if;
+
+  insert into public.matmove_withdrawals(
+    request_key,
+    user_id,
+    wallet_id,
+    source_account,
+    platform_account,
+    amount_minor,
+    monime_fee_minor,
+    platform_fee_minor,
+    total_minor,
+    provider,
+    phone,
+    state
+  )
+  values(
+    p_key,
+    p_user_id,
+    p_wallet_id,
+    p_source,
+    p_platform,
+    p_amount,
+    p_monime_fee,
+    p_platform_fee,
+    p_amount + p_monime_fee + p_platform_fee,
+    p_provider,
+    p_phone,
+    case
+      when p_platform_fee = 0 then 'fee_paid'
+      else 'fee_pending'
+    end
+  )
+  returning * into v;
+
+  if p_platform_fee > 0 then
+    insert into public.matmove_withdrawal_legs(
+      withdrawal_id, kind, amount_minor
+    )
+    values(v.id, 'fee', p_platform_fee);
+  end if;
+
+  insert into public.matmove_withdrawal_legs(
+    withdrawal_id, kind, amount_minor
+  )
+  values(v.id, 'payout', p_amount);
+
+  return to_jsonb(v);
+end;
+$function$
