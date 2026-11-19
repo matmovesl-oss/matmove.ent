@@ -15,7 +15,7 @@ import TransactionHistory from '@/components/TransactionHistory';
 import TripHistory from '@/components/TripHistory';
 
 import PayoutPanel from '@/components/PayoutPanel';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
@@ -56,13 +56,13 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
   const [isOnline, setIsOnline] = useState(false);
   const presenceBusy = useRef(false);
   const lastPresenceSent = useRef(0);
-  const publishPresence = async (action: 'online'|'heartbeat'|'offline', latitude?: number, longitude?: number, accuracy?: number) => {
+  const publishPresence = useCallback(async (action: 'online'|'heartbeat'|'offline', latitude?: number, longitude?: number, accuracy?: number) => {
     const { data, error } = await supabase.rpc('matmove_set_driver_presence', {
       p_action: action, p_latitude: latitude ?? null, p_longitude: longitude ?? null, p_accuracy_m: accuracy ?? null
     });
     if (error) throw new Error(error.message || 'Driver availability could not be confirmed.');
     return data;
-  };
+  }, []);
   const toggleOnline = async () => {
     if (presenceBusy.current) return;
     presenceBusy.current = true;
@@ -89,6 +89,13 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
     } finally { presenceBusy.current = false; }
   };
   useEffect(() => {
+    let live = true;
+    void supabase.rpc('matmove_driver_presence_snapshot').then(({ data, error }) => {
+      if (live && !error && data?.online && data?.fresh) setIsOnline(true);
+    });
+    return () => { live = false; };
+  }, [profile?.id]);
+  useEffect(() => {
     if (!isOnline || !profile?.id) return;
     let live = true, sending = false;
     const send = (position: GeolocationPosition) => {
@@ -112,7 +119,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
       }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 });
     }, 10000);
     return () => { live = false; navigator.geolocation.clearWatch(watch); window.clearInterval(heartbeat); };
-  }, [isOnline, profile?.id]);
+  }, [isOnline, profile?.id, publishPresence]);
   const [activeRequests, setActiveRequests] = useState<any[]>([]);
   const [negotiatingId, setNegotiatingId] = useState<string | null>(null);
   const [fareSnapshots, setFareSnapshots] = useState<Record<string, FareSnapshot>>({});
