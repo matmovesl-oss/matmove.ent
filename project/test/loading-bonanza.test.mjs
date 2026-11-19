@@ -27,7 +27,7 @@ test('Loading Bonanza is fixed at one percent and requires a separate referral t
   assert.match(migration, /matmove_loading_bonanza_record_topup/);
   assert.match(migration, /new.credit_minor/);
   assert.match(migration, /new.provider_payment_id/);
-  assert.match(migration, /on conflict\(payment_transaction_id\) do nothing/);
+  assert.match(migration, /on conflict\(topup_id\) do nothing/);
   assert.match(migration, /matmove_loading_bonanza_claim/);
   assert.match(migration, /matmove_loading_bonanza_record/);
   assert.match(migration, /matmove_loading_bonanza_funding_claim/);
@@ -87,11 +87,12 @@ test('scheduled payment reconciliation includes Loading Bonanza with bounded cou
 
 test('only the verified completed Payment Code receipt is recorded for cashback', async () => {
   const api = await readFile(new URL('../api/create-wallet-payment-code.js', import.meta.url), 'utf8');
-  assert.match(api, /if \(result\.confirmed\)/);
+  assert.match(api, /if\(result\.confirmed\)/);
   assert.match(api, /topupSettlement\(code,provider\)/);
   assert.match(api, /matmove_loading_bonanza_record_topup/);
   assert.match(api, /settlement\.paymentId/);
   assert.match(api, /settlement\.creditMinor/);
   assert.match(api, /code\.financialAccountId/);
   assert.match(api, /do not create another load/);
+  assert.match(api, /reconcileLoadingBonanzaBatch\(context\.db/);
 });
