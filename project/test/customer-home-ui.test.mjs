@@ -45,23 +45,21 @@ test('homepage feed replaces the decorative route demo with admin-published movi
 });
 
 
-test('ride booking uses a full-screen map and draggable Uber-style location sheet',async()=>{
+test('ride booking uses an inline responsive map and lets the customer page scroll naturally',async()=>{
  const [picker,ride,app]=await Promise.all([
   read('../src/components/RideLocationPicker.tsx'),
   read('../src/pages/RiderDashboard.tsx'),
   read('../src/App.tsx')
  ]);
- assert.match(picker,/fixed inset-0 z-10/);
- assert.match(picker,/Plan your ride/);
- assert.match(picker,/onPointerMove/);
- assert.match(picker,/onPointerUp/);
+ assert.match(picker,/relative z-10 w-full min-w-0 bg-\[#e9eef1\]/);
+ assert.match(picker,/h-\[min\(56dvh,520px\)\]/);
+ assert.match(picker,/gestureHandling: 'greedy'/);
+ assert.doesNotMatch(picker,/mapFirst\?"fixed inset-0/);
+ assert.doesNotMatch(picker,/fixed inset-x-0 bottom-\[calc\(64px/);
  assert.match(picker,/Back to MatMove home/);
  assert.match(picker,/Change locations/);
  assert.match(ride,/bookingReady=\{Boolean\(pickupCoords && destinationCoords && !routeEditing\)\}/);
  assert.match(ride,/onRouteEditingChange=\{setRouteEditing\}/);
- assert.match(ride,/fixed inset-x-0 bottom/);
- assert.match(ride,/min-h-\[148px\]/);
-  assert.match(ride,/max-h-\[min\(66dvh,700px\)\]/);
  assert.match(app,/onBack=\{\(\) => setActiveSection\('home'\)\}/);
 });
 
@@ -116,14 +114,13 @@ test('saved Home and Work addresses render as bordered updateable cards',async()
 });
 
 
-test('ride location panel follows the finger continuously and the map remains full-screen behind it',async()=>{
+test('ride location form flows below the map and has no fixed draggable sheet',async()=>{
  const picker=await read('../src/components/RideLocationPicker.tsx');
- assert.match(picker,/height:'100dvh',minHeight:'100dvh'/);
- assert.match(picker,/const \[locationSheetDragging,setLocationSheetDragging\]=useState\(false\)/);
- assert.match(picker,/calc\(\$\{locationDragStartHeight\.current\}px - \$\{locationDragDelta\}px\)/);
- assert.match(picker,/height 380ms cubic-bezier\(\.22,1,\.36,1\)/);
- assert.match(picker,/setLocationDragDelta\(Math\.max\(base-maxHeight,Math\.min\(base-180,delta\)\)\)/);
- assert.doesNotMatch(picker,/transform:locationDragDelta/);
+ assert.match(picker,/relative z-30 mx-auto w-full max-w-5xl min-w-0/);
+ assert.match(picker,/height:'auto',maxHeight:'none',overflow:'visible'/);
+ assert.doesNotMatch(picker,/locationSheetDragging|locationDragStartHeight|locationDragDelta/);
+ assert.doesNotMatch(picker,/Drag or tap to expand or collapse ride locations/);
+ assert.doesNotMatch(picker,/fixed bottom-\[calc\(82px/);
 });
 test('ride booking sheet height tracks the drag handle and snaps smoothly on release',async()=>{
  const page=await read('../src/pages/RiderDashboard.tsx');
