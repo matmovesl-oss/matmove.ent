@@ -107,6 +107,19 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
   const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
   const [isProcessingPayout, setIsProcessingPayout] = useState(false);
 
+
+  useEffect(() => {
+    if (!isLoadModalOpen && !isPayoutModalOpen && !isTransferModalOpen) return;
+    const rootOverflow = document.documentElement.style.overflow;
+    const bodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.documentElement.style.overflow = rootOverflow;
+      document.body.style.overflow = bodyOverflow;
+    };
+  }, [isLoadModalOpen, isPayoutModalOpen, isTransferModalOpen]);
+
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferAmount, setTransferAmount] = useState('');
   const [transferCurrency, setTransferCurrency] = useState<'SLE' | 'USD'>('SLE');
