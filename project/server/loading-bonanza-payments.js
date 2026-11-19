@@ -127,7 +127,7 @@ export async function reconcileLoadingBonanzaBatch(db = dbClient(), { provider =
   let checked = 0, failed = 0;
   for (const row of result.data) {
     try {
-      await runReward(db, row.id, provider, env);
+      await reconcileLoadingBonanzaReward(db, row.id, provider, env);
       checked++;
     } catch (error) {
       const waiting = ['CAPACITY', 'PAUSED'].includes(error.code);
