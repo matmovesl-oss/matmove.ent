@@ -103,17 +103,17 @@ export function TransactionModal({
   const reference = tx.id || tx.reference;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-2 backdrop-blur-sm sm:p-4">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="transaction-receipt-title"
-        className="relative max-h-[calc(100dvh-2rem)] w-full max-w-md min-w-0 space-y-4 overflow-y-auto rounded-3xl bg-white p-4 shadow-2xl sm:p-6"
+        className="relative max-h-[calc(100dvh-1rem)] w-full max-w-md space-y-4 overflow-y-auto overscroll-contain rounded-2xl bg-white p-4 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:space-y-5 sm:rounded-3xl sm:p-6"
       >
         <button
           onClick={onClose}
           aria-label="Close transaction details"
-          className="absolute right-3 top-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-50 p-2 text-slate-400 hover:text-slate-600"
+          className="absolute right-3 top-3 z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:text-slate-600 sm:right-4 sm:top-4"
         >
           <X size={20} />
         </button>
@@ -224,16 +224,16 @@ export function TransactionModal({
         <div className="space-y-3 border-t pt-4">
           <button
             onClick={() => void shareReceipt()}
-            className="w-full whitespace-nowrap rounded-xl border py-3 font-bold leading-none"
+            className="w-full rounded-xl border py-3 font-bold"
           >
             Share receipt
           </button>
 
           <button
             onClick={onClose}
-            className="w-full whitespace-nowrap rounded-xl bg-slate-900 py-3 font-bold leading-none text-white"
+            className="w-full rounded-xl bg-slate-900 py-3.5 font-bold text-white"
           >
-            Close
+            Close details
           </button>
         </div>
       </div>
