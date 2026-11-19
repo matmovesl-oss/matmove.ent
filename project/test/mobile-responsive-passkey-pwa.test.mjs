@@ -30,13 +30,35 @@ test('customer sign-in uses Supabase verified passkeys and keeps password fallba
   assert.match(profile, /supabase\.auth\.registerPasskey\(\)/);
   assert.match(profile, /supabase\.auth\.passkey\.list\(\)/);
   assert.match(profile, /supabase\.auth\.passkey\.delete\(/);
-  assert.match(profile, /Biometrics & passkeys/);
+  assert.match(profile, /Biometrics & Face ID/);
+  assert.match(profile, /Face ID or fingerprint on this device/);
+  assert.match(profile, /min-h-\[56px\]/);
   assert.doesNotMatch(profile, /Supabase Auth/);
   assert.match(profile, /Device passkeys are not enabled for MatMove yet/);
   assert.match(auth, /Passkey sign-in is not enabled for MatMove yet/);
   assert.match(client, /experimental:\s*\{\s*passkey:\s*true\s*\}/);
   assert.match(client, /VITE_SUPABASE_ANON_KEY/);
   assert.doesNotMatch(client, /SERVICE_ROLE|SECRET_KEY/i);
+});
+
+test('passcode keypad appends digits locally and only verifies after submission', async () => {
+  const keypad = await readFile('src/components/CustomerPasscode.tsx', 'utf8');
+  assert.match(keypad, /const appendDigit=/);
+  assert.match(keypad, /setPin\(value=>value\.length<limit\?value\+digit:value\)/);
+  assert.match(keypad, /appendDigit\(digit\)/);
+  assert.match(keypad, /customerPasscode\(id,creating\?'create':changing\?'change':'verify'/);
+});
+
+test('wallet cards use a wallet symbol instead of the M-only artwork', async () => {
+  const wallets = await readFile('src/components/WalletCards.tsx', 'utf8');
+  assert.match(wallets, /<Wallet className="text-emerald-700" size=\{27\}\/>/);
+  assert.doesNotMatch(wallets, /wallet-icon\.png/);
+});
+
+test('customer home uses the MatMove wordmark instead of the M-only logo', async () => {
+  const home = await readFile('src/components/PortalHome.tsx', 'utf8');
+  assert.match(home, /className="mm-brand"><span>MatMove/);
+  assert.equal(home.includes('<div className="mm-brand"><img src="/logo.jpg"'), false);
 });
 
 test('PWA shell does not cache API, authentication or private user data', async () => {
@@ -100,4 +122,7 @@ test('Trips uses compact cards and only exposes full receipts after verified pay
   assert.doesNotMatch(trips, /Unfinished requests/);
   assert.doesNotMatch(trips, /Time period/);
   assert.match(trips, /Download \/ Share full receipt PDF/);
+  assert.match(trips, /Physical cash return/);
+  assert.doesNotMatch(trips, /Needs payment review/);
+  assert.doesNotMatch(trips, /Cash return: \{t\.cashReturn/);
 });

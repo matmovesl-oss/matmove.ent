@@ -137,11 +137,11 @@ export function PasskeySecurity({userId}:{userId:string}) {
   finally{setBusy(false);}
  };
 
- return <section aria-labelledby="mm-passkey-title" className="my-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-  <button type="button" onClick={toggleSecurity} aria-expanded={expanded} className="flex min-h-[68px] w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600">
-   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Fingerprint size={20}/></span>
-   <span className="min-w-0 flex-1"><b id="mm-passkey-title" className="block text-sm font-bold text-slate-900">Biometrics & passkeys</b><small className="mt-0.5 block text-xs text-slate-500">Face ID, fingerprint or device unlock</small></span>
-   <span className="text-xs font-bold text-emerald-800">{expanded?'Close':'Manage'}</span>
+ return <section aria-labelledby="mm-passkey-title" className="my-2 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+  <button type="button" onClick={toggleSecurity} aria-expanded={expanded} className="flex min-h-[56px] w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600">
+   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Fingerprint size={18}/></span>
+   <span className="min-w-0 flex-1"><b id="mm-passkey-title" className="block text-sm font-bold text-slate-900">Biometrics & Face ID</b><small className="mt-0.5 block text-xs text-slate-500">Face ID or fingerprint on this device</small></span>
+   <span className="text-xs font-bold text-emerald-800">{expanded?'Close':'Set up'}</span>
   </button>
   {expanded&&<div className="border-t border-slate-100 p-4">
    <p className="text-sm leading-5 text-slate-600">Use your device's secure sign-in. MatMove never receives your face or fingerprint data.</p>

@@ -6,6 +6,8 @@ const migration=await readFile(new URL('../supabase/migrations/20261119120000_ma
 const service=await readFile(new URL('../src/services/fareNegotiationService.ts',import.meta.url),'utf8');
 const ui=await readFile(new URL('../src/components/FareNegotiation.tsx',import.meta.url),'utf8');
 const driver=await readFile(new URL('../src/pages/DriverDashboard.tsx',import.meta.url),'utf8');
+const rider=await readFile(new URL('../src/pages/RiderDashboard.tsx',import.meta.url),'utf8');
+const merchant=await readFile(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
 
 test('fare offers snapshot only the KYC-approved driver vehicle and enforce strict category matching',()=>{
  assert.match(migration,/select \* into p from public\.profiles where id=new\.driver_id/i);
@@ -44,4 +46,13 @@ test('customer approval records category and fare together; mismatched drivers a
  assert.match(ui,/Alternative categories stay unavailable until MatMove can verify/);
  assert.match(ui,/!!vehicleType&&matchingVehicle/);
  assert.match(driver,/vehicleType=\{profile\.vehicle_type \|\| ''\}/);
+});
+
+
+test('rider and merchant see actual driver vehicle separately from requested category',()=>{
+ assert.match(rider,/Driver vehicle: \{String\(activeBooking\.matmove_confirmed_vehicle_type\|\|activeBooking\.driver\?\.vehicle_type\|\|'Awaiting vehicle verification'\)/);
+ assert.match(rider,/Requested vehicle: \{String\(activeBooking\.vehicle_type/);
+ assert.ok(merchant.includes("Driver vehicle: {String(activeBooking.matmove_confirmed_vehicle_type||activeBooking.driver?.vehicle_type||'Awaiting vehicle verification')"));
+ assert.ok(merchant.includes('Requested vehicle: {String(activeBooking.vehicle_type'));
+ assert.doesNotMatch(rider,/Driver vehicle: \{String\(activeBooking\.matmove_confirmed_vehicle_type\|\|activeBooking\.driver\?\.vehicle_type\|\|activeBooking\.vehicle_type/);
 });

@@ -37,7 +37,6 @@ export default function WalletCards({
     if (el) el.scrollTo({left: el.clientWidth * next, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
   }
   const [notice, setNotice] = useState('');
-  const [iconFailed, setIconFailed] = useState(false);
 
   async function share(wallet: any, currency: string) {
     const id =
@@ -123,19 +122,7 @@ export default function WalletCards({
             >
               <div className="flex items-center justify-between">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/95">
-                  {iconFailed ? (
-                    <Wallet
-                      className="text-emerald-700"
-                      size={27}
-                    />
-                  ) : (
-                    <img
-                      src="/wallet-icon.png"
-                      alt="MatMove"
-                      className="h-9 w-9 object-contain"
-                      onError={() => setIconFailed(true)}
-                    />
-                  )}
+                  <Wallet className="text-emerald-700" size={27}/>
                 </div>
 
                 <button
