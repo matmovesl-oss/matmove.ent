@@ -164,6 +164,11 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
     } catch (err: any) { setWalletNotice(err.message || 'Wallet refresh failed.'); setSleWallet((previous: any) => previous ? { ...previous, balanceAvailable: false } : null); } finally { balanceBusy.current = false; setIsRefreshing(false); }
   };
 
+  useEffect(() => {
+    if (!profile?.id) return;
+    void walletFetch('/api/get-live-wallet', { action: 'sync_account_labels' }).catch(() => {});
+  }, [profile?.id]);
+
   const hasSleAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || ''));
   const setupSleWallet = async () => {
     if (!canTransact || setupBusy.current) return;
