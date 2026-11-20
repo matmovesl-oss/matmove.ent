@@ -7,6 +7,7 @@ let supportTicket=null,supportMessages=[];
 function nodes(n){if(!n||typeof n!=='object')return[];if(Array.isArray(n))return n.flatMap(nodes);return[n,...nodes(n.props?.children)];}
 function text(n){if(n==null||typeof n==='boolean')return'';if(typeof n!=='object')return String(n);if(Array.isArray(n))return n.map(text).join('');return text(n.props?.children);}
 async function page(which,fn,{reply=base(),failure=null}={}){
+ supportTicket=null;supportMessages=[];
  const dir=await mkdtemp(join(process.cwd(),'.assistance-ui-')),out=join(dir,'ui.mjs'),original={window:globalThis.window,document:globalThis.document};
  const slots=[],effects=[],calls=[],navigation=[],intervals=new Map(),channels=[];let cursor=0,dirty=true,tree,unmounted=false,identity=uid,handler=null,nextTimer=0;
  let props=which==='MatMoveHelp'?{userId:uid,context:{role:'rider'},onNavigate:d=>navigation.push(d)}:{userId:uid,onNavigate:d=>navigation.push(d)};
