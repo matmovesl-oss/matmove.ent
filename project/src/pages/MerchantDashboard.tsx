@@ -1,5 +1,6 @@
 import {useTripRequest} from '@/lib/useTripRequest';
 import ActiveTripMap from '@/components/ActiveTripMap';
+import MapScrollCue from '@/components/MapScrollCue';
 import {MerchantProductCatalog, catalogMoney} from '@/components/ProductCatalog';
 import { SkeletonBlock, SkeletonList } from '@/components/Skeleton';
 
@@ -480,6 +481,8 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
       )}
 
       {activeSection === 'home' && (activeBooking && ['accepted','in_progress'].includes(activeBooking.status) ? <ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/> : <RideLocationPicker layout="map-first" key={profile.id} userId={profile.id} onBack={onBack || (() => { setRouteEditing(true); setPickup(''); setDestination(''); setPickupCoords(null); setDestinationCoords(null); setTripDistanceKm(null); setOfferAmount(''); })} bookingReady={Boolean(pickupCoords && destinationCoords && !routeEditing)} onRouteEditingChange={setRouteEditing} onChange={(selection: TripLocations) => { setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />)}
+
+      {activeSection === 'home' && <MapScrollCue />}
 
       {activeSection === 'wallet' && (
         <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
