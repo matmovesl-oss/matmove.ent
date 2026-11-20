@@ -1402,7 +1402,7 @@ function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle,
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[130] flex min-h-[100dvh] w-full items-start justify-center overflow-y-auto bg-slate-50 pt-[calc(env(safe-area-inset-top)+12px)] pb-6">
       <div className="relative min-h-[100dvh] w-full max-w-5xl bg-white p-4 shadow-none sm:p-6">
         <button onClick={onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600"><X size={20} /></button>
         <h2 className="text-xl font-black text-slate-900">Freetown – Accra Direct Bus</h2>
@@ -1528,7 +1528,7 @@ function EventsModal({ uid, userPhone, walletBalance, events, eventsError, onRet
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[130] flex min-h-[100dvh] w-full items-start justify-center overflow-y-auto bg-slate-50 pt-[calc(env(safe-area-inset-top)+12px)] pb-6">
       <div className="relative min-h-[100dvh] w-full max-w-5xl bg-white p-4 shadow-none sm:p-6 space-y-4">
         <button onClick={onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600"><X size={20} /></button>
         <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
