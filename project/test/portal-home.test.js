@@ -83,7 +83,7 @@ test('Skipped-KYC customers can save preferences, while drivers cannot add cards
 test('Home navigation retains old ride, KYC and games routes and never initiates card payments',async()=>{
  const app=await readFile(new URL('../src/App.tsx',import.meta.url),'utf8');
  const home=await readFile(new URL('../src/components/PortalHome.tsx',import.meta.url),'utf8');
- assert.match(app,/activeSection === 'home' && <PortalHome/);
+ assert.match(app,/activeSection === 'home' && <CustomerHome/);\n assert.match(app,/activeSection === 'services' && <PortalHome/);
  assert.equal((app.match(/activeSection=\{activeSection === 'ride' \? 'home' : activeSection\}/g)||[]).length,3);
  for(const token of ['ArcadeGames','KycWorkspace','KycStatusNotice','RiderDashboard','DriverDashboard','MerchantDashboard'])assert.ok(app.includes(token));
  assert.match(home,/balanceAvailable === true/);assert.match(home,/wallet\?\.user_id === uid/);
@@ -107,7 +107,7 @@ test('all three roles receive compact service navigation without starting paymen
   for(const role of ['rider','driver','merchant']){
    const html=renderToStaticMarkup(React.createElement(Home,{profile:{id:rider,role,first_name:'Richard'},onNavigate(){}}));
    assert.match(html,/Services/);assert.match(html,/Wallet &amp; payments|Wallet & payments/);assert.match(html,/Loading wallet/);
-   assert.match(html,/Loading saved places/);assert.match(html,/Travel to Ghana/);assert.match(html,/Events & tickets/);assert.match(html,/Games &amp; entertainment|Games & entertainment/);
+   assert.match(html,/Loading saved places/);assert.match(html,/Travel to Ghana/);assert.match(html,/Events &amp; tickets|Events & tickets/);assert.match(html,/Games &amp; entertainment|Games & entertainment/);
    if(role==='driver'){assert.match(html,/Driver radar/);assert.doesNotMatch(html,/Payment references/);}
    else assert.match(html,/Payment references/);
    if(role==='merchant')assert.match(html,/My business &amp; orders|My business & orders/);
