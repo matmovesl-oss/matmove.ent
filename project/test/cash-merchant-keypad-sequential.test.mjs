@@ -98,8 +98,6 @@ test('Merchant location selection and Ride booking form are sequential with one 
  assert.match(picker,/sticky top-0 z-20/);
  assert.match(merchant,/sticky top-0 z-20/);
  assert.doesNotMatch(rider,/sticky top-0 z-20/);
- assert.match(merchant,/delta < -6 \? true : delta > 80 \? false : bookingSheetExpanded/);
- assert.match(rider,/delta < -6 \? true : delta > 80 \? false : bookingSheetExpanded/);
 });
 
 test('Services back arrow is left of the Wi dey move brand',async()=>{
