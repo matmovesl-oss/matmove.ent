@@ -29,15 +29,12 @@ test('passcode number keys, zero, delete and clear are circular with black borde
   assert.match(keypad, /appendDigit\('0'\)/);
 });
 
-test('account Services is a compact expandable role menu with full-screen destinations', async () => {
+test('account Services is a compact single row and its arrow opens the dedicated full-screen Services page', async () => {
   const app = await readFile('src/App.tsx', 'utf8');
-  assert.match(app, /aria-label="Account services"/);
-  assert.match(app, /aria-expanded=\{servicesExpanded\}/);
-  assert.match(app, /aria-controls="mm-account-services-options"/);
-  assert.match(app, /onNavigate\('ride'\)/);
-  assert.match(app, /onNavigate\('shop'\)/);
-  assert.match(app, /onNavigate\('inventory'\)/);
-  assert.match(app, /onNavigate\('trips'\)/);
-  assert.match(app, /Explore all services/);
-  assert.match(app, /onNavigate=\{setActiveSection\}/);
+  assert.match(app, /onServices=\{\(\) => setActiveSection\('services'\)\}/);
+  assert.match(app, /onClick=\{onServices\} aria-label="Open Services"/);
+  assert.match(app, /<b>Services<\/b><small>Open your services and tools<\/small>/);
+  assert.match(app, /<ArrowRight size=\{18\}\/>/);
+  assert.match(app, /activeSection === 'services' && <PortalHome[^>]*mode="services"/);
+  assert.doesNotMatch(app, /servicesExpanded|mm-account-services-options|Explore all services/);
 });
