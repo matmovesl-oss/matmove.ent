@@ -597,7 +597,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
           <section className="mx-3 mb-3 rounded-2xl border border-blue-200 bg-blue-50 p-3">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-sm font-bold text-blue-950">{hasCashReviewCases ? 'Previous cash request needs review' : 'You have an unfinished request'}</h2>
+                <h2 className="text-sm font-bold text-blue-950">{hasCashReviewCases ? 'A previous cash request is under review' : 'You have an unfinished request'}</h2>
                 <p className="mt-1 text-xs leading-5 text-blue-900">{hasCashReviewCases ? 'Your original cash case is safely preserved. Review it in Trips; do not make a duplicate payment.' : 'Open Trips to review the original request and continue from its saved status.'}</p>
               </div>
               <button type="button" onClick={() => onOpenTrips?.()} className="min-h-10 shrink-0 rounded-xl bg-blue-700 px-3 text-xs font-bold text-white">{hasCashReviewCases ? 'Review in Trips' : 'Open Trips'}</button>
