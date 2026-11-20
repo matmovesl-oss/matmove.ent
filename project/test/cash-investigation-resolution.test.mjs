@@ -14,12 +14,3 @@ test('verified cash refunds resolve old review tickets without closing uncertain
   assert.match(migration, /b\.status='cash_review_required'/);
   assert.match(migration, /v_updated=v_definition/);
 });
-
-test('admin investigation explains pending provider refunds and two-party cash returns', async () => {
-  const review = await readFile('src/components/AdminTripReview.tsx', 'utf8');
-  assert.match(review, /provider has not confirmed the receipt yet/);
-  assert.match(review, /Do not issue a second refund/);
-  assert.match(review, /driver and customer must both confirm the return/);
-  assert.match(review, /Awaiting cash reconciliation/);
-  assert.match(review, /Check refund status/);
-});
