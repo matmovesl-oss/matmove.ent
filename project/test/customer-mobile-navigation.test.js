@@ -44,13 +44,13 @@ test('ride booking uses the full map-first location picker for rider and merchan
   const merchant = await readFile('src/pages/MerchantDashboard.tsx', 'utf8');
   const driver = await readFile('src/pages/DriverDashboard.tsx', 'utf8');
   assert.ok(picker.includes("layout === 'map-first'"));
-  assert.ok(picker.includes("min(62dvh,640px)"));
+  assert.ok(picker.includes("min(56dvh,520px)"));
   assert.ok(picker.includes("Back to MatMove home"));
   assert.ok(picker.includes("Change locations"));
   assert.ok(rider.includes('layout="map-first"'));
   assert.ok(merchant.includes('layout="map-first"'));
   assert.ok(rider.includes('max-h-[min(66dvh,700px)]'));
-  assert.ok(merchant.includes('max-h-[58dvh]'));
+  assert.ok(merchant.includes('bookingReady={Boolean(pickupCoords && destinationCoords && !routeEditing)}'));
   assert.ok(driver.includes('clamp(340px, 58dvh, 620px)'));
   assert.ok(driver.includes('order-2 relative z-20'));
 

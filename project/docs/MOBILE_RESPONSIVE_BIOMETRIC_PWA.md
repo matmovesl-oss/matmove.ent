@@ -20,18 +20,18 @@
 
 Supabase's current hosted-project guide requires both the dashboard feature and the WebAuthn relying-party settings. The client flag alone is not enough.
 
-For the current production host, the initial configuration should be:
+For the current production host, the required production configuration is:
 
 1. Open Supabase Dashboard → Authentication → Passkeys for project jjqtpnrnfzlwhnvhbsdy.
 2. Enable Passkey authentication.
 3. Set Relying Party Display Name to MatMove.
-4. Set Relying Party ID to matmoveent.vercel.app.
-5. Set Relying Party Origins to https://matmoveent.vercel.app.
-6. Save and verify passkey registration/sign-in on that production HTTPS origin.
+4. Set Relying Party ID to matmove.space.
+5. Set Relying Party Origins to https://matmove.space and https://www.matmove.space.
+6. Save and verify passkey registration/sign-in on both production HTTPS origins.
 
-The Vercel preview hostname is a different origin and is intentionally not included in the production RP origins. Do not register real user passkeys on a preview hostname.
+The Vercel preview hostname (including matmove-ent.vercel.app) is a different origin and must not be used as the production RP ID or origin. The production app is served from matmove.space; www.matmove.space is also an allowed origin under the matmove.space RP ID. Do not register real user passkeys on a preview hostname.
 
-**Domain migration warning:** WebAuthn passkeys are bound to the RP ID. Changing the RP ID later (for example, moving from the Vercel default domain to a future custom MatMove domain) invalidates passkeys created under the old RP ID; affected users must register new passkeys. Since a custom domain has not yet been selected, treat the RP ID choice as a production decision before enabling user rollout.
+**Domain migration warning:** WebAuthn passkeys are bound to the RP ID. Changing the RP ID later (for example, moving from the Vercel default domain to a future custom MatMove domain) invalidates passkeys created under the old RP ID; affected users must register new passkeys. The custom production domain is now selected. Use matmove.space as the RP ID before enabling user rollout. Any passkeys created under the old Vercel RP ID must be registered again.
 
 The connected Supabase tools can inspect the project and database but do not expose the hosted Auth Passkeys configuration endpoint. I have therefore not enabled the server-side setting or claimed that passkey enrollment is live. The UI and SDK integration are committed; project dashboard configuration and real-device tests remain outstanding.
 

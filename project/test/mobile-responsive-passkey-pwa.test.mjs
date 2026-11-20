@@ -126,3 +126,22 @@ test('Trips uses compact cards and only exposes full receipts after verified pay
   assert.doesNotMatch(trips, /Needs payment review/);
   assert.doesNotMatch(trips, /Cash return: \{t\.cashReturn/);
 });
+
+
+ 
+test('production passkey domain, country-wide live map label and receipt close control are correct', async () => {
+  const [map, trips, biometricGuide] = await Promise.all([
+    readFile('src/components/RideLocationPicker.tsx', 'utf8'),
+    readFile('src/components/TripHistory.tsx', 'utf8'),
+    readFile('docs/MOBILE_RESPONSIVE_BIOMETRIC_PWA.md', 'utf8'),
+  ]);
+  assert.ok(map.includes('SIERRA LEONE · LIVE MAP'));
+  assert.ok(map.includes('absolute right-4 top-[calc(env(safe-area-inset-top)+14px)]'));
+  assert.ok(map.includes('MatMove · Sierra Leone'));
+  assert.equal(map.includes('FREETOWN · LIVE MAP'), false);
+  assert.ok(trips.includes('h-8 min-h-8 shrink-0 items-center justify-center whitespace-nowrap'));
+  assert.ok(trips.includes('text-xs font-semibold leading-none">Close</button>'));
+  assert.ok(biometricGuide.includes('Relying Party ID to matmove.space'));
+  assert.ok(biometricGuide.includes('https://matmove.space and https://www.matmove.space'));
+  assert.ok(biometricGuide.includes('preview hostname'));
+});
