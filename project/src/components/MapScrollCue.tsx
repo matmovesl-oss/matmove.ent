@@ -1,6 +1,52 @@
+import { useEffect, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
+/**
+ * Shows the map scroll cue only while more page content is available.
+ * It disappears automatically after the user reaches the bottom of the page.
+ */
 export default function MapScrollCue() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    let frame = 0;
+
+    const update = () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const root = document.documentElement;
+        const body = document.body;
+        const pageHeight = Math.max(root.scrollHeight, body?.scrollHeight || 0);
+        const viewportHeight = window.innerHeight || root.clientHeight;
+        const scrollTop = window.scrollY || root.scrollTop || body?.scrollTop || 0;
+        const hasMoreContent = pageHeight - viewportHeight > 120;
+        const reachedBottom = scrollTop + viewportHeight >= pageHeight - 48;
+        setVisible(hasMoreContent && !reachedBottom);
+      });
+    };
+
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    resizeObserver?.observe(document.documentElement);
+    if (document.body) resizeObserver?.observe(document.body);
+
+    const mutationObserver = typeof MutationObserver !== 'undefined' ? new MutationObserver(update) : null;
+    if (document.body) mutationObserver?.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+    };
+  }, []);
+
+  if (!visible) return null;
+
   const scrollToDetails = () => {
     const distance = Math.max(260, Math.round(window.innerHeight * 0.75));
     window.scrollBy({ top: distance, behavior: 'smooth' });
@@ -10,11 +56,11 @@ export default function MapScrollCue() {
     <button
       type="button"
       aria-label="Scroll down to see more details below the map"
+      title="Scroll down to see more"
       onClick={scrollToDetails}
-      className="absolute bottom-3 left-1/2 z-30 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border-2 border-slate-900 bg-white/95 px-4 py-2 text-xs font-extrabold text-slate-950 shadow-lg backdrop-blur transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+      className="absolute bottom-3 left-1/2 z-30 inline-flex h-11 w-11 -translate-x-1/2 items-center justify-center rounded-full border border-slate-300 bg-white/95 text-slate-950 shadow-lg backdrop-blur transition hover:border-slate-500 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
     >
-      <span>More below</span>
-      <ChevronDown size={17} aria-hidden="true" className="animate-bounce" />
+      <ChevronDown size={22} strokeWidth={2.5} aria-hidden="true" className="animate-bounce" />
     </button>
   );
 }
