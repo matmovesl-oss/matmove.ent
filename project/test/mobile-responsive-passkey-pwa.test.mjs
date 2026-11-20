@@ -149,7 +149,7 @@ test('production passkey domain, country-wide live map label and receipt close c
 test('passcode keypad uses equal circular keys with a clear black border', async () => {
   const pin = await readFile('src/components/CustomerPasscode.tsx', 'utf8');
   assert.match(pin, /grid w-fit grid-cols-3 gap-3/);
-  assert.match(pin, /h-14 w-14[^"]*rounded-full border-2 border-black/);
+  assert.match(pin, /h-16 w-16[^"]*rounded-full border-2 border-black/);
   assert.match(pin, /aria-label="Passcode keypad"/);
 });
 
