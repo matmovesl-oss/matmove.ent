@@ -185,10 +185,13 @@ test('Events Hub has a compact always-visible close control and a clear empty-ev
   assert.match(home, /disabled=\{busy \|\| !networkOnline\}/);
 });
 
-test('Rider ride screen exposes compact Load, Withdraw and Transfer shortcuts but disables them offline', async () => {
+test('Rider ride screen exposes compact wallet shortcuts and all customer sections show the global offline state', async () => {
   const rider = await readFile('src/pages/RiderDashboard.tsx', 'utf8');
+  const app = await readFile('src/App.tsx', 'utf8');
   assert.match(rider, /activeSection === 'wallet' \? 'hidden' : ''/);
   assert.match(rider, /disabled=\{!networkOnline \|\| !canLoad \|\| !hasSleAccount/);
   assert.match(rider, /disabled=\{!networkOnline \|\| !canSend \|\| !hasSleAccount/);
-  assert.match(rider, /Offline mode · showing saved information/);
+  assert.match(app, /function OfflineStatus\\(\\)/);
+  assert.equal((app.match(/<OfflineStatus \\/>/g) || []).length, 2);
+  assert.match(app, /Offline mode · saved information only/);
 });
