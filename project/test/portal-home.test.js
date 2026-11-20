@@ -83,7 +83,8 @@ test('Skipped-KYC customers can save preferences, while drivers cannot add cards
 test('Home navigation retains old ride, KYC and games routes and never initiates card payments',async()=>{
  const app=await readFile(new URL('../src/App.tsx',import.meta.url),'utf8');
  const home=await readFile(new URL('../src/components/PortalHome.tsx',import.meta.url),'utf8');
- assert.match(app,/activeSection === 'home' && <CustomerHome/);\n assert.match(app,/activeSection === 'services' && <PortalHome/);
+ assert.match(app,/activeSection === 'home' && <CustomerHome/);
+ assert.match(app,/activeSection === 'services' && <PortalHome/);
  assert.equal((app.match(/activeSection=\{activeSection === 'ride' \? 'home' : activeSection\}/g)||[]).length,3);
  for(const token of ['ArcadeGames','KycWorkspace','KycStatusNotice','RiderDashboard','DriverDashboard','MerchantDashboard'])assert.ok(app.includes(token));
  assert.match(home,/balanceAvailable === true/);assert.match(home,/wallet\?\.user_id === uid/);
