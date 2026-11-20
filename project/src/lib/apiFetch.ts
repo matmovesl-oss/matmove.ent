@@ -4,6 +4,9 @@ export async function walletFetch(
   url: string,
   body: Record<string, unknown>
 ) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('MatMove is offline. This server request was not sent. Reconnect and try again.');
+  }
   const {
     data: { session },
     error,
