@@ -37,14 +37,14 @@ async function page(which,fn,{reply=base(),failure=null}={}){
   await settle();await fn(h);
  }finally{if(!unmounted)for(const s of slots)s?.cleanup?.();for(const[k,v]of Object.entries(original)){if(v===undefined)delete globalThis[k];else globalThis[k]=v;}delete globalThis.__assistanceHooks;delete globalThis.__assistanceDb;await rm(dir,{recursive:true,force:true});}
 }
-for(const role of ['rider','driver','merchant'])test(`${role} Help navigates only to role-supported screens without any API call`,()=>page('MatMoveHelp',async h=>{
+for(const role of ['rider','driver','merchant'])test(`${role} Help navigates only to role-supported screens and sends questions to support`,()=>page('MatMoveHelp',async h=>{
  await h.update({context:{role}});await h.click('Open MatMove Help');assert.equal(h.dialog.ref.current.open,true);await h.ask('complete identity verification');await h.click('Open Account');assert.deepEqual(h.navigation,['account']);assert.equal(h.calls.filter(c=>c.name==='matmove_support_customer_open').length,1);assert.ok(!h.calls.some(c=>/payment|wallet|withdraw|transfer/i.test(c.name)));assert.equal(h.dialog.ref.current.open,false);
  assert.equal(h.module.customerHelpSection(role==='driver'?'radar':'ride',role),'ride');assert.equal(h.module.customerHelpSection('games',role),'home');assert.throws(()=>h.module.customerHelpSection('https://external.example',role));
 }));
 test('Help opens every browse topic including those whose title does not match search keywords',()=>page('MatMoveHelp',async h=>{
  await h.click('Open MatMove Help');await h.click('Protect your account');assert.match(h.text,/Keep your password/);await h.click('Open Account');assert.deepEqual(h.navigation,['account']);
 }));
-test('unknown and sensitive questions stay local; close and Escape clear retained question and answers',()=>page('MatMoveHelp',async h=>{
+test('unknown questions are saved; sensitive data stays local and close clears retained text',()=>page('MatMoveHelp',async h=>{
  await h.click('Open MatMove Help');await h.ask('the moon is green');assert.match(h.text,/do not have a verified guide/);await h.ask('my pin is 123456');assert.match(h.text,/Keep passwords/);assert.ok(!h.text.includes('123456'));assert.equal(h.calls.length,0);
  h.dialog.props.onCancel({preventDefault(){}});await h.settle();assert.equal(h.dialog.ref.current.open,false);assert.equal(h.nodes.find(n=>n.type==='input').props.value,'');
 }));
