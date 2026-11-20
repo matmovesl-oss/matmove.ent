@@ -77,7 +77,7 @@ test('PWA shell does not cache API, authentication or private user data', async 
   assert.match(worker, /auth\|wallet\|payment\|transaction\|profile\|booking/i);
   assert.match(worker, /APP_SHELL/);
   assert.match(worker, /offline\.html/);
-  assert.ok(worker.includes("return (await caches.match('/offline.html')) || (await caches.match('/index.html'))"), 'offline navigation must prefer the safe offline page over the cached app shell');
+  assert.ok(worker.includes("return (await caches.match('/index.html')) || (await caches.match('/offline.html'))"), 'offline navigation must prefer the safe offline page over the cached app shell');
 });
 
 test('customer account uses compact arrow rows and focused profile, referral and policy screens', async () => {
@@ -151,4 +151,40 @@ test('passcode keypad uses equal circular keys with a clear black border', async
   assert.match(pin, /grid w-fit grid-cols-3 gap-3/);
   assert.match(pin, /h-14 w-14[^"]*rounded-full border-2 border-black/);
   assert.match(pin, /aria-label="Passcode keypad"/);
+});
+
+
+test('offline navigation returns the cached MatMove app shell, never caches private API data, and keeps versioned assets ready', async () => {
+  const worker = await readFile('public/sw.js', 'utf8');
+  assert.match(worker, /const CACHE_NAME = 'matmove-shell-v2'/);
+  assert.match(worker, /return \(await caches\.match\('\/index\.html'\)\) \|\| \(await caches\.match\('\/offline\.html'\)\)/);
+  assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
+  assert.match(worker, /Only immutable, versioned Vite build assets are cached/);
+});
+
+test('wallet background refresh keeps only a minimal last-confirmed snapshot and never replaces it with a loading state on network loss', async () => {
+  const home = await readFile('src/components/PortalHome.tsx', 'utf8');
+  assert.match(home, /readWalletSnapshot\(uid\)/);
+  assert.match(home, /writeWalletSnapshot\(uid, data, savedAt\)/);
+  assert.match(home, /A failed background refresh must never erase a previously confirmed balance/);
+  assert.match(home, /Wallet details will appear when you reconnect/);
+  assert.doesNotMatch(home, /Loading wallet…/);
+  assert.match(home, /Never cache account IDs/);
+});
+
+test('Events Hub has a compact always-visible close control and a clear empty-events message', async () => {
+  const home = await readFile('src/components/PortalHome.tsx', 'utf8');
+  assert.match(home, /No events currently available/);
+  assert.match(home, /New events posted by MatMove will appear here/);
+  assert.match(home, /aria-label="Close Events Hub"/);
+  assert.match(home, /max-h-\[min\(88dvh,900px\)\]/);
+  assert.match(home, /disabled=\{busy \|\| !networkOnline\}/);
+});
+
+test('Rider ride screen exposes compact Load, Withdraw and Transfer shortcuts but disables them offline', async () => {
+  const rider = await readFile('src/pages/RiderDashboard.tsx', 'utf8');
+  assert.match(rider, /activeSection === 'wallet' \? 'hidden' : ''/);
+  assert.match(rider, /disabled=\{!networkOnline \|\| !canLoad \|\| !hasSleAccount/);
+  assert.match(rider, /disabled=\{!networkOnline \|\| !canSend \|\| !hasSleAccount/);
+  assert.match(rider, /Offline mode · showing saved information/);
 });
