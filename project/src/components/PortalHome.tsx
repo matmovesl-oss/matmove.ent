@@ -455,12 +455,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
         <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">Services</h1>
         <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">Choose a service below. Each section opens separately so you can focus on one task at a time.</p>
       </section>
-      <button type="button" onClick={() => onNavigate('wallet')} className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Wallet size={19}/></span>
-        <span className="min-w-0 flex-1"><b className="block text-sm text-slate-950">Wallet & payments</b><small className="block text-xs text-slate-500">{wallet?.is_frozen || profile.is_wallet_frozen ? 'Wallet frozen · contact support' : wallets ? 'Open wallet balances, top-ups and transfers' : networkOnline ? 'Wallet balance is not available yet' : 'Wallet details will appear when you reconnect'}</small></span>
-        <ArrowRight size={17} className="text-slate-400"/>
-      </button>
-      {walletUpdatedAt && <p className="ml-14 text-[10px] text-slate-400">{networkOnline ? 'Last confirmed' : 'Offline · last confirmed'} {new Date(walletUpdatedAt).toLocaleString()}</p>}
+      {walletUpdatedAt && <p className="text-[10px] text-slate-400">{networkOnline ? 'Wallet last confirmed' : 'Offline · wallet last confirmed'} {new Date(walletUpdatedAt).toLocaleString()}</p>}
       {!wallets && balanceError && networkOnline && <p role="status" className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{balanceError}</p>}
       {preferencesError && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">{preferencesError} <button type="button" onClick={() => void refreshPreferences()} className="font-bold underline">Retry saved places</button></p>}
       <section className="space-y-2" aria-labelledby="matmove-core-services">
