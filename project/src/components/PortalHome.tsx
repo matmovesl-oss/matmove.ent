@@ -392,6 +392,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
         <ArrowRight size={17} className="text-slate-400"/>
       </button>
       {balanceError && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800">{balanceError} <button type="button" disabled={balanceLoading} onClick={() => void refreshWallets()} className="font-bold underline">Retry</button></p>}
+      {preferencesError && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">{preferencesError} <button type="button" onClick={() => void refreshPreferences()} className="font-bold underline">Retry saved places</button></p>}
       <section className="space-y-2" aria-labelledby="matmove-core-services">
         <div className="px-1"><h2 id="matmove-core-services" className="text-sm font-black text-slate-950">Your MatMove services</h2><p className="mt-1 text-xs text-slate-500">Everyday tools for your account.</p></div>
         {coreServices.map(serviceRow)}
