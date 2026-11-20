@@ -120,6 +120,8 @@ export function RiderDashboard(props: any) {
 }
 
 export default function PortalHome({ profile, onNavigate, mode = 'services' }: Props) {
+  const uid = profile.id as string;
+  const role = profile.role as string;
   const [selectedGame, setSelectedGame] = useState<'spin'|'dice'|'fruity'|'crankling'|null>(null);
   const [currency, setCurrency] = useState<'SLE' | 'USD'>('SLE');
   const [visible, setVisible] = useState(false);
@@ -152,8 +154,6 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
   const balanceBusy = useRef(false);
   const preferencesBusy = useRef(false);
   const tripsBusy = useRef(false);
-  const uid = profile.id as string;
-  const role = profile.role as string;
 
   const sameIdentity = useCallback(async () => {
     const { data, error } = await supabase.auth.getSession();
