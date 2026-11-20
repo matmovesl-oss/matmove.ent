@@ -45,8 +45,8 @@ test('Help opens every browse topic including those whose title does not match s
  await h.click('Open MatMove Help');await h.click('Protect your account');assert.match(h.text,/Keep your password/);await h.click('Open Account');assert.deepEqual(h.navigation,['account']);
 }));
 test('unknown questions are saved; sensitive data stays local and close clears retained text',()=>page('MatMoveHelp',async h=>{
- await h.click('Open MatMove Help');await h.ask('the moon is green');assert.match(h.text,/do not have a verified guide/);await h.ask('my pin is 123456');assert.match(h.text,/Keep passwords/);assert.ok(!h.text.includes('123456'));assert.equal(h.calls.length,0);
- h.dialog.props.onCancel({preventDefault(){}});await h.settle();assert.equal(h.dialog.ref.current.open,false);assert.equal(h.nodes.find(n=>n.type==='input').props.value,'');
+ await h.click('Open MatMove Help');await h.ask('the moon is green');assert.match(h.text,/do not have a verified guide/);await h.ask('my pin is 123456');assert.match(h.text,/Keep passwords/);assert.ok(!h.text.includes('123456'));assert.equal(h.calls.filter(c=>c.name==='matmove_support_customer_open').length,1);assert.ok(!JSON.stringify(h.calls).includes('123456'));
+ h.dialog.props.onCancel({preventDefault(){}});await h.settle();assert.equal(h.dialog.ref.current.open,false);assert.equal(h.nodes.find(n=>n.type==='textarea'&&n.props['aria-label']==='Ask MatMove Support').props.value,'');
 }));
 test('changed customer and revoked Admin assignments clear answers and invalidate retained navigation buttons',()=>page('MatMoveHelp',async h=>{
  await h.update({context:{role:'admin',isActive:true,permissions:['kyc']}});await h.click('Open MatMove Help');await h.ask('kyc');const old=h.button('Open KYC');await h.update({context:{role:'admin',isActive:true,permissions:[]}});old.props.onClick();await h.settle();assert.deepEqual(h.navigation,[]);assert.ok(!h.text.includes('Open KYC'));
