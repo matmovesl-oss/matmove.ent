@@ -170,6 +170,9 @@ test('wallet background refresh keeps only a minimal last-confirmed snapshot and
   assert.match(home, /Wallet details will appear when you reconnect/);
   assert.doesNotMatch(home, /Loading wallet…/);
   assert.match(home, /Never cache account IDs/);
+  const apiFetch = await readFile('src/lib/apiFetch.ts', 'utf8');
+  assert.match(apiFetch, /if \(typeof navigator !== 'undefined' && !navigator\.onLine\)/);
+  assert.match(apiFetch, /This server request was not sent/);
 });
 
 test('Events Hub has a compact always-visible close control and a clear empty-events message', async () => {
