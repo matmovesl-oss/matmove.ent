@@ -2,6 +2,8 @@ import test from 'node:test';import assert from 'node:assert/strict';import {bui
 const uid='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',mid='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const item={id:'12',message_id:mid,title:'Welcome',body:'Complete verification from Account.',destination:'kyc',created_at:'2026-10-27T12:00:00Z',read_at:null};
 const base=()=>({user_id:uid,items:[{...item}],unread_count:'1',observed_max_id:'12',next_before:null});
+const supportId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+let supportTicket=null,supportMessages=[];
 function nodes(n){if(!n||typeof n!=='object')return[];if(Array.isArray(n))return n.flatMap(nodes);return[n,...nodes(n.props?.children)];}
 function text(n){if(n==null||typeof n==='boolean')return'';if(typeof n!=='object')return String(n);if(Array.isArray(n))return n.map(text).join('');return text(n.props?.children);}
 async function page(which,fn,{reply=base(),failure=null}={}){
@@ -18,6 +20,10 @@ async function page(which,fn,{reply=base(),failure=null}={}){
   if(handler)return handler(name,args);
   if(failure)return{data:null,error:{message:failure}};
   if(name==='matmove_notifications')return{data:reply,error:null};
+  if(name==='matmove_support_customer_list')return{data:{user_id:identity,items:supportTicket?[{...supportTicket,last_message:supportMessages.at(-1)?.body||supportTicket.last_message}]:[]},error:null};
+  if(name==='matmove_support_customer_open'){supportTicket={id:supportId,ticket_number:'1',subject:args.p_subject,category:args.p_category,status:'open',created_at:'2026-10-27T12:00:00Z',last_message_at:'2026-10-27T12:00:00Z',last_message:args.p_body,unread_count:0};supportMessages=[{id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',sender_type:'customer',body:args.p_body,created_at:'2026-10-27T12:00:00Z',read_at:null}];return{data:{conversation:supportTicket,message:supportMessages[0]},error:null};}
+  if(name==='matmove_support_customer_messages')return{data:{conversation:{id:args.p_conversation_id,ticket_number:'1',subject:supportTicket?.subject||'Support',category:supportTicket?.category||'other',status:supportTicket?.status||'open'},messages:supportMessages},error:null};
+  if(name==='matmove_support_customer_message'){supportMessages.push({id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',sender_type:'customer',body:args.p_body,created_at:'2026-10-27T12:01:00Z',read_at:null});return{data:{id:supportMessages.at(-1).id,conversation_id:args.p_conversation_id},error:null};}
   if(name==='matmove_notification_read'){reply={...reply,items:reply.items.map(i=>({...i,read_at:'2026-10-27T13:00:00Z'})),unread_count:'0'};return{data:{user_id:uid,id:args.p_id,through:args.p_through,changed:1},error:null};}
   throw new Error('Unexpected RPC '+name);
  }).then(yes,no)};return q;}};
@@ -26,12 +32,12 @@ async function page(which,fn,{reply=base(),failure=null}={}){
   const module=await import(pathToFileURL(out));function render(){cursor=0;dirty=false;tree=module.default(props);for(const n of nodes(tree))if(n.type==='dialog'&&n.ref&&!n.ref.current)n.ref.current={open:false,showModal(){this.open=true;},close(){this.open=false;}};while(effects.length)effects.shift()();}
   async function settle(){for(let n=0;n<15;n++){if(dirty&&!unmounted)render();await new Promise(r=>setImmediate(r));if(n>7&&!dirty)break;}}
   const button=label=>{const n=nodes(tree).find(n=>n.type==='button'&&(text(n).trim()===label||n.props['aria-label']===label));assert.ok(n,`Missing ${label}: ${text(tree)}`);return n;};
-  const h={module,calls,navigation,intervals,channels,button,settle,get nodes(){return nodes(tree);},get text(){return text(tree);},get dialog(){return nodes(tree).find(n=>n.type==='dialog');},setHandler:fn=>handler=fn,setUser:id=>identity=id,setReply:value=>reply=value,async update(value){props={...props,...value};dirty=true;await settle();},async click(label){const b=button(label);assert.ok(!b.props.disabled,`${label} disabled`);b.props.onClick();await settle();},async ask(q){nodes(tree).find(n=>n.type==='input').props.onChange({target:{value:q}});await settle();nodes(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});await settle();},unmount(){unmounted=true;for(const s of slots)s?.cleanup?.();}};
+  const h={module,calls,navigation,intervals,channels,button,settle,get nodes(){return nodes(tree);},get text(){return text(tree);},get dialog(){return nodes(tree).find(n=>n.type==='dialog');},setHandler:fn=>handler=fn,setUser:id=>identity=id,setReply:value=>reply=value,async update(value){props={...props,...value};dirty=true;await settle();},async click(label){const b=button(label);assert.ok(!b.props.disabled,`${label} disabled`);b.props.onClick();await settle();},async ask(q){const field=nodes(tree).find(n=>n.type==='textarea'&&n.props['aria-label']==='Ask MatMove Support')||nodes(tree).find(n=>n.type==='input');assert.ok(field);field.props.onChange({target:{value:q}});await settle();nodes(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});await settle();},unmount(){unmounted=true;for(const s of slots)s?.cleanup?.();}};
   await settle();await fn(h);
  }finally{if(!unmounted)for(const s of slots)s?.cleanup?.();for(const[k,v]of Object.entries(original)){if(v===undefined)delete globalThis[k];else globalThis[k]=v;}delete globalThis.__assistanceHooks;delete globalThis.__assistanceDb;await rm(dir,{recursive:true,force:true});}
 }
 for(const role of ['rider','driver','merchant'])test(`${role} Help navigates only to role-supported screens without any API call`,()=>page('MatMoveHelp',async h=>{
- await h.update({context:{role}});await h.click('Open MatMove Help');assert.equal(h.dialog.ref.current.open,true);await h.ask('complete identity verification');await h.click('Open Account');assert.deepEqual(h.navigation,['account']);assert.equal(h.calls.length,0);assert.equal(h.dialog.ref.current.open,false);
+ await h.update({context:{role}});await h.click('Open MatMove Help');assert.equal(h.dialog.ref.current.open,true);await h.ask('complete identity verification');await h.click('Open Account');assert.deepEqual(h.navigation,['account']);assert.equal(h.calls.filter(c=>c.name==='matmove_support_customer_open').length,1);assert.ok(!h.calls.some(c=>/payment|wallet|withdraw|transfer/i.test(c.name)));assert.equal(h.dialog.ref.current.open,false);
  assert.equal(h.module.customerHelpSection(role==='driver'?'radar':'ride',role),'ride');assert.equal(h.module.customerHelpSection('games',role),'home');assert.throws(()=>h.module.customerHelpSection('https://external.example',role));
 }));
 test('Help opens every browse topic including those whose title does not match search keywords',()=>page('MatMoveHelp',async h=>{
