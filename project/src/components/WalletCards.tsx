@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  Wallet,
   RefreshCw,
   Copy,
   Share2,
@@ -122,7 +121,7 @@ export default function WalletCards({
             >
               <div className="flex items-center justify-between">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/95">
-                  <Wallet className="text-emerald-700" size={27}/>
+                  <img src="/logo.jpg" alt="MatMove" className="h-9 w-9 object-contain"/>
                 </div>
 
                 <button

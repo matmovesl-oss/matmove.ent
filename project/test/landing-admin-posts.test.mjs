@@ -12,8 +12,9 @@ test('public landing updates use the published, date-filtered MatMove posts view
 
 test('homepage post loading is cancelled safely on unmount', async () => {
   const source = await readFile(new URL('../src/components/PublicHomepagePosts.tsx', import.meta.url), 'utf8');
-  assert.match(source, /let active = true/);
-  assert.match(source, /if \(active\) setPosts/);
-  assert.match(source, /active = false/);
-  assert.match(source, /clearInterval\(refresh\)/);
+  assert.match(source, /let active=true,inFlight=false/);
+  assert.match(source, /if\(active\)\{setPosts/);
+  assert.match(source, /active=false/);
+  assert.match(source, /clearInterval\(timer\)/);
+  assert.match(source, /removeChannel\(channel\)/);
 });

@@ -51,7 +51,7 @@ test('passcode keypad appends digits locally and only verifies after submission'
 
 test('wallet cards use a wallet symbol instead of the M-only artwork', async () => {
   const wallets = await readFile('src/components/WalletCards.tsx', 'utf8');
-  assert.match(wallets, /<Wallet className="text-emerald-700" size=\{27\}\/>/);
+  assert.match(wallets, /src="\/logo\.jpg" alt="MatMove"/);
   assert.doesNotMatch(wallets, /wallet-icon\.png/);
 });
 

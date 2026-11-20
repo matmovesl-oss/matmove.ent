@@ -351,19 +351,16 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
     ? [
         { title: 'Driver radar', detail: 'Go online and receive nearby requests', Icon: Navigation, action: () => onNavigate('ride') },
         { title: 'My trips', detail: tripsLoading ? 'Loading your trips…' : `${trips.length} recent trip records · view all`, Icon: Car, action: () => onNavigate('trips') },
-        { title: 'Earnings & wallet', detail: 'Balances, top-ups and withdrawals', Icon: Wallet, action: () => onNavigate('wallet') },
       ]
     : role === 'merchant'
       ? [
           { title: 'My business & orders', detail: 'Manage products and customer orders', Icon: Store, action: () => onNavigate('inventory') },
           { title: 'Transport & delivery', detail: 'Request a ride or delivery vehicle', Icon: Car, action: () => onNavigate('ride') },
-          { title: 'Business wallet', detail: 'Balances, earnings and payouts', Icon: Wallet, action: () => onNavigate('wallet') },
         ]
       : [
           { title: 'Book a ride or delivery', detail: 'Choose a vehicle and set your route', Icon: Car, action: () => onNavigate('ride') },
           { title: 'Food & shopping', detail: 'Browse products and local vendors', Icon: ShoppingBag, action: () => onNavigate('shop') },
           { title: 'My trips', detail: tripsLoading ? 'Loading your trips…' : `${trips.length} recent trip records · view all`, Icon: MapPin, action: () => onNavigate('trips') },
-          { title: 'Wallet & payments', detail: 'Balances, top-ups and transaction history', Icon: Wallet, action: () => onNavigate('wallet') },
         ];
 
   const extraServices = [
@@ -456,7 +453,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
         <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">Choose a service below. Each section opens separately so you can focus on one task at a time.</p>
       </section>
       <button type="button" onClick={() => onNavigate('wallet')} className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Wallet size={19}/></span>
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white"><img src="/logo.jpg" alt="MatMove" className="h-8 w-9 object-contain"/></span>
         <span className="min-w-0 flex-1"><b className="block text-sm text-slate-950">Wallet & payments</b><small className="block text-xs text-slate-500">{wallet?.is_frozen || profile.is_wallet_frozen ? 'Wallet frozen · contact support' : wallets ? 'Open wallet balances, top-ups and transfers' : networkOnline ? 'Wallet balance is not available yet' : 'Wallet details will appear when you reconnect'}</small></span>
         <ArrowRight size={17} className="text-slate-400"/>
       </button>
