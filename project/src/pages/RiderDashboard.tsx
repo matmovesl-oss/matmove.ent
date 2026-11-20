@@ -1,4 +1,5 @@
 import ActiveTripMap from '@/components/ActiveTripMap';
+import ScrollDownHint from '@/components/ScrollDownHint';
 import { CashMonimeSuccess } from '@/components/CashMonimeSuccess';
 import { ProductGallery, catalogMoney, catalogCheckoutAllowed } from '@/components/ProductCatalog';
 import FareNegotiation from '@/components/FareNegotiation';
@@ -890,6 +891,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
             </div>
           </div>
         )}
+
+        {['home','ride'].includes(activeSection) && <ScrollDownHint />}
 
         {activeSection === 'wallet' && (
           <div className="w-full space-y-6">
