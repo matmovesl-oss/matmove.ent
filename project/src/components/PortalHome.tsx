@@ -131,7 +131,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
   const [walletUpdatedAt, setWalletUpdatedAt] = useState<string | null>(() => walletSnapshot?.savedAt || null);
   const [balanceLoading, setBalanceLoading] = useState(() => !walletSnapshot);
   const [balanceError, setBalanceError] = useState('');
-  const [networkOnline, setNetworkOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
+  const [networkOnline, setNetworkOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine !== false);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
   const [preferencesLoading, setPreferencesLoading] = useState(true);
   const [preferencesError, setPreferencesError] = useState('');
