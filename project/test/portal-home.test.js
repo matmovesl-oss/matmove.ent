@@ -95,7 +95,7 @@ test('Home navigation retains old ride, KYC and games routes and never initiates
 });
 
 
-test('All three Home screens render masked wallets and loading states before any fetch; card references are limited to rider and merchant UI',async()=>{
+test('all three roles receive compact service navigation without starting payments during render',async()=>{
  const dir=await mkdtemp(join(process.cwd(),'.portal-home-test-'));
  try{
   const out=join(dir,'home.mjs');
@@ -106,11 +106,13 @@ test('All three Home screens render masked wallets and loading states before any
   const {default:Home}=await import(pathToFileURL(out));
   for(const role of ['rider','driver','merchant']){
    const html=renderToStaticMarkup(React.createElement(Home,{profile:{id:rider,role,first_name:'Richard'},onNavigate(){}}));
-   assert.match(html,/Hello, Richard/);assert.match(html,/Balance hidden/);assert.match(html,/Loading saved places/);assert.match(html,/Loading services/);
-   assert.doesNotMatch(html,/No products listed|No trips yet/);assert.match(html,/Load with Mobile Money/);
-   if(role==='driver'){assert.match(html,/Driver radar/);assert.doesNotMatch(html,/Payment methods/);}
-   else assert.match(html,/Payment methods/);
-   if(role==='merchant')assert.match(html,/My business/);
+   assert.match(html,/Services/);assert.match(html,/Wallet & payments/);assert.match(html,/Open wallet balances/);
+   assert.match(html,/Loading saved places/);assert.match(html,/Travel to Ghana/);assert.match(html,/Events & tickets/);assert.match(html,/Games &amp; entertainment|Games & entertainment/);
+   if(role==='driver'){assert.match(html,/Driver radar/);assert.doesNotMatch(html,/Payment references/);}
+   else assert.match(html,/Payment references/);
+   if(role==='merchant')assert.match(html,/My business &amp; orders|My business & orders/);
+   if(role==='rider'){assert.match(html,/Book a ride or delivery/);assert.match(html,/Food &amp; shopping|Food & shopping/);}
+   assert.doesNotMatch(html,/Hello, Richard/);
   }
  }finally{await rm(dir,{recursive:true,force:true});}
 });
