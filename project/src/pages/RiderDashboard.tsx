@@ -594,10 +594,18 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
       <div className="mx-auto max-w-7xl px-0 pt-2 sm:px-4">
         {(activeSection === 'home' || activeSection === 'ride') && hasUnfinishedBookings && !activeBooking && (
-          <section className="mx-3 mb-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-            <h2 className="font-bold text-blue-950">{hasCashReviewCases ? 'A previous cash request is under review' : 'You have an unfinished request'}</h2>
-            <p className="mt-1 text-sm text-blue-900">{hasCashReviewCases ? 'Its live dispatch has been closed. The original cash-return confirmations and fee reserve remain preserved for MatMove Support. No cash settlement or refund has been recorded. You can make a fresh request while the case remains visible in Trips.' : 'Existing requests are kept in Trips, separate from creating a new one. Open Trips to review the original status, cash handover or digital payment and continue that same request.'}</p>
-            <button type="button" onClick={() => onOpenTrips?.()} className="mt-3 min-h-11 rounded-xl bg-blue-700 px-4 font-bold text-white">{hasCashReviewCases ? 'Review cash case in Trips' : 'Open Trips'}</button>
+          <section className="mx-3 mb-3 rounded-2xl border border-blue-200 bg-blue-50 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-sm font-bold text-blue-950">{hasCashReviewCases ? 'Previous cash request needs review' : 'You have an unfinished request'}</h2>
+                <p className="mt-1 text-xs leading-5 text-blue-900">{hasCashReviewCases ? 'Your original cash case is safely preserved. Review it in Trips; do not make a duplicate payment.' : 'Open Trips to review the original request and continue from its saved status.'}</p>
+              </div>
+              <button type="button" onClick={() => onOpenTrips?.()} className="min-h-10 shrink-0 rounded-xl bg-blue-700 px-3 text-xs font-bold text-white">{hasCashReviewCases ? 'Review in Trips' : 'Open Trips'}</button>
+            </div>
+            {hasCashReviewCases && <details className="mt-2 border-t border-blue-200 pt-2 text-xs text-blue-900">
+              <summary className="min-h-9 cursor-pointer font-bold">View cash review details</summary>
+              <p className="pb-1 leading-5">Its live dispatch has been closed. The original cash-return confirmations and fee reserve remain preserved for MatMove Support. No cash settlement or refund has been recorded. You can make a fresh request while the case remains visible in Trips.</p>
+            </details>}
           </section>
         )}
       </div>
