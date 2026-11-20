@@ -2,7 +2,7 @@ import { ChevronDown } from 'lucide-react';
 
 export default function MapScrollCue() {
   const scrollToDetails = () => {
-    const distance = Math.max(260, Math.round(window.innerHeight * 0.52));
+    const distance = Math.max(260, Math.round(window.innerHeight * 0.75));
     window.scrollBy({ top: distance, behavior: 'smooth' });
   };
 
