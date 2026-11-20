@@ -600,7 +600,6 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
         </div>
       </header>
 
-      {!networkOnline && <p role="status" className="mx-3 mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 sm:mx-4">Offline mode · showing saved information. Wallet actions and new requests need an internet connection.</p>}
       {((rideNotice&&!tripRequest.retained) || walletNotice) && (
         <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
           {rideNotice&&!tripRequest.retained && <p>{rideNotice}</p>}
