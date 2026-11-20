@@ -100,7 +100,9 @@ test('Account Services entry is compact and the Services directory uses separate
   const app = await readFile('src/App.tsx', 'utf8');
   const services = await readFile('src/components/PortalHome.tsx', 'utf8');
   assert.match(app, /aria-label="Open services"/);
-  assert.match(app, /className="mm-account-link min-h-14 px-3 py-2"/);
+  assert.match(app, /className="mm-account-link mm-account-link-compact"/);
+  const css = await readFile('src/index.css', 'utf8');
+  assert.match(css, /\.mm-account-link-compact \{ min-height:56px/);
   assert.match(app, /<b>Services<\/b>/);
   assert.match(services, /const coreServices = role === 'driver'/);
   assert.match(services, /const extraServices = \[/);
