@@ -95,6 +95,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
   const [tripsLoading, setTripsLoading] = useState(true);
   const [tripsError, setTripsError] = useState('');
   const [panel, setPanel] = useState<'places' | 'cards' | 'travel' | 'events' | 'cancel_travel' | null>(null);
+  const [servicePage, setServicePage] = useState<'travel' | 'games' | 'concierge' | null>(null);
   const [busSettings, setBusSettings] = useState<any>({ id: 'bus_ghana', total_seats: 50, price_usd: 100, price_sle: 2400 });
   const [confirmedSeats, setConfirmedSeats] = useState(0);
   const [existingBooking, setExistingBooking] = useState<any>(null);
@@ -276,209 +277,134 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
   const isBusFull = availableSeats <= 0;
 
   if (selectedGame) return <ArcadeGames key={`${uid}:${selectedGame}`} userId={uid} initialGame={selectedGame} onBack={() => setSelectedGame(null)} />;
-  
-  return (
-    <main className="mm-portal-morph mm-home overflow-hidden mx-auto max-w-[100vw]">
-      <header className="mm-home-heading">
-        <div className="flex min-w-0 items-center gap-2">
-          {mode==='services'&&<button className="mm-icon-button shrink-0" type="button" aria-label="Back to Home" onClick={() => onNavigate('home')}><ArrowLeft size={21}/></button>}
-          <div className="mm-brand"><span>MatMove<span className="mm-muted">Your everyday, connected.</span></span></div>
-        </div>
-        <button className="mm-icon-button shrink-0" type="button" aria-label="Open your account" onClick={() => onNavigate('account')}><ShieldCheck size={22}/></button>
-      </header>
-      <div className="mm-welcome"><p className="mm-eyebrow">{role === 'merchant' ? 'Business space' : role === 'driver' ? 'Driver space' : 'Your MatMove'}</p><h1>{mode === 'services' ? 'Your services, together.' : 'Hello, '+name+'.'}</h1><p>{mode === 'services' ? 'Explore travel, shopping, wallet tools, games, events and concierge.' : 'Where will today take you?'}</p></div>
-      <div className="mm-home-grid">
-        <section className={`mm-home-wallet mm-home-wallet-${currency.toLowerCase()}`} aria-label="Wallet overview">
-          <div className="mm-row"><div className="mm-currency-tabs" aria-label="Wallet currency">{(['SLE','USD'] as const).map(c => <button key={c} type="button" aria-pressed={currency === c} onClick={() => { setCurrency(c); setVisible(false); }}>{c}</button>)}</div><button type="button" className="mm-glass-button" aria-label="Refresh balances" disabled={balanceLoading} onClick={() => void refreshWallets()}><RefreshCw size={18} className={balanceLoading ? 'animate-spin' : ''}/></button></div>
-          <p className="mm-wallet-label">{currency === 'SLE' ? 'Leone wallet' : 'US dollar wallet'}</p>
-          <div className="mm-balance-row"><strong aria-live="polite">{currency} {visible ? balanceLoading ? <span className="inline-block h-6 w-24 bg-white/20 rounded animate-pulse"></span> : verifiedBalance ? wallet.balance.toFixed(2) : '—' : <span aria-label="Balance hidden">••••••</span>}</strong><button type="button" className="mm-glass-button" aria-label={visible ? 'Hide balance' : 'Show balance'} aria-pressed={visible} onClick={() => setVisible(v => !v)}>{visible ? <EyeOff size={20}/> : <Eye size={20}/>}</button></div>
-          <p className="mm-wallet-caption">{balanceLoading ? <span className="inline-block h-3 w-36 rounded bg-white/20 animate-pulse align-middle" aria-label="Loading wallet status" /> : balanceError ? 'Balance could not be loaded.' : wallet?.is_frozen || profile.is_wallet_frozen ? 'Wallet frozen · contact support' : !wallet ? 'Open Wallet to check setup.' : !verifiedBalance ? 'Open Wallet to check account status.' : 'Available balance · verified with your wallet provider'}</p>
-          <button className="mm-wallet-open" type="button" onClick={() => onNavigate('wallet')}>Open wallet <ArrowRight size={17}/></button>
-        </section>
 
-        <ConciergeServices userId={uid}/>
+  const coreServices = role === 'driver'
+    ? [
+        { title: 'Driver radar', detail: 'Go online and receive nearby requests', Icon: Navigation, action: () => onNavigate('ride') },
+        { title: 'My trips', detail: tripsLoading ? 'Loading your trips…' : `${trips.length} recent trip records · view all`, Icon: Car, action: () => onNavigate('trips') },
+        { title: 'Earnings & wallet', detail: 'Balances, top-ups and withdrawals', Icon: Wallet, action: () => onNavigate('wallet') },
+      ]
+    : role === 'merchant'
+      ? [
+          { title: 'My business & orders', detail: 'Manage products and customer orders', Icon: Store, action: () => onNavigate('inventory') },
+          { title: 'Transport & delivery', detail: 'Request a ride or delivery vehicle', Icon: Car, action: () => onNavigate('ride') },
+          { title: 'Business wallet', detail: 'Balances, earnings and payouts', Icon: Wallet, action: () => onNavigate('wallet') },
+        ]
+      : [
+          { title: 'Book a ride or delivery', detail: 'Choose a vehicle and set your route', Icon: Car, action: () => onNavigate('ride') },
+          { title: 'Food & shopping', detail: 'Browse products and local vendors', Icon: ShoppingBag, action: () => onNavigate('shop') },
+          { title: 'My trips', detail: tripsLoading ? 'Loading your trips…' : `${trips.length} recent trip records · view all`, Icon: MapPin, action: () => onNavigate('trips') },
+          { title: 'Wallet & payments', detail: 'Balances, top-ups and transaction history', Icon: Wallet, action: () => onNavigate('wallet') },
+        ];
 
-        {/* Travel to Ghana */}
-        <section className="mm-surface" aria-label="Travel & Bus Booking">
-          <div className="mm-row">
-            <h2 className="flex items-center gap-2"><Bus className="text-blue-600" size={20} /> Travel to Ghana</h2>
-            <span className="text-xs text-slate-500 font-bold">1st & 15th every month</span>
+  const extraServices = [
+    { title: 'Travel to Ghana', detail: 'Freetown–Accra direct bus bookings', Icon: Bus, action: () => setServicePage('travel') },
+    { title: 'Events & tickets', detail: eventsLoading ? 'Loading available events…' : events.length ? `${events.length} events available · view tickets` : 'Browse events and verified tickets', Icon: Ticket, action: () => setPanel('events') },
+    { title: 'Games & entertainment', detail: 'Explore MatMove games · 18+', Icon: Sparkles, action: () => setServicePage('games') },
+    { title: 'Concierge services', detail: 'Explore additional services and request details', Icon: Briefcase, action: () => setServicePage('concierge') },
+    { title: 'Saved places', detail: preferencesLoading ? 'Loading saved addresses…' : 'Manage your Home and Work locations', Icon: Home, action: () => setPanel('places') },
+    ...(role !== 'driver' ? [{ title: 'Payment references', detail: 'Manage optional saved card references', Icon: CreditCard, action: () => setPanel('cards') }] : []),
+  ];
+
+  const serviceRow = (item: { title: string; detail: string; Icon: any; action: () => void }) => {
+    const Icon = item.Icon;
+    return <button key={item.title} type="button" onClick={item.action} className="flex min-h-[68px] w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left shadow-sm transition hover:border-emerald-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Icon size={19}/></span>
+      <span className="min-w-0 flex-1"><b className="block text-sm font-bold text-slate-950">{item.title}</b><small className="mt-0.5 block text-xs leading-5 text-slate-500">{item.detail}</small></span>
+      <ArrowRight size={17} className="shrink-0 text-slate-400"/>
+    </button>;
+  };
+
+  if (servicePage === 'games') return (
+    <main className="fixed inset-0 z-[100] min-h-[100dvh] overflow-y-auto bg-slate-50 px-4 pb-10 pt-[calc(env(safe-area-inset-top)+16px)]">
+      <div className="mx-auto max-w-4xl">
+        <header className="mb-5 flex items-center justify-between gap-3">
+          <button type="button" onClick={() => setServicePage(null)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Services</button>
+          <span className="text-xs font-bold text-slate-500">MATMOVE GAMES</span>
+        </header>
+        <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+          <div className="mb-4"><p className="text-xs font-extrabold uppercase tracking-[.16em] text-emerald-700">Play responsibly · 18+</p><h1 className="mt-1 text-2xl font-black text-slate-950">Play MatMove Games</h1><p className="mt-2 text-sm text-slate-600">Choose a game to view its rules and available play options. Account eligibility applies.</p></div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {([
+              ['spin','Spin Wheel','🎡','Enter for a chance to win.'],
+              ['dice','RICH DICE','🎲','Choose your prediction.'],
+              ['fruity','Fruity Flue','🍍','Match all four fruits.'],
+              ['crankling','CRANKLING','777','Match your chosen number.'],
+            ] as const).map(([id,title,icon,description])=><button type="button" key={id} onClick={() => setSelectedGame(id as any)} className="flex min-h-28 items-center gap-4 rounded-2xl border border-amber-300 bg-gradient-to-br from-slate-950 to-purple-950 p-4 text-left text-white shadow-sm transition hover:-translate-y-0.5"><span aria-hidden="true" className="text-4xl font-black text-amber-300">{icon}</span><span className="min-w-0 flex-1"><b className="block text-sm">{title}</b><small className="mt-1 block text-xs text-slate-200">{description}</small></span><ArrowRight size={18} className="shrink-0 text-amber-300"/></button>)}
           </div>
-          {travelLoading ? <div role="status" aria-label="Loading travel details" className="mt-4 space-y-3 animate-pulse"><SkeletonBlock className="h-4 w-3/4" /><SkeletonBlock className="h-3 w-1/2" /><SkeletonBlock className="h-24 w-full" /></div> : travelError ? <p role="alert" className="mm-alert">{travelError} <button type="button" onClick={() => void fetchTravelAndEvents()}>Retry</button></p> : <>
-            <p className="mb-2 text-sm text-slate-600">
-              Freetown to Accra Direct Bus. Price: <b>${Number(busSettings.price_usd || 100).toLocaleString()} / SLE {Number(busSettings.price_sle || 2400).toLocaleString()}</b> per seat.
-            </p>
-
-            <div className="mb-3 flex items-center justify-between text-xs font-bold text-slate-500">
-              <span>Seat Capacity: {Number(busSettings.total_seats || 50).toLocaleString()} Seats</span>
-              <span className={isBusFull ? 'text-rose-600' : 'text-emerald-700'}>
-                {isBusFull ? 'BUS FULL' : `${availableSeats} Seats Available`}
-              </span>
-            </div>
-
-            {existingBooking && existingBooking.status !== 'cancelled' ? (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-500 uppercase">Your Reservation</span>
-                  <span className={`px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                    existingBooking.status === 'cancel_requested' ? 'bg-rose-100 text-rose-800 animate-pulse' :
-                    existingBooking.status === 'cancelled' ? 'bg-slate-200 text-slate-700' :
-                    existingBooking.is_paid ? 'bg-emerald-100 text-emerald-800' :
-                    existingBooking.status === 'approved' ? 'bg-indigo-100 text-indigo-800' :
-                    existingBooking.status === 'boarded' ? 'bg-purple-100 text-purple-800' :
-                    existingBooking.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                  }`}>
-                    {existingBooking.status === 'cancel_requested' ? 'Cancel Requested' : existingBooking.is_paid ? 'Paid & Confirmed' : existingBooking.status === 'approved' ? 'Approved (Ready to Pay)' : existingBooking.status}
-                  </span>
-                </div>
-                <p className="text-sm font-bold text-slate-900">
-                  Freetown – Accra Direct ({existingBooking.passengers_count} Seat{existingBooking.passengers_count > 1 ? 's' : ''})
-                </p>
-
-                {existingBooking.status === 'approved' && !existingBooking.is_paid && (
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setPanel('travel')}
-                      className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-md hover:bg-emerald-500"
-                    >
-                      Confirm & Pay SLE {Number(existingBooking.fare_amount).toLocaleString()}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleWithdrawUnpaidBooking}
-                      className="px-4 py-2.5 rounded-xl border border-rose-300 text-rose-700 font-bold text-xs hover:bg-rose-50"
-                    >
-                      Cancel & Start Fresh
-                    </button>
-                  </div>
-                )}
-
-                {existingBooking.status === 'pending_approval' && (
-                  <button
-                    type="button"
-                    onClick={handleWithdrawUnpaidBooking}
-                    className="w-full mt-2 rounded-xl border border-slate-300 text-slate-600 font-bold text-xs py-2 hover:bg-slate-100"
-                  >
-                    Withdraw Booking & Start Fresh
-                  </button>
-                )}
-
-                {existingBooking.is_paid && !['cancel_requested', 'cancelled'].includes(existingBooking.status) && (
-                  <button
-                    type="button"
-                    onClick={() => setPanel('cancel_travel')}
-                    className="w-full mt-2 rounded-xl border border-rose-300 text-rose-700 font-bold text-xs py-2 hover:bg-rose-50"
-                  >
-                    Request Cancellation (Refund)
-                  </button>
-                )}
-
-                {existingBooking.status === 'cancel_requested' && (
-                  <p className="text-[11px] text-rose-700 font-medium pt-1">
-                    Your cancellation request is pending dispatch review. Reason: {existingBooking.cancel_reason}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {existingBooking?.status === 'cancelled' && (
-                  <div className="p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-center justify-between">
-                    <span>Previous reservation cancelled.</span>
-                    <button type="button" onClick={() => {try{localStorage.setItem(`matmove.travel.cancelled.dismissed.${uid}.${existingBooking.id}`,"1");}catch{/* Keep this dismissal for the current view if browser storage is disabled. */}setExistingBooking(null);}} className="font-bold underline text-indigo-600">Dismiss</button>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  disabled={isBusFull}
-                  onClick={() => { setExistingBooking(null); setPanel('travel'); }}
-                  className={`w-full min-h-24 rounded-2xl border p-4 text-left shadow-sm flex items-center justify-between transition ${
-                    isBusFull 
-                      ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                      : 'border-blue-200 bg-gradient-to-r from-blue-900 to-indigo-900 text-white hover:opacity-95'
-                  }`}
-                >
-                  <div>
-                    <b className="block text-lg font-bold">
-                      {isBusFull ? 'Bus is Full for this Departure' : 'Freetown - Accra Direct'}
-                    </b>
-                    <span className="mt-1 block text-sm opacity-90">
-                      {isBusFull ? `All ${Number(busSettings.total_seats || 50).toLocaleString()} seats reserved.` : 'Book up to 3 passengers. Departures 7:00 AM sharp.'}
-                    </span>
-                  </div>
-                  <ArrowRight size={24} className={isBusFull ? 'text-slate-300' : 'text-blue-300'}/>
-                </button>
-              </div>
-            )}
-          </>}
-        </section>
-
-        {/* Events Hub Card */}
-        <section className="mm-surface" aria-label="Upcoming Events Hub">
-          <div className="mm-row">
-            <h2 className="flex items-center gap-2">
-              <Ticket className="text-sky-600" size={20} /> Events & Ticket Gate
-            </h2>
-            <button type="button" className="mm-text-button" onClick={() => setPanel('events')}>View all</button>
-          </div>
-          <p className="mb-3 text-sm text-slate-600">Official tickets with single checkout for up to 3 passes.</p>
-          {eventsLoading ? <div role="status" aria-label="Loading events" className="grid gap-3 sm:grid-cols-2 animate-pulse"><SkeletonBlock className="h-28" /><SkeletonBlock className="h-28" /></div> : eventsError ? <p role="alert" className="mm-alert">{eventsError} <button type="button" onClick={() => void fetchTravelAndEvents()}>Retry</button></p> : events.length === 0 ? (
-            <p className="text-xs text-slate-400 py-3">No active events posted yet.</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {events.slice(0, 2).map(evt => (
-                <div key={evt.id} className="rounded-2xl border border-slate-200 overflow-hidden flex flex-col justify-between p-3 bg-slate-50">
-                  <div>
-                    <img src={evt.flyer_url || '/logo.jpg'} alt={`${evt.title} event flyer`} loading="lazy" className="mb-3 h-28 w-full rounded-xl bg-slate-100 object-cover" />
-                    <h4 className="font-bold text-slate-900 text-sm line-clamp-1">{evt.title}</h4>
-                    <p className="text-xs text-slate-500 mt-1">{evt.venue} · {new Date(evt.event_date).toLocaleDateString()}</p>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between pt-2 border-t border-slate-200">
-                    <div><span className="font-black text-sky-600 text-sm">SLE {Number(evt.ticket_price).toLocaleString()}</span>{evt.ticket_price_usd!=null&&<span className="ml-2 text-xs font-bold text-emerald-700">USD ${Number(evt.ticket_price_usd).toFixed(2)}</span>}</div>
-                    <button type="button" onClick={() => setPanel('events')} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
-                      Book Ticket
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="mm-services" aria-label="Quick actions">
-          {shortcuts.map(({ section, label, detail, Icon }) => <button type="button" className="mm-service" key={section} onClick={() => onNavigate(section)}><span className="mm-service-icon"><Icon size={25}/></span><span><b>{label}</b><small>{detail}</small></span><ArrowRight size={18}/></button>)}
-          <div className="mm-small-actions"><button type="button" onClick={() => onNavigate('wallet')}><Wallet size={18}/> Load with Mobile Money</button><button type="button" onClick={() => onNavigate('account')}><ShieldCheck size={18}/> My account</button></div>
         </section>
       </div>
+    </main>
+  );
 
-      {balanceError && <div role="alert" className="mm-alert">{balanceError} <button type="button" disabled={balanceLoading} onClick={() => void refreshWallets()}>Retry</button></div>}
-      
-      <section className="mm-surface" aria-label="MatMove games">
-        <div className="mm-row"><h2>Play MatMove Games</h2><span className="text-xs text-slate-500">18+ · Play responsibly</span></div>
-        <p className="mb-3 text-sm text-slate-600">Explore the games and view the rules and possible prizes before playing. Account eligibility applies.</p>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{([
-          ['spin','Spin Wheel','🎡','Spin for a possible prize.'],
-          ['dice','RICH DICE','🎲','Choose your prediction.'],
-          ['fruity','Fruity Flue','🍍','Match all four fruits.'],
-          ['crankling','CRANKLING','777','Match your chosen number.'],
-        ] as const).map(([id,title,icon,description])=><button type="button" key={id} onClick={()=>setSelectedGame(id as any)} className="min-h-36 rounded-2xl border border-amber-300 bg-gradient-to-br from-slate-950 to-purple-950 p-4 text-left text-white"><span aria-hidden="true" className="text-3xl font-black text-amber-300">{icon}</span><b className="mt-3 block text-sm">{title}</b><span className="mt-1 block text-xs text-slate-200">{description}</span><span className="mt-3 block text-xs font-bold text-amber-300">Open game →</span></button>)}</div>
-      </section>
+  if (servicePage === 'concierge') return (
+    <main className="fixed inset-0 z-[100] min-h-[100dvh] overflow-y-auto bg-slate-50 px-4 pb-10 pt-[calc(env(safe-area-inset-top)+16px)]">
+      <div className="mx-auto max-w-3xl">
+        <header className="mb-5 flex items-center justify-between gap-3">
+          <button type="button" onClick={() => setServicePage(null)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Services</button>
+          <span className="text-xs font-bold text-slate-500">MATMOVE CONCIERGE</span>
+        </header>
+        <ConciergeServices userId={uid}/>
+      </div>
+    </main>
+  );
 
-      <section className="mm-surface"><div className="mm-row"><h2>Your shortcuts</h2><button type="button" className="mm-text-button" onClick={() => setPanel(panel === 'places' ? null : 'places')}>{panel === 'places' ? 'Close' : 'Manage places'}</button></div>
-        {preferencesLoading && !preferences ? <div role="status" aria-label="Loading saved places" className="space-y-2 animate-pulse"><div className="h-12 bg-slate-100 rounded-xl"></div></div> : preferencesError ? <div role="alert" className="mm-alert">{preferencesError} <button type="button" onClick={() => void refreshPreferences()}>Retry</button></div> : <div className="mm-place-grid">{(['home','work'] as const).map(kind => { const place = preferences?.places.find(p => p.kind === kind); const Icon = kind === 'home' ? Home : Briefcase; return <button type="button" key={kind} className="mm-place-tile" onClick={() => setPanel('places')}><Icon size={20}/><span><b>{kind === 'home' ? 'Home' : 'Work'}</b><small>{place?.address || `Add your ${kind} address`}</small></span></button>; })}</div>}
-      </section>
+  if (servicePage === 'travel') return (
+    <main className="fixed inset-0 z-[100] min-h-[100dvh] overflow-y-auto bg-slate-50 px-4 pb-10 pt-[calc(env(safe-area-inset-top)+16px)]">
+      <div className="mx-auto max-w-3xl">
+        <header className="mb-5 flex items-center justify-between gap-3">
+          <button type="button" onClick={() => setServicePage(null)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Services</button>
+          <span className="text-xs font-bold text-slate-500">MATMOVE TRAVEL</span>
+        </header>
+        <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+          <div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-blue-50 text-blue-700"><Bus size={22}/></span><div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">1st & 15th every month</p><h1 className="text-xl font-black text-slate-950">Freetown – Accra Direct</h1></div></div>
+          {travelLoading ? <div role="status" className="space-y-2"><SkeletonBlock className="h-4 w-3/4"/><SkeletonBlock className="h-20 w-full"/></div> : travelError ? <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-800">{travelError} <button type="button" onClick={() => void fetchTravelAndEvents()} className="font-bold underline">Retry</button></p> : <div className="rounded-2xl bg-slate-50 p-4"><p className="text-sm text-slate-600">Direct bus service from Freetown to Accra. Price per seat: <b className="text-slate-950">USD ${Number(busSettings.price_usd || 100).toLocaleString()} / SLE {Number(busSettings.price_sle || 2400).toLocaleString()}</b>.</p><div className="mt-3 flex items-center justify-between gap-3 text-xs font-bold"><span className="text-slate-500">Seat capacity: {Number(busSettings.total_seats || 50).toLocaleString()}</span><span className={isBusFull ? 'text-rose-600' : 'text-emerald-700'}>{isBusFull ? 'BUS FULL' : `${availableSeats} seats available`}</span></div></div>}
+          {existingBooking && existingBooking.status !== 'cancelled' ? <div className="space-y-3 rounded-2xl border border-slate-200 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2"><b className="text-sm text-slate-900">Your reservation</b><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold capitalize text-slate-700">{String(existingBooking.status).replace(/_/g,' ')}</span></div>
+            <p className="text-sm font-semibold text-slate-800">Freetown – Accra Direct · {existingBooking.passengers_count} seat{existingBooking.passengers_count > 1 ? 's' : ''}</p>
+            {existingBooking.status === 'approved' && !existingBooking.is_paid && <button type="button" onClick={() => setPanel('travel')} className="min-h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white">Confirm & pay SLE {Number(existingBooking.fare_amount).toLocaleString()}</button>}
+            {existingBooking.status === 'pending_approval' && <button type="button" onClick={() => void handleWithdrawUnpaidBooking()} className="min-h-11 w-full rounded-xl border border-rose-200 bg-rose-50 px-4 text-sm font-bold text-rose-700">Withdraw booking & start fresh</button>}
+            {existingBooking.is_paid && !['cancel_requested','cancelled'].includes(existingBooking.status) && <button type="button" onClick={() => setPanel('cancel_travel')} className="min-h-11 w-full rounded-xl border border-rose-200 bg-rose-50 px-4 text-sm font-bold text-rose-700">Request cancellation (refund)</button>}
+            {existingBooking.status === 'cancel_requested' && <p className="text-xs text-rose-700">Your cancellation request is pending dispatch review. Reason: {existingBooking.cancel_reason}</p>}
+          </div> : <>{existingBooking?.status === 'cancelled' && <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600"><span>Previous reservation cancelled.</span><button type="button" onClick={() => {try{localStorage.setItem(`matmove.travel.cancelled.dismissed.${uid}.${existingBooking.id}`,'1');}catch{/* Browser storage may be unavailable. */}setExistingBooking(null);}} className="font-bold underline">Dismiss</button></div>}<button type="button" disabled={travelLoading || !!travelError || isBusFull} onClick={() => { setExistingBooking(null); setPanel('travel'); }} className="min-h-12 w-full rounded-xl bg-slate-950 px-4 font-bold text-white disabled:opacity-50">{isBusFull ? 'Bus is full for this departure' : 'Book a seat'}</button></>}
+        </section>
+        {panel === 'travel' && <TravelBookingModal uid={uid} userName={profile.full_name || profile.first_name || ''} userPhone={userPhone} walletBalance={travelWalletBalance} priceSle={Number(busSettings.price_sle || 2400)} departureDate={busSettings.departure_date} availableSeats={availableSeats} existingBooking={existingBooking} onSuccess={() => { setPanel(null); void fetchTravelAndEvents(); void refreshWallets(); }} onClose={() => setPanel(null)}/>}
+        {panel === 'cancel_travel' && existingBooking && <CancelTravelModal booking={existingBooking} onSuccess={() => { setPanel(null); void fetchTravelAndEvents(); }} onClose={() => setPanel(null)}/>}
+      </div>
+    </main>
+  );
 
-      {role !== 'driver' && <button type="button" className="mm-payment-link" aria-expanded={panel === 'cards'} onClick={() => setPanel(panel === 'cards' ? null : 'cards')}><CreditCard size={23}/><span><b>Payment methods</b><small>Mobile Money · optional card references</small></span><ArrowRight size={18}/></button>}
-      
-      {(panel === 'places' || panel === 'cards') && <PersonalTools key={`${uid}:${panel}`} uid={uid} panel={panel} preferences={preferences} error={preferencesError} loading={preferencesLoading} refresh={refreshPreferences} onClose={() => setPanel(null)}/>}
-      {panel === 'travel' && <TravelBookingModal uid={uid} userName={profile.full_name || profile.first_name || ''} userPhone={userPhone} walletBalance={travelWalletBalance} priceSle={Number(busSettings.price_sle || 2400)} departureDate={busSettings.departure_date} availableSeats={availableSeats} existingBooking={existingBooking} onSuccess={() => { setPanel(null); void fetchTravelAndEvents(); void refreshWallets(); }} onClose={() => setPanel(null)} />}
-      {panel === 'cancel_travel' && existingBooking && <CancelTravelModal booking={existingBooking} onSuccess={() => { setPanel(null); void fetchTravelAndEvents(); }} onClose={() => setPanel(null)} />}
-      {panel === 'events' && <EventsModal uid={uid} userPhone={userPhone} walletBalance={travelWalletBalance} events={events} eventsError={eventsError} onRetry={fetchTravelAndEvents} onWalletRefresh={refreshWallets} onClose={() => setPanel(null)} />}
-      
-      <section className="mm-surface"><div className="mm-row"><h2>Recent trips</h2><button type="button" className="mm-text-button" onClick={() => onNavigate('trips')}>View all</button></div>
-        {tripsLoading && !trips.length ? <SkeletonList count={2} /> : tripsError ? <div role="alert" className="mm-alert">{tripsError} <button type="button" onClick={() => void refreshTrips()}>Retry</button></div> : !trips.length ? <p className="mm-empty">Your trips will appear here after your first booking.</p> : trips.map(trip => <button type="button" className="mm-trip-row" key={trip.id} onClick={() => onNavigate('trips')}><MapPin size={19}/><span><b>{trip.destination_location || trip.service_type}</b><small>{trip.status} · {new Date(trip.created_at).toLocaleDateString()}</small></span><ArrowRight size={16}/></button>)}
+  return (
+    <main className="mm-portal-morph mx-auto min-h-[calc(100dvh-120px)] max-w-3xl space-y-5 px-4 pb-28 pt-4">
+      <header className="flex items-center justify-between gap-3">
+        <button type="button" onClick={() => onNavigate('home')} aria-label="Back to Home" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><ArrowLeft size={18}/> Home</button>
+        <span className="text-sm font-black tracking-tight text-slate-950">MATMOVE</span>
+        <button type="button" onClick={() => onNavigate('account')} aria-label="Open your account" className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700"><ShieldCheck size={19}/></button>
+      </header>
+      <section className="rounded-3xl bg-[#0b2236] p-5 text-white shadow-lg sm:p-6">
+        <p className="text-xs font-extrabold uppercase tracking-[.18em] text-emerald-200">{role === 'merchant' ? 'Business space' : role === 'driver' ? 'Driver space' : 'Your MatMove'}</p>
+        <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">Services</h1>
+        <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">Choose a service below. Each section opens separately so you can focus on one task at a time.</p>
       </section>
-      <p className="mm-home-footer">Made for your everyday moves.</p>
+      <button type="button" onClick={() => onNavigate('wallet')} className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Wallet size={19}/></span>
+        <span className="min-w-0 flex-1"><b className="block text-sm text-slate-950">Wallet & payments</b><small className="block text-xs text-slate-500">{balanceLoading ? 'Loading wallet…' : balanceError ? 'Wallet status needs checking' : wallet?.is_frozen || profile.is_wallet_frozen ? 'Wallet frozen · contact support' : 'Open wallet balances, top-ups and transfers'}</small></span>
+        <ArrowRight size={17} className="text-slate-400"/>
+      </button>
+      {balanceError && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800">{balanceError} <button type="button" disabled={balanceLoading} onClick={() => void refreshWallets()} className="font-bold underline">Retry</button></p>}
+      <section className="space-y-2" aria-labelledby="matmove-core-services">
+        <div className="px-1"><h2 id="matmove-core-services" className="text-sm font-black text-slate-950">Your MatMove services</h2><p className="mt-1 text-xs text-slate-500">Everyday tools for your account.</p></div>
+        {coreServices.map(serviceRow)}
+      </section>
+      <section className="space-y-2" aria-labelledby="matmove-more-services">
+        <div className="px-1"><h2 id="matmove-more-services" className="text-sm font-black text-slate-950">Explore more</h2><p className="mt-1 text-xs text-slate-500">Travel, events and additional services.</p></div>
+        {extraServices.map(serviceRow)}
+      </section>
+      {(panel === 'places' || panel === 'cards') && <div className="fixed inset-0 z-[120] min-h-[100dvh] overflow-y-auto bg-slate-50 px-4 pb-10 pt-[calc(env(safe-area-inset-top)+16px)]"><div className="mx-auto max-w-3xl"><PersonalTools key={`${uid}:${panel}`} uid={uid} panel={panel} preferences={preferences} error={preferencesError} loading={preferencesLoading} refresh={refreshPreferences} onClose={() => setPanel(null)}/></div></div>}
+      {panel === 'travel' && <TravelBookingModal uid={uid} userName={profile.full_name || profile.first_name || ''} userPhone={userPhone} walletBalance={travelWalletBalance} priceSle={Number(busSettings.price_sle || 2400)} departureDate={busSettings.departure_date} availableSeats={availableSeats} existingBooking={existingBooking} onSuccess={() => { setPanel(null); void fetchTravelAndEvents(); void refreshWallets(); }} onClose={() => setPanel(null)}/>}
+      {panel === 'cancel_travel' && existingBooking && <CancelTravelModal booking={existingBooking} onSuccess={() => { setPanel(null); void fetchTravelAndEvents(); }} onClose={() => setPanel(null)}/>}
+      {panel === 'events' && <EventsModal uid={uid} userPhone={userPhone} walletBalance={travelWalletBalance} events={events} eventsError={eventsError} onRetry={fetchTravelAndEvents} onWalletRefresh={refreshWallets} onClose={() => setPanel(null)}/>}
+      <p className="pb-2 text-center text-xs text-slate-400">Made for your everyday moves.</p>
     </main>
   );
 }
