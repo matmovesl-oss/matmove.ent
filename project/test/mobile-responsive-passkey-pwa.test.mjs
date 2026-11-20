@@ -57,7 +57,7 @@ test('wallet cards use a wallet symbol instead of the M-only artwork', async () 
 
 test('customer home uses the MatMove wordmark instead of the M-only logo', async () => {
   const home = await readFile('src/components/PortalHome.tsx', 'utf8');
-  assert.match(home, /className="mm-brand"><span>MatMove/);
+  assert.match(home, /<span className="text-sm font-black tracking-tight text-slate-950">MATMOVE<\/span>/);
   assert.equal(home.includes('<div className="mm-brand"><img src="/logo.jpg"'), false);
 });
 
@@ -148,7 +148,7 @@ test('production passkey domain, country-wide live map label and receipt close c
 
 test('passcode keypad uses equal circular keys with a clear black border', async () => {
   const pin = await readFile('src/components/CustomerPasscode.tsx', 'utf8');
-  assert.match(pin, /grid grid-cols-3 gap-3/);
+  assert.match(pin, /grid w-fit grid-cols-3 gap-3/);
   assert.match(pin, /h-14 w-14[^"]*rounded-full border-2 border-black/);
   assert.match(pin, /aria-label="Passcode keypad"/);
 });
