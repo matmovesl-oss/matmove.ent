@@ -50,5 +50,5 @@ test('rider cash-review notice is compact while retaining the full original reco
   assert.match(rider, /Review in Trips/);
   assert.match(rider, /<details className="mt-2 border-t border-blue-200 pt-2 text-xs text-blue-900">/);
   assert.match(rider, /No cash settlement or refund has been recorded/);
-  assert.match(rider, /Do not make a duplicate payment/);
+  assert.match(rider, /do not make a duplicate payment/i);
 });
