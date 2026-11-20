@@ -1,4 +1,4 @@
-const CACHE_NAME = 'matmove-shell-v1';
+const CACHE_NAME = 'matmove-shell-v2';
 const APP_SHELL = ['/', '/index.html', '/offline.html', '/logo.jpg'];
 
 self.addEventListener('install', event => {
@@ -34,7 +34,7 @@ self.addEventListener('fetch', event => {
         }
         return response;
       } catch {
-        return (await caches.match('/offline.html')) || (await caches.match('/index.html'));
+        return (await caches.match('/index.html')) || (await caches.match('/offline.html'));
       }
     })());
     return;

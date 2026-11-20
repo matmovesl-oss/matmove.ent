@@ -21,7 +21,7 @@ async function page(name,fn,{role='rider',saved=null,preferencesError=null}={}){
   useCallback(fn,deps){const i=cursor++;if(!(i in slots)||changed(slots[i].deps,deps))slots[i]={fn,deps};return slots[i].fn;},
   useEffect(fn,deps){const i=cursor++,old=slots[i];if(!old||changed(old.deps,deps)){const s={deps,cleanup:old?.cleanup};slots[i]=s;effects.push(()=>{s.cleanup?.();s.cleanup=fn();});}}
  };
- globalThis.window={setTimeout:(fn,ms)=>{timers.set(++timer,{fn,ms});return timer;},clearTimeout:i=>timers.delete(i),setInterval:()=>++timer,clearInterval(){}};
+ globalThis.window={setTimeout:(fn,ms)=>{timers.set(++timer,{fn,ms});return timer;},clearTimeout:i=>timers.delete(i),setInterval:()=>++timer,clearInterval(){},addEventListener(){},removeEventListener(){}};
  globalThis.document={visibilityState:'visible',addEventListener(){},removeEventListener(){}};
  globalThis.localStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
  globalThis.__hwDb={channel(){const c={on(){return c;},subscribe(){return c;}};return c;},removeChannel(){},auth:{getSession:async()=>({data:{session:{user:{id:uid}}},error:null})},rpc:async(name,args)=>{calls.push({kind:'rpc',name,args});return{data:{user_id:uid,places:[],cardReferences:[]},error:preferencesError};},from(){const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:(yes,no)=>Promise.resolve({data:[],error:null}).then(yes,no)};return q;}};

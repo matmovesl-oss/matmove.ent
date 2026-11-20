@@ -41,6 +41,44 @@ export type TripLocations = { pickup: Point | null; destination: Point | null; d
 const CENTER = { lat: 8.4808, lng: -13.2290 };
 let sdkPromise: Promise<void> | null = null;
 
+type WalletSnapshot = { userId: string; savedAt: string; wallets: { sleWallet: any; usdWallet: any } };
+function safeWalletForCache(value: any, userId: string, currency: 'SLE' | 'USD') {
+  if (!value || value.user_id !== userId) return null;
+  const balance = typeof value.balance === 'number' && Number.isFinite(value.balance) && value.balance >= 0
+    ? value.balance : null;
+  return {
+    user_id: userId,
+    currency,
+    balance,
+    balanceAvailable: value.balanceAvailable === true && balance !== null,
+    is_frozen: value.is_frozen === true,
+  };
+}
+function readWalletSnapshot(userId: string): WalletSnapshot | null {
+  try {
+    const value = JSON.parse(localStorage.getItem('matmove:wallet-snapshot:v1:' + userId) || 'null');
+    if (value?.userId !== userId || typeof value.savedAt !== 'string' || !Number.isFinite(Date.parse(value.savedAt))) return null;
+    const wallets = {
+      sleWallet: safeWalletForCache(value.wallets?.sleWallet, userId, 'SLE'),
+      usdWallet: safeWalletForCache(value.wallets?.usdWallet, userId, 'USD'),
+    };
+    return wallets.sleWallet || wallets.usdWallet ? { userId, savedAt: value.savedAt, wallets } : null;
+  } catch { return null; }
+}
+function writeWalletSnapshot(userId: string, wallets: any, savedAt: string) {
+  try {
+    // Cache only the last verified balance and freeze state. Never cache account IDs,
+    // provider credentials, transaction histories or payment instructions.
+    const safe = {
+      sleWallet: safeWalletForCache(wallets?.sleWallet, userId, 'SLE'),
+      usdWallet: safeWalletForCache(wallets?.usdWallet, userId, 'USD'),
+    };
+    if (safe.sleWallet || safe.usdWallet) {
+      localStorage.setItem('matmove:wallet-snapshot:v1:' + userId, JSON.stringify({ userId, savedAt, wallets: safe }));
+    }
+  } catch { /* Offline wallet display is best-effort; live provider verification stays authoritative. */ }
+}
+
 export function loadGoogleMaps(apiKey: string): Promise<void> {
   if (window.google?.maps?.Map && window.google.maps.Geocoder) return Promise.resolve();
   if (sdkPromise) return sdkPromise;
@@ -82,12 +120,18 @@ export function RiderDashboard(props: any) {
 }
 
 export default function PortalHome({ profile, onNavigate, mode = 'services' }: Props) {
+  const uid = profile.id as string;
+  const role = profile.role as string;
   const [selectedGame, setSelectedGame] = useState<'spin'|'dice'|'fruity'|'crankling'|null>(null);
   const [currency, setCurrency] = useState<'SLE' | 'USD'>('SLE');
   const [visible, setVisible] = useState(false);
-  const [wallets, setWallets] = useState<any>(null);
-  const [balanceLoading, setBalanceLoading] = useState(true);
+  const [walletSnapshot, setWalletSnapshot] = useState<WalletSnapshot | null>(() => readWalletSnapshot(uid));
+  const [wallets, setWallets] = useState<any>(() => walletSnapshot?.wallets || null);
+  const walletDataRef = useRef<any>(walletSnapshot?.wallets || null);
+  const [walletUpdatedAt, setWalletUpdatedAt] = useState<string | null>(() => walletSnapshot?.savedAt || null);
+  const [balanceLoading, setBalanceLoading] = useState(() => !walletSnapshot);
   const [balanceError, setBalanceError] = useState('');
+  const [networkOnline, setNetworkOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine !== false);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
   const [preferencesLoading, setPreferencesLoading] = useState(true);
   const [preferencesError, setPreferencesError] = useState('');
@@ -110,8 +154,6 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
   const balanceBusy = useRef(false);
   const preferencesBusy = useRef(false);
   const tripsBusy = useRef(false);
-  const uid = profile.id as string;
-  const role = profile.role as string;
 
   const sameIdentity = useCallback(async () => {
     const { data, error } = await supabase.auth.getSession();
@@ -140,18 +182,32 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
   const refreshWallets = useCallback(async () => {
     if (balanceBusy.current) return;
     balanceBusy.current = true;
-    if (mounted.current) setBalanceLoading(true);
+    if (mounted.current && !walletDataRef.current) setBalanceLoading(true);
     try {
       if (!await sameIdentity()) throw new Error('Please sign in again.');
       const { response, data, finish } = await walletFetch('/api/get-live-wallet', {});
       if (!response.ok) throw new Error(data.error || 'Could not load balances.');
       if (mounted.current && await sameIdentity()) {
+        const savedAt = new Date().toISOString();
+        const safe = {
+          sleWallet: safeWalletForCache(data?.sleWallet, uid, 'SLE'),
+          usdWallet: safeWalletForCache(data?.usdWallet, uid, 'USD'),
+        };
+        walletDataRef.current = data;
         setWallets(data);
+        setWalletSnapshot({ userId: uid, savedAt, wallets: safe });
+        setWalletUpdatedAt(savedAt);
+        writeWalletSnapshot(uid, data, savedAt);
         setBalanceError('');
         finish();
       }
     } catch (error: any) {
-      if (mounted.current) { setWallets(null); setBalanceError(error.message || 'Could not load balances.'); }
+      // A failed background refresh must never erase a previously confirmed balance.
+      if (mounted.current && !walletDataRef.current) {
+        setBalanceError(typeof navigator !== 'undefined' && !navigator.onLine
+          ? 'Wallet details will refresh when you reconnect.'
+          : error.message || 'Could not load balances.');
+      }
     } finally {
       balanceBusy.current = false;
       if (mounted.current) setBalanceLoading(false);
@@ -232,6 +288,11 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
     const refreshVisible = () => {
       if (document.visibilityState === 'visible') { void refreshWallets(); void refreshTrips(); void fetchTravelAndEvents(); }
     };
+    const online = () => {
+      setNetworkOnline(true);
+      void refreshWallets(); void refreshTrips(); void fetchTravelAndEvents();
+    };
+    const offline = () => setNetworkOnline(false);
     const timer = window.setInterval(refreshVisible, 30000);
     const liveChannel = supabase.channel(`customer-travel-events-${uid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'travel_settings', filter: 'id=eq.bus_ghana' }, () => { void fetchTravelAndEvents(); })
@@ -239,7 +300,15 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
       .on('postgres_changes', { event: '*', schema: 'public', table: 'platform_events' }, () => { void fetchTravelAndEvents(); })
       .subscribe();
     document.addEventListener('visibilitychange', refreshVisible);
-    return () => { mounted.current = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshVisible); void supabase.removeChannel(liveChannel); };
+    window.addEventListener('online', online);
+    window.addEventListener('offline', offline);
+    return () => {
+      mounted.current = false; window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshVisible);
+      window.removeEventListener('online', online);
+      window.removeEventListener('offline', offline);
+      void supabase.removeChannel(liveChannel);
+    };
   }, [refreshPreferences, refreshWallets, refreshTrips, fetchTravelAndEvents, uid]);
 
   const handleWithdrawUnpaidBooking = async () => {
@@ -299,7 +368,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
 
   const extraServices = [
     { title: 'Travel to Ghana', detail: 'Freetown–Accra direct bus bookings', Icon: Bus, action: () => setServicePage('travel') },
-    { title: 'Events & tickets', detail: eventsLoading ? 'Loading available events…' : events.length ? `${events.length} events available · view tickets` : 'Browse events and verified tickets', Icon: Ticket, action: () => setPanel('events') },
+    { title: 'Events & tickets', detail: eventsLoading ? 'Checking events…' : events.length ? `${events.length} events available · view tickets` : eventsError ? 'Events unavailable · tap to retry' : 'No events currently available', Icon: Ticket, action: () => setPanel('events') },
     { title: 'Games & entertainment', detail: 'Explore MatMove games · 18+', Icon: Sparkles, action: () => setServicePage('games') },
     { title: 'Concierge services', detail: 'Explore additional services and request details', Icon: Briefcase, action: () => setServicePage('concierge') },
     { title: 'Saved places', detail: preferencesLoading ? 'Loading saved places…' : preferencesError ? 'Saved-place access needs attention · open to retry' : 'Manage your Home and Work locations', Icon: Home, action: () => setPanel('places') },
@@ -388,10 +457,11 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
       </section>
       <button type="button" onClick={() => onNavigate('wallet')} className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Wallet size={19}/></span>
-        <span className="min-w-0 flex-1"><b className="block text-sm text-slate-950">Wallet & payments</b><small className="block text-xs text-slate-500">{balanceLoading ? 'Loading wallet…' : balanceError ? 'Wallet status needs checking' : wallet?.is_frozen || profile.is_wallet_frozen ? 'Wallet frozen · contact support' : 'Open wallet balances, top-ups and transfers'}</small></span>
+        <span className="min-w-0 flex-1"><b className="block text-sm text-slate-950">Wallet & payments</b><small className="block text-xs text-slate-500">{wallet?.is_frozen || profile.is_wallet_frozen ? 'Wallet frozen · contact support' : wallets ? 'Open wallet balances, top-ups and transfers' : networkOnline ? 'Wallet balance is not available yet' : 'Wallet details will appear when you reconnect'}</small></span>
         <ArrowRight size={17} className="text-slate-400"/>
       </button>
-      {balanceError && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800">{balanceError} <button type="button" disabled={balanceLoading} onClick={() => void refreshWallets()} className="font-bold underline">Retry</button></p>}
+      {walletUpdatedAt && <p className="ml-14 text-[10px] text-slate-400">{networkOnline ? 'Last confirmed' : 'Offline · last confirmed'} {new Date(walletUpdatedAt).toLocaleString()}</p>}
+      {!wallets && balanceError && networkOnline && <p role="status" className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{balanceError}</p>}
       {preferencesError && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">{preferencesError} <button type="button" onClick={() => void refreshPreferences()} className="font-bold underline">Retry saved places</button></p>}
       <section className="space-y-2" aria-labelledby="matmove-core-services">
         <div className="px-1"><h2 id="matmove-core-services" className="text-sm font-black text-slate-950">Your MatMove services</h2><p className="mt-1 text-xs text-slate-500">Everyday tools for your account.</p></div>
@@ -404,7 +474,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
       {(panel === 'places' || panel === 'cards') && <div className="fixed inset-0 z-[120] min-h-[100dvh] overflow-y-auto bg-slate-50 px-4 pb-10 pt-[calc(env(safe-area-inset-top)+16px)]"><div className="mx-auto max-w-3xl"><PersonalTools key={`${uid}:${panel}`} uid={uid} panel={panel} preferences={preferences} error={preferencesError} loading={preferencesLoading} refresh={refreshPreferences} onClose={() => setPanel(null)}/></div></div>}
       {panel === 'travel' && <TravelBookingModal uid={uid} userName={profile.full_name || profile.first_name || ''} userPhone={userPhone} walletBalance={travelWalletBalance} priceSle={Number(busSettings.price_sle || 2400)} departureDate={busSettings.departure_date} availableSeats={availableSeats} existingBooking={existingBooking} onSuccess={() => { setPanel(null); void fetchTravelAndEvents(); void refreshWallets(); }} onClose={() => setPanel(null)}/>}
       {panel === 'cancel_travel' && existingBooking && <CancelTravelModal booking={existingBooking} onSuccess={() => { setPanel(null); void fetchTravelAndEvents(); }} onClose={() => setPanel(null)}/>}
-      {panel === 'events' && <EventsModal uid={uid} userPhone={userPhone} walletBalance={travelWalletBalance} events={events} eventsError={eventsError} onRetry={fetchTravelAndEvents} onWalletRefresh={refreshWallets} onClose={() => setPanel(null)}/>}
+      {panel === 'events' && <EventsModal uid={uid} userPhone={userPhone} walletBalance={travelWalletBalance} events={events} eventsLoading={eventsLoading} eventsError={eventsError} networkOnline={networkOnline} onRetry={fetchTravelAndEvents} onWalletRefresh={refreshWallets} onClose={() => setPanel(null)}/>} 
       <p className="pb-2 text-center text-xs text-slate-400">Made for your everyday moves.</p>
     </main>
   );
@@ -1464,7 +1534,7 @@ function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle,
   );
 }
 
-function EventsModal({ uid, userPhone, walletBalance, events, eventsError, onRetry, onWalletRefresh, onClose }: any) {
+function EventsModal({ uid, userPhone, walletBalance, events, eventsLoading, eventsError, networkOnline, onRetry, onWalletRefresh, onClose }: any) {
   const [selectedTicketCount, setSelectedTicketCount] = useState<Record<string, number>>({});
   const [myTickets, setMyTickets] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
@@ -1489,6 +1559,10 @@ function EventsModal({ uid, userPhone, walletBalance, events, eventsError, onRet
   }, [fetchMyTickets]);
 
   const handleBuyTickets = async (evt: any) => {
+    if (!networkOnline || typeof navigator !== 'undefined' && !navigator.onLine) {
+      setError('Connect to the internet before purchasing event tickets. No payment has been taken.');
+      return;
+    }
     const count = selectedTicketCount[evt.id] || 1;
     const total = Number(evt.ticket_price) * count;
 
@@ -1528,13 +1602,18 @@ function EventsModal({ uid, userPhone, walletBalance, events, eventsError, onRet
   };
 
   return (
-    <div className="fixed inset-0 z-[130] flex min-h-[100dvh] w-full items-start justify-center overflow-y-auto bg-slate-50 pt-[calc(env(safe-area-inset-top)+12px)] pb-6">
-      <div className="relative min-h-[100dvh] w-full max-w-5xl bg-white p-4 shadow-none sm:p-6 space-y-4">
-        <button onClick={onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600"><X size={20} /></button>
-        <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-          <Sparkles className="text-sky-600" size={22} /> MatMove Events Hub
-        </h2>
-        <p className="text-xs text-slate-500">Official event tickets verified through Monime ledger</p>
+    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/45 p-3 pt-[calc(env(safe-area-inset-top)+12px)] pb-[calc(env(safe-area-inset-bottom)+12px)]">
+      <div role="dialog" aria-modal="true" aria-labelledby="matmove-events-title" className="flex max-h-[min(88dvh,900px)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-6">
+          <div className="min-w-0">
+            <h2 id="matmove-events-title" className="flex items-center gap-2 text-lg font-black text-slate-900">
+              <Sparkles className="shrink-0 text-sky-600" size={22} /> MatMove Events Hub
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">Official event tickets verified through Monime ledger</p>
+          </div>
+          <button type="button" aria-label="Close Events Hub" onClick={onClose} className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"><X size={20} /></button>
+        </header>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
 
         {error && <div className="p-3 bg-rose-50 text-rose-700 text-xs rounded-xl font-bold">{error}</div>}
         {notice && <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl leading-relaxed">{notice}</div>}
@@ -1563,7 +1642,15 @@ function EventsModal({ uid, userPhone, walletBalance, events, eventsError, onRet
 
         <div className="space-y-4 pt-2">
           <span className="text-xs font-bold text-slate-700 block">Available Events</span>
-          {events.map((evt: any) => {
+          {eventsLoading ? <p role="status" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-600">Checking for ticketed events…</p>
+            : eventsError && events.length === 0 ? <p role="status" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-600">Events could not be checked. Reconnect or refresh to try again.</p>
+            : events.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-7 text-center">
+                <Ticket className="mx-auto text-slate-300" size={26}/>
+                <p className="mt-2 text-sm font-bold text-slate-800">No events currently available</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">There are no ticketed events at the moment. New events posted by MatMove will appear here.</p>
+                <button type="button" onClick={() => void onRetry?.()} className="mt-3 inline-flex min-h-10 items-center rounded-xl border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700">Refresh events</button>
+              </div>
+            : events.map((evt: any) => {
             const count = selectedTicketCount[evt.id] || 1;
             const total = Number(evt.ticket_price) * count;
 
@@ -1595,16 +1682,17 @@ function EventsModal({ uid, userPhone, walletBalance, events, eventsError, onRet
                 <div className="text-right shrink-0">
                   <span className="text-base font-black text-sky-600 block mb-1">SLE {total.toLocaleString()}</span>{evt.ticket_price_usd!=null&&<span className="mb-2 block text-xs font-bold text-emerald-700">USD ${(Number(evt.ticket_price_usd)*count).toFixed(2)} display quote</span>}
                   <button
-                    disabled={busy}
+                    disabled={busy || !networkOnline}
                     onClick={() => handleBuyTickets(evt)}
                     className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition shadow-sm disabled:opacity-50"
                   >
-                    {busy ? 'Processing…' : `Buy ${count} Ticket${count > 1 ? 's' : ''}`}
+                    {busy ? 'Processing…' : !networkOnline ? 'Connect to buy' : `Buy ${count} Ticket${count > 1 ? 's' : ''}`}
                   </button>
                 </div>
               </div>
             );
           })}
+        </div>
         </div>
       </div>
     </div>

@@ -109,6 +109,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
   const [cancellingRequestId,setCancellingRequestId]=useState<string|null>(null);
   const handleCancelCustomerRequest=async(id:string)=>{
+    if(!networkOnline){setRideNotice('Connect to the internet before changing this request. No cancellation was submitted.');return;}
     if(cancellingRequestId)return;
     setCancellingRequestId(id);setRideNotice('');
     try{
@@ -147,6 +148,15 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
 
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [networkOnline, setNetworkOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine !== false);
+
+  useEffect(() => {
+    const online = () => setNetworkOnline(true);
+    const offline = () => setNetworkOnline(false);
+    window.addEventListener('online', online);
+    window.addEventListener('offline', offline);
+    return () => { window.removeEventListener('online', online); window.removeEventListener('offline', offline); };
+  }, []);
 
   useEffect(() => {
     if (!isLoadModalOpen && !isPayoutModalOpen && !isTransferModalOpen) return;
@@ -264,8 +274,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       if (data.transactions) setTransactions(data.transactions);
       setWalletNotice(data.sleWallet?.balanceAvailable === false ? data.sleWallet.balanceError || 'Balance unavailable.' : (data.warnings || []).join(' '));
     } catch (err: any) {
-      setWalletNotice(err.message || 'Wallet refresh failed.');
-      setSleWallet((previous: any) => previous ? { ...previous, balanceAvailable: false } : null);
+      setWalletNotice(!networkOnline ? 'Offline · showing your last confirmed wallet information.' : err.message || 'Wallet refresh failed.');
     } finally {
       balanceBusy.current = false;
       setIsRefreshing(false);
@@ -279,7 +288,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
   const hasSleAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || ''));
   const setupSleWallet = async () => {
-    if (!canLoad || setupBusy.current) return;
+    if (!networkOnline || !canLoad || setupBusy.current) return;
     setupBusy.current = true;
     setIsSettingUpWallet(true);
     setWalletSetupError('');
@@ -317,6 +326,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   }, [profile?.id]);
 
   const handleCreateUsdWallet = async () => {
+    if (!networkOnline) { setWalletNotice('Connect to the internet before creating a wallet.'); return; }
     if (!canLoad || isCreatingUsd) { setWalletNotice('Wallet access is unavailable.'); return; }
     setIsCreatingUsd(true);
     try {
@@ -334,6 +344,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   };
 
   const handleRequest = async () => {
+    if (!networkOnline) { setRideNotice('You are offline. Your ride request has not been sent. Reconnect and try again.'); return; }
     if (tripLoading || tripError || activeBooking || isRequesting) return;
     let recoveredSavedRequest = false;
     if (tripRequest.retained) {
@@ -425,6 +436,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   };
 
   const cancelTrip = async () => {
+    if (!networkOnline) { setRideNotice('Connect to the internet before changing this trip. No cancellation was submitted.'); return; }
     if (!activeBooking || isRequesting) return;
     
     const isAfterFiveMinutes = elapsedSeconds > 300;
@@ -464,6 +476,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   };
 
   const executeRidePayment = async () => {
+    if (!networkOnline) { setRideNotice('You are offline. No payment or cash confirmation was submitted. Reconnect and try again.'); return; }
     if (!activeBooking || isRequesting) return;
     setIsRequesting(true);
     setRideNotice('');
@@ -510,6 +523,10 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
   const executeTransfer = async () => {
     if (isProcessingTransfer) return;
+    if (!networkOnline) {
+      setTransferError('Connect to the internet before sending a transfer. No transaction has been submitted.');
+      return;
+    }
     if (!canSend) {
       setTransferError(isFrozen ? 'Your wallet is unavailable.' : 'Verify your identity before transferring.');
       return;
@@ -568,7 +585,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   return (
     <div className="flex-1 bg-slate-50 min-h-screen">
       <CashMonimeSuccess open={cashSuccessOpen} onClose={() => setCashSuccessOpen(false)} />
-      <header className={`sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur ${activeSection === 'wallet' || activeSection === 'home' ? 'hidden' : ''}`}>
+      <header className={`sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur ${activeSection === 'wallet' ? 'hidden' : ''}`}>
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="min-w-0">
             <h1 className="truncate text-base font-bold text-slate-900 sm:text-xl">
@@ -576,9 +593,9 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
             </h1>
           </div>
           <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:min-w-[360px]">
-            <button type="button" onClick={() => setIsLoadModalOpen(true)} disabled={!canLoad || !hasSleAccount || isSettingUpWallet} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-blue-600 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Load</button>
-            <button type="button" onClick={() => setIsPayoutModalOpen(true)} disabled={!canSend || !hasSleAccount} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-emerald-600 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Withdraw</button>
-            <button type="button" onClick={() => setIsTransferModalOpen(true)} disabled={!canSend || !hasSleAccount} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-slate-900 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Transfer</button>
+            <button type="button" onClick={() => setIsLoadModalOpen(true)} disabled={!networkOnline || !canLoad || !hasSleAccount || isSettingUpWallet} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-blue-600 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Load</button>
+            <button type="button" onClick={() => setIsPayoutModalOpen(true)} disabled={!networkOnline || !canSend || !hasSleAccount} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-emerald-600 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Withdraw</button>
+            <button type="button" onClick={() => setIsTransferModalOpen(true)} disabled={!networkOnline || !canSend || !hasSleAccount} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-slate-900 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Transfer</button>
           </div>
         </div>
       </header>
@@ -910,7 +927,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 w-full">
                 <button
                   onClick={() => setIsLoadModalOpen(true)}
-                  disabled={!canLoad || !hasSleAccount || isSettingUpWallet}
+                  disabled={!networkOnline || !canLoad || !hasSleAccount || isSettingUpWallet}
                   className="p-4 sm:p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
                 >
                   <div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24} /></div>
@@ -919,7 +936,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
                 <button
                   onClick={() => setIsPayoutModalOpen(true)}
-                  disabled={!canSend || !hasSleAccount}
+                  disabled={!networkOnline || !canSend || !hasSleAccount}
                   className="p-4 sm:p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
                 >
                   <ArrowUpRight size={24} /> Withdraw
@@ -927,7 +944,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
                 <button
                   onClick={() => setIsTransferModalOpen(true)}
-                  disabled={!canSend || !hasSleAccount}
+                  disabled={!networkOnline || !canSend || !hasSleAccount}
                   className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
                 >
                   <div className="p-3 bg-white rounded-full shadow-sm"><Users size={24} /></div>
@@ -943,10 +960,10 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
       {selectedTx && <TransactionModal tx={selectedTx} onClose={() => setSelectedTx(null)} />}
       {isLoadModalOpen && (
-        <WalletTopUp userId={profile?.id} allowed={canLoad && hasSleAccount} onClose={() => setIsLoadModalOpen(false)} onPaid={fetchLiveBalance} />
+        <WalletTopUp userId={profile?.id} allowed={networkOnline && canLoad && hasSleAccount} onClose={() => setIsLoadModalOpen(false)} onPaid={fetchLiveBalance} />
       )}
       {isPayoutModalOpen && (
-        <PayoutPanel userId={profile?.id} allowed={canSend && hasSleAccount} onClose={() => setIsPayoutModalOpen(false)} onBalanceChange={fetchLiveBalance} />
+        <PayoutPanel userId={profile?.id} allowed={networkOnline && canSend && hasSleAccount} onClose={() => setIsPayoutModalOpen(false)} onBalanceChange={fetchLiveBalance} />
       )}
 
       {isTransferModalOpen && (
@@ -991,7 +1008,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
             <button
               onClick={executeTransfer}
-              disabled={!canSend || !hasSleAccount || isProcessingTransfer || !transferAmount || !transferRecipient}
+              disabled={!networkOnline || !canSend || !hasSleAccount || isProcessingTransfer || !transferAmount || !transferRecipient}
               className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold p-4 rounded-xl flex justify-center items-center gap-2 transition disabled:opacity-50"
             >
               {isProcessingTransfer ? <Loader2 size={20} className="animate-spin" /> : <Users size={20} />}
