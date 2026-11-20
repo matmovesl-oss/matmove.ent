@@ -143,6 +143,19 @@ export function PortalApp() {
   return <CustomerPasscode key={session.user.id} userId={session.user.id} onLogout={signOut}>{lock=><PortalContent onPrivacyLock={lock}/>}</CustomerPasscode>;
 }
 
+function OfflineStatus(){
+ const [online,setOnline]=useState(()=>typeof navigator==='undefined'||navigator.onLine!==false);
+ useEffect(()=>{
+  const connected=()=>setOnline(true);
+  const disconnected=()=>setOnline(false);
+  window.addEventListener('online',connected);
+  window.addEventListener('offline',disconnected);
+  return()=>{window.removeEventListener('online',connected);window.removeEventListener('offline',disconnected);};
+ },[]);
+ if(online)return null;
+ return <div role="status" className="mx-auto max-w-6xl px-4 pt-2"><p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">Offline mode · saved information only. Wallet actions, new ride requests and ticket purchases need an internet connection.</p></div>;
+}
+
 function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -391,6 +404,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
       <>{guide}
       <div className="portal-shell min-h-screen bg-slate-50 pb-28">
         {accountHeader}
+        <OfflineStatus />
         <div className={sectionTransitioning ? 'mm-section-enter' : undefined}>
           <AccountSection
             profile={profile}
@@ -419,6 +433,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     <>{guide}
     <div className="portal-shell relative min-h-screen bg-slate-50 pb-24 [&_.mm-home-heading>button]:hidden">
       {accountHeader}
+        <OfflineStatus />
       <div className="mx-auto max-w-6xl px-4"><KycStatusNotice profile={profile} onVerify={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal?resume=1'); }}/></div>
       {activeSection !== 'home' && activeSection !== 'services' && (
         <div className="mx-auto max-w-6xl px-4 pt-3">
