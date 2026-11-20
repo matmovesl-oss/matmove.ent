@@ -1,4 +1,5 @@
 import ActiveTripMap from '@/components/ActiveTripMap';
+import MapScrollCue from '@/components/MapScrollCue';
 import { CashMonimeSuccess } from '@/components/CashMonimeSuccess';
 import { ProductGallery, catalogMoney, catalogCheckoutAllowed } from '@/components/ProductCatalog';
 import FareNegotiation from '@/components/FareNegotiation';
@@ -898,6 +899,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
             </div>
           </div>
         )}
+
+        {activeSection === 'home' && <MapScrollCue />}
 
         {activeSection === 'wallet' && (
           <div className="w-full space-y-6">
