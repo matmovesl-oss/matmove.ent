@@ -70,7 +70,7 @@ export default function MatMoveHelp({userId,context,onNavigate}:{userId:string;c
  },[userId,loadTickets,loadMessages]);
 
  useEffect(()=>{const el=dialog.current;if(open&&el&&!el.open)el.showModal();if(!open&&el?.open)el.close();return()=>{if(el?.open)el.close();};},[open]);
- useEffect(()=>{setQuestion('');setReply(null);setError('');setAnswerScope(scope);},[scope]);
+ useEffect(()=>{setQuestion('');setReply(null);setError('');setAnswerScope(scope);setOpen(false);setSelected(null);selectedRef.current=null;setMessages([]);setSupportError('');},[scope]);
 
  async function ask(value:string){
   const clean=value.trim();if(!clean||writeLock.current)return;
