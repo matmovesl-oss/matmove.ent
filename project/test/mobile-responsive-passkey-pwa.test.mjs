@@ -191,7 +191,7 @@ test('Rider ride screen exposes compact wallet shortcuts and all customer sectio
   assert.match(rider, /activeSection === 'wallet' \? 'hidden' : ''/);
   assert.match(rider, /disabled=\{!networkOnline \|\| !canLoad \|\| !hasSleAccount/);
   assert.match(rider, /disabled=\{!networkOnline \|\| !canSend \|\| !hasSleAccount/);
-  assert.match(app, /function OfflineStatus\\(\\)/);
-  assert.equal((app.match(/<OfflineStatus \\/>/g) || []).length, 2);
+  assert.ok(app.includes('function OfflineStatus(){'));
+  assert.equal(app.split('<OfflineStatus />').length - 1, 2);
   assert.match(app, /Offline mode · saved information only/);
 });
