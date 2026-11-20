@@ -46,7 +46,7 @@ test('all rider, merchant and driver map surfaces show a scroll cue that scrolls
 
 test('rider cash-review notice is compact while retaining the full original reconciliation explanation', async () => {
   const rider = await readFile(new URL('../src/pages/RiderDashboard.tsx', import.meta.url), 'utf8');
-  assert.match(rider, /Previous cash request needs review/);
+  assert.match(rider, /A previous cash request is under review/);
   assert.match(rider, /Review in Trips/);
   assert.match(rider, /<details className="mt-2 border-t border-blue-200 pt-2 text-xs text-blue-900">/);
   assert.match(rider, /No cash settlement or refund has been recorded/);
