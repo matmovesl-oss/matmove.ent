@@ -34,7 +34,7 @@ test('Wallet shows the MatMove logo once instead of the generic wallet pictogram
  assert.doesNotMatch(services,/title: 'Earnings & wallet'/);
  assert.doesNotMatch(services,/title: 'Business wallet'/);
  assert.doesNotMatch(services,/title: 'Wallet & payments'/);
- assert.match(services,/title: 'Wallet & payments'/);
+ assert.match(services,/>Wallet & payments<\/b>/);
 });
 
 test('Passcode keypad uses larger round number buttons and a stronger number weight',async()=>{
