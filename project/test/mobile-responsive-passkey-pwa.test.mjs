@@ -178,6 +178,7 @@ test('wallet background refresh keeps only a minimal last-confirmed snapshot and
 test('Events Hub has a compact always-visible close control and a clear empty-events message', async () => {
   const home = await readFile('src/components/PortalHome.tsx', 'utf8');
   assert.match(home, /No events currently available/);
+  assert.match(home, /eventsError && events.length === 0/);
   assert.match(home, /New events posted by MatMove will appear here/);
   assert.match(home, /aria-label="Close Events Hub"/);
   assert.match(home, /max-h-\[min\(88dvh,900px\)\]/);
