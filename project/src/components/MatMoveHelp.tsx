@@ -28,7 +28,7 @@ export default function MatMoveHelp({userId,context,onNavigate}:{userId:string;c
  const [reply,setReply]=useState<ReturnType<typeof searchMatMoveHelp>|null>(null),[error,setError]=useState('');
  const [tab,setTab]=useState<'guide'|'support'>('guide'),[tickets,setTickets]=useState<Ticket[]>([]);
  const [selected,setSelected]=useState<Ticket|null>(null),[messages,setMessages]=useState<SupportMessage[]>([]);
- const [draft,setDraft]=useState(''),[busy,setBusy]=useState(false),[supportError,setSupportError]=useState('');
+ const [draft,setDraft]=useState(''),[busy,setBusy]=useState(false),[supportError,setSupportError]=useState(''),[supportNotice,setSupportNotice]=useState('');
  const dialog=useRef<HTMLDialogElement>(null),identity=useRef(userId),latest=useRef(context),selectedRef=useRef<Ticket|null>(null),mounted=useRef(false),writeLock=useRef(false);
  identity.current=userId;latest.current=context;selectedRef.current=selected;
  const scope=JSON.stringify([userId,context.role,context.isActive,context.isOwner,context.permissions]);
@@ -75,15 +75,18 @@ export default function MatMoveHelp({userId,context,onNavigate}:{userId:string;c
  async function ask(value:string){
   const clean=value.trim();if(!clean||writeLock.current)return;
   writeLock.current=true;setBusy(true);setError('');setSupportError('');
-  setReply(searchMatMoveHelp(clean,latest.current));setAnswerScope(scope);
+  const guidance=searchMatMoveHelp(clean,latest.current);setReply(guidance);setAnswerScope(scope);
+  if(guidance.kind==='privacy'){writeLock.current=false;setBusy(false);return;}
+  setSupportNotice('');
   try{
    const {data,error}=await supabase.rpc('matmove_support_customer_open',{p_request_key:requestKey(),p_subject:clean.slice(0,100),p_category:category,p_body:clean});
    if(error)throw new Error(error.message||'Your question could not be sent. Please try again.');
    const id=data?.conversation?.id;
    if(typeof id!=='string'||typeof data?.conversation?.ticket_number!=='string')throw new Error('The support ticket was not confirmed. Refresh your support inbox before retrying.');
    const next:Ticket={id,ticket_number:data.conversation.ticket_number,subject:data.conversation.subject||clean.slice(0,100),category:data.conversation.category||category,status:data.conversation.status||'open',created_at:new Date().toISOString(),last_message_at:new Date().toISOString(),last_message:clean,unread_count:0};
-   setSelected(next);selectedRef.current=next;setTab('support');setQuestion('');setCategory('other');
+   setSelected(next);selectedRef.current=next;setQuestion('');setCategory('other');
    await Promise.all([loadTickets(),loadMessages(id)]);
+   setSupportNotice('Your question has been sent to MatMove Support. Ticket '+ticketRef(next.ticket_number)+'. Open My support to continue the conversation.');
    setSupportError('');
   }catch(e){setSupportError(e instanceof Error?e.message:'Your question could not be sent.');}
   finally{writeLock.current=false;setBusy(false);}
@@ -107,7 +110,7 @@ export default function MatMoveHelp({userId,context,onNavigate}:{userId:string;c
   try{await loadMessages(ticket.id);await loadTickets();}
   catch(e){setSupportError(e instanceof Error?e.message:'Conversation unavailable.');}
  }
- const close=()=>{setOpen(false);setQuestion('');setReply(null);setError('');setSupportError('')};
+ const close=()=>{setOpen(false);setQuestion('');setReply(null);setError('');setSupportError('');setSupportNotice('')};
  return <>
   <button type="button" aria-label={unread?'Open MatMove Help, '+unread+' unread support replies':'Open MatMove Help'} onClick={()=>{setOpen(true);void loadTickets().catch(e=>setSupportError(e.message));}} className="relative flex min-h-11 items-center gap-1 rounded-xl border px-3 text-sm font-bold text-emerald-800"><CircleHelp size={18}/><span className="hidden sm:inline">Help</span>{unread>0&&<span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-rose-600 px-1 text-center text-[10px] font-black text-white">{unread>9?'9+':unread}</span>}</button>
   <dialog ref={dialog} aria-label="MatMove Help and Support" onCancel={e=>{e.preventDefault();close();}} className="m-auto max-h-[90dvh] w-[calc(100%_-_1rem)] max-w-xl overflow-y-auto rounded-3xl border-0 bg-white p-4 text-slate-900 shadow-2xl backdrop:bg-slate-950/55 sm:p-5">
@@ -125,6 +128,7 @@ export default function MatMoveHelp({userId,context,onNavigate}:{userId:string;c
      <textarea aria-label="Ask MatMove Support" value={question} maxLength={2000} rows={3} disabled={busy} autoComplete="off" className="block min-h-24 w-full resize-y rounded-xl border p-3 text-base" placeholder="Write your question or explain the issue…" onChange={e=>setQuestion(e.target.value)}/>
      <button type="submit" disabled={busy||question.trim().length<1} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">{busy?'Sending your question…':<><Send size={16}/> Send to MatMove Support</>}</button>
     </form>
+    {supportNotice&&<p role="status" className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{supportNotice}</p>}
     {supportError&&<p role="alert" className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-800">{supportError}</p>}
     {visibleReply&&<section aria-live="polite" className="mt-4"><p className="text-sm text-slate-600">{visibleReply.message}</p>{visibleReply.articles.map(a=><article key={a.id} className="mt-3 rounded-2xl border bg-slate-50 p-4"><h3 className="font-bold">{a.title}</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{a.answer}</p><button type="button" onClick={()=>{try{onNavigate(a.action.destination);close();}catch{setError('This section could not be opened. Use the app navigation or try again.');}}} className="mt-3 flex min-h-11 items-center gap-2 font-bold text-emerald-800">{a.action.label}<ArrowUpRight size={16}/></button></article>)}</section>}
     <h3 className="mt-5 text-sm font-bold">Browse help topics</h3><div className="mt-2 flex flex-wrap gap-2">{topics.map(t=><button type="button" key={t.id} onClick={()=>{if(identity.current!==userId||!helpTopics(latest.current).some(a=>a.id===t.id))return;const article=HELP_ARTICLES.find(a=>a.id===t.id);if(article){setReply({version:HELP_VERSION,kind:'answer',message:'Guidance only. Actions still use the app’s normal checks.',articles:[article]});setAnswerScope(scope);}}} className="min-h-10 rounded-xl border px-3 py-2 text-left text-xs font-semibold">{t.title}</button>)}</div>
