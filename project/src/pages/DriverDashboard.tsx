@@ -1,4 +1,5 @@
 import ActiveTripMap from '@/components/ActiveTripMap';
+import ScrollDownHint from '@/components/ScrollDownHint';
 import { CashMonimeSuccess } from '@/components/CashMonimeSuccess';
 import { SkeletonBlock, SkeletonList } from '@/components/Skeleton';
 
@@ -670,6 +671,8 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
           </div>}
         </div>
       )}
+
+      {activeSection === 'home' && <ScrollDownHint />}
 
       {activeSection === 'wallet' && (
         <div className="p-6 max-w-4xl mx-auto w-full space-y-6">
