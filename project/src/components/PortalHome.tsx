@@ -1287,8 +1287,8 @@ function CancelTravelModal({ booking, onSuccess, onClose }: any) {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+    <div className="fixed inset-0 z-[130] flex min-h-[100dvh] w-full items-start justify-center overflow-y-auto bg-slate-50 pt-[calc(env(safe-area-inset-top)+12px)] pb-6">
+      <div className="relative min-h-[100dvh] w-full max-w-3xl bg-white p-4 shadow-none sm:p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
             <XCircle className="text-rose-600" size={18} /> Cancel Travel Booking
@@ -1402,7 +1402,7 @@ function TravelBookingModal({ uid, userName, userPhone, walletBalance, priceSle,
 
   return (
     <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+      <div className="relative min-h-[100dvh] w-full max-w-5xl bg-white p-4 shadow-none sm:p-6">
         <button onClick={onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600"><X size={20} /></button>
         <h2 className="text-xl font-black text-slate-900">Freetown – Accra Direct Bus</h2>
         <p className="text-xs text-slate-500 mt-0.5">Departures 1st & 15th every month · SLE {priceSle.toLocaleString()} / seat</p>
@@ -1528,7 +1528,7 @@ function EventsModal({ uid, userPhone, walletBalance, events, eventsError, onRet
 
   return (
     <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[85vh] overflow-y-auto space-y-4">
+      <div className="relative min-h-[100dvh] w-full max-w-5xl bg-white p-4 shadow-none sm:p-6 space-y-4">
         <button onClick={onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600"><X size={20} /></button>
         <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
           <Sparkles className="text-sky-600" size={22} /> MatMove Events Hub
