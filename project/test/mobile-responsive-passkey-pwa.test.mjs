@@ -77,7 +77,7 @@ test('PWA shell does not cache API, authentication or private user data', async 
   assert.match(worker, /auth\|wallet\|payment\|transaction\|profile\|booking/i);
   assert.match(worker, /APP_SHELL/);
   assert.match(worker, /offline\.html/);
-  assert.ok(worker.includes("return (await caches.match('/index.html')) || (await caches.match('/offline.html'))"), 'offline navigation must prefer the safe offline page over the cached app shell');
+  assert.ok(worker.includes("return (await caches.match('/index.html')) || (await caches.match('/offline.html'))"), 'offline navigation must prefer the cached app shell over the fallback page');
 });
 
 test('customer account uses compact arrow rows and focused profile, referral and policy screens', async () => {
