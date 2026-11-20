@@ -1643,6 +1643,7 @@ function EventsModal({ uid, userPhone, walletBalance, events, eventsLoading, eve
         <div className="space-y-4 pt-2">
           <span className="text-xs font-bold text-slate-700 block">Available Events</span>
           {eventsLoading ? <p role="status" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-600">Checking for ticketed events…</p>
+            : eventsError ? <p role="status" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-600">Events could not be checked. Reconnect or refresh to try again.</p>
             : events.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-7 text-center">
                 <Ticket className="mx-auto text-slate-300" size={26}/>
                 <p className="mt-2 text-sm font-bold text-slate-800">No events currently available</p>
