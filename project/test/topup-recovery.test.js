@@ -6,7 +6,7 @@ import { topupQuote } from '../server/topup-fees.js';
 import { publicPaymentCode, topupSettlement, encodeTopupQuote, decodeTopupQuote } from '../server/payment-code.js';
 import { createPaymentCodeHandler, getPaymentCodeHandler } from '../api/create-wallet-payment-code.js';
 const user='11111111-1111-4111-8111-111111111111';
-const context={user:{id:user},accountId:'fac-user',minor:500,idempotencyKey:'a'.repeat(64),wallets:[{currency:'SLE',monime_account_id:'fac-user'}]};
+const context={user:{id:user},accountId:'fac-user',minor:500,idempotencyKey:'a'.repeat(64),wallets:[{id:'wallet-user',currency:'SLE',monime_account_id:'fac-user'}],db:{rpc:async(name,args)=>({data:{user_id:args?.p_user,wallet_id:args?.p_wallet,payment_code_id:args?.p_payment_code,gross_minor:args?.p_gross,state:'pending'},error:null})}};
 const code={id:'code-test',mode:'one_time',financialAccountId:'fac-user',amount:{currency:'SLE',value:500},metadata:{matmoveUserId:user,purpose:'wallet_topup'},ussdCode:'*715*123#',expireTime:'2026-10-15T02:00:00Z',status:'pending'};
 const res=()=>({status(n){this.code=n;return this;},json(b){this.body=b;return this;}});
 const configured=c=>({MATMOVE_TOPUP_NET_ENABLED:'true',MONIME_TOPUP_FEE_CONFIG:JSON.stringify({confirmed:true,rateBps:0,fixedMinor:50,minimumMinor:0,taxBps:0,rounding:'ceil',...c})});
