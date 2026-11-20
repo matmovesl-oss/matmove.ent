@@ -148,7 +148,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
 
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-  const [networkOnline, setNetworkOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
+  const [networkOnline, setNetworkOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine !== false);
 
   useEffect(() => {
     const online = () => setNetworkOnline(true);
