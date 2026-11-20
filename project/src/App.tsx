@@ -98,6 +98,7 @@ import {
   DollarSign,
   CheckCircle2,
   AlertCircle,
+  ChevronDown,
 } from 'lucide-react';
 
 type PortalSection =
@@ -402,6 +403,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
               setActiveSection('home')
             }
             onServices={() => setActiveSection('services')}
+            onNavigate={setActiveSection}
           />
         </div>
 
@@ -494,10 +496,12 @@ function AccountSection({
   onBack,
   onLock,
   onServices,
+  onNavigate,
 }: any) {
   const navigate = useNavigate();
   const resumeVerification = () => { if (profile.kyc_status === 'approved') return; sessionStorage.setItem('ob_role', profile.role); navigate('/onboarding/personal?resume=1'); };
   const [activePanel, setActivePanel] = useState<string | null>(null);
+  const [servicesExpanded, setServicesExpanded] = useState(false);
   const [viewingGames, setViewingGames] = useState(false);
   const [viewingWallet, setViewingWallet] = useState(false);
   const [
@@ -1295,9 +1299,33 @@ function AccountSection({
         <button type="button" onClick={onLock} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><LockKeyhole size={17}/> Lock app</button>
       </div>
 
-      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <button type="button" onClick={() => setViewingWallet(true)} className="mm-account-link"><span className="mm-account-link-icon bg-emerald-50 text-emerald-700"><Wallet size={19}/></span><span className="min-w-0 flex-1"><b>Wallet & payments</b><small>Balances, transactions, top-ups and transfers</small></span><ArrowRight size={18}/></button>
-        <button type="button" onClick={onServices} className="mm-account-link"><span className="mm-account-link-icon bg-slate-100 text-slate-700"><Store size={19}/></span><span className="min-w-0 flex-1"><b>Services & tools</b><small>Shop, business, travel, events and games</small></span><ArrowRight size={18}/></button>
+      <div className="mb-3 space-y-2">
+        <button type="button" onClick={() => setViewingWallet(true)} className="mm-account-link w-full"><span className="mm-account-link-icon bg-emerald-50 text-emerald-700"><Wallet size={19}/></span><span className="min-w-0 flex-1"><b>Wallet & payments</b><small>Balances, transactions, top-ups and transfers</small></span><ArrowRight size={18}/></button>
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white" aria-label="Account services">
+          <button type="button" aria-expanded={servicesExpanded} aria-controls="mm-account-services-options" onClick={() => setServicesExpanded(value => !value)} className="mm-account-row w-full">
+            <span className="mm-account-link-icon bg-slate-100 text-slate-700"><Store size={19}/></span>
+            <span className="min-w-0 flex-1"><b>Services</b><small>Tap to open your role-specific services</small></span>
+            <ChevronDown size={19} className={servicesExpanded ? 'rotate-180 transition-transform' : 'transition-transform'}/>
+          </button>
+          {servicesExpanded && <div id="mm-account-services-options" className="grid grid-cols-1 gap-2 border-t border-slate-100 bg-slate-50 p-3 sm:grid-cols-2">
+            {profile.role === 'rider' && <>
+              <button type="button" onClick={() => onNavigate('ride')} className="mm-account-link"><span className="mm-account-link-icon bg-emerald-50 text-emerald-700"><Car size={18}/></span><span className="min-w-0 flex-1"><b>Book a ride</b><small>Open the ride booking screen</small></span><ArrowRight size={17}/></button>
+              <button type="button" onClick={() => onNavigate('shop')} className="mm-account-link"><span className="mm-account-link-icon bg-sky-50 text-sky-700"><ShoppingBag size={18}/></span><span className="min-w-0 flex-1"><b>Shop & orders</b><small>Open shopping and order history</small></span><ArrowRight size={17}/></button>
+              <button type="button" onClick={() => onNavigate('trips')} className="mm-account-link"><span className="mm-account-link-icon bg-violet-50 text-violet-700"><Navigation size={18}/></span><span className="min-w-0 flex-1"><b>My trips</b><small>Open trip history and details</small></span><ArrowRight size={17}/></button>
+            </>}
+            {profile.role === 'driver' && <>
+              <button type="button" onClick={() => onNavigate('ride')} className="mm-account-link"><span className="mm-account-link-icon bg-emerald-50 text-emerald-700"><Navigation size={18}/></span><span className="min-w-0 flex-1"><b>Driver radar</b><small>Open driver requests and map</small></span><ArrowRight size={17}/></button>
+              <button type="button" onClick={() => onNavigate('trips')} className="mm-account-link"><span className="mm-account-link-icon bg-violet-50 text-violet-700"><Car size={18}/></span><span className="min-w-0 flex-1"><b>My trips</b><small>Open your trip history</small></span><ArrowRight size={17}/></button>
+              <button type="button" onClick={() => onNavigate('wallet')} className="mm-account-link"><span className="mm-account-link-icon bg-amber-50 text-amber-700"><Wallet size={18}/></span><span className="min-w-0 flex-1"><b>Earnings & wallet</b><small>Open balances and payouts</small></span><ArrowRight size={17}/></button>
+            </>}
+            {profile.role === 'merchant' && <>
+              <button type="button" onClick={() => onNavigate('inventory')} className="mm-account-link"><span className="mm-account-link-icon bg-emerald-50 text-emerald-700"><Store size={18}/></span><span className="min-w-0 flex-1"><b>My business</b><small>Open inventory and orders</small></span><ArrowRight size={17}/></button>
+              <button type="button" onClick={() => onNavigate('trips')} className="mm-account-link"><span className="mm-account-link-icon bg-violet-50 text-violet-700"><Car size={18}/></span><span className="min-w-0 flex-1"><b>My trips</b><small>Open business trip history</small></span><ArrowRight size={17}/></button>
+              <button type="button" onClick={() => onNavigate('wallet')} className="mm-account-link"><span className="mm-account-link-icon bg-amber-50 text-amber-700"><Wallet size={18}/></span><span className="min-w-0 flex-1"><b>Business wallet</b><small>Open balances and payouts</small></span><ArrowRight size={17}/></button>
+            </>}
+            <button type="button" onClick={onServices} className="mm-account-link sm:col-span-2"><span className="mm-account-link-icon bg-slate-100 text-slate-700"><Store size={18}/></span><span className="min-w-0 flex-1"><b>Explore all services</b><small>Travel, events, concierge and more</small></span><ArrowRight size={17}/></button>
+          </div>}
+        </section>
       </div>
 
       <PasskeySecurity key={profile.id} userId={profile.id}/>
