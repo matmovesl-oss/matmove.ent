@@ -30,3 +30,25 @@ test('merchant ride booking panel stays in normal page flow and map keeps one-fi
   assert.doesNotMatch(merchant, /Drag or tap to expand or collapse ride booking panel/, 'merchant booking panel must not trap page scrolling');
   assert.match(picker, /gestureHandling: 'greedy'/, 'map should pan with a single finger');
 });
+
+test('all rider, merchant and driver map surfaces show a scroll cue that scrolls the page down', async () => {
+  const cue = await readFile(new URL('../src/components/MapScrollCue.tsx', import.meta.url), 'utf8');
+  const picker = await readFile(new URL('../src/components/RideLocationPicker.tsx', import.meta.url), 'utf8');
+  const trip = await readFile(new URL('../src/components/ActiveTripMap.tsx', import.meta.url), 'utf8');
+  const driver = await readFile(new URL('../src/pages/DriverDashboard.tsx', import.meta.url), 'utf8');
+  assert.match(cue, /aria-label="Scroll down to see more details below the map"/);
+  assert.match(cue, /window\.scrollBy\(\{ top: distance, behavior: 'smooth' \}\)/);
+  assert.match(cue, /absolute bottom-3 left-1\/2/);
+  assert.match(picker, /MapScrollCue/);
+  assert.match(trip, /MapScrollCue/);
+  assert.match(driver, /MapScrollCue/);
+});
+
+test('rider cash-review notice is compact while retaining the full original reconciliation explanation', async () => {
+  const rider = await readFile(new URL('../src/pages/RiderDashboard.tsx', import.meta.url), 'utf8');
+  assert.match(rider, /A previous cash request is under review/);
+  assert.match(rider, /Review in Trips/);
+  assert.match(rider, /<details className="mt-2 border-t border-blue-200 pt-2 text-xs text-blue-900">/);
+  assert.match(rider, /No cash settlement or refund has been recorded/);
+  assert.match(rider, /do not make a duplicate payment/i);
+});

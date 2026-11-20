@@ -100,10 +100,10 @@ test('Merchant location selection and Ride booking form are sequential with one 
  assert.doesNotMatch(rider,/sticky top-0 z-20/);
 });
 
-test('Services back arrow is left of the Wi dey move brand',async()=>{
+test('Services directory has a clear Back to Home control and MatMove wordmark',async()=>{
  const portal=await read('../src/components/PortalHome.tsx');
- assert.match(portal,/mode==='services'&&<button className="mm-icon-button shrink-0" type="button" aria-label="Back to Home"/);
- assert.match(portal,/mm-brand/);
+ assert.match(portal,/aria-label="Back to Home"/);
+ assert.match(portal,/<span className="text-sm font-black tracking-tight text-slate-950">MATMOVE<\/span>/);
  assert.match(portal,/Open your account/);
 });
 

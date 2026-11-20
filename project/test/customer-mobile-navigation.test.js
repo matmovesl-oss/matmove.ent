@@ -95,3 +95,26 @@ test('home map car motion can be paused, resumed and its selected route shared',
   assert.ok(map.includes('navigator.share'));
   assert.ok(map.includes('setActiveRoute'));
 });
+
+test('Account Services entry is compact and the Services directory uses separate full-screen sections', async () => {
+  const app = await readFile('src/App.tsx', 'utf8');
+  const services = await readFile('src/components/PortalHome.tsx', 'utf8');
+  assert.match(app, /aria-label="Open services"/);
+  assert.match(app, /className="mm-account-link mm-account-link-compact"/);
+  const css = await readFile('src/index.css', 'utf8');
+  assert.match(css, /\.mm-account-link\.mm-account-link-compact \{ min-height:56px/);
+  assert.equal((services.match(/fixed inset-0 z-\[130\]/g) || []).length, 3);
+  assert.match(app, /<b>Services<\/b>/);
+  assert.match(services, /const coreServices = role === 'driver'/);
+  assert.match(services, /const extraServices = \[/);
+  assert.match(services, /const serviceRow =/);
+  assert.match(services, /More from MatMove|Explore more/);
+  assert.match(services, /fixed inset-0 z-\[100\]/);
+  assert.match(services, /servicePage === 'travel'/);
+  assert.match(services, /servicePage === 'games'/);
+  assert.match(services, /servicePage === 'concierge'/);
+  assert.match(services, /panel === 'events' && <EventsModal/);
+  assert.match(services, /fixed inset-0 z-\[120\]/);
+  assert.match(services, /fixed inset-0 z-\[130\]/);
+  assert.match(services, /Back to Services/);
+});

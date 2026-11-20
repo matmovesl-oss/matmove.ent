@@ -3,6 +3,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {supabase} from '@/lib/supabase';
 import {portalIsUnlocked,onPortalPrivacyChange} from '@/lib/portalPrivacy';
+import MapScrollCue from '@/components/MapScrollCue';
 type Point={lat:number;lng:number};
 type Snapshot={bookingId:string;viewerId:string;riderId:string;driverId:string;status:'accepted'|'in_progress';pickup:Point|null;destination:Point|null;position:(Point&{accuracy:number;observedAt:string;receivedAt:string})|null;locationState:'fresh'|'waiting'|'stale';serverTime:string};
 const pageVisible=(userId?:string)=>document.visibilityState!=='hidden'&&(!userId||portalIsUnlocked(userId));
@@ -129,6 +130,9 @@ export default function ActiveTripMap({userId,bookingId,driver=false}:{userId:st
   {navigating&&<div className="rounded-xl bg-blue-50 p-3 text-sm"><p role="status">{routeText}</p>{routeSteps.length>0&&<details className="mt-2"><summary className="cursor-pointer font-bold">Route instructions</summary><ol className="mt-2 list-decimal space-y-2 pl-5">{routeSteps.map((step,i)=><li key={i}>{step}</li>)}</ol></details>}<p className="mt-2 text-xs text-slate-600">Route guidance updates while MatMove is open. Follow road signs and local conditions.</p></div>}
   <p className="text-xs text-slate-500">A = pickup · B = destination · D = assigned driver · C = customer (when shared). GPS is supplied by the driver’s device and does not authorize a fare or payment.</p>
   {mapError?<p role="alert" className="text-sm text-red-700">{mapError}<button type="button" onClick={()=>setMapRetry(n=>n+1)} className="min-h-11 px-2 font-bold underline">Retry trip map</button></p>:!mapReady&&<p role="status" className="text-sm">Loading map…</p>}
-  <div ref={host} aria-label="Assigned trip pickup, destination and driver map" className="w-full rounded-xl bg-slate-100" style={{height:'clamp(260px,42dvh,440px)',minHeight:260}}/>
+  <div className="relative">
+   <div ref={host} aria-label="Assigned trip pickup, destination and driver map" className="w-full rounded-xl bg-slate-100" style={{height:'clamp(260px,42dvh,440px)',minHeight:260}}/>
+   <MapScrollCue/>
+  </div>
  </section>;
 }

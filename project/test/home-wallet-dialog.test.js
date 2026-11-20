@@ -44,11 +44,15 @@ async function page(name,fn,{role='rider',saved=null,preferencesError=null}={}){
   await settle();await fn(h);
  }finally{unmounted=true;for(const s of slots)s?.cleanup?.();for(const[k,v]of Object.entries(previous)){if(v===undefined)delete globalThis[k];else globalThis[k]=v;}for(const k of ['__hwHooks','__hwDb','__hwPayout'])delete globalThis[k];await rm(dir,{recursive:true,force:true});}
 }
-for(const role of ['rider','driver','merchant'])test(`${role} Home shows all four games and opens exactly the selected existing game without payment`,()=>page('PortalHome',async h=>{
+for(const role of ['rider','driver','merchant'])test(`${role} Services opens the games section separately and opens the selected game without payment`,()=>page('PortalHome',async h=>{
+ assert.match(h.text,/Services/);assert.doesNotMatch(h.text,/RICH DICE/);
+ const games=h.nodes.find(n=>n.type==='button'&&text(n).includes('Games & entertainment'));
+ assert.ok(games,'Games should be a compact service row');games.props.onClick();await h.settle();
  for(const label of ['Spin Wheel','RICH DICE','Fruity Flue','CRANKLING'])assert.ok(h.text.includes(label));
- const button=h.nodes.find(n=>n.type==='button'&&text(n).includes('RICH DICE'));button.props.onClick();await h.settle();
+ const button=h.nodes.find(n=>n.type==='button'&&text(n).includes('RICH DICE'));assert.ok(button);button.props.onClick();await h.settle();
  assert.equal(h.tree.props.initialGame,'dice');assert.equal(h.tree.props.userId,uid);assert.equal(h.calls.filter(c=>c.kind==='payout').length,0);
  h.tree.props.onBack();await h.settle();assert.match(h.text,/Play MatMove Games/);
+ const back=h.nodes.find(n=>n.type==='button'&&text(n).includes('Back to Services'));assert.ok(back);back.props.onClick();await h.settle();assert.match(h.text,/Services/);
 },{role}));
 test('Home shows the actionable preferences error without claiming the user has no saved places',()=>page('PortalHome',async h=>{
  assert.match(h.text,/ACCESS: Customer account setup required/);assert.doesNotMatch(h.text,/Add your home address/);

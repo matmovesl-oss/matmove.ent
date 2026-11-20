@@ -1297,7 +1297,7 @@ function AccountSection({
 
       <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <button type="button" onClick={() => setViewingWallet(true)} className="mm-account-link"><span className="mm-account-link-icon bg-emerald-50 text-emerald-700"><Wallet size={19}/></span><span className="min-w-0 flex-1"><b>Wallet & payments</b><small>Balances, transactions, top-ups and transfers</small></span><ArrowRight size={18}/></button>
-        <button type="button" onClick={onServices} className="mm-account-link"><span className="mm-account-link-icon bg-slate-100 text-slate-700"><Store size={19}/></span><span className="min-w-0 flex-1"><b>Services & tools</b><small>Shop, business, travel, events and games</small></span><ArrowRight size={18}/></button>
+        <button type="button" onClick={onServices} aria-label="Open services" className="mm-account-link mm-account-link-compact"><span className="mm-account-link-icon bg-slate-100 text-slate-700"><Store size={17}/></span><span className="min-w-0 flex-1"><b>Services</b><small>Open MatMove services</small></span><ArrowRight size={17}/></button>
       </div>
 
       <PasskeySecurity key={profile.id} userId={profile.id}/>
