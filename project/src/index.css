@@ -454,6 +454,10 @@ input, select, textarea { font-size: 16px; }
 .mm-account-link small,.mm-account-row small { display:block;margin-top:3px;color:#64748b;font-size:12px;font-weight:450;line-height:1.4; }
 .mm-account-link>svg:last-child,.mm-account-row>svg:last-child { flex:none;color:#64748b; }
 .mm-account-link-icon { display:grid;place-items:center;width:40px;height:40px;flex:none;border-radius:13px; }
+.mm-account-link-compact { min-height:56px;padding:8px 10px;gap:10px; }
+.mm-account-link-compact .mm-account-link-icon { width:34px;height:34px;border-radius:10px; }
+.mm-account-link-compact small { margin-top:1px; }
+
 .mm-account-row { border:0;border-radius:0;min-height:66px;padding:12px 14px; }
 .mm-account-row:focus-visible,.mm-account-link:focus-visible { outline:3px solid #0b73c9;outline-offset:-3px; }
 @media(max-width:420px) {
