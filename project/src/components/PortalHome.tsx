@@ -302,7 +302,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
     { title: 'Events & tickets', detail: eventsLoading ? 'Loading available events…' : events.length ? `${events.length} events available · view tickets` : 'Browse events and verified tickets', Icon: Ticket, action: () => setPanel('events') },
     { title: 'Games & entertainment', detail: 'Explore MatMove games · 18+', Icon: Sparkles, action: () => setServicePage('games') },
     { title: 'Concierge services', detail: 'Explore additional services and request details', Icon: Briefcase, action: () => setServicePage('concierge') },
-    { title: 'Saved places', detail: preferencesLoading ? 'Loading saved addresses…' : 'Manage your Home and Work locations', Icon: Home, action: () => setPanel('places') },
+    { title: 'Saved places', detail: preferencesLoading ? 'Loading saved places…' : preferencesError ? 'Saved-place access needs attention · open to retry' : 'Manage your Home and Work locations', Icon: Home, action: () => setPanel('places') },
     ...(role !== 'driver' ? [{ title: 'Payment references', detail: 'Manage optional saved card references', Icon: CreditCard, action: () => setPanel('cards') }] : []),
   ];
 
