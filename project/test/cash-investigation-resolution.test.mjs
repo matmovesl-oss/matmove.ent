@@ -9,7 +9,7 @@ test('verified cash refunds resolve old review tickets without closing uncertain
   assert.match(migration, /after update of state on public\.ride_payments/);
   assert.match(migration, /cp\.status not in \('refunded','cancelled'\)/);
   assert.match(migration, /cp\.driver_id is not null and cp\.cash_return_status<>'refunded'/);
-  assert.match(migration, /status='cash_review_required' and exists/);
+  assert.ok(migration.includes("status=''cash_review_required'' and exists"));
   assert.match(migration, /cp\.status='refunded'/);
   assert.match(migration, /b\.status='cash_review_required'/);
   assert.match(migration, /v_updated=v_definition/);
