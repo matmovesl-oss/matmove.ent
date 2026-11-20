@@ -102,7 +102,8 @@ test('Account Services entry is compact and the Services directory uses separate
   assert.match(app, /aria-label="Open services"/);
   assert.match(app, /className="mm-account-link mm-account-link-compact"/);
   const css = await readFile('src/index.css', 'utf8');
-  assert.match(css, /\.mm-account-link-compact \{ min-height:56px/);
+  assert.match(css, /\.mm-account-link\.mm-account-link-compact \{ min-height:56px/);
+  assert.equal((services.match(/fixed inset-0 z-\[130\]/g) || []).length, 3);
   assert.match(app, /<b>Services<\/b>/);
   assert.match(services, /const coreServices = role === 'driver'/);
   assert.match(services, /const extraServices = \[/);
