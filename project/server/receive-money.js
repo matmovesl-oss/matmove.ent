@@ -666,14 +666,22 @@ export async function reconcileReceivePaymentEvent(db, event, providerObject) {
       : null;
   const reference = providerObject.reference;
   const status = String(providerObject.status || '').toLowerCase();
-  const valid = status === 'completed' &&
+  const lifecycle = event?.event_type || event?.payload?.event?.name;
+  const expectedStatus = lifecycle === 'checkout_session.cancelled' || lifecycle === 'payment_code.cancelled'
+    ? 'cancelled'
+    : lifecycle === 'checkout_session.expired' || lifecycle === 'payment_code.expired'
+      ? 'expired'
+      : 'completed';
+  const status = String(providerObject.status || '').toLowerCase();
+  const reference = providerObject.reference;
+  const valid = status === expectedStatus &&
     providerObject.financialAccountId === payment.provider_account_id &&
     amountMinor === Number(payment.amount_minor) &&
-    providerObject.amount?.currency !== 'USD' &&
     reference === payment.reference &&
+    providerObject.amount?.currency !== 'USD' &&
     (providerObject.currency == null || providerObject.currency === 'SLE');
-  if (!valid || (providerObject.reference && providerObject.reference !== payment.reference)) {
-    throw new Error('Provider completed payment did not match the expected MatMove recipient, amount, currency and reference.');
+  if (!valid) {
+    throw new Error('Provider payment did not match the expected MatMove recipient, amount, currency, reference and final status.');
   }
 
   if (payment.state === 'completed') {
@@ -683,6 +691,16 @@ export async function reconcileReceivePaymentEvent(db, event, providerObject) {
     return 'processed';
   }
   if (payment.state === 'review_required') throw new Error('MatMove payment is already under review.');
+  if (expectedStatus !== 'completed') {
+    const { error: updateError } = await db.from('matmove_received_payments').update({
+      provider_object_id: objectId,
+      state: expectedStatus,
+      provider_status: expectedStatus,
+      updated_at: new Date().toISOString()
+    }).eq('id', payment.id).neq('state', 'completed');
+    if (updateError) throw new Error('Could not record the final cancelled or expired payment request.');
+    return 'processed';
+  }
   const { data: updated, error: updateError } = await db.from('matmove_received_payments')
     .update({
       provider_object_id: objectId,
