@@ -79,13 +79,18 @@ export async function manageReceiveLink(context, body, { verify = verifiedAccoun
 
   const existing = await loadOwnedLink(db, wallet.id);
   if (body?.operation === 'status') {
-    return existing?.enabled ? {
+    const featureEnabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true';
+    return featureEnabled && existing?.enabled ? {
+      featureEnabled: true,
       enabled: true,
       publicName: existing.public_name,
       publicUrl: `${safeOrigin()}/pay/${existing.public_slug}`,
       recipientCode: existing.recipient_code,
       smsReceiptsEnabled: existing.sms_receipts_enabled
-    } : { enabled: false, publicUrl: null, recipientCode: null, smsReceiptsEnabled: false };
+    } : { featureEnabled, enabled: false, publicUrl: null, recipientCode: null, smsReceiptsEnabled: false };
+  }
+  if (body?.enabled !== false && process.env.MATMOVE_RECEIVE_MONEY_ENABLED !== 'true') {
+    throw new HttpError(503, 'MatMove secure receiving payments are not activated yet. Please check again after provider verification.');
   }
   const enable = body?.enabled !== false;
   const smsEnabled = body?.smsReceiptsEnabled ?? existing?.sms_receipts_enabled ?? false;
@@ -164,6 +169,7 @@ export async function manageReceiveLink(context, body, { verify = verifiedAccoun
 }
 
 export async function getPublicReceiveLink(db, slug) {
+  if (process.env.MATMOVE_RECEIVE_MONEY_ENABLED !== 'true') return null;
   if (typeof slug !== 'string' || !SLUG.test(slug)) return null;
   const { data, error } = await db.from('matmove_receive_links')
     .select('id,public_name,recipient_code,enabled')
@@ -219,7 +225,8 @@ async function getOrCreatePayment(db, { link, amountMinor, channel, idempotencyK
   return data;
 }
 
-export async function createReceiveCheckout(req, res, { db = dbClient(), provider } = {}) {
+export async function createReceiveCheckout(req, res, { db = dbClient(), provider, verify = verifiedAccount } = {}) {
+  if (process.env.MATMOVE_RECEIVE_MONEY_ENABLED !== 'true') throw new HttpError(503, 'MatMove receive payments are being activated. Please try again later.');
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
   const origin = safeOrigin();
   const slug = req.body?.slug;
@@ -242,11 +249,20 @@ export async function createReceiveCheckout(req, res, { db = dbClient(), provide
   const { data: wallet, error: walletError } = await db.from('wallets')
     .select('id,user_id,currency,is_frozen,monime_account_id,metadata')
     .eq('id', link.wallet_id).eq('user_id', link.user_id).single();
-  if (walletError || !wallet || wallet.currency !== 'SLE' || wallet.is_frozen === true) {
+  const { data: profile, error: profileError } = await db.from('profiles')
+    .select('is_wallet_frozen').eq('id', link.user_id).single();
+  if (walletError || !wallet || wallet.currency !== 'SLE' || wallet.is_frozen === true ||
+      profileError || profile?.is_wallet_frozen === true) {
     throw new HttpError(409, 'The recipient wallet is not available to receive payment.');
   }
   if ((wallet.monime_account_id || wallet.metadata?.monime_account_id) !== link.financial_account_id) {
     throw new HttpError(409, 'The recipient wallet account requires verification before receiving payment.');
+  }
+  const providerAccount = await verify(db, wallet);
+  if (providerAccount?.id !== link.financial_account_id ||
+      providerAccount?.currency !== 'SLE' ||
+      String(providerAccount?.uvan || '').trim() !== link.payment_target_ref) {
+    throw new HttpError(409, 'The recipient Monime account needs verification before receiving payment.');
   }
 
   const row = await getOrCreatePayment(db, {
@@ -401,7 +417,10 @@ async function linkForUssdCode(db, code) {
   const { data: wallet, error: walletError } = await db.from('wallets')
     .select('id,user_id,currency,is_frozen,monime_account_id,metadata')
     .eq('id', data.wallet_id).eq('user_id', data.user_id).single();
+  const { data: profile, error: profileError } = await db.from('profiles')
+    .select('is_wallet_frozen').eq('id', data.user_id).single();
   if (walletError || !wallet || wallet.currency !== 'SLE' || wallet.is_frozen === true ||
+      profileError || profile?.is_wallet_frozen === true ||
       (wallet.monime_account_id || wallet.metadata?.monime_account_id) !== data.financial_account_id) return null;
   return data;
 }
@@ -424,7 +443,7 @@ async function createUssdIntent(db, link, sessionId, amountText) {
   return row;
 }
 
-export async function resolveUssdExchange(payload, { db = dbClient(), enabled = process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true' } = {}) {
+export async function resolveUssdExchange(payload, { db = dbClient(), enabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true' && process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true' } = {}) {
   if (!enabled) return stop('MatMove USSD payments are not enabled yet. Please use the MatMove payment link.');
   const sessionId = payload?.global?.sessionId;
   if (typeof sessionId !== 'string' || !UUID.test(sessionId)) return stop('This USSD session could not be verified. Please dial again.');
