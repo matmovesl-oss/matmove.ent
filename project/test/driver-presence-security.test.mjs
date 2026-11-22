@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const migration=readFileSync(new URL('../supabase/migrations/20261119133000_matmove_driver_presence_v1.sql',import.meta.url),'utf8');
+const migration=readFileSync(new URL('../supabase/migrations/20261119102352_matmove_driver_presence_v1.sql',import.meta.url),'utf8');
 const dashboard=readFileSync(new URL('../src/pages/DriverDashboard.tsx',import.meta.url),'utf8');
 
 test('driver presence is server-owned and protected by RLS and authenticated RPCs',()=>{

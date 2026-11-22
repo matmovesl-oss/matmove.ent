@@ -26,7 +26,7 @@ test('Admin cash refund legs are included in the scheduled queue and reconciled 
 });
 
 test('Admin cancellation is dispatch-authorized, idempotent and keeps paid bookings open until refund verification', async () => {
-  const migration = await read('../supabase/migrations/20261114150000_matmove_admin_cancel_refund_workflow_v1.sql');
+  const migration = await read('../supabase/migrations/20261114150854_matmove_admin_cancel_refund_stale_request_sweep_v1.sql');
   assert.match(migration, /public\.matmove_dispatch_actor\(\)/);
   assert.match(migration, /public\.matmove_admin_cancel_booking/);
   assert.match(migration, /p_request_id/);
@@ -39,8 +39,8 @@ test('Admin cancellation is dispatch-authorized, idempotent and keeps paid booki
 
 test('Supabase stale-request Cron remains protected and Vercel schedules the unified payment reconciler daily', async () => {
   const api = await read('../server/ride-api.js');
-  const migration = await read('../supabase/migrations/20261114150000_matmove_admin_cancel_refund_workflow_v1.sql');
-  const cronMigration = await read('../supabase/migrations/20261114151000_matmove_stale_request_sweep_cron_v2.sql');
+  const migration = await read('../supabase/migrations/20261114150854_matmove_admin_cancel_refund_stale_request_sweep_v1.sql');
+  const cronMigration = await read('../supabase/migrations/20261114151012_matmove_stale_request_sweep_cron_v2.sql');
   const routes = await read('../vercel.json');
   assert.match(api, /db\.rpc\('matmove_ride_stale_request_sweep'\)/);
   assert.match(api, /staleRequests: staleSweep\.data/);
@@ -52,7 +52,7 @@ test('Supabase stale-request Cron remains protected and Vercel schedules the uni
 });
 
 test('automatic abandonment never cancels a request with any payment ledger or an assigned driver', async () => {
-  const migration = await read('../supabase/migrations/20261114150000_matmove_admin_cancel_refund_workflow_v1.sql');
+  const migration = await read('../supabase/migrations/20261114150854_matmove_admin_cancel_refund_stale_request_sweep_v1.sql');
   assert.match(migration, /interval '30 minutes'/);
   assert.match(migration, /interval '60 minutes'/);
   assert.match(migration, /b\.driver_id is null/);
@@ -62,7 +62,7 @@ test('automatic abandonment never cancels a request with any payment ledger or a
 });
 
 test('Admin can cancel an in-progress digital ride through full refund, but cannot auto-cancel an uncertain cash handover', async () => {
-  const migration = await read('../supabase/migrations/20261114152000_matmove_admin_cancel_in_progress_digital_v2.sql');
+  const migration = await read('../supabase/migrations/20261114151824_matmove_admin_cancel_in_progress_digital_v2.sql');
   assert.match(migration, /'in_progress'/);
   assert.match(migration, /b\.status='in_progress' and b\.payment_method='cash'/);
   assert.match(migration, /PAYMENT_LEDGER_MISSING/);
@@ -81,7 +81,7 @@ test('Admin can trigger immediate server-side refund reconciliation using a disp
 });
 
 test('Admin cannot auto-cancel a cash ride once a driver is linked to the cash ledger', async () => {
-  const migration = await read('../supabase/migrations/20261114153000_matmove_cash_admin_cancel_handover_guard_v1.sql');
+  const migration = await read('../supabase/migrations/20261114153128_matmove_cash_admin_cancel_handover_guard_v1.sql');
   assert.match(migration, /cp\.driver_id is not null/);
   assert.match(migration, /CASH_HANDOVER_REVIEW_REQUIRED/);
 });

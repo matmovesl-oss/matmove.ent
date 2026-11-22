@@ -15,7 +15,7 @@ test('cash status exposes the separate physical-return confirmation state',()=>{
  assert.match(server,/cash_return_rider_confirmed_at/);
 });
 
-const terminalMigration=readFileSync(new URL('../supabase/migrations/20261115114500_matmove_admin_cash_return_terminal_booking_v1.sql',import.meta.url),'utf8');
+const terminalMigration=readFileSync(new URL('../supabase/migrations/20261115114757_matmove_admin_cash_return_terminal_booking_v1.sql',import.meta.url),'utf8');
 test('verified Admin cash refund closes an in-progress booking only after both physical-return confirmations',()=>{
  assert.match(terminalMigration,/status=''in_progress'' and exists\(select 1 from public\.matmove_cash_ride_payments cpr/);
  assert.match(terminalMigration,/cpr\.status=''refunded'' and cpr\.cash_return_status=''refunded''/);

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const migration = await readFile(new URL('../supabase/migrations/20261116165000_matmove_driver_cancel_redispatch_hardening_v2.sql', import.meta.url), 'utf8');
+const migration = await readFile(new URL('../supabase/migrations/20261117004915_matmove_driver_cancel_redispatch_hardening_v2.sql', import.meta.url), 'utf8');
 const ridePayments = await readFile(new URL('../server/ride-payments.js', import.meta.url), 'utf8');
 const cashPayments = await readFile(new URL('../server/cash-ride-payments.js', import.meta.url), 'utf8');
 const rideService = await readFile(new URL('../src/services/rideService.ts', import.meta.url), 'utf8');

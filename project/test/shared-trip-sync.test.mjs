@@ -122,7 +122,7 @@ test('review-only cash bookings stay in Trips but are excluded from the Rider an
  assert.doesNotMatch(trips,/Needs payment review/);
 });
 test('scheduled stale cash return quarantine closes dispatch without settling or refunding money',async()=>{
- const migration=await read('../supabase/migrations/20261117033000_matmove_stale_cash_handover_quarantine_v1.sql');
+ const migration=await read('../supabase/migrations/20261117045151_matmove_stale_cash_handover_quarantine_v1.sql');
  assert.ok(migration.includes("cash_return_requested_at < pg_catalog.clock_timestamp() - interval '24 hours'"));
  assert.match(migration,/cp\.cash_return_driver_confirmed_at is null\s+or cp\.cash_return_rider_confirmed_at is null/);
  assert.match(migration,/set status='review_required'/);
@@ -181,7 +181,7 @@ test('Rider Ride tab displays the unfinished cash-review notice instead of hidin
 });
 
 test('stale cash requests with an exact verified fee reserve are closed from live matching without refunding or capturing',async()=>{
- const migration=await read('../supabase/migrations/20261117033000_matmove_stale_cash_handover_quarantine_v1.sql');
+ const migration=await read('../supabase/migrations/20261117045151_matmove_stale_cash_handover_quarantine_v1.sql');
  assert.match(migration,/b\.status in \('pending','pending_admin'\)/);
  assert.match(migration,/b\.driver_id is null[\s\S]*b\.started_at is null/);
  assert.match(migration,/cp\.status='fee_reserved'/);
@@ -215,7 +215,7 @@ test('Trip History distinguishes a returned cash handover from an old reserved d
 
 
 test('bookings RLS grants authenticated participants a permissive own-booking read without weakening restrictive policy',async()=>{
- const migration=await read('../supabase/migrations/20261117095000_matmove_bookings_owner_select_v1.sql');
+ const migration=await read('../supabase/migrations/20261117112151_matmove_bookings_owner_select_v1.sql');
  assert.match(migration,/create policy matmove_bookings_owner_select/);
  assert.match(migration,/as permissive/);
  assert.match(migration,/for select/);

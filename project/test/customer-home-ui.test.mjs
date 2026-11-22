@@ -78,7 +78,7 @@ test('ride vehicle selector and map pins use branded visual markers instead of p
 });
 
 test('homepage post storage upload allowlist grants only the named admin permission',async()=>{
- const sql=await read('../supabase/migrations/20261113160500_matmove_homepage_post_storage_upload_allowlist_v1.sql');
+ const sql=await read('../supabase/migrations/20261113161043_matmove_homepage_post_storage_upload_allowlist_v1.sql');
  assert.match(sql,/as restrictive/i);
  assert.match(sql,/bucket_id = 'matmove-homepage-posts'/);
  assert.match(sql,/public\.matmove_admin_can\('notifications'\)/);

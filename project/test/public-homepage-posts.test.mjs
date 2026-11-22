@@ -7,7 +7,7 @@ const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 test('public landing page reads the restricted published-post view', async () => {
   const component = await read('../src/components/PublicHomepagePosts.tsx');
   const landing = await read('../src/pages/LandingPage.tsx');
-  const migration = await read('../supabase/migrations/20261119144000_matmove_public_homepage_posts_view_v1.sql');
+  const migration = await read('../supabase/migrations/20261119174659_matmove_public_homepage_posts_view_v1.sql');
 
   assert.match(component, /from\('matmove_public_homepage_posts'\)/);
   assert.match(component, /image_path/);

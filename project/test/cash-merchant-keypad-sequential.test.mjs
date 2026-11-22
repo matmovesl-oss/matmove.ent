@@ -69,7 +69,7 @@ test('Merchant can book cash rides, reserve only the fee, and confirm the same t
 test('cash capture still requires both customer and driver confirmation and the verified fee reserve',async()=>{
  const [cashServer,migration]=await Promise.all([
   read('../server/cash-ride-payments.js'),
-  read('../supabase/migrations/20261113143000_matmove_cash_shared_account_ledger_settlement.sql')
+  read('../supabase/migrations/20261113141937_matmove_cash_shared_account_ledger_settlement.sql')
  ]);
  assert.match(cashServer,/confirmation\.captureReady/);
  assert.match(cashServer,/finishCashLeg\(db, bookingId, 'capture'/);
