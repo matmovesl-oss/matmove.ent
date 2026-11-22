@@ -4,6 +4,7 @@ import InviteEarn from '@/components/InviteEarn';
 import MatMoveHelp, {customerHelpSection} from '@/components/MatMoveHelp';
 import CustomerSupport from '@/components/CustomerSupport';
 import NotificationBell from '@/components/NotificationBell';
+import ReceivePayLinkPage, { ReceivePaymentCompletePage } from '@/pages/ReceivePayLinkPage';
 
 import PortalHome from '@/components/PortalHome';
 import CustomerHome from '@/components/CustomerHome';
@@ -1415,6 +1416,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
+      <Route path="/pay/complete" element={<ReceivePaymentCompletePage />} />
+      <Route path="/pay/:slug" element={<ReceivePayLinkPage />} />
       <Route
         path="/"
         element={<LandingPage />}
