@@ -107,7 +107,7 @@ test('all three roles receive compact service navigation without starting paymen
   const {default:Home}=await import(pathToFileURL(out));
   for(const role of ['rider','driver','merchant']){
    const html=renderToStaticMarkup(React.createElement(Home,{profile:{id:rider,role,first_name:'Richard'},onNavigate(){}}));
-   assert.match(html,/Services/);assert.match(html,/Wallet &amp; payments|Wallet & payments/);assert.match(html,/Wallet balance is not available yet/);assert.doesNotMatch(html,/Loading wallet/);
+   assert.match(html,/Services/);assert.match(html,/Wallet &amp; payments|Wallet & payments/);assert.doesNotMatch(html,/Wallet balance is not available yet|Loading wallet/);assert.doesNotMatch(html,/SLE\s+[0-9,]+(?:\.\d{2})?/);
    assert.match(html,/Loading saved places/);assert.match(html,/Travel to Ghana/);assert.match(html,/Events &amp; tickets|Events & tickets/);assert.match(html,/Games &amp; entertainment|Games & entertainment/);
    if(role==='driver'){assert.match(html,/Driver radar/);assert.doesNotMatch(html,/Payment references/);}
    else assert.match(html,/Payment references/);
