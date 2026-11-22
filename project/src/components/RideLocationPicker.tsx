@@ -3,7 +3,7 @@ import {locationVoiceAvailable,startLocationVoice} from '@/lib/voiceLocation';
 
 import { useEffect, useRef, useState } from 'react';
 import MapScrollCue from '@/components/MapScrollCue';
-import { Home, Briefcase, Check } from 'lucide-react';
+import { Home, Briefcase, Check, MapPin } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 type Point = { coords: [number, number]; address: string };
