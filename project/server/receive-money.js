@@ -78,6 +78,15 @@ export async function manageReceiveLink(context, body, { verify = verifiedAccoun
   }
 
   const existing = await loadOwnedLink(db, wallet.id);
+  if (body?.operation === 'status') {
+    return existing?.enabled ? {
+      enabled: true,
+      publicName: existing.public_name,
+      publicUrl: `${safeOrigin()}/pay/${existing.public_slug}`,
+      recipientCode: existing.recipient_code,
+      smsReceiptsEnabled: existing.sms_receipts_enabled
+    } : { enabled: false, publicUrl: null, recipientCode: null, smsReceiptsEnabled: false };
+  }
   const enable = body?.enabled !== false;
   const smsEnabled = body?.smsReceiptsEnabled ?? existing?.sms_receipts_enabled ?? false;
   if (smsEnabled && !phoneE164(profile)) {
