@@ -129,7 +129,7 @@ test('Trips uses compact cards and only exposes full receipts after verified pay
 
 
  
-test('production passkey domain, country-wide live map label and receipt close control are correct', async () => {
+test('production passkey domain, global place-search map label and receipt close control are correct', async () => {
   const [map, trips, biometricGuide] = await Promise.all([
     readFile('src/components/RideLocationPicker.tsx', 'utf8'),
     readFile('src/components/TripHistory.tsx', 'utf8'),
@@ -137,7 +137,7 @@ test('production passkey domain, country-wide live map label and receipt close c
   ]);
   assert.ok(map.includes('SIERRA LEONE · LIVE MAP'));
   assert.ok(map.includes('absolute right-4 top-[calc(env(safe-area-inset-top)+14px)]'));
-  assert.ok(map.includes('MatMove · Sierra Leone'));
+  assert.ok(map.includes('MatMove · Global place search'));
   assert.equal(map.includes('FREETOWN · LIVE MAP'), false);
   assert.ok(trips.includes('h-8 min-h-8 shrink-0 items-center justify-center whitespace-nowrap'));
   assert.ok(trips.includes('text-xs font-semibold leading-none">Close</button>'));
