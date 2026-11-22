@@ -290,12 +290,12 @@ test('signed unrelated event type cannot enter purchase fulfilment even when it 
   }
 });
 
-test('unsupported checkout-session events are quarantined immediately and never fulfil a purchase', async () => {
+test('unrelated financial-account events are quarantined and never fulfil a purchase', async () => {
   const { event, payment, db } = fixture('completed', true);
-  event.event_type = 'checkout_session.completed';
-  event.object_type = 'checkout_session';
-  event.payload.event.name = 'checkout_session.completed';
-  event.payload.object.type = 'checkout_session';
+  event.event_type = 'financial_account.credited';
+  event.object_type = 'financial_account';
+  event.payload.event.name = 'financial_account.credited';
+  event.payload.object.type = 'financial_account';
 
   const originalFetch = globalThis.fetch;
   const previousApiKey = process.env.MONIME_API_KEY;
@@ -303,7 +303,7 @@ test('unsupported checkout-session events are quarantined immediately and never 
   process.env.MONIME_API_KEY = 'mon_test_matmove_worker_test';
   process.env.MONIME_SPACE_ID = 'space-test';
   let fetchCalls = 0;
-  globalThis.fetch = async () => { fetchCalls++; throw new Error('unsupported checkout event must not query transfer endpoint'); };
+  globalThis.fetch = async () => { fetchCalls++; throw new Error('unsupported financial account event must not query provider endpoint'); };
 
   try {
     const result = await processMonimeWebhookBatch({ db, limit: 10 });
