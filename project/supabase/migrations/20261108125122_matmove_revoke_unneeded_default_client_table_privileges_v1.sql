@@ -1,0 +1,1 @@
+alter default privileges in schema public revoke references, trigger, truncate on tables from anon, authenticated;

@@ -1,5 +1,3 @@
-begin;
-
 -- Merchant ride bookings use the same private cash-ride ledger as Rider bookings.
 -- Customer role validation must reject every role not in ('rider','merchant').
 -- The booking's rider_id column is the customer-party reference for both roles.
@@ -119,5 +117,3 @@ $migration$;
 comment on constraint matmove_cash_ride_audit_events_actor_type_check
   on public.matmove_cash_ride_audit_events is
   'Customer cash-ride actions distinguish rider and merchant actors; driver, admin and system events remain separately attributable.';
-
-commit;

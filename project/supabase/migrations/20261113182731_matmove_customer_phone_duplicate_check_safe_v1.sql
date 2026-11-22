@@ -1,5 +1,5 @@
--- Strictly validate new customer input while safely skipping blank and malformed
--- legacy phone values in duplicate detection. Never rewrite legacy profile data.
+-- Keep strict validation for the new phone number, but skip malformed legacy
+-- values while checking whether another account already owns that number.
 create or replace function public.matmove_customer_phone_match(p_phone text)
 returns text
 language plpgsql
@@ -17,10 +17,12 @@ begin
   elsif v ~ '^232[0-9]{8}$' then
     v:='+'||v;
   end if;
+
   if v ~ '^\+[1-9][0-9]{7,14}$'
      and (v not like '+232%' or v ~ '^\+232[0-9]{8}$') then
     return v;
   end if;
+
   return null;
 end;
 $phone_match$;
@@ -45,6 +47,7 @@ begin
   if auth.uid() is null then
     raise exception 'FORBIDDEN: Sign in before completing your account.';
   end if;
+
   if to_regclass('public.matmove_staff_access') is not null then
     execute 'select exists(select 1 from public.matmove_staff_access s where s.id=$1 and s.is_active=true and s.removed_at is null)'
       into v_active_admin using auth.uid();
@@ -52,25 +55,31 @@ begin
       raise exception 'FORBIDDEN: An active Admin account cannot create a Customer account.';
     end if;
   end if;
+
   if v_role not in ('rider','driver','merchant') then
     raise exception 'INVALID: Choose rider, driver or merchant.';
   end if;
+
   select * into u from auth.users where id=auth.uid() for update;
   if not found or nullif(u.email,'') is null then
     raise exception 'FORBIDDEN: An authenticated email account is required.';
   end if;
 
-  -- New user input still passes the strict canonical phone validator.
+  -- The entered value remains strictly validated.
   v_phone:=public.matmove_customer_phone(p_phone);
   if v_phone is null then
     raise exception 'INVALID: Enter a valid phone number, for example +232 76 000 000.';
   end if;
+
   select * into p from public.profiles where id=u.id for update;
 
   if p.kyc_status='approved' then
     if p.role is distinct from v_role then
       raise exception 'LOCKED: Your verified account type cannot be changed here.';
     end if;
+
+    -- Legacy approved profiles may be missing a phone number. Complete only
+    -- that missing field; never overwrite an existing verified phone or role.
     if nullif(trim(coalesce(p.phone,'')),'') is null
        and nullif(trim(coalesce(p.phone_number,'')),'') is null then
       if exists(
@@ -80,6 +89,7 @@ begin
       ) then
         raise exception 'CONFLICT: This phone number is already registered. Sign in to that account or use another number.';
       end if;
+
       update public.profiles
       set phone=v_phone,phone_number=v_phone,updated_at=now()
       where id=u.id and role=v_role and kyc_status='approved'
@@ -87,15 +97,18 @@ begin
         and nullif(trim(coalesce(phone_number,'')),'') is null;
       return public.matmove_customer_me();
     end if;
+
     if public.matmove_customer_phone(coalesce(nullif(p.phone,''),p.phone_number)) is distinct from v_phone then
       raise exception 'LOCKED: Your verified phone number is already set. Contact MatMove support for changes.';
     end if;
+
     return public.matmove_customer_me();
   end if;
 
   if p.role is not null and p.role not in ('rider','driver','merchant') then
     raise exception 'FORBIDDEN: Administrative accounts cannot be converted here.';
   end if;
+
   if exists(
     select 1 from public.user_roles
     where profile_id=u.id and role::text not in ('rider','driver','merchant')
@@ -105,6 +118,7 @@ begin
 
   select count(*),min(role::text) into v_count,v_existing
   from public.user_roles where profile_id=u.id;
+
   if v_count>1 then
     if p.role in ('rider','driver','merchant')
        and exists(select 1 from public.user_roles where profile_id=u.id and role::text=p.role) then
@@ -113,16 +127,19 @@ begin
       raise exception 'CONFLICT: Customer roles need support review.';
     end if;
   end if;
+
   v_existing:=coalesce(p.customer_onboarding_role,v_existing,case when p.kyc_status='approved' then p.role else null end);
+
   if p.kyc_status='approved' and p.role is not null and p.role<>v_role then
     raise exception 'CONFLICT: Approved account roles need support review.';
   end if;
+
   if v_existing is not null and v_existing<>v_role then
     raise exception 'FORBIDDEN: Your account type is already assigned. Contact support to change it.';
   end if;
 
-  -- Unusable legacy values return NULL from the safe matcher and do not abort
-  -- this customer's signup. Valid existing numbers remain protected.
+  -- Invalid or blank legacy profile numbers are ignored by the duplicate scan.
+  -- They do not cause a valid new customer's number to fail.
   if exists(
     select 1 from public.profiles other
     where other.id<>u.id
@@ -154,6 +171,7 @@ begin
   insert into public.user_roles(profile_id,role)
   values(u.id,v_role::public.user_role)
   on conflict(profile_id,role) do nothing;
+
   perform public.ensure_matmove_wallets(u.id);
   return public.matmove_customer_me();
 end;

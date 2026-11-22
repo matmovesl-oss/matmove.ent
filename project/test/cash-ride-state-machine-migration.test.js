@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const migration = new URL(
-  '../supabase/migrations/20261112190000_matmove_cash_ride_booking_and_state_machine.sql',
+  '../supabase/migrations/20261113134644_matmove_cash_ride_booking_and_state_machine.sql',
   import.meta.url
 );
 
@@ -127,7 +127,7 @@ test('cash fee capture destination must match the deployed MONIME_PLATFORM_FEE_A
 });
 
 const sharedMigration = new URL(
-  '../supabase/migrations/20261113143000_matmove_cash_shared_account_ledger_settlement.sql',
+  '../supabase/migrations/20261113141937_matmove_cash_shared_account_ledger_settlement.sql',
   import.meta.url
 );
 
