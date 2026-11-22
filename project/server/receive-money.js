@@ -504,7 +504,7 @@ async function createUssdIntent(db, link, sessionId, amountText, { provider = mo
   return { row: { ...row, provider_object_id: code.id, state: 'processing' }, code };
 }
 
-export async function resolveUssdExchange(payload, { db = dbClient(), enabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true' && process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true' } = {}) {
+export async function resolveUssdExchange(payload, { db = dbClient(), provider = monime, enabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true' && process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true' } = {}) {
   if (!enabled) return stop('MatMove USSD payments are not enabled yet. Please use the MatMove payment link.');
   const sessionId = payload?.global?.sessionId;
   if (typeof sessionId !== 'string' || !UUID.test(sessionId)) return stop('This USSD session could not be verified. Please dial again.');
@@ -541,7 +541,7 @@ export async function resolveUssdExchange(payload, { db = dbClient(), enabled = 
       const link = await linkForUssdCode(db, code);
       if (!link) return stop('This MatMove recipient is no longer available.');
       const amount = String(flowData.enter_amount || '').trim();
-      const { row, code: paymentCode } = await createUssdIntent(db, link, sessionId, amount);
+      const { row, code: paymentCode } = await createUssdIntent(db, link, sessionId, amount, { provider });
       return {
         action: 'navigate',
         pageId: 'collect_payment',
