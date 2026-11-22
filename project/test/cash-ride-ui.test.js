@@ -78,3 +78,10 @@ test('Driver can refresh the server-verified cash handover and old requests are 
   assert.match(code,/Older request · over 24 hours/);
   assert.match(code,/Flag this old request with support/);
 });
+
+test('delivery booking hides passenger selection and sends a neutral passenger count',async()=>{
+  const code=await readFile(riderFile,'utf8');
+  assert.match(code,/serviceType !== 'delivery' && <div className="mb-4">[\s\S]*?Who is travelling/);
+  assert.match(code,/passenger_count: serviceType === 'delivery' \? 1 : passengerCount/);
+  assert.match(code,/Choose your vehicle/);
+});
