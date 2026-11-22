@@ -12,10 +12,9 @@ test('trigger-only SECURITY DEFINER entry points are not directly executable by 
     'matmove_resolve_ride_investigation_after_cash_payment',
     'matmove_resolve_ride_investigation_after_digital_payment',
   ]) {
-    assert.match(
-      sql,
-      new RegExp('revoke all on function public\\.' + fn + '\\\\(\\\\)\\\\s+from public, anon, authenticated, service_role', 'i')
-    );
+    const expected = `revoke all on function public.${fn}()
+  from public, anon, authenticated, service_role;`;
+    assert.ok(sql.includes(expected), `Missing least-privilege revoke for ${fn}`);
   }
 
   assert.match(sql, /notify pgrst/i);
