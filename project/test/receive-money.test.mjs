@@ -275,6 +275,27 @@ test('verified incoming payment queues one opt-in SMS even when the completion w
   assert.equal(db.tables.matmove_receive_sms_outbox.length, 1);
 });
 
+test('verified incoming payment queues one opt-in SMS even when the completion webhook is retried', async () => {
+  const { db, link, payment } = makeDb();
+  link.sms_receipts_enabled = true;
+  const event = { object_id: 'pay-test-receive', object_type: 'payment', event_type: 'payment.processing_completed' };
+  const providerObject = {
+    id: 'pay-test-receive',
+    status: 'completed',
+    financialAccountId: payment.provider_account_id,
+    amount: { currency: 'SLE', value: 2500 },
+    reference: payment.reference,
+    metadata: { mmReceivePayId: payment.id }
+  };
+  await reconcileReceivePaymentEvent(db, event, providerObject);
+  assert.equal(payment.state, 'completed');
+  assert.equal(db.tables.matmove_receive_sms_outbox.length, 1);
+  assert.equal(db.tables.matmove_receive_sms_outbox[0].phone_e164, '+23276543210');
+  assert.match(db.tables.matmove_receive_sms_outbox[0].message, /SLE 25\.00/);
+  await reconcileReceivePaymentEvent(db, event, providerObject);
+  assert.equal(db.tables.matmove_receive_sms_outbox.length, 1);
+});
+
 test('incoming payment amount mismatch is rejected without completing the MatMove record', async () => {
   const { db, payment } = makeDb();
   const event = { object_id: 'pay-test-receive', object_type: 'payment', event_type: 'payment.processing_completed' };
