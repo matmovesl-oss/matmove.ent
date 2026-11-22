@@ -211,7 +211,7 @@ test('USSD recipient confirmation returns the verified UVAN and a unique payment
   const { db, link } = makeDb();
   db.tables.matmove_received_payments = [];
   const payload = {
-    global: { sessionId },
+    global: { sessionId: 'monime-session_2026-11' },
     currentPage: 'confirm_payment',
     flowData: {
       enter_recipient: 'MM-ABCDEFGH',
