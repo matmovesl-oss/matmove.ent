@@ -160,6 +160,7 @@ export async function manageReceiveLink(context, body, { verify = verifiedAccoun
   }
 
   return {
+    featureEnabled: true,
     enabled: true,
     publicName: link.public_name,
     publicUrl: `${safeOrigin()}/pay/${link.public_slug}`,
@@ -503,7 +504,7 @@ export async function resolveUssdExchange(payload, { db = dbClient(), enabled = 
 export async function handleReceiveUssdExchange(req, res, {
   db = dbClient(),
   privateKey = process.env.MONIME_RSA_PRIVATE_KEY,
-  enabled = process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true'
+  enabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true' && process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true'
 } = {}) {
   res.setHeader?.('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
