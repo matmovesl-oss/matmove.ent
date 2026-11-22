@@ -3,12 +3,13 @@ import {locationVoiceAvailable,startLocationVoice} from '@/lib/voiceLocation';
 
 import { useEffect, useRef, useState } from 'react';
 import MapScrollCue from '@/components/MapScrollCue';
-import { Home, Briefcase, Check } from 'lucide-react';
+import { Home, Briefcase, Check, MapPin } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 type Point = { coords: [number, number]; address: string };
 type Target = 'pickup' | 'destination';
 type Prediction = google.maps.places.PlacePrediction;
+type MatMovePlace={id:string;name:string;category:string;address:string;city:string|null;region:string|null;country_code:string;latitude:number;longitude:number;notes:string|null;display_order:number};
 const validCoords=(coords:[number,number])=>Number.isFinite(coords[0])&&Number.isFinite(coords[1])&&Math.abs(coords[0])<=180&&Math.abs(coords[1])<=90;
 type SavedPlace = { kind: 'home' | 'work'; address: string; latitude: number | null; longitude: number | null; version: number };
 export type TripLocations = { pickup: Point | null; destination: Point | null; distanceKm: number | null };
@@ -82,6 +83,7 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
   const [routing, setRouting] = useState(false);
   const [searching, setSearching] = useState<Target | null>(null);
   const [results, setResults] = useState<{ target: Target; items: google.maps.GeocoderResult[] } | null>(null);
+  const [matmovePlaces,setMatmovePlaces]=useState<MatMovePlace[]>([]);
   const [pinTarget, setPinTarget] = useState<Target | null>(null);
   const [saved, setSaved] = useState<SavedPlace[]>([]);
   const [savedLoading, setSavedLoading] = useState(!!userId);
@@ -90,6 +92,29 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
   const [preferencesRetry, setPreferencesRetry] = useState(0);
 
   const emit = () => onChangeRef.current({ ...value.current });
+
+  useEffect(()=>{
+    let live=true,busy=false;
+    const load=async()=>{
+      if(busy)return;busy=true;
+      try{
+        const {data,error}=await supabase.from('matmove_map_places')
+          .select('id,name,category,address,city,region,country_code,latitude,longitude,notes,display_order')
+          .eq('is_active',true).order('display_order',{ascending:true}).order('name',{ascending:true}).limit(500);
+        if(error)throw error;
+        if(live)setMatmovePlaces(Array.isArray(data)?data as MatMovePlace[]:[]);
+      }catch{
+        // Google Places remains available if the optional curated MatMove directory cannot load.
+      }finally{busy=false;}
+    };
+    void load();
+    const channel=supabase.channel('matmove-active-map-places')
+      .on('postgres_changes',{event:'*',schema:'public',table:'matmove_map_places'},()=>void load()).subscribe();
+    const timer=window.setInterval(()=>{if(document.visibilityState==='visible')void load();},60000);
+    const onVisible=()=>{if(document.visibilityState==='visible')void load();};
+    document.addEventListener('visibilitychange',onVisible);
+    return()=>{live=false;window.clearInterval(timer);document.removeEventListener('visibilitychange',onVisible);void supabase.removeChannel(channel);};
+  },[]);
 
   useEffect(()=>{
     if(bookingReady){setEditingRoute(false);onRouteEditingChange?.(false);}
@@ -112,6 +137,14 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
     setTexts({ ...textsRef.current }); setResults(null); setSearching(null);
     markers.current[target]?.setMap(null); clearRoute(); emit();
   };
+  function chooseMatMovePlace(target:Target,place:MatMovePlace){
+    const coords:[number,number]=[Number(place.longitude),Number(place.latitude)];
+    if(!validCoords(coords)){setMessage('This official MatMove place has invalid coordinates. Choose another result.');return;}
+    const address=[place.address,place.city,place.region,place.country_code].filter(Boolean).join(', ');
+    putPoint(target,{coords,address:address||place.name});
+    setMessage(`${place.name} selected from MatMove's verified places. Your route previews automatically once both locations are selected.`);
+  }
+
   function later(callback: () => void, ms = 12000) {
     const id = window.setTimeout(() => { timers.current.delete(id); callback(); }, ms);
     timers.current.add(id); return () => { window.clearTimeout(id); timers.current.delete(id); };
@@ -258,7 +291,7 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
     setReady(false); setMapError('');
     loadGoogleMaps(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').then(() => {
       if (disposed || !mapElement.current) return;
-      map.current = new google.maps.Map(mapElement.current, { center: CENTER, zoom: 13, minZoom: 11, maxZoom: 19, disableDefaultUI: true, zoomControl: true, zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }, mapTypeControl: false, streetViewControl: false, fullscreenControl: false, keyboardShortcuts: false, clickableIcons: false, gestureHandling: 'greedy', backgroundColor: '#e8eef2' });
+      map.current = new google.maps.Map(mapElement.current, { center: CENTER, zoom: 13, minZoom: 2, maxZoom: 21, disableDefaultUI: true, zoomControl: true, zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }, mapTypeControl: false, streetViewControl: false, fullscreenControl: false, keyboardShortcuts: false, clickableIcons: false, gestureHandling: 'greedy', backgroundColor: '#e8eef2' });
       geocoder.current = new google.maps.Geocoder();
       renderer.current = new google.maps.DirectionsRenderer({ suppressMarkers: true, polylineOptions: { strokeColor: '#14765d', strokeWeight: 5 } });
       map.current.addListener('click', (event: google.maps.MapMouseEvent) => {
@@ -314,7 +347,10 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
         const lib=await placesLibrary.current;
         if(completed||!valid())return;
         sessions.current[target]??=new lib.AutocompleteSessionToken();
-        const {suggestions:found}=await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions({input:query.trim(),sessionToken:sessions.current[target],includedRegionCodes:['sl'],locationBias:{center:CENTER,radius:30000},region:'sl',language:'en'});
+        const request:google.maps.places.AutocompleteRequest={input:query.trim(),sessionToken:sessions.current[target],language:'en'};
+        const viewport=map.current?.getBounds();
+        if(viewport)request.locationBias=viewport;
+        const {suggestions:found}=await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
         if(completed||!valid())return;
         const items=found.map(s=>s.placePrediction).filter((p):p is Prediction=>!!p).slice(0,5);
         setSuggestions({target,items});setActiveSuggestion(-1);
@@ -362,7 +398,10 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
     const stopTimeout = later(() => {
       if (generation.current === ownGeneration && tokens.current[target] === token) { completed = true; setSearching(null); setMessage('Address search timed out. Retry or place a map pin.'); }
     });
-    geocoder.current.geocode({ address: query, componentRestrictions: { country: 'SL' }, region: 'SL', bounds: new google.maps.LatLngBounds({ lat: 8.35, lng: -13.33 }, { lat: 8.55, lng: -13.10 }) }, (items, status) => {
+    const request:google.maps.GeocoderRequest={address:query};
+    const viewport=map.current?.getBounds();
+    if(viewport)request.bounds=viewport;
+    geocoder.current.geocode(request, (items, status) => {
       stopTimeout();
       if (completed || generation.current !== ownGeneration || tokens.current[target] !== token) return;
       completed = true; setSearching(null);
@@ -429,13 +468,14 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
     {mapFirst&&bookingReady&&!editingRoute&&<div className="absolute left-4 right-4 top-[calc(env(safe-area-inset-top)+70px)] z-20 mx-auto max-w-xl rounded-2xl border border-white/80 bg-white/95 p-3 shadow-lg backdrop-blur"><div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">Your route</p><p className="truncate text-xs font-bold text-slate-800">From: {textsRef.current.pickup||'Pickup selected'}</p><p className="truncate text-xs text-slate-500">To: {textsRef.current.destination||'Destination selected'}</p></div><button type="button" onClick={()=>{setEditingRoute(true);onRouteEditingChange?.(true);}} className="shrink-0 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Change locations</button></div></div>}
     {(!mapFirst||!bookingReady||editingRoute)&&<div className={mapFirst?`relative z-30 mx-auto w-full max-w-5xl min-w-0 rounded-b-[28px] border border-slate-200 bg-white px-4 pb-5 pt-2 shadow-[0_12px_35px_rgba(15,35,50,.12)] sm:px-6`:"relative z-20 space-y-3"} style={mapFirst?{height:'auto',maxHeight:'none',overflow:'visible'}:undefined}>
       
-      {mapFirst&&<div className="sticky top-0 z-20 -mx-4 mb-3 flex items-center justify-between gap-3 border-b border-slate-100 bg-white/95 px-4 pb-2 pt-2 backdrop-blur sm:-mx-6 sm:px-6"><div><p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-700">MatMove · Sierra Leone</p><h2 className="mt-0.5 text-lg font-black text-slate-950">Plan your ride</h2></div><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-800">Pickup & destination</span></div>}
+      {mapFirst&&<div className="sticky top-0 z-20 -mx-4 mb-3 flex items-center justify-between gap-3 border-b border-slate-100 bg-white/95 px-4 pb-2 pt-2 backdrop-blur sm:-mx-6 sm:px-6"><div><p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-700">MatMove · Global place search</p><h2 className="mt-0.5 text-lg font-black text-slate-950">Plan your ride</h2></div><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-800">Pickup & destination</span></div>}
       {mapFirst&&editingRoute&&value.current.pickup&&value.current.destination&&distance!==null&&!routing&&<div className="mb-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3"><p className="text-xs font-semibold text-emerald-900">Both locations and the route are ready. Review the pickup and destination, then continue.</p><button type="button" onClick={()=>{setEditingRoute(false);onRouteEditingChange?.(false);}} className="mt-3 min-h-11 w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-bold text-white shadow-sm active:scale-[.99]">Confirm locations & continue</button></div>}
     {userId && <div className="rounded-xl bg-slate-50 p-3 text-sm"><div className="flex items-center gap-2"><b>Saved Home & Work</b></div>{savedLoading ? <p role="status" className="mt-1 text-slate-600">Loading saved places…</p> : savedError ? <p role="alert" className="mt-1 text-red-700">{savedError} <button type="button" className="min-h-10 underline" onClick={() => setPreferencesRetry(n => n+1)}>Reload saved places</button></p> : !saved.length ? <p className="mt-1 text-xs text-slate-600">Choose a location, then save it as Home or Work.</p> : <p className="mt-1 text-xs text-slate-600">Your saved places are ready below.</p>}</div>}
     <p className="text-xs text-slate-600">Enter both locations, choose a suggestion, or pin them directly on the map. Voice entry is optional. {!voiceAvailable&&'Typing and map pins are available.'}</p>
     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
       {(['pickup','destination'] as Target[]).map(target => <div key={target} className="min-w-0">
         <label className="block text-sm font-bold capitalize">{target}<input aria-label={target === 'pickup' ? 'Pickup address' : 'Destination address'} role="combobox" aria-autocomplete="list" aria-expanded={suggestions?.target===target&&suggestions.items.length>0} aria-controls={`mm-${target}-suggestions`} aria-activedescendant={suggestions?.target===target&&activeSuggestion>=0?`mm-${target}-suggestion-${activeSuggestion}`:undefined} autoComplete="off" value={texts[target]} maxLength={300} placeholder={target==='pickup'?'Enter pickup location':'Where are you going?'} onChange={e => typeAddress(target,e.target.value)} onKeyDown={e=>{const items=suggestions?.target===target?suggestions.items:[];if(e.key==='Escape'){tokens.current[target]++;setSuggestions(null);setSearching(null);setActiveSuggestion(-1);}else if(items.length&&(e.key==='ArrowDown'||e.key==='ArrowUp')){e.preventDefault();setActiveSuggestion(i=>(i+(e.key==='ArrowDown'?1:-1)+items.length)%items.length);}else if(e.key==='Enter'){e.preventDefault();if(items.length&&activeSuggestion>=0)void chooseSuggestion(target,items[activeSuggestion]);else searchAddress(target);}}} className="mt-1 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 text-base font-normal outline-none focus:border-emerald-600 focus:bg-white"/></label>
+        {texts[target].trim().length>=2&&matmovePlaces.filter(place=>[place.name,place.address,place.city,place.region,place.country_code].some(value=>String(value||'').toLowerCase().includes(texts[target].trim().toLowerCase()))).slice(0,4).length>0&&<div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50/40 shadow-sm"><p className="px-3 pb-1 pt-2 text-[10px] font-black uppercase tracking-wide text-emerald-800">MatMove verified places</p>{matmovePlaces.filter(place=>[place.name,place.address,place.city,place.region,place.country_code].some(value=>String(value||'').toLowerCase().includes(texts[target].trim().toLowerCase()))).slice(0,4).map(place=><button key={place.id} type="button" onClick={()=>chooseMatMovePlace(target,place)} className="flex min-h-11 w-full items-center gap-2 border-t border-emerald-100 px-3 py-2 text-left"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white text-emerald-800"><MapPin size={14}/></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-slate-900">{place.name}</span><span className="block truncate text-[10px] text-slate-500">{[place.address,place.city,place.country_code].filter(Boolean).join(', ')}</span></span><span className="shrink-0 text-[9px] font-bold uppercase text-emerald-800">{place.category.replace(/_/g,' ')}</span></button>)}</div>}
         {suggestions?.target===target&&suggestions.items.length>0&&<div className="mt-2 rounded-xl border bg-white shadow-lg"><ul id={`mm-${target}-suggestions`} role="listbox" aria-label={`${target} place suggestions`} className="max-h-48 overflow-y-auto">{suggestions.items.map((item,index)=><li key={item.placeId} id={`mm-${target}-suggestion-${index}`} role="option" aria-selected={activeSuggestion===index}><button type="button" onClick={()=>void chooseSuggestion(target,item)} className={`min-h-11 w-full border-b p-3 text-left text-sm ${activeSuggestion===index?'bg-emerald-50':''}`}>{item.text.toString()}</button></li>)}</ul><p className="px-3 py-2 text-right text-xs text-slate-500">Google Maps</p></div>}
         <div className="mt-2 flex flex-wrap gap-2"><button type="button" disabled={!ready||!voiceAvailable} aria-pressed={listening===target} onClick={()=>speak(target)} className="min-h-9 rounded-lg border px-3 text-xs font-bold disabled:opacity-50">{listening===target?'Stop microphone':`Speak ${target}`}</button><button type="button" disabled={!ready || searching === target || texts[target].trim().length < 3} className="min-h-9 rounded-lg border px-3 text-xs font-bold disabled:opacity-50" onClick={() => searchAddress(target)}>{searching === target ? 'Searching…' : `Find ${target}`}</button>{saved.map(place => <button key={place.kind} type="button" disabled={!ready || saving || savedLoading || !!savedError} onClick={() => useSaved(target,place)} className="min-h-9 rounded-lg bg-emerald-50 px-3 text-xs font-bold capitalize text-emerald-800">{place.kind}</button>)}</div>
         {results?.target === target && <ul aria-label={`${target} address matches`} className="mt-2 max-h-44 overflow-y-auto rounded-xl border bg-white">{results.items.map((item,index) => <li key={item.place_id || index}><button type="button" className="w-full border-b p-3 text-left text-sm" onClick={() => { const location=item.geometry.location; putPoint(target,{address:item.formatted_address,coords:[location.lng(),location.lat()]}); setMessage('Location selected. Your route previews automatically once both pins are selected.'); }}>{item.formatted_address}</button></li>)}</ul>}
