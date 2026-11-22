@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Loader2, ShieldCheck, Wallet, CircleCheck, Smartphone } from 'lucide-react';
 
@@ -37,7 +37,7 @@ export default function ReceivePayLinkPage() {
     return () => { live = false; };
   }, [slug]);
 
-  async function pay(event: React.FormEvent) {
+  async function pay(event: FormEvent) {
     event.preventDefault();
     setError('');
     setNotice('');
@@ -48,6 +48,12 @@ export default function ReceivePayLinkPage() {
     }
     setSubmitting(true);
     try {
+      const storageKey = `matmove:receive:${slug}:${value.toFixed(2)}`;
+      let requestKey = sessionStorage.getItem(storageKey);
+      if (!requestKey || !/^[0-9a-f-]{36}$/i.test(requestKey)) {
+        requestKey = crypto.randomUUID();
+        sessionStorage.setItem(storageKey, requestKey);
+      }
       const response = await fetch('/api/create-monime-checkout?action=receive_checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -55,7 +61,7 @@ export default function ReceivePayLinkPage() {
         body: JSON.stringify({
           slug,
           amount: value,
-          idempotencyKey: crypto.randomUUID()
+          idempotencyKey: requestKey
         })
       });
       const data = await response.json().catch(() => null);
