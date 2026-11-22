@@ -34,7 +34,7 @@ test('wallet has full-screen entry points from Account and Services', async () =
   assert.ok(app.includes('Wallet & payments'));
   assert.ok(app.includes('setViewingWallet(true)'));
   assert.ok(services.includes("onNavigate('wallet')"));
-  assert.ok(services.includes('Open wallet'));
+  assert.ok(/title: '(?:Wallet & payments|Earnings & wallet|Business wallet)'/.test(services));
   assert.ok(app.includes('onServices={() => setActiveSection(\'services\')}'));
 });
 
