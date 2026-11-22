@@ -6,7 +6,6 @@ import CustomerSupport from '@/components/CustomerSupport';
 import NotificationBell from '@/components/NotificationBell';
 import ReceivePayLinkPage, { ReceivePaymentCompletePage } from '@/pages/ReceivePayLinkPage';
 
-import PortalHome from '@/components/PortalHome';
 import CustomerHome from '@/components/CustomerHome';
 import PortalGuide from '@/components/PortalGuide';
 import AccountProfile, {AccountIdentity, PasskeySecurity} from '@/components/AccountProfile';
@@ -91,6 +90,7 @@ import {
 } from 'lucide-react';
 
 
+const PortalHome = lazy(() => import('@/components/PortalHome'));
 const RiderDashboard = lazy(() =>
   import('@/pages/RiderDashboard').then(module => ({default: module.RiderDashboard}))
 );
