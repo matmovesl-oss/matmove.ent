@@ -138,8 +138,11 @@ export function RideLocationPicker({ onChange, userId, layout = 'default', onBac
     markers.current[target]?.setMap(null); clearRoute(); emit();
   };
   function chooseMatMovePlace(target:Target,place:MatMovePlace){
-    const coords:[number,number]=[Number(place.longitude),Number(place.latitude)];
+    const position={lat:Number(place.latitude),lng:Number(place.longitude)};
+    const coords:[number,number]=[position.lng,position.lat];
     if(!validCoords(coords)){setMessage('This official MatMove place has invalid coordinates. Choose another result.');return;}
+    map.current?.panTo(position);
+    map.current?.setZoom(Math.max(map.current?.getZoom()||0,15));
     const address=[place.address,place.city,place.region,place.country_code].filter(Boolean).join(', ');
     putPoint(target,{coords,address:address||place.name});
     setMessage(`${place.name} selected from MatMove's verified places. Your route previews automatically once both locations are selected.`);
