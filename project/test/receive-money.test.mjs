@@ -123,7 +123,7 @@ function makeDb() {
     wallet_id: link.wallet_id,
     provider_account_id: link.financial_account_id,
     provider_channel: 'ussd',
-    provider_object_id: 'pmc-test-receive',
+    provider_object_id: 'pay-test-receive',
     reference: 'MM-000000000123',
     idempotency_key: 'ussd:' + sessionId,
     amount_minor: 2500,
@@ -185,10 +185,9 @@ test('USSD exchange fails closed when either receive-money gate is disabled', as
   });
 });
 
-test('USSD recipient confirmation creates an amount-bound one-time Payment Code for the verified recipient', async () => {
+test('USSD recipient confirmation returns the verified UVAN and a unique payment reference', async () => {
   const { db, link } = makeDb();
   db.tables.matmove_received_payments = [];
-  const calls = [];
   const payload = {
     global: { sessionId },
     currentPage: 'confirm_payment',
@@ -198,40 +197,21 @@ test('USSD recipient confirmation creates an amount-bound one-time Payment Code 
       confirm_payment: 'true'
     }
   };
-  const provider = async (path, options = {}) => {
-    calls.push({ path, options });
-    assert.equal(path, 'payment-codes');
-    assert.equal(options.method, 'POST');
-    const body = JSON.parse(options.body);
-    assert.equal(body.financialAccountId, link.financial_account_id);
-    assert.deepEqual(body.amount, { currency: 'SLE', value: 2500 });
-    assert.equal(body.duration, '10m');
-    const row = db.tables.matmove_received_payments[0];
-    assert.equal(body.reference, row.reference);
-    assert.equal(body.metadata.mmReceivePayId, row.id);
-    return {
-      id: 'pmc-created-for-test',
-      status: 'pending',
-      enable: true,
-      financialAccountId: link.financial_account_id,
-      amount: { currency: 'SLE', value: 2500 },
-      reference: row.reference,
-      metadata: { mmReceivePayId: row.id, mmReceiveLinkId: linkId }
-    };
-  };
-  const result = await resolveUssdExchange(payload, { db, enabled: true, provider });
+  const result = await resolveUssdExchange(payload, { db, enabled: true });
   assert.equal(result.action, 'navigate');
   assert.equal(result.pageId, 'collect_payment');
-  assert.equal(result.pageData.paymentTargetRef, 'pmc-created-for-test');
+  assert.equal(result.pageData.paymentTargetRef, link.payment_target_ref);
   assert.equal(result.pageData.amount, 25);
   assert.equal(result.pageData.receiveLinkId, linkId);
-  assert.equal(calls.length, 1);
-  assert.equal(db.tables.matmove_received_payments[0].provider_object_id, 'pmc-created-for-test');
+  assert.equal(result.pageData.receivePaymentId, db.tables.matmove_received_payments[0].id);
+  assert.match(result.pageData.reference, /^MM-[A-F0-9]{12}$/);
+  assert.equal(db.tables.matmove_received_payments[0].state, 'processing');
+  assert.equal(db.tables.matmove_received_payments[0].provider_channel, 'ussd');
 });
 
-test('incoming payment completes only when final Monime code matches account, amount and reference', async () => {
+test('incoming USSD payment completes only when final Monime payment matches account, amount and reference', async () => {
   const { db, payment } = makeDb();
-  const event = { object_id: 'pmc-test-receive', object_type: 'payment_code', event_type: 'payment_code.completed' };
+  const event = { object_id: 'pay-test-receive', object_type: 'payment', event_type: 'payment.processing_completed' };
   const providerObject = {
     id: 'pmc-test-receive',
     status: 'completed',
@@ -281,7 +261,7 @@ test('SMS receipt worker stays idle until its provider credentials are configure
   }
 });
 
-test('Monime receive flow has unique pages, three validation stages and a Payment Code template', async () => {
+test('Monime receive flow has unique pages, three validation stages and a UVAN-targeted collect_payment template', async () => {
   const flow = JSON.parse(await readFile(new URL('../MATMOVE_RECEIVE_MONEY_USSD_FLOW.json', import.meta.url), 'utf8'));
   assert.equal(flow.version, '1.0');
   const ids = flow.pages.map(page => page.id);
