@@ -361,8 +361,15 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 3, even
             : 'internal-transfers';
       const providerObject = await getProviderObject(event.object_id, resource);
       if (providerObject.id !== event.object_id) throw new ManualReviewError('Monime returned a different provider object identifier; manual review required.');
+      const hasReceiveMetadata = Boolean(
+        providerObject?.metadata?.mmReceivePayId ||
+        providerObject?.ownershipGraph?.owner?.metadata?.mmReceivePayId ||
+        providerObject?.ownershipGraph?.owner?.owner?.metadata?.mmReceivePayId
+      );
       const result = receiveEvent
-        ? await reconcileReceivePaymentEvent(db, event, providerObject)
+        ? hasReceiveMetadata
+          ? await reconcileReceivePaymentEvent(db, event, providerObject)
+          : 'processed'
         : await processLinkedTransfer(db, event, providerObject);
       if (result === 'pending') {
         const { error: queueError } = await db.from('matmove_monime_webhook_events')
