@@ -550,7 +550,8 @@ export async function resolveUssdExchange(payload, { db = dbClient(), enabled = 
           amount: Number(row.amount_minor) / 100,
           paymentTargetRef: paymentCode.id,
           reference: row.reference,
-          receivePaymentId: row.id
+          receivePaymentId: row.id,
+          receiveLinkId: link.id
         }
       };
     }
