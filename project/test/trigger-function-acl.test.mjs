@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const migration = 'docs/pending-migrations/matmove_trigger_only_definer_function_acl_v1.sql';
+const migration = 'supabase/migrations/20261122225147_matmove_trigger_only_definer_function_acl_v1.sql';
 
 test('trigger-only SECURITY DEFINER entry points are not directly executable by API roles', async () => {
   const sql = await readFile(migration, 'utf8');
