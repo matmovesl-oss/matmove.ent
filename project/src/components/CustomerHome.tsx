@@ -56,7 +56,7 @@ export default function CustomerHome({profile,onNavigate}:Props){
 
   <section className="grid gap-3 sm:grid-cols-2">
    <button type="button" onClick={()=>onNavigate('account')} className="mm-glass-tile flex min-h-24 items-center gap-4 rounded-3xl p-4 text-left transition"><span className="rounded-2xl bg-emerald-50 p-3 text-emerald-700"><Wallet size={22}/></span><span className="min-w-0"><b className="block text-slate-950">My wallet</b><small className="text-slate-500">Balances, top-ups and payments</small></span><ArrowRight className="ml-auto shrink-0 text-slate-400"/></button>
-   <button type="button" onClick={openRide} className="flex min-h-24 items-center gap-4 rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-emerald-200"><span className="rounded-2xl bg-sky-50 p-3 text-sky-700"><MapPin size={22}/></span><span className="min-w-0"><b className="block text-slate-950">Manage places</b><small className="text-slate-500">Home, Work and favourite locations</small></span><ArrowRight className="ml-auto shrink-0 text-slate-400"/></button>
+   <button type="button" onClick={openRide} className="mm-glass-tile flex min-h-24 items-center gap-4 rounded-3xl p-4 text-left transition"><span className="rounded-2xl bg-sky-50 p-3 text-sky-700"><MapPin size={22}/></span><span className="min-w-0"><b className="block text-slate-950">Manage places</b><small className="text-slate-500">Home, Work and favourite locations</small></span><ArrowRight className="ml-auto shrink-0 text-slate-400"/></button>
   </section>
  </main>;
 }
