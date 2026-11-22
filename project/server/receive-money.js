@@ -408,7 +408,7 @@ function stop(message) {
   return { action: 'stop', message: String(message).slice(0, 120) };
 }
 
-async function linkForUssdCode(db, code, { verify = false } = {}) {
+async function linkForUssdCode(db, code, { verify = false, verifyAccount = verifiedAccount } = {}) {
   if (typeof code !== 'string' || !RECIPIENT_CODE.test(code.trim().toUpperCase())) return null;
   const { data, error } = await db.from('matmove_receive_links')
     .select('id,user_id,wallet_id,financial_account_id,payment_target_ref,recipient_code,public_name,enabled,sms_receipts_enabled')
@@ -424,7 +424,7 @@ async function linkForUssdCode(db, code, { verify = false } = {}) {
       profileError || profile?.is_wallet_frozen === true ||
       (wallet.monime_account_id || wallet.metadata?.monime_account_id) !== data.financial_account_id) return null;
   if (verify) {
-    const account = await verifiedAccount(db, wallet);
+    const account = await verifyAccount(db, wallet);
     if (account?.id !== data.financial_account_id ||
         account?.currency !== 'SLE' ||
         String(account?.uvan || '').trim() !== data.payment_target_ref) return null;
@@ -460,7 +460,7 @@ async function createUssdIntent(db, link, sessionId, amountText) {
   return { ...row, state: 'processing', provider_status: 'awaiting_payer_authorization' };
 }
 
-export async function resolveUssdExchange(payload, { db = dbClient(), enabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true' && process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true' } = {}) {
+export async function resolveUssdExchange(payload, { db = dbClient(), verify = verifiedAccount, enabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true' && process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true' } = {}) {
   if (!enabled) return stop('MatMove USSD payments are not enabled yet. Please use the MatMove payment link.');
   const sessionId = payload?.global?.sessionId;
   if (typeof sessionId !== 'string' || !UUID.test(sessionId)) return stop('This USSD session could not be verified. Please dial again.');
@@ -477,7 +477,7 @@ export async function resolveUssdExchange(payload, { db = dbClient(), enabled = 
 
     if (page === 'enter_amount') {
       const code = String(flowData.enter_recipient || '').trim().toUpperCase();
-      const link = await linkForUssdCode(db, code, { verify: true });
+      const link = await linkForUssdCode(db, code, { verify: true, verifyAccount: verify });
       if (!link) return stop('This MatMove recipient is no longer available.');
       const amount = String(flowData.enter_amount || '').trim();
       if (!/^\d{1,7}$/.test(amount) || Number(amount) < 1 || Number(amount) > 1000000) {
