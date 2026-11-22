@@ -7,7 +7,7 @@ import {
   Copy,
   Share2,
   Plus,
-  Eye, EyeOff, ChevronLeft, ChevronRight,
+  Eye, EyeOff, ChevronLeft, ChevronRight, ExternalLink,
 } from 'lucide-react';
 
 type Props = {
@@ -81,6 +81,34 @@ export default function WalletCards({
     }
   }
 
+  async function copyPaymentLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setNotice('Monime Get Paid link copied.');
+    } catch {
+      setNotice('Could not copy the payment link. Open it and copy the address instead.');
+    }
+  }
+
+  async function sharePaymentLink(url: string) {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'MatMove — Receive Money',
+          text: 'Pay this MatMove SLE wallet securely through Monime.',
+          url,
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setNotice('Monime Get Paid link copied.');
+      }
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') {
+        setNotice('Unable to share the payment link. You can copy it instead.');
+      }
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
@@ -103,6 +131,18 @@ export default function WalletCards({
           const id =
             wallet?.monime_account_id ||
             wallet?.metadata?.monime_account_id;
+
+          const paymentUrl = (() => {
+            if (currency !== 'SLE' || typeof wallet?.monime_payment_url !== 'string') return null;
+            try {
+              const parsed = new URL(wallet.monime_payment_url);
+              return parsed.protocol === 'https:' && parsed.hostname === 'pay.monime.io'
+                ? parsed.toString()
+                : null;
+            } catch {
+              return null;
+            }
+          })();
 
           const available =
             wallet?.balanceAvailable === true &&
@@ -182,6 +222,42 @@ export default function WalletCards({
                       Share wallet
                     </button>
                   </div>
+                  {currency === 'SLE' && paymentUrl && (
+                    <div className="mt-4 rounded-2xl border border-white/20 bg-white/10 p-3">
+                      <p className="text-xs font-bold uppercase tracking-wider text-white/75">Monime UVAN</p>
+                      <p className="mt-1 break-all font-mono text-lg font-bold">{wallet.monime_uvan || 'Available through Get Paid'}</p>
+                      <a
+                        href={paymentUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-bold underline underline-offset-4"
+                      >
+                        Open Get Paid link <ExternalLink size={14}/>
+                      </a>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-sm"
+                          onClick={() => void copyPaymentLink(paymentUrl)}
+                        >
+                          <Copy size={14}/> Copy Get Paid link
+                        </button>
+                        <button
+                          type="button"
+                          className="flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-sm"
+                          onClick={() => void sharePaymentLink(paymentUrl)}
+                        >
+                          <Share2 size={14}/> Share payment link
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-white/75">Payments are processed by Monime and settle to this SLE account.</p>
+                    </div>
+                  )}
+                  {currency === 'SLE' && !paymentUrl && (
+                    <p className="mt-3 rounded-xl bg-white/10 p-3 text-xs text-white/85">
+                      Your Monime Get Paid link is not available yet. Refresh your wallet after the receiving alias is provisioned.
+                    </p>
+                  )}
                 </>
               ) : currency === 'USD' ? (
                 <button
