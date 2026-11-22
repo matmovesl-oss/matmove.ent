@@ -15,6 +15,13 @@ export default function ReceivePayLinkPage() {
   const [notice, setNotice] = useState(search.get('cancelled') === '1' ? 'The previous payment was cancelled. You can start again.' : '');
 
   useEffect(() => {
+    if (search.get('cancelled') === '1') {
+      try {
+        const pendingKey = sessionStorage.getItem('matmove:receive:pending');
+        if (pendingKey) sessionStorage.removeItem(pendingKey);
+        sessionStorage.removeItem('matmove:receive:pending');
+      } catch { /* Optional browser storage. */ }
+    }
     let live = true;
     async function load() {
       setLoading(true);
@@ -35,7 +42,7 @@ export default function ReceivePayLinkPage() {
     }
     void load();
     return () => { live = false; };
-  }, [slug]);
+  }, [slug, search]);
 
   async function pay(event: FormEvent) {
     event.preventDefault();
@@ -67,6 +74,8 @@ export default function ReceivePayLinkPage() {
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || 'MatMove could not start this payment.');
       if (data?.completed === true) {
+        sessionStorage.removeItem(storageKey);
+        sessionStorage.removeItem('matmove:receive:pending');
         setNotice('This payment request has already been confirmed by MatMove.');
         return;
       }
@@ -74,6 +83,7 @@ export default function ReceivePayLinkPage() {
       if (target.protocol !== 'https:' || !(target.hostname === 'monime.io' || target.hostname.endsWith('.monime.io'))) {
         throw new Error('The payment provider returned an unverified checkout link. Contact MatMove support.');
       }
+      sessionStorage.setItem('matmove:receive:pending', storageKey);
       window.location.assign(target.toString());
     } catch (cause: any) {
       setError(cause?.message || 'Payment could not be started. Please try again.');
@@ -141,6 +151,13 @@ export default function ReceivePayLinkPage() {
 
 export function ReceivePaymentCompletePage() {
   const [search] = useSearchParams();
+  useEffect(() => {
+    try {
+      const pendingKey = sessionStorage.getItem('matmove:receive:pending');
+      if (pendingKey) sessionStorage.removeItem(pendingKey);
+      sessionStorage.removeItem('matmove:receive:pending');
+    } catch { /* Optional browser storage. */ }
+  }, []);
   const reference = search.get('ref') || '';
   return (
     <main className="portal-shell flex min-h-screen items-center justify-center px-4 py-10">
