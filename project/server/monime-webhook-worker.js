@@ -342,8 +342,8 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 3, even
         event.object_type === 'payout' &&
         ['payout.completed', 'payout.failed'].includes(event.event_type)
       ) || (
-        event.object_type === 'payment_code' &&
-        ['payment_code.completed', 'payment_code.cancelled', 'payment_code.expired'].includes(event.event_type)
+        event.object_type === 'payment' &&
+        event.event_type === 'payment.processing_completed'
       ) || (
         event.object_type === 'checkout_session' &&
         ['checkout_session.completed', 'checkout_session.cancelled', 'checkout_session.expired'].includes(event.event_type)
@@ -351,11 +351,11 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 3, even
       if (!supportedEnvelope) {
         throw new ManualReviewError('Unsupported Monime event type or object for MatMove ledger reconciliation; manual review required.');
       }
-      const receiveEvent = event.object_type === 'payment_code' || event.object_type === 'checkout_session';
+      const receiveEvent = event.object_type === 'payment' || event.object_type === 'checkout_session';
       const resource = event.object_type === 'payout'
         ? 'payouts'
-        : event.object_type === 'payment_code'
-          ? 'payment-codes'
+        : event.object_type === 'payment'
+          ? 'payments'
           : event.object_type === 'checkout_session'
             ? 'checkout-sessions'
             : 'internal-transfers';
