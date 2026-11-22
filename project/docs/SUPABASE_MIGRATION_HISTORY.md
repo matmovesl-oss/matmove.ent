@@ -6,6 +6,6 @@ On 2026-11-22, the repository's stale 51-file migration directory was reconciled
 
 After that reconciliation, the public homepage view security migration `20261122223335_matmove_public_homepage_posts_security_invoker_v1.sql` was applied through Supabase migration tooling and verified in production. The repository now contains that exact canonical migration file as well.
 
-The current production migration history contains 125 applied versions. The unrelated six-to-nine-digit passcode policy change remains under `docs/pending-migrations` and is not marked as applied; it must be reviewed and deployed separately.
+The current production migration history contains 126 applied versions. The six-to-nine-digit new/change/recover passcode policy migration `20261122224429_matmove_customer_passcode_new_pin_six_to_nine_digits_v1.sql` has been applied through Supabase migration tooling and verified in production. Legacy 4-digit upgrade and 10-digit verification remain supported; the storage constraint continues to permit 4 or 6–10 digits.
 
 Do not reset or repair production migration history. New DDL must be added as a new migration and applied through the Supabase migration workflow.
