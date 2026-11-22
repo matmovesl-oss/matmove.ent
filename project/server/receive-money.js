@@ -447,7 +447,7 @@ async function linkForUssdCode(db, code, { verify = false, verifyAccount = verif
 
 async function createUssdIntent(db, link, sessionId, amountText) {
   const amount = Number(amountText);
-  if (!/^\\d{1,7}$/.test(String(amountText)) || !Number.isSafeInteger(amount) || amount < 1 || amount > 1000000) {
+  if (!/^\d{1,7}$/.test(String(amountText)) || !Number.isSafeInteger(amount) || amount < 1 || amount > 1000000) {
     throw new Error('Enter an amount between SLE 1 and SLE 1,000,000.');
   }
   const amountMinor = amount * 100;
@@ -473,8 +473,9 @@ async function createUssdIntent(db, link, sessionId, amountText) {
   return { ...row, state: 'processing', provider_status: 'awaiting_payer_authorization' };
 }
 
-export async function resolveUssdExchange(payload, { db = dbClient(), verify = verifiedAccount, enabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true' && process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true' } = {}) {
+export async function resolveUssdExchange(payload, { db, verify = verifiedAccount, enabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true' && process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true' } = {}) {
   if (!enabled) return stop('MatMove USSD payments are not enabled yet. Please use the MatMove payment link.');
+  db = db || dbClient();
   const sessionId = payload?.global?.sessionId;
   if (typeof sessionId !== 'string' || !UUID.test(sessionId)) return stop('This USSD session could not be verified. Please dial again.');
   const flowData = payload?.flowData && typeof payload.flowData === 'object' ? payload.flowData : {};
@@ -532,7 +533,7 @@ export async function resolveUssdExchange(payload, { db = dbClient(), verify = v
 }
 
 export async function handleReceiveUssdExchange(req, res, {
-  db = dbClient(),
+  db,
   privateKey = process.env.MONIME_RSA_PRIVATE_KEY,
   enabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true' && process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true'
 } = {}) {
