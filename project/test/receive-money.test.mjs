@@ -15,6 +15,7 @@ import {
   getPublicReceiveLink,
   processReceiveSmsOutbox,
   reconcileReceivePaymentEvent,
+  receiveCheckoutReturn,
   resolveUssdExchange
 } from '../server/receive-money.js';
 
@@ -146,6 +147,24 @@ function makeDb() {
   return { db, link, wallet, payment };
 }
 
+test('Monime checkout success POST safely redirects to the MatMove confirmation page', () => {
+  let statusCode = 0;
+  let location = '';
+  let ended = false;
+  const res = {
+    setHeader(name, value) { if (name.toLowerCase() === 'location') location = value; },
+    status(value) { statusCode = value; return this; },
+    end() { ended = true; return this; }
+  };
+  receiveCheckoutReturn({
+    method: 'POST',
+    query: { ref: 'MM-ABCDEF123456' }
+  }, res);
+  assert.equal(statusCode, 303);
+  assert.equal(location, 'https://matmove.space/pay/complete?ref=MM-ABCDEF123456');
+  assert.equal(ended, true);
+});
+
 test('Monime USSD RSA-OAEP-SHA256 and AES-128-GCM exchange decrypts and encrypts correctly', () => {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', {
     modulusLength: 2048,
@@ -220,7 +239,7 @@ test('incoming USSD payment completes only when final Monime payment matches acc
   const { db, payment } = makeDb();
   const event = { object_id: 'pay-test-receive', object_type: 'payment', event_type: 'payment.processing_completed' };
   const providerObject = {
-    id: 'pmc-test-receive',
+    id: 'pay-test-receive',
     status: 'completed',
     financialAccountId: payment.provider_account_id,
     amount: { currency: 'SLE', value: 2500 },
@@ -258,7 +277,7 @@ test('verified incoming payment queues one opt-in SMS even when the completion w
 
 test('incoming payment amount mismatch is rejected without completing the MatMove record', async () => {
   const { db, payment } = makeDb();
-  const event = { object_id: 'pmc-test-receive', object_type: 'payment_code', event_type: 'payment_code.completed' };
+  const event = { object_id: 'pay-test-receive', object_type: 'payment', event_type: 'payment.processing_completed' };
   const providerObject = {
     id: 'pmc-test-receive',
     status: 'completed',
