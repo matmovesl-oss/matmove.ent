@@ -408,7 +408,7 @@ function stop(message) {
   return { action: 'stop', message: String(message).slice(0, 120) };
 }
 
-async function linkForUssdCode(db, code) {
+async function linkForUssdCode(db, code, { verify = false } = {}) {
   if (typeof code !== 'string' || !RECIPIENT_CODE.test(code.trim().toUpperCase())) return null;
   const { data, error } = await db.from('matmove_receive_links')
     .select('id,user_id,wallet_id,financial_account_id,payment_target_ref,recipient_code,public_name,enabled,sms_receipts_enabled')
@@ -423,6 +423,12 @@ async function linkForUssdCode(db, code) {
   if (walletError || !wallet || wallet.currency !== 'SLE' || wallet.is_frozen === true ||
       profileError || profile?.is_wallet_frozen === true ||
       (wallet.monime_account_id || wallet.metadata?.monime_account_id) !== data.financial_account_id) return null;
+  if (verify) {
+    const account = await verifiedAccount(db, wallet);
+    if (account?.id !== data.financial_account_id ||
+        account?.currency !== 'SLE' ||
+        String(account?.uvan || '').trim() !== data.payment_target_ref) return null;
+  }
   return data;
 }
 
@@ -471,7 +477,7 @@ export async function resolveUssdExchange(payload, { db = dbClient(), enabled = 
 
     if (page === 'enter_amount') {
       const code = String(flowData.enter_recipient || '').trim().toUpperCase();
-      const link = await linkForUssdCode(db, code);
+      const link = await linkForUssdCode(db, code, { verify: true });
       if (!link) return stop('This MatMove recipient is no longer available.');
       const amount = String(flowData.enter_amount || '').trim();
       if (!/^\d{1,7}$/.test(amount) || Number(amount) < 1 || Number(amount) > 1000000) {
