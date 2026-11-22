@@ -1,0 +1,83 @@
+{
+  "version": "1.0",
+  "pages": [
+    {
+      "id": "welcome",
+      "component": {
+        "type": "display",
+        "label": "MatMove Receive Money. Pay a MatMove user with their recipient code. Amounts are in SLE."
+      }
+    },
+    {
+      "id": "enter_recipient",
+      "component": {
+        "type": "prompt",
+        "data_type": "text",
+        "label": "Enter the recipient's MatMove code (MM-XXXXXXXX)",
+        "min_length": 11,
+        "max_length": 11,
+        "max_invalid_input_attempts": 3
+      },
+      "on_done": {
+        "action": "exchange",
+        "url": "https://matmove.space/api/get-live-wallet?action=receive_ussd_exchange"
+      }
+    },
+    {
+      "id": "enter_amount",
+      "component": {
+        "type": "prompt",
+        "data_type": "integer",
+        "label": "Pay $(data.recipientName). Enter amount in SLE.",
+        "min_value": 1,
+        "max_value": 1000000
+      },
+      "on_done": {
+        "action": "exchange",
+        "url": "https://matmove.space/api/get-live-wallet?action=receive_ussd_exchange"
+      }
+    },
+    {
+      "id": "confirm_payment",
+      "component": {
+        "type": "prompt",
+        "data_type": "boolean",
+        "label": "Pay SLE $(page.enter_amount.value) to $(data.recipientName)?"
+      },
+      "on_done": {
+        "action": "exchange",
+        "url": "https://matmove.space/api/get-live-wallet?action=receive_ussd_exchange"
+      }
+    },
+    {
+      "id": "collect_payment",
+      "component": {
+        "type": "template",
+        "template_name": "collect_payment",
+        "label": "Enter your $(session.network_provider_name) PIN to pay {{amount}} to $(data.recipientName).",
+        "template_data": {
+          "payment_target_ref": "$(data.paymentTargetRef)",
+          "amount": "$(data.amount)",
+          "reference": "$(data.reference)",
+          "receipt_name": "MatMove Receive",
+          "metadata": {
+            "mmReceivePayId": "$(data.receivePaymentId)",
+            "mmReceiveLinkId": "$(data.receiveLinkId)",
+            "purpose": "matmove_receive"
+          }
+        }
+      },
+      "on_done": {
+        "action": "next",
+        "next_page": "payment_done"
+      }
+    },
+    {
+      "id": "payment_done",
+      "component": {
+        "type": "display",
+        "label": "Payment submitted successfully. Keep your mobile-money receipt. MatMove will notify the recipient after verification."
+      }
+    }
+  ]
+}
