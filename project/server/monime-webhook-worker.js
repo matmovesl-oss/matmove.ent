@@ -8,6 +8,7 @@ import { reconcileSpinRound } from './spin-payments.js';
 import { reconcileArcadeRound } from './arcade-payments.js';
 import { runReferralLeg } from './referral-payments.js';
 import { reconcileLoadingBonanzaReward, reconcileLoadingBonanzaBatch } from './loading-bonanza-payments.js';
+import { reconcileReceivePaymentEvent, processReceiveSmsOutbox } from './receive-money.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ATTEMPTS = 12;
@@ -340,14 +341,36 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 3, even
       ) || (
         event.object_type === 'payout' &&
         ['payout.completed', 'payout.failed'].includes(event.event_type)
+      ) || (
+        event.object_type === 'payment' &&
+        event.event_type === 'payment.processing_completed'
+      ) || (
+        event.object_type === 'checkout_session' &&
+        ['checkout_session.completed', 'checkout_session.cancelled', 'checkout_session.expired'].includes(event.event_type)
       );
       if (!supportedEnvelope) {
         throw new ManualReviewError('Unsupported Monime event type or object for MatMove ledger reconciliation; manual review required.');
       }
-      const resource = event.object_type === 'payout' ? 'payouts' : 'internal-transfers';
+      const receiveEvent = event.object_type === 'payment' || event.object_type === 'checkout_session';
+      const resource = event.object_type === 'payout'
+        ? 'payouts'
+        : event.object_type === 'payment'
+          ? 'payments'
+          : event.object_type === 'checkout_session'
+            ? 'checkout-sessions'
+            : 'internal-transfers';
       const providerObject = await getProviderObject(event.object_id, resource);
       if (providerObject.id !== event.object_id) throw new ManualReviewError('Monime returned a different provider object identifier; manual review required.');
-      const result = await processLinkedTransfer(db, event, providerObject);
+      const hasReceiveMetadata = Boolean(
+        providerObject?.metadata?.mmReceivePayId ||
+        providerObject?.ownershipGraph?.owner?.metadata?.mmReceivePayId ||
+        providerObject?.ownershipGraph?.owner?.owner?.metadata?.mmReceivePayId
+      );
+      const result = receiveEvent
+        ? hasReceiveMetadata
+          ? await reconcileReceivePaymentEvent(db, event, providerObject)
+          : 'processed'
+        : await processLinkedTransfer(db, event, providerObject);
       if (result === 'pending') {
         const { error: queueError } = await db.from('matmove_monime_webhook_events')
           .update({ status: 'pending', updated_at: new Date().toISOString(), last_error: 'Monime transfer is not final yet.' })
@@ -376,6 +399,15 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 3, even
       if (exhausted) failed++;
       else retrying++;
     }
+  }
+
+  // Run the SMS outbox even when there are no new webhook events. This lets
+  // the scheduled reconciler drain receipts created by earlier confirmed payments.
+  try {
+    const sms = await processReceiveSmsOutbox({ db, limit: 3 });
+    if (sms.failed > 0) console.error('MatMove receive SMS needs review', { failed: sms.failed });
+  } catch {
+    console.error('MatMove receive SMS processing deferred', { reason: 'outbox_unavailable' });
   }
 
   return { checked: (pending || []).length, processed, retrying, failed };

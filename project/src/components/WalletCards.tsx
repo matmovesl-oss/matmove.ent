@@ -1,6 +1,7 @@
 
 
 import { useEffect, useRef, useState } from 'react';
+import ReceiveMoneyPanel from '@/components/ReceiveMoneyPanel';
 import {
   Wallet,
   RefreshCw,
@@ -281,6 +282,7 @@ export default function WalletCards({
         })}
       </div>
 
+      <ReceiveMoneyPanel sleWallet={sleWallet}/>
       <div className="flex justify-center gap-3" aria-label="Choose wallet">
         {['SLE','USD'].map((currency,index)=><button type="button" key={currency} aria-label={`Show ${currency} wallet`} aria-current={active===index?'true':undefined} onClick={()=>move(index)} className={`rounded-full px-4 py-1 text-xs font-bold ${active===index?'bg-slate-900 text-white':'bg-slate-100 text-slate-600'}`}>{currency}</button>)}
       </div>
