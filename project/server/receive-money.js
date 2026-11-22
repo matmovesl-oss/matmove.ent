@@ -467,7 +467,7 @@ async function verifyUssdRecipientAccount(db, wallet) {
   if (!response.ok || !account ||
       account.id !== accountId ||
       account.currency !== 'SLE' ||
-      !/^\\d{6,20}$/.test(String(account.uvan || ''))) {
+      !/^\d{6,20}$/.test(String(account.uvan || ''))) {
     throw new Error('Recipient Monime SLE account is not currently valid.');
   }
   return account;
