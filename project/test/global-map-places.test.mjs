@@ -11,7 +11,7 @@ test('Google Places autocomplete searches globally and uses the visible map view
  assert.match(source,/request\.locationBias=viewport/);
  assert.match(source,/geocoder\.current\.geocode\(request/);
  assert.match(source,/minZoom:\s*2/);
- assert.match(source,/Worldwide place search/);
+ assert.match(source,/Global place search/);
 });
 
 test('customer picker reads only active MatMove-curated places and refreshes them through Realtime',async()=>{
