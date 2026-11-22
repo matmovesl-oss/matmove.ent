@@ -2,7 +2,7 @@ import {
   createCipheriv, createDecipheriv, createHash, privateDecrypt,
   constants, randomBytes, randomUUID
 } from 'node:crypto';
-import { HttpError, dbClient, monime, toMinorUnits, verifiedAccount } from './wallet-security.js';
+import { HttpError, dbClient, toMinorUnits, verifiedAccount } from './wallet-security.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG = /^[A-Za-z0-9_-]{24,64}$/;
@@ -426,9 +426,9 @@ async function linkForUssdCode(db, code) {
   return data;
 }
 
-async function createUssdIntent(db, link, sessionId, amountText, { provider = monime } = {}) {
+async function createUssdIntent(db, link, sessionId, amountText) {
   const amount = Number(amountText);
-  if (!/^\d{1,7}$/.test(String(amountText)) || !Number.isSafeInteger(amount) || amount < 1 || amount > 1000000) {
+  if (!/^\\d{1,7}$/.test(String(amountText)) || !Number.isSafeInteger(amount) || amount < 1 || amount > 1000000) {
     throw new Error('Enter an amount between SLE 1 and SLE 1,000,000.');
   }
   const amountMinor = amount * 100;
@@ -441,70 +441,20 @@ async function createUssdIntent(db, link, sessionId, amountText, { provider = mo
   if (row.state === 'completed' || row.provider_channel !== 'ussd') {
     throw new Error('This USSD session has already been used. Start a new payment session.');
   }
-
-  // Each USSD payment gets its own one-time Monime Payment Code, so the
-  // amount, receiver account, reference and MatMove ID are fixed before PIN entry.
-  const code = row.provider_object_id
-    ? await provider(`payment-codes/${encodeURIComponent(row.provider_object_id)}`)
-    : await provider('payment-codes', {
-        method: 'POST',
-        headers: { 'Idempotency-Key': row.idempotency_key.slice(0, 64) },
-        body: JSON.stringify({
-          name: `MatMove payment to ${link.public_name}`,
-          mode: 'one_time',
-          enable: true,
-          amount: { currency: 'SLE', value: amountMinor },
-          duration: '10m',
-          financialAccountId: link.financial_account_id,
-          authorizedProviders: ['m17', 'm18'],
-          reference: row.reference,
-          metadata: {
-            mmReceivePayId: row.id,
-            mmReceiveLinkId: link.id,
-            purpose: 'matmove_receive'
-          }
-        })
-      });
-
-  const codeMetadata = metadataFor(code);
-  if (
-    typeof code?.id !== 'string' ||
-    code.financialAccountId !== link.financial_account_id ||
-    code.amount?.currency !== 'SLE' ||
-    code.amount?.value !== amountMinor ||
-    code.reference !== row.reference ||
-    codeMetadata.mmReceivePayId !== row.id ||
-    code.status !== 'pending' ||
-    code.enable !== true
-  ) {
-    await db.from('matmove_received_payments').update({
-      state: 'review_required',
-      provider_status: 'payment_code_response_mismatch',
-      updated_at: new Date().toISOString()
-    }).eq('id', row.id);
-    throw new Error('Monime did not return the expected one-time payment code.');
-  }
-
-  if (row.provider_object_id && row.provider_object_id !== code.id) {
-    await db.from('matmove_received_payments').update({
-      state: 'review_required',
-      provider_status: 'multiple_payment_codes',
-      updated_at: new Date().toISOString()
-    }).eq('id', row.id);
-    throw new Error('This MatMove payment request is already linked to another provider code.');
+  if (row.state === 'review_required') {
+    throw new Error('This payment request needs support review. Please start a new session later.');
   }
 
   const { error } = await db.from('matmove_received_payments').update({
-    provider_object_id: code.id,
     state: 'processing',
-    provider_status: 'pending',
+    provider_status: 'awaiting_payer_authorization',
     updated_at: new Date().toISOString()
   }).eq('id', row.id).neq('state', 'completed');
-  if (error) throw new Error('Monime created the payment code, but MatMove could not save its reference. Start a new USSD session only after checking support.');
-  return { row: { ...row, provider_object_id: code.id, state: 'processing' }, code };
+  if (error) throw new Error('MatMove could not securely record this payment request.');
+  return { ...row, state: 'processing', provider_status: 'awaiting_payer_authorization' };
 }
 
-export async function resolveUssdExchange(payload, { db = dbClient(), provider = monime, enabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true' && process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true' } = {}) {
+export async function resolveUssdExchange(payload, { db = dbClient(), enabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true' && process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true' } = {}) {
   if (!enabled) return stop('MatMove USSD payments are not enabled yet. Please use the MatMove payment link.');
   const sessionId = payload?.global?.sessionId;
   if (typeof sessionId !== 'string' || !UUID.test(sessionId)) return stop('This USSD session could not be verified. Please dial again.');
@@ -548,7 +498,7 @@ export async function resolveUssdExchange(payload, { db = dbClient(), provider =
         pageData: {
           recipientName: link.public_name,
           amount: Number(row.amount_minor) / 100,
-          paymentTargetRef: paymentCode.id,
+          paymentTargetRef: link.payment_target_ref,
           reference: row.reference,
           receivePaymentId: row.id,
           receiveLinkId: link.id
@@ -656,7 +606,7 @@ export async function reconcileReceivePaymentEvent(db, event, providerObject) {
   if (payment.provider_channel === 'checkout' && event.object_type !== 'checkout_session') {
     throw new Error('Provider object type did not match the receive-payment channel.');
   }
-  if (payment.provider_channel === 'ussd' && event.object_type !== 'payment_code') {
+  if (payment.provider_channel === 'ussd' && event.object_type !== 'payment') {
     throw new Error('Provider object type did not match the receive-payment channel.');
   }
 
