@@ -342,8 +342,8 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 3, even
         event.object_type === 'payout' &&
         ['payout.completed', 'payout.failed'].includes(event.event_type)
       ) || (
-        event.object_type === 'payment' &&
-        event.event_type === 'payment.processing_completed'
+        event.object_type === 'payment_code' &&
+        event.event_type === 'payment_code.completed'
       ) || (
         event.object_type === 'checkout_session' &&
         event.event_type === 'checkout_session.completed'
@@ -351,11 +351,11 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 3, even
       if (!supportedEnvelope) {
         throw new ManualReviewError('Unsupported Monime event type or object for MatMove ledger reconciliation; manual review required.');
       }
-      const receiveEvent = event.object_type === 'payment' || event.object_type === 'checkout_session';
+      const receiveEvent = event.object_type === 'payment_code' || event.object_type === 'checkout_session';
       const resource = event.object_type === 'payout'
         ? 'payouts'
-        : event.object_type === 'payment'
-          ? 'payments'
+        : event.object_type === 'payment_code'
+          ? 'payment-codes'
           : event.object_type === 'checkout_session'
             ? 'checkout-sessions'
             : 'internal-transfers';
@@ -376,16 +376,6 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 3, even
           .eq('event_id', event.event_id);
         if (queueError) throw new Error('Could not mark the Monime event as processed.');
         processed++;
-        if (receiveEvent) {
-          try {
-            const sms = await processReceiveSmsOutbox({ db, limit: 3 });
-            if (sms.failed > 0) console.error('MatMove receive SMS needs review', { failed: sms.failed });
-          } catch {
-            // The financial receipt is already verified and saved. The outbox
-            // remains durable for the scheduled retry/review path.
-            console.error('MatMove receive SMS processing deferred', { reason: 'outbox_unavailable' });
-          }
-        }
       }
     } catch (error) {
       const manualReview = error instanceof ManualReviewError;
@@ -402,6 +392,15 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 3, even
       if (exhausted) failed++;
       else retrying++;
     }
+  }
+
+  // Run the SMS outbox even when there are no new webhook events. This lets
+  // the scheduled reconciler drain receipts created by earlier confirmed payments.
+  try {
+    const sms = await processReceiveSmsOutbox({ db, limit: 3 });
+    if (sms.failed > 0) console.error('MatMove receive SMS needs review', { failed: sms.failed });
+  } catch {
+    console.error('MatMove receive SMS processing deferred', { reason: 'outbox_unavailable' });
   }
 
   return { checked: (pending || []).length, processed, retrying, failed };
