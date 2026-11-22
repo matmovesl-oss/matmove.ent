@@ -186,7 +186,7 @@ export async function getPublicReceiveLink(db, slug) {
 }
 
 function paymentReference(id) {
-  return `MM-${String(id).replace(/-/g, '').slice(0, 12).toUpperCase()}`;
+  return `MM-${String(id).replace(/-/g, '').slice(0, 16).toUpperCase()}`;
 }
 
 async function getOrCreatePayment(db, { link, amountMinor, channel, idempotencyKey }) {
@@ -230,7 +230,7 @@ export function receiveCheckoutReturn(req, res) {
   const method = String(req.method || '').toUpperCase();
   if (!['GET', 'POST'].includes(method)) return res.status(405).json({ error: 'Method not allowed.' });
   const reference = String(req.query?.ref || '').trim();
-  if (!/^MM-[A-F0-9]{12}$/.test(reference)) {
+  if (!/^MM-[A-F0-9]{16}$/.test(reference)) {
     return res.status(400).json({ error: 'The MatMove payment reference is invalid.' });
   }
   const destination = `${safeOrigin()}/pay/complete?ref=${encodeURIComponent(reference)}`;
@@ -505,7 +505,7 @@ export async function resolveUssdExchange(payload, { db = dbClient(), verify = v
 
     if (page === 'confirm_payment') {
       const confirmed = String(flowData.confirm_payment || '').toLowerCase();
-      if (confirmed !== 'true' && confirmed !== 'yes') return stop('Payment cancelled.');
+      if (!['true', 'yes', '1'].includes(confirmed)) return stop('Payment cancelled.');
       const code = String(flowData.enter_recipient || '').trim().toUpperCase();
       const link = await linkForUssdCode(db, code, { verify: true, verifyAccount: verify });
       if (!link) return stop('This MatMove recipient is no longer available.');
