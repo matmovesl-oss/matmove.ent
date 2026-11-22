@@ -3,8 +3,9 @@ import {
   monime,
   HttpError,
 } from '../server/wallet-security.js';
+import { createReceiveCheckout } from '../server/receive-money.js';
 
-export default protectedWallet(
+const createWalletTopup = protectedWallet(
   'load',
   async (req, res) => {
     const {
@@ -100,3 +101,21 @@ export default protectedWallet(
     return res.status(200).json({ link });
   }
 );
+
+export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.query?.action === 'receive_checkout') {
+    try {
+      return await createReceiveCheckout(req, res);
+    } catch (error) {
+      const status = Number.isInteger(error?.status) ? error.status : 503;
+      if (status >= 500) console.error('MatMove receive checkout failed', { reason: error?.message || 'checkout_error' });
+      return res.status(status).json({
+        error: status >= 500 && !error?.status
+          ? 'MatMove could not start this payment. Check the same payment request before retrying.'
+          : String(error?.message || 'Payment could not be started.')
+      });
+    }
+  }
+  return createWalletTopup(req, res);
+}
