@@ -80,6 +80,9 @@ class Query {
   async execute(single = false) {
     const rows = this.db.tables[this.table] || (this.db.tables[this.table] = []);
     if (this.operation === 'insert') {
+      if (this.table === 'matmove_receive_sms_outbox' && rows.some(row => row.payment_id === this.values.payment_id)) {
+        return { data: null, error: { code: '23505' } };
+      }
       const row = { ...this.values };
       rows.push(row);
       return { data: single ? this.project(row) : null, error: null };
@@ -197,7 +200,11 @@ test('USSD recipient confirmation returns the verified UVAN and a unique payment
       confirm_payment: 'true'
     }
   };
-  const result = await resolveUssdExchange(payload, { db, enabled: true });
+  const result = await resolveUssdExchange(payload, {
+    db,
+    enabled: true,
+    verify: async () => ({ id: link.financial_account_id, currency: 'SLE', uvan: link.payment_target_ref })
+  });
   assert.equal(result.action, 'navigate');
   assert.equal(result.pageId, 'collect_payment');
   assert.equal(result.pageData.paymentTargetRef, link.payment_target_ref);
@@ -226,6 +233,27 @@ test('incoming USSD payment completes only when final Monime payment matches acc
   assert.ok(payment.completed_at);
   assert.equal(payment.provider_object_id, event.object_id);
   assert.equal(db.tables.matmove_receive_sms_outbox.length, 0);
+});
+
+test('verified incoming payment queues one opt-in SMS even when the completion webhook is retried', async () => {
+  const { db, link, payment } = makeDb();
+  link.sms_receipts_enabled = true;
+  const event = { object_id: 'pay-test-receive', object_type: 'payment', event_type: 'payment.processing_completed' };
+  const providerObject = {
+    id: 'pay-test-receive',
+    status: 'completed',
+    financialAccountId: payment.provider_account_id,
+    amount: { currency: 'SLE', value: 2500 },
+    reference: payment.reference,
+    metadata: { mmReceivePayId: payment.id }
+  };
+  await reconcileReceivePaymentEvent(db, event, providerObject);
+  assert.equal(payment.state, 'completed');
+  assert.equal(db.tables.matmove_receive_sms_outbox.length, 1);
+  assert.equal(db.tables.matmove_receive_sms_outbox[0].phone_e164, '+23276543210');
+  assert.match(db.tables.matmove_receive_sms_outbox[0].message, /SLE 25\.00/);
+  await reconcileReceivePaymentEvent(db, event, providerObject);
+  assert.equal(db.tables.matmove_receive_sms_outbox.length, 1);
 });
 
 test('incoming payment amount mismatch is rejected without completing the MatMove record', async () => {
