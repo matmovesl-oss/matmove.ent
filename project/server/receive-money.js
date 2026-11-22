@@ -226,6 +226,19 @@ async function getOrCreatePayment(db, { link, amountMinor, channel, idempotencyK
   return data;
 }
 
+export function receiveCheckoutReturn(req, res) {
+  const method = String(req.method || '').toUpperCase();
+  if (!['GET', 'POST'].includes(method)) return res.status(405).json({ error: 'Method not allowed.' });
+  const reference = String(req.query?.ref || '').trim();
+  if (!/^MM-[A-F0-9]{12}$/.test(reference)) {
+    return res.status(400).json({ error: 'The MatMove payment reference is invalid.' });
+  }
+  const destination = `${safeOrigin()}/pay/complete?ref=${encodeURIComponent(reference)}`;
+  res.setHeader?.('Cache-Control', 'no-store');
+  res.setHeader?.('Location', destination);
+  return res.status(303).end();
+}
+
 export async function createReceiveCheckout(req, res, { db = dbClient(), provider, verify = verifiedAccount } = {}) {
   if (process.env.MATMOVE_RECEIVE_MONEY_ENABLED !== 'true') throw new HttpError(503, 'MatMove receive payments are being activated. Please try again later.');
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
@@ -304,7 +317,7 @@ export async function createReceiveCheckout(req, res, { db = dbClient(), provide
       description: 'Secure MatMove receive-money payment',
       financialAccountId: link.financial_account_id,
       reference: row.reference,
-      successUrl: `${origin}/pay/complete?ref=${encodeURIComponent(row.reference)}`,
+      successUrl: `${origin}/api/create-monime-checkout?action=receive_checkout_return&ref=${encodeURIComponent(row.reference)}`,
       cancelUrl: `${origin}/pay/${encodeURIComponent(slug)}?cancelled=1`,
       lineItems: [{
         type: 'custom',
