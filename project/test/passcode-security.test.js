@@ -89,12 +89,9 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
   assert.equal((await pg.query('select balance from wallets where user_id=$1',[uid])).rows[0].balance,'42.50');
   assert.equal((await pg.query('select kyc_status from profiles where id=$1',[uid])).rows[0].kyc_status,'approved');
  });
- }finally{await pg.close();}
-});
 
- 
-test('existing ten-digit legacy passcodes remain verifiable while new passcodes are capped at nine digits',async()=>{
- const legacyTen='44444444-4444-4444-8444-444444444444';
+ await t.test('existing ten-digit legacy passcodes remain verifiable while new passcodes are capped at nine digits',async()=>{
+ const legacyTen='66666666-6666-4666-8666-666666666666';
  await pg.exec('reset role');
  await pg.query('insert into auth.users(id) values($1)',[legacyTen]);
  await pg.query("insert into profiles values($1,'rider',null,'approved','Legacy Ten Digit Customer')",[legacyTen]);
@@ -112,7 +109,10 @@ test('existing ten-digit legacy passcodes remain verifiable while new passcodes 
  await assert.rejects(rpc('change','1234567890','1234567890'),/6 and 9 digits/);
  assert.equal((await rpc('verify','1234567890')).ok,true);
 });
+ }finally{await pg.close();}
+});
 
+ 
 test('credential recovery screens are separate and each updates only its selected credential',async()=>{
  const app=await readFile('src/App.tsx','utf8');
  const callback=await readFile('src/pages/AuthPages.tsx','utf8');
