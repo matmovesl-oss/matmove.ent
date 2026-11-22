@@ -3,7 +3,7 @@ import {
   monime,
   HttpError,
 } from '../server/wallet-security.js';
-import { createReceiveCheckout } from '../server/receive-money.js';
+import { createReceiveCheckout, receiveCheckoutReturn } from '../server/receive-money.js';
 
 const createWalletTopup = protectedWallet(
   'load',
@@ -104,6 +104,7 @@ const createWalletTopup = protectedWallet(
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
+  if (req.query?.action === 'receive_checkout_return') return receiveCheckoutReturn(req, res);
   if (req.query?.action === 'receive_checkout') {
     try {
       return await createReceiveCheckout(req, res);
