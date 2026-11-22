@@ -21,7 +21,7 @@ test('public landing page reads the restricted published-post view', async () =>
 
 
 test('public homepage view uses invoker security with narrowly scoped anonymous RLS access', async () => {
-  const migration = await read('../docs/pending-migrations/matmove_public_homepage_posts_security_invoker.sql');
+  const migration = await read('../supabase/migrations/20261122223335_matmove_public_homepage_posts_security_invoker_v1.sql');
 
   assert.match(migration, /grant select\s*\([\s\S]*?id[\s\S]*?title[\s\S]*?summary[\s\S]*?body[\s\S]*?image_path[\s\S]*?starts_at[\s\S]*?expires_at[\s\S]*?display_order[\s\S]*?price_amount[\s\S]*?price_currency[\s\S]*?created_at[\s\S]*?status[\s\S]*?deleted_at[\s\S]*?\)\s*on public\.matmove_homepage_posts to anon/i);
   assert.match(migration, /drop policy if exists matmove_homepage_posts_anon_public_feed_read/i);
