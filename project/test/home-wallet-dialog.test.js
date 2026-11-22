@@ -32,10 +32,11 @@ async function page(name,fn,{role='rider',saved=null,preferencesError=null}={}){
    b.onResolve({filter:/^@\/lib\/(supabase|apiFetch)$/},a=>({path:a.path.endsWith('supabase')?'db':'wallet',namespace:'mock'}));
    b.onResolve({filter:/^@\/services\/payoutService$/},()=>({path:'payout',namespace:'mock'}));
    b.onResolve({filter:/^@\/components\/ArcadeGames$/},()=>({path:'arcade',namespace:'mock'}));
-   b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:{hooks:'export const {useState,useRef,useEffect,useCallback}=globalThis.__hwHooks;',db:'export const supabase=globalThis.__hwDb;',wallet:`export const walletFetch=async()=>({response:{ok:true},data:{sleWallet:{user_id:'${uid}',balanceAvailable:true,balance:2}},finish(){}});`,payout:'export const payoutRequest=(body)=>globalThis.__hwPayout(body);',arcade:'export function ArcadeGames(){return null;}'}[a.path]}));
+   b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:{hooks:'export const {useState,useRef,useEffect,useCallback}=globalThis.__hwHooks;export const lazy=load=>function Lazy(props){return {type:"ArcadeGames",props};};export function Suspense({children}){return children;}',db:'export const supabase=globalThis.__hwDb;',wallet:`export const walletFetch=async()=>({response:{ok:true},data:{sleWallet:{user_id:'${uid}',balanceAvailable:true,balance:2}},finish(){}});`,payout:'export const payoutRequest=(body)=>globalThis.__hwPayout(body);',arcade:'export function ArcadeGames(){return null;}'}[a.path]}));
   }}]});
   const {default:Component}=await import(pathToFileURL(out));
   function render(){cursor=0;dirty=false;tree=name==='PortalHome'?Component({profile:{id:uid,role,first_name:'Test'},onNavigate:s=>calls.push({kind:'navigate',section:s})}):Component({userId:uid,allowed:true,onClose:()=>closed++,onBalanceChange:()=>calls.push({kind:'balance'})});
+   if(name==='PortalHome'&&tree?.type?.name==='Suspense')tree=tree.props.children;
    for(const n of nodes(tree))if(n.ref&&typeof n.ref==='object'&&!n.ref.current)n.ref.current=n.type==='dialog'?{open:false,showModal(){this.open=true;modalOpens++;}}:{};
    while(effects.length)effects.shift()();
   }
