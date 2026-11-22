@@ -689,6 +689,9 @@ export async function reconcileReceivePaymentEvent(db, event, providerObject) {
     if (payment.provider_object_id && payment.provider_object_id !== objectId) {
       throw new Error('A second provider payment object references an already completed MatMove request.');
     }
+    // A previous webhook may have recorded the payment but failed before
+    // inserting its SMS outbox row. The unique payment_id makes this retry safe.
+    await queueRecipientSms(db, payment);
     return 'processed';
   }
   if (payment.state === 'review_required') throw new Error('MatMove payment is already under review.');
