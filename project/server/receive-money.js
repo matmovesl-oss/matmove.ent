@@ -477,7 +477,7 @@ export async function resolveUssdExchange(payload, { db = dbClient(), verify = v
 
     if (page === 'enter_amount') {
       const code = String(flowData.enter_recipient || '').trim().toUpperCase();
-      const link = await linkForUssdCode(db, code, { verify: true, verifyAccount: verify });
+      const link = await linkForUssdCode(db, code);
       if (!link) return stop('This MatMove recipient is no longer available.');
       const amount = String(flowData.enter_amount || '').trim();
       if (!/^\d{1,7}$/.test(amount) || Number(amount) < 1 || Number(amount) > 1000000) {
@@ -494,10 +494,10 @@ export async function resolveUssdExchange(payload, { db = dbClient(), verify = v
       const confirmed = String(flowData.confirm_payment || '').toLowerCase();
       if (confirmed !== 'true' && confirmed !== 'yes') return stop('Payment cancelled.');
       const code = String(flowData.enter_recipient || '').trim().toUpperCase();
-      const link = await linkForUssdCode(db, code);
+      const link = await linkForUssdCode(db, code, { verify: true, verifyAccount: verify });
       if (!link) return stop('This MatMove recipient is no longer available.');
       const amount = String(flowData.enter_amount || '').trim();
-      const { row, code: paymentCode } = await createUssdIntent(db, link, sessionId, amount, { provider });
+      const row = await createUssdIntent(db, link, sessionId, amount);
       return {
         action: 'navigate',
         pageId: 'collect_payment',
