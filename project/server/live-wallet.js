@@ -85,7 +85,7 @@ export async function liveWallet(
 
       // A UVAN is a Monime-issued receiving alias. Preserve leading zeroes
       // and never synthesize one from the Financial Account ID.
-      const uvan = typeof account.uvan === 'string' && /^\\d{6,20}$/.test(account.uvan.trim())
+      const uvan = typeof account.uvan === 'string' && /^\d{6,20}$/.test(account.uvan.trim())
         ? account.uvan.trim()
         : null;
       const monimePaymentUrl = currency === 'SLE' && uvan
