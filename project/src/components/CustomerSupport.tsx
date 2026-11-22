@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {MessageCircle,Plus,Send,X,RefreshCw,ArrowLeft,ChevronDown,ChevronRight,ArrowUpRight,Globe,Instagram} from 'lucide-react';
+import {MessageCircle,Send,X,RefreshCw,ArrowLeft,ChevronDown,ChevronRight,ArrowUpRight,Globe,Instagram} from 'lucide-react';
 import {supabase} from '@/lib/supabase';
 
 type Ticket={id:string;ticket_number:string;subject:string;category:string;status:string;created_at:string;last_message_at:string;last_message:string;unread_count:number};
