@@ -635,15 +635,13 @@ export async function reconcileReceivePaymentEvent(db, event, providerObject) {
       ? providerObject.amount.value
       : null;
   const reference = providerObject.reference;
-  const status = String(providerObject.status || '').toLowerCase();
   const lifecycle = event?.event_type || event?.payload?.event?.name;
-  const expectedStatus = lifecycle === 'checkout_session.cancelled' || lifecycle === 'payment_code.cancelled'
+  const expectedStatus = lifecycle === 'checkout_session.cancelled'
     ? 'cancelled'
-    : lifecycle === 'checkout_session.expired' || lifecycle === 'payment_code.expired'
+    : lifecycle === 'checkout_session.expired'
       ? 'expired'
       : 'completed';
   const status = String(providerObject.status || '').toLowerCase();
-  const reference = providerObject.reference;
   const valid = status === expectedStatus &&
     providerObject.financialAccountId === payment.provider_account_id &&
     amountMinor === Number(payment.amount_minor) &&
