@@ -146,3 +146,19 @@ test('login and customer role onboarding use branded MatMove vehicle illustratio
  assert.match(onboarding,/illustration: '\/matmove-car\.svg'/);
  assert.match(onboarding,/illustration: '\/matmove-bike\.svg'/);
 });
+
+
+test('large customer workspaces are lazy-loaded behind a glass loading state',async()=>{
+ const app=await read('../src/App.tsx');
+ assert.match(app,/lazy\(\(\)\s*=>\s*import\('@\/pages\/RiderDashboard'\)/);
+ assert.match(app,/lazy\(\(\)\s*=>\s*import\('@\/pages\/DriverDashboard'\)/);
+ assert.match(app,/lazy\(\(\)\s*=>\s*import\('@\/pages\/MerchantDashboard'\)/);
+ assert.match(app,/lazy\(\(\)\s*=>\s*import\('@\/components\/ArcadeGames'\)/);
+ assert.match(app,/lazy\(\(\)\s*=>\s*import\('@\/components\/ActivityAnalytics'\)/);
+ assert.match(app,/lazy\(\(\)\s*=>\s*import\('@\/components\/MerchantAnalytics'\)/);
+ assert.match(app,/<Suspense fallback=\{<CustomerWorkspaceLoading \/>\}>/);
+ assert.match(app,/function CustomerWorkspaceLoading/);
+ assert.doesNotMatch(app,/import\s*\{\s*RiderDashboard\s*\}\s*from\s*'@\/pages\/RiderDashboard'/);
+ assert.doesNotMatch(app,/import\s*\{\s*DriverDashboard\s*\}\s*from\s*'@\/pages\/DriverDashboard'/);
+ assert.doesNotMatch(app,/import\s*\{\s*MerchantDashboard\s*\}\s*from\s*'@\/pages\/MerchantDashboard'/);
+});

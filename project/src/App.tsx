@@ -15,11 +15,6 @@ import AccountProfile, {AccountIdentity, PasskeySecurity} from '@/components/Acc
 
 
 
-import { ArcadeGames } from '@/components/ArcadeGames';
-
-import ActivityAnalytics from '@/components/ActivityAnalytics';
-import MerchantAnalytics from '@/components/MerchantAnalytics';
-
 import MerchantCheckout from '@/components/MerchantCheckout';
 import { AccountPolicy } from '@/components/AccountPolicy';
 import {
@@ -30,6 +25,8 @@ import {
   useNavigate,
 } from 'react-router-dom';
 import {
+  lazy,
+  Suspense,
   useState,
   useEffect,
   useCallback,
@@ -63,15 +60,6 @@ import {
   VerificationPage,
 } from '@/pages/OnboardingPages';
 
-import {
-  RiderDashboard,
-} from '@/pages/RiderDashboard';
-import {
-  DriverDashboard,
-} from '@/pages/DriverDashboard';
-import {
-  MerchantDashboard,
-} from '@/pages/MerchantDashboard';
 
 import {
   UserCircle,
@@ -101,6 +89,22 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
+
+
+const RiderDashboard = lazy(() =>
+  import('@/pages/RiderDashboard').then(module => ({default: module.RiderDashboard}))
+);
+const DriverDashboard = lazy(() =>
+  import('@/pages/DriverDashboard').then(module => ({default: module.DriverDashboard}))
+);
+const MerchantDashboard = lazy(() =>
+  import('@/pages/MerchantDashboard').then(module => ({default: module.MerchantDashboard}))
+);
+const ArcadeGames = lazy(() =>
+  import('@/components/ArcadeGames').then(module => ({default: module.ArcadeGames}))
+);
+const ActivityAnalytics = lazy(() => import('@/components/ActivityAnalytics'));
+const MerchantAnalytics = lazy(() => import('@/components/MerchantAnalytics'));
 
 type PortalSection =
   | 'home'
@@ -445,41 +449,43 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
         </div>
       )}
       <div className={sectionTransitioning ? 'mm-section-enter' : undefined}>
-        {activeSection === 'home' && <CustomerHome key={`${profile.id}:${role}`} profile={profile} onNavigate={setActiveSection} />}
-        {activeSection === 'services' && <PortalHome key={`${profile.id}:${role}:services`} profile={profile} mode="services" onNavigate={setActiveSection} />}
-        {activeSection !== 'home' && activeSection !== 'services' && role === 'rider' && (
-          <RiderDashboard
-            profile={profile}
-            wallet={wallet}
-            activeSection={activeSection === 'ride' ? 'home' : activeSection}
-            resumeTripId={resumeTripId}
-            onResumeTrip={(bookingId:string)=>{rememberTrip(bookingId);setActiveSection('ride');}}
-            onOpenTrips={(bookingId?:string|null)=>{if(bookingId)rememberTrip(bookingId);setActiveSection('trips');}}
-            onBack={() => setActiveSection('home')}
-          />
-        )}
+        <Suspense fallback={<CustomerWorkspaceLoading />}>
+          {activeSection === 'home' && <CustomerHome key={`${profile.id}:${role}`} profile={profile} onNavigate={setActiveSection} />}
+          {activeSection === 'services' && <PortalHome key={`${profile.id}:${role}:services`} profile={profile} mode="services" onNavigate={setActiveSection} />}
+          {activeSection !== 'home' && activeSection !== 'services' && role === 'rider' && (
+            <RiderDashboard
+              profile={profile}
+              wallet={wallet}
+              activeSection={activeSection === 'ride' ? 'home' : activeSection}
+              resumeTripId={resumeTripId}
+              onResumeTrip={(bookingId:string)=>{rememberTrip(bookingId);setActiveSection('ride');}}
+              onOpenTrips={(bookingId?:string|null)=>{if(bookingId)rememberTrip(bookingId);setActiveSection('trips');}}
+              onBack={() => setActiveSection('home')}
+            />
+          )}
 
-        {activeSection !== 'home' && activeSection !== 'services' && role === 'driver' && (
-          <DriverDashboard
-            profile={profile}
-            wallet={wallet}
-            activeSection={activeSection === 'ride' ? 'home' : activeSection}
-            resumeTripId={resumeTripId}
-            onResumeTrip={(bookingId:string)=>{rememberTrip(bookingId);setActiveSection('ride');}}
-          />
-        )}
+          {activeSection !== 'home' && activeSection !== 'services' && role === 'driver' && (
+            <DriverDashboard
+              profile={profile}
+              wallet={wallet}
+              activeSection={activeSection === 'ride' ? 'home' : activeSection}
+              resumeTripId={resumeTripId}
+              onResumeTrip={(bookingId:string)=>{rememberTrip(bookingId);setActiveSection('ride');}}
+            />
+          )}
 
-        {activeSection !== 'home' && activeSection !== 'services' && role === 'merchant' && (
-          <MerchantDashboard
-            profile={profile}
-            wallet={wallet}
-            activeSection={activeSection === 'ride' ? 'home' : activeSection}
-            resumeTripId={resumeTripId}
-            onResumeTrip={(bookingId:string)=>{rememberTrip(bookingId);setActiveSection('ride');}}
-            onOpenTrips={(bookingId?:string|null)=>{if(bookingId)rememberTrip(bookingId);setActiveSection('trips');}}
-            onBack={() => setActiveSection('home')}
-          />
-        )}
+          {activeSection !== 'home' && activeSection !== 'services' && role === 'merchant' && (
+            <MerchantDashboard
+              profile={profile}
+              wallet={wallet}
+              activeSection={activeSection === 'ride' ? 'home' : activeSection}
+              resumeTripId={resumeTripId}
+              onResumeTrip={(bookingId:string)=>{rememberTrip(bookingId);setActiveSection('ride');}}
+              onOpenTrips={(bookingId?:string|null)=>{if(bookingId)rememberTrip(bookingId);setActiveSection('trips');}}
+              onBack={() => setActiveSection('home')}
+            />
+          )}
+        </Suspense>
       </div>
 
       <PortalNavigation
@@ -489,6 +495,19 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
       />
     </div>
     </>
+  );
+}
+
+
+function CustomerWorkspaceLoading({label='Loading your MatMove workspace...'}:{label?:string}) {
+  return (
+    <section role="status" aria-live="polite" className="mx-auto max-w-6xl px-4 py-10">
+      <div className="rounded-3xl border border-white/85 bg-white/75 p-6 shadow-[0_16px_42px_rgba(16,50,83,.09)] backdrop-blur-xl">
+        <div className="motion-safe:animate-pulse h-3 w-24 rounded-full bg-emerald-100" />
+        <div className="motion-safe:animate-pulse mt-4 h-7 w-2/3 rounded-xl bg-sky-100" />
+        <p className="mt-5 text-sm font-semibold text-slate-600">{label}</p>
+      </div>
+    </section>
   );
 }
 
@@ -876,15 +895,27 @@ function AccountSection({
     );
 
   if (viewingGames) {
-    return <ArcadeGames key={profile.id} userId={profile.id} onBack={() => setViewingGames(false)} />;
+    return (
+      <Suspense fallback={<CustomerWorkspaceLoading label="Loading MatMove Games..." />}>
+        <ArcadeGames key={profile.id} userId={profile.id} onBack={() => setViewingGames(false)} />
+      </Suspense>
+    );
   }
 
   if (viewingAnalytics && (profile.role === 'rider' || profile.role === 'driver')) {
-    return <ActivityAnalytics role={profile.role} onBack={() => setViewingAnalytics(false)} />;
+    return (
+      <Suspense fallback={<CustomerWorkspaceLoading label="Loading your activity..." />}>
+        <ActivityAnalytics role={profile.role} onBack={() => setViewingAnalytics(false)} />
+      </Suspense>
+    );
   }
 
   if (viewingAnalytics && profile.role === 'merchant') {
-    return <MerchantAnalytics userId={profile.id} onBack={() => setViewingAnalytics(false)} />;
+    return (
+      <Suspense fallback={<CustomerWorkspaceLoading label="Loading business analytics..." />}>
+        <MerchantAnalytics userId={profile.id} onBack={() => setViewingAnalytics(false)} />
+      </Suspense>
+    );
   }
 
   if (viewingAnalytics) {
