@@ -97,6 +97,14 @@ export async function manageReceiveLink(context, body, { verify = verifiedAccoun
   if (smsEnabled && !phoneE164(profile)) {
     throw new HttpError(400, 'Add a valid Sierra Leone mobile number to your MatMove profile before enabling SMS receipts.');
   }
+  if (smsEnabled && ![
+    process.env.APPHIVE_SMS_CLIENT_ID,
+    process.env.APPHIVE_SMS_CLIENT_SECRET,
+    process.env.APPHIVE_SMS_WALLET_TOKEN,
+    process.env.APPHIVE_SMS_SENDER_ID
+  ].every(value => typeof value === 'string' && value.trim())) {
+    throw new HttpError(503, 'SMS receipts are not available yet. Please try again after MatMove activates SMS delivery.');
+  }
 
   if (!enable) {
     if (!existing) return { enabled: false, publicUrl: null, recipientCode: null, smsReceiptsEnabled: false };
