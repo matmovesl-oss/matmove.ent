@@ -5,6 +5,7 @@ import {
 import { HttpError, dbClient, toMinorUnits, verifiedAccount } from './wallet-security.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const USSD_SESSION_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const SLUG = /^[A-Za-z0-9_-]{24,64}$/;
 const RECIPIENT_CODE = /^MM-[A-Z2-9]{8}$/;
 const MAX_RECEIVE_MINOR = 100000000; // SLE 1,000,000 hard safety ceiling.
@@ -429,7 +430,50 @@ function stop(message) {
   return { action: 'stop', message: String(message).slice(0, 120) };
 }
 
-async function linkForUssdCode(db, code, { verify = false, verifyAccount = verifiedAccount } = {}) {
+async function verifyUssdRecipientAccount(db, wallet) {
+  const direct = wallet?.monime_account_id;
+  const legacy = wallet?.metadata?.monime_account_id;
+  if (direct && legacy && direct !== legacy) throw new Error('Recipient account links disagree.');
+  const accountId = direct || legacy;
+  if (!/^fac-[A-Za-z0-9_-]+$/.test(String(accountId))) throw new Error('Recipient account link is invalid.');
+
+  const linked = await db.from('wallets').select('id').or(
+    `monime_account_id.eq.${accountId},` +
+    `metadata->>monime_account_id.eq.${accountId}`
+  );
+  if (linked.error || linked.data?.length !== 1 || linked.data[0].id !== wallet.id) {
+    throw new Error('Recipient financial-account ownership could not be verified.');
+  }
+
+  const token = process.env.MONIME_API_KEY;
+  const spaceId = process.env.MONIME_SPACE_ID;
+  if (!token || !spaceId) throw new Error('Monime verification is not configured.');
+  const controller = AbortSignal.timeout(3500);
+  const response = await fetch(
+    `https://api.monime.io/v1/financial-accounts/${encodeURIComponent(accountId)}?withBalance=true`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Monime-Space-Id': spaceId,
+        'Monime-Version': 'caph.2025-08-23',
+        Accept: 'application/json'
+      },
+      signal: controller
+    }
+  );
+  const body = await response.json().catch(() => null);
+  const account = body?.result;
+  if (!response.ok || !account ||
+      account.id !== accountId ||
+      account.currency !== 'SLE' ||
+      !/^\\d{6,20}$/.test(String(account.uvan || ''))) {
+    throw new Error('Recipient Monime SLE account is not currently valid.');
+  }
+  return account;
+}
+
+async function linkForUssdCode(db, code, { verify = false, verifyAccount = verifyUssdRecipientAccount } = {}) {
   if (typeof code !== 'string' || !RECIPIENT_CODE.test(code.trim().toUpperCase())) return null;
   const { data, error } = await db.from('matmove_receive_links')
     .select('id,user_id,wallet_id,financial_account_id,payment_target_ref,recipient_code,public_name,enabled,sms_receipts_enabled')
@@ -481,11 +525,11 @@ async function createUssdIntent(db, link, sessionId, amountText) {
   return { ...row, state: 'processing', provider_status: 'awaiting_payer_authorization' };
 }
 
-export async function resolveUssdExchange(payload, { db, verify = verifiedAccount, enabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true' && process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true' } = {}) {
+export async function resolveUssdExchange(payload, { db, verify = verifyUssdRecipientAccount, enabled = process.env.MATMOVE_RECEIVE_MONEY_ENABLED === 'true' && process.env.MATMOVE_RECEIVE_USSD_ENABLED === 'true' } = {}) {
   if (!enabled) return stop('MatMove USSD payments are not enabled yet. Please use the MatMove payment link.');
   db = db || dbClient();
   const sessionId = payload?.global?.sessionId;
-  if (typeof sessionId !== 'string' || !UUID.test(sessionId)) return stop('This USSD session could not be verified. Please dial again.');
+  if (typeof sessionId !== 'string' || !USSD_SESSION_ID.test(sessionId)) return stop('This USSD session could not be verified. Please dial again.');
   const flowData = payload?.flowData && typeof payload.flowData === 'object' ? payload.flowData : {};
   const page = payload?.currentPage;
 
