@@ -44,7 +44,7 @@ test('customer contact migration enables active-only public reads and keeps writ
 
 test('database rejects unsafe social links, malformed WhatsApp numbers, and WhatsApp hard deletion',async()=>{
  const migration=await readFile(new URL('../supabase/migrations/20261122030000_matmove_public_contacts_socials_whatsapp_v1.sql',import.meta.url),'utf8');
- assert.match(migration,/v_url !~\\* '\\^https:\\/\\//);
+ assert.match(migration,/v_url !~\* '\^https:\/\//);
  assert.match(migration,/v_phone !~ '\^\[1-9\]\[0-9\]\{7,14\}\$'/);
  assert.match(migration,/WhatsApp support cannot be deleted/);
  assert.match(migration,/version=version\+1/);
