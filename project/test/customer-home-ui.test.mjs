@@ -162,3 +162,15 @@ test('large customer workspaces are lazy-loaded behind a glass loading state',as
  assert.doesNotMatch(app,/import\s*\{\s*DriverDashboard\s*\}\s*from\s*'@\/pages\/DriverDashboard'/);
  assert.doesNotMatch(app,/import\s*\{\s*MerchantDashboard\s*\}\s*from\s*'@\/pages\/MerchantDashboard'/);
 });
+
+
+test('services directory and games are excluded from the initial customer JavaScript bundle',async()=>{
+ const app=await read('../src/App.tsx','utf8');
+ const portal=await read('../src/components/PortalHome.tsx','utf8');
+ assert.match(app,/const PortalHome = lazy\(\(\)\s*=>\s*import\('@\/components\/PortalHome'\)\)/);
+ assert.doesNotMatch(app,/import PortalHome from '@\/components\/PortalHome'/);
+ assert.match(app,/<Suspense fallback=\{<CustomerWorkspaceLoading \/>\}>/);
+ assert.match(portal,/lazy\(\(\)\s*=>\s*import\('@\/components\/ArcadeGames'\)/);
+ assert.match(portal,/<Suspense fallback=\{/);
+ assert.doesNotMatch(portal,/import\s*\{\s*ArcadeGames\s*\}\s*from\s*'@\/components\/ArcadeGames'/);
+});

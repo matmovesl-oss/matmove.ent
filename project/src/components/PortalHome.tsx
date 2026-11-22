@@ -1,10 +1,9 @@
 import {RideLocationPicker} from '@/components/RideLocationPicker';
 import ConciergeServices from '@/components/ConciergeServices';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Briefcase, Car, CreditCard, Eye, EyeOff, Home, Loader2, MapPin, Navigation, RefreshCw, ShieldCheck, ShoppingBag, Store, Trash2, Wallet, X, Bus, Ticket, Sparkles, CheckCircle2, Calendar, XCircle, Smartphone, Clock, Plane, Package, Ship, CalendarClock, Minus, Plus, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { walletFetch } from '@/lib/apiFetch';
-import { ArcadeGames } from '@/components/ArcadeGames';
 import { SkeletonBlock, SkeletonList } from '@/components/Skeleton';
 import ActiveTripMap, { tripPinFields } from '@/components/ActiveTripMap';
 import { ProductGallery, catalogMoney, catalogCheckoutAllowed } from '@/components/ProductCatalog';
@@ -21,6 +20,10 @@ import { useWalletAccess } from '@/lib/useWalletAccess';
 import { updateRide } from '@/services/rideService';
 import { locationVoiceAvailable, startLocationVoice } from '@/lib/voiceLocation';
 import 'mapbox-gl/dist/mapbox-gl.css';
+
+const ArcadeGames = lazy(() =>
+  import('@/components/ArcadeGames').then(module => ({default: module.ArcadeGames}))
+);
 
 const WHATSAPP_NUMBER = '23290330362';
 
@@ -345,7 +348,18 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
   const userPhone = String(profile.phone || profile.phone_number || '');
   const isBusFull = availableSeats <= 0;
 
-  if (selectedGame) return <ArcadeGames key={`${uid}:${selectedGame}`} userId={uid} initialGame={selectedGame} onBack={() => setSelectedGame(null)} />;
+  if (selectedGame) return (
+    <Suspense fallback={
+      <section role="status" aria-live="polite" className="mx-auto max-w-6xl px-4 py-10">
+        <div className="rounded-3xl border border-white/85 bg-white/75 p-6 shadow-[0_16px_42px_rgba(16,50,83,.09)] backdrop-blur-xl">
+          <div className="motion-safe:animate-pulse h-3 w-24 rounded-full bg-emerald-100" />
+          <p className="mt-4 text-sm font-semibold text-slate-600">Loading MatMove Games...</p>
+        </div>
+      </section>
+    }>
+      <ArcadeGames key={`${uid}:${selectedGame}`} userId={uid} initialGame={selectedGame} onBack={() => setSelectedGame(null)} />
+    </Suspense>
+  );
 
   const coreServices = role === 'driver'
     ? [
