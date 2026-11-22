@@ -1,5 +1,5 @@
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -468,4 +468,223 @@ input, select, textarea { font-size: 16px; }
 }
 @media(prefers-reduced-motion:reduce) {
  .mm-account-link,.mm-account-row { transition:none; }
+}
+
+
+/* MatMove Glass UI system — consistent customer experience, green / white / blue. */
+:root {
+  --navy: #102b45;
+  --blue: #1769e0;
+  --blue-soft: #eaf4ff;
+  --green: #109b71;
+  --orange: #e99431;
+  --text: #102b45;
+  --muted: #61788f;
+  --line: rgba(45, 103, 146, .16);
+  --mm-glass: rgba(255, 255, 255, .74);
+  --mm-glass-strong: rgba(255, 255, 255, .9);
+  --mm-glass-border: rgba(255, 255, 255, .82);
+  --mm-glass-shadow: 0 16px 42px rgba(16, 50, 83, .09);
+  --mm-glass-shadow-hover: 0 22px 50px rgba(16, 50, 83, .14);
+}
+html { background: #f2f8fc; }
+body {
+  color: var(--text);
+  background:
+    radial-gradient(ellipse at 8% 2%, rgba(16, 155, 113, .10), transparent 32rem),
+    radial-gradient(ellipse at 94% 12%, rgba(23, 105, 224, .10), transparent 34rem),
+    linear-gradient(145deg, #f5fafc 0%, #eef6fb 50%, #f7fbfd 100%);
+}
+.portal-shell {
+  color: var(--text);
+  background:
+    radial-gradient(ellipse at 8% 0%, rgba(16, 155, 113, .085), transparent 31rem),
+    radial-gradient(ellipse at 96% 9%, rgba(23, 105, 224, .09), transparent 34rem),
+    linear-gradient(145deg, #f5fafc 0%, #eef6fb 52%, #f7fbfd 100%);
+}
+.portal-shell > header {
+  position: sticky;
+  top: 0;
+  z-index: 35;
+  border-color: rgba(110, 151, 183, .18) !important;
+  background: rgba(255, 255, 255, .76) !important;
+  box-shadow: 0 6px 24px rgba(16, 50, 83, .045);
+  backdrop-filter: blur(20px) saturate(155%);
+  -webkit-backdrop-filter: blur(20px) saturate(155%);
+}
+.portal-shell :is(h1, h2, h3, h4, .font-display) {
+  font-family: 'Sora', 'Manrope', 'Plus Jakarta Sans', sans-serif;
+  letter-spacing: -.035em;
+}
+.portal-shell :is(p, small, label, button, input, select, textarea) {
+  font-family: 'Plus Jakarta Sans', 'Manrope', sans-serif;
+}
+.portal-shell :is(.form-card, .estimate-card, .booking-list-card, .transaction-card,
+  .profile-card, .settings-card, .active-booking, .recent-list, .saved-locations,
+  .trust-card, .service-card, .choice-card, .trip-side-card, .schedule-summary > div,
+  .schedule-card, .wallet-stat-card, .finance-stat-row > div, .confirmation-card,
+  .mm-surface, .mm-service, .mm-place-tile, .mm-payment-link, .mm-card-reference,
+  .mm-account-link, .mm-account-row) {
+  background: var(--mm-glass) !important;
+  border-color: rgba(255, 255, 255, .88) !important;
+  box-shadow: var(--mm-glass-shadow);
+  backdrop-filter: blur(17px) saturate(145%);
+  -webkit-backdrop-filter: blur(17px) saturate(145%);
+}
+.portal-shell :is(section, article, aside)[class*="rounded-"][class*="border"]:not([class*="bg-gradient"]):not([class*="border-amber"]):not([class*="border-red"]) {
+  border-color: rgba(255, 255, 255, .84);
+}
+.portal-shell :is(.service-card, .choice-card, .active-booking, .recent-list,
+  .saved-locations, .trip-side-card, .schedule-card, .wallet-stat-card,
+  .mm-surface, .mm-service, .mm-place-tile, .mm-payment-link, .mm-card-reference,
+  .mm-account-link) {
+  border: 1px solid rgba(255, 255, 255, .88);
+  border-radius: 20px;
+}
+.portal-shell :is(.service-card, .choice-card, .mm-service, .mm-place-tile,
+  .mm-payment-link, .mm-account-link, .mm-glass-tile) {
+  transition: transform 220ms cubic-bezier(.2,.75,.25,1), box-shadow 220ms ease,
+    border-color 220ms ease, background-color 220ms ease;
+}
+.portal-shell :is(.service-card, .choice-card, .mm-service, .mm-place-tile,
+  .mm-payment-link, .mm-account-link, .mm-glass-tile):hover {
+  transform: translateY(-2px);
+  border-color: rgba(23, 105, 224, .24);
+  box-shadow: var(--mm-glass-shadow-hover);
+}
+.portal-shell :is(.input-field, .select-field, .search-field, .filter-button,
+  .mm-field input, .mm-field select, input:not([type="checkbox"]):not([type="radio"]),
+  select, textarea) {
+  border-color: rgba(69, 119, 157, .24);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .86);
+}
+.portal-shell :is(.input-field, .select-field, .search-field, .filter-button,
+  .mm-field input, .mm-field select, input:not([type="checkbox"]):not([type="radio"]),
+  select, textarea):focus {
+  border-color: rgba(23, 105, 224, .62);
+  box-shadow: 0 0 0 4px rgba(23, 105, 224, .10);
+  outline: none;
+}
+.portal-shell :is(.primary-button, .mm-primary) {
+  color: white;
+  background: linear-gradient(112deg, #0b936a 0%, #117f9a 55%, #1769e0 100%);
+  border: 1px solid rgba(255, 255, 255, .22);
+  border-radius: 14px;
+  box-shadow: 0 10px 22px rgba(16, 119, 139, .19);
+}
+.portal-shell :is(.primary-button, .mm-primary):hover {
+  filter: saturate(1.08) brightness(1.03);
+  box-shadow: 0 14px 28px rgba(16, 119, 139, .24);
+}
+.portal-shell :is(.outline-button, .mm-secondary) {
+  color: #15517d;
+  background: rgba(255, 255, 255, .76);
+  border: 1px solid rgba(73, 127, 169, .23);
+  border-radius: 14px;
+}
+.portal-shell :is(.wallet-hero, .wallet-balance-card) {
+  background: linear-gradient(120deg, #0b654f 0%, #116e91 54%, #1769e0 100%);
+  box-shadow: 0 18px 38px rgba(13, 93, 107, .20);
+  border: 1px solid rgba(255, 255, 255, .18);
+}
+.portal-shell .mm-portal-nav {
+  background: rgba(255, 255, 255, .78);
+  border-top: 1px solid rgba(255, 255, 255, .9);
+  box-shadow: 0 -10px 32px rgba(16, 50, 83, .08);
+  backdrop-filter: blur(22px) saturate(165%);
+  -webkit-backdrop-filter: blur(22px) saturate(165%);
+}
+.portal-shell .mm-portal-nav button[aria-current=page] { color: #087658; }
+.portal-shell .mm-portal-nav button[aria-current=page]::before {
+  background: linear-gradient(135deg, rgba(16, 155, 113, .15), rgba(23, 105, 224, .13));
+  border: 1px solid rgba(16, 155, 113, .10);
+}
+.portal-shell .mm-account-link, .portal-shell .mm-account-row {
+  border-color: rgba(255, 255, 255, .82);
+  background: rgba(255, 255, 255, .74);
+}
+.portal-shell .mm-account-link:hover, .portal-shell .mm-account-row:hover {
+  background: rgba(255, 255, 255, .93);
+}
+.portal-shell .mm-glass-hero {
+  background: linear-gradient(128deg, rgba(9, 58, 79, .97) 0%, rgba(15, 101, 127, .94) 56%, rgba(10, 128, 92, .93) 100%);
+  border: 1px solid rgba(255, 255, 255, .23);
+  box-shadow: 0 24px 56px rgba(9, 65, 91, .20);
+  backdrop-filter: blur(20px) saturate(135%);
+  -webkit-backdrop-filter: blur(20px) saturate(135%);
+}
+.portal-shell .mm-glass-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, rgba(255,255,255,.075), transparent 38%, rgba(255,255,255,.025));
+}
+.portal-shell .mm-glass-tile {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(145deg, rgba(255,255,255,.88), rgba(242,249,255,.67));
+  border: 1px solid rgba(255,255,255,.92);
+  box-shadow: 0 12px 30px rgba(16,50,83,.075);
+  backdrop-filter: blur(17px) saturate(150%);
+  -webkit-backdrop-filter: blur(17px) saturate(150%);
+}
+.portal-shell .mm-glass-tile:focus-visible {
+  outline: 3px solid rgba(23,105,224,.62);
+  outline-offset: 3px;
+}
+.portal-shell .mm-glass-icon {
+  color: #145b94;
+  background: linear-gradient(145deg, rgba(255,255,255,.95), rgba(223,242,255,.86));
+  border: 1px solid rgba(23,105,224,.15);
+  box-shadow: 0 8px 20px rgba(23,105,224,.10);
+}
+.portal-shell .mm-eyebrow { color: #087658; }
+.portal-shell .mm-service-icon { background: linear-gradient(145deg, #e0f7ec, #e5f2ff); color: #087658; }
+.portal-shell .mm-service:nth-child(even) .mm-service-icon { background: linear-gradient(145deg, #e2f5ff, #e5f8f0); color: #1769e0; }
+.portal-shell .mm-text-button { color: #125fba; }
+.portal-shell ::selection { color: #063d38; background: rgba(66, 190, 150, .24); }
+.portal-shell button:focus-visible, .portal-shell a:focus-visible {
+  outline: 3px solid rgba(23, 105, 224, .56);
+  outline-offset: 3px;
+}
+.portal-shell .mm-section-enter {
+  animation: mm-section-glass-in 250ms cubic-bezier(.18,.78,.22,1) both;
+  transform-origin: 50% 35%;
+  will-change: transform, opacity, filter;
+}
+@keyframes mm-section-glass-in {
+  from { opacity: 0; transform: translate3d(13px, 3px, 0) scale(.992); filter: blur(9px); }
+  72% { opacity: 1; filter: blur(1.2px); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
+}
+.portal-shell .mm-portal-morph {
+  animation-duration: 340ms;
+}
+.portal-shell .mm-glass-tile:active,
+.portal-shell :is(.service-card, .choice-card, .mm-service, .mm-place-tile):active {
+  transform: scale(.988);
+}
+@supports not ((backdrop-filter: blur(1px))) {
+  .portal-shell :is(.form-card, .estimate-card, .booking-list-card, .transaction-card,
+    .profile-card, .settings-card, .active-booking, .recent-list, .saved-locations,
+    .trust-card, .service-card, .choice-card, .trip-side-card, .schedule-card,
+    .wallet-stat-card, .mm-surface, .mm-service, .mm-place-tile, .mm-payment-link,
+    .mm-card-reference, .mm-account-link, .mm-account-row, .mm-portal-nav) {
+    background: rgba(255, 255, 255, .94) !important;
+  }
+}
+@media (max-width: 640px) {
+  .portal-shell > header { background: rgba(255,255,255,.84) !important; }
+  .portal-shell :is(.form-card, .estimate-card, .trip-side-card, .schedule-card, .mm-surface) {
+    border-radius: 18px;
+    box-shadow: 0 10px 28px rgba(16, 50, 83, .075);
+  }
+  .portal-shell .mm-portal-nav { padding-top: 7px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-shell .mm-section-enter, .portal-shell .mm-portal-morph { animation: none !important; filter: none !important; }
+  .portal-shell :is(.service-card, .choice-card, .mm-service, .mm-place-tile, .mm-glass-tile,
+    .mm-account-link, .mm-account-row, .mm-portal-nav button) { transition: none !important; }
 }
