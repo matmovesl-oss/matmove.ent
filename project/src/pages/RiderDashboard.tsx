@@ -416,7 +416,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
         destination_location: destination,
         fare_amount: finalAmount.toFixed(2),
         scheduled_time: serviceType === 'scheduled' ? new Date(scheduledTime).toISOString() : null,
-        passenger_count: passengerCount,
+        passenger_count: serviceType === 'delivery' ? 1 : passengerCount,
         passenger_name: null,
         pickup_pin: { lat: pickupCoords![1], lng: pickupCoords![0] },
         destination_pin: { lat: destinationCoords![1], lng: destinationCoords![0] }
@@ -657,7 +657,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
               {viewMode === 'new' || (!activeBooking && viewMode === 'active') ? (
                 <>
-                  <div className="mb-4">
+                  {serviceType !== 'delivery' && <div className="mb-4">
                     <div className="mb-2 flex items-end justify-between gap-3"><div><label className="block text-xs font-extrabold text-slate-800">Who is travelling?</label><p className="mt-1 text-[10px] text-slate-500">Choose up to three passengers</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500">Max 3</span></div>
                     <div className="grid grid-cols-3 gap-2">
                       {[1, 2, 3].map(count => (
@@ -669,7 +669,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
                         </button>
                       ))}
                     </div>
-                  </div>
+                  </div>}
 
                   <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1.5" aria-label="Choose a booking service">
                     <button
