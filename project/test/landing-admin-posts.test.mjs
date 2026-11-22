@@ -17,3 +17,12 @@ test('homepage post loading is cancelled safely on unmount', async () => {
   assert.match(source, /active = false/);
   assert.match(source, /clearInterval\(refresh\)/);
 });
+
+test('homepage post hard-delete migration deletes records and removes archived rows from Admin list', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/20261122022007_matmove_homepage_posts_permanent_delete_and_active_list_v1.sql', import.meta.url), 'utf8');
+  assert.match(migration, /'delete'/);
+  assert.match(migration, /delete from public\.matmove_homepage_posts where id=p_id/i);
+  assert.match(migration, /where deleted_at is null and status <> 'archived'/i);
+  assert.match(migration, /'image_path',p\.image_path/);
+  assert.match(migration, /matmove_homepage_post_enquiries_post_id_fkey/i) === false;
+});
