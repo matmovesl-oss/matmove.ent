@@ -6,8 +6,8 @@ const driverDashboard=readFileSync(new URL('../src/pages/DriverDashboard.tsx',im
 const portal=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
 const merchantDashboard=readFileSync(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8');
 const contacts=readFileSync(new URL('../src/lib/tripContacts.ts',import.meta.url),'utf8');
-const tripCardsMigration=readFileSync(new URL('../supabase/migrations/20261115114900_matmove_trip_payment_and_investigation_cards_v1.sql',import.meta.url),'utf8');
-const unpaidCashMigration=readFileSync(new URL('../supabase/migrations/20261115115100_matmove_admin_flag_unpaid_cash_fare_v1.sql',import.meta.url),'utf8');
+const tripCardsMigration=readFileSync(new URL('../supabase/migrations/20261115115248_matmove_trip_payment_and_investigation_cards_v1.sql',import.meta.url),'utf8');
+const unpaidCashMigration=readFileSync(new URL('../supabase/migrations/20261115115525_matmove_admin_flag_unpaid_cash_fare_v1.sql',import.meta.url),'utf8');
 test('Trips centre has compact Active, Requests and History tabs',()=>{
  assert.match(trips,/label:'Active'/);
  assert.match(trips,/label:'Requests'/);
@@ -100,15 +100,15 @@ test('Rider and Merchant can create separately while unfinished requests remain 
  assert.doesNotMatch(restoreBlock,/matmove_create_customer_trip|reserveCashRide/);
 });
 test('parallel customer request migration removes the server-side pending-booking creation block',()=>{
- const migration=readFileSync(new URL('../supabase/migrations/20261116094000_matmove_allow_parallel_customer_requests_v1.sql',import.meta.url),'utf8');
+ const migration=readFileSync(new URL('../supabase/migrations/20261116095339_matmove_allow_parallel_customer_requests_v1.sql',import.meta.url),'utf8');
  assert.match(migration,/matmove_create_customer_trip\(uuid,jsonb\)/);
  assert.match(migration,/Resolve your pending request before creating another/);
  assert.match(migration,/v_updated := replace\(v_definition, v_old, ''\)/);
 });
 
 test('Admin digital dispute cancellation reconciles customer 50, driver 5 and platform 45 before closing',()=>{
- const settlement=readFileSync(new URL('../supabase/migrations/20261116101500_matmove_admin_dispute_escrow_split_v1.sql',import.meta.url),'utf8');
- const hardening=readFileSync(new URL('../supabase/migrations/20261116103000_matmove_harden_admin_dispute_split_retry_v1.sql',import.meta.url),'utf8');
+ const settlement=readFileSync(new URL('../supabase/migrations/20261116095701_matmove_admin_dispute_escrow_split_v1.sql',import.meta.url),'utf8');
+ const hardening=readFileSync(new URL('../supabase/migrations/20261116100213_matmove_harden_admin_dispute_split_retry_v1.sql',import.meta.url),'utf8');
  const payments=readFileSync(new URL('../server/ride-payments.js',import.meta.url),'utf8');
  assert.match(settlement,/rp\.fare_minor::numeric \* 0\.50/);
  assert.match(settlement,/rp\.fare_minor::numeric \* 0\.05/);

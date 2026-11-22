@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 test('verified cash refunds resolve old review tickets without closing uncertain handovers', async () => {
-  const migration = await readFile('supabase/migrations/20261120100000_matmove_resolve_verified_cash_investigations_v1.sql', 'utf8');
+  const migration = await readFile('supabase/migrations/20261120093040_matmove_resolve_verified_cash_investigations_v1.sql', 'utf8');
   assert.match(migration, /matmove_resolve_ride_investigation_if_safe/);
   assert.match(migration, /after update of status,cash_return_status on public\.matmove_cash_ride_payments/);
   assert.match(migration, /after update of state on public\.ride_payments/);

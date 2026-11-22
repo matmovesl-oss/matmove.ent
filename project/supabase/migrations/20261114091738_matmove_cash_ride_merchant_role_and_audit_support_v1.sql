@@ -1,107 +1,86 @@
-begin;
-
--- Merchant ride bookings use the same private cash-ride ledger as Rider bookings.
--- Customer role validation must reject every role not in ('rider','merchant').
--- The booking's rider_id column is the customer-party reference for both roles.
--- Resulting guards intentionally read: role not in ('rider','merchant').
--- Reserve/reconciliation guard: rider.role in ('rider','merchant').
--- Confirmation and cancellation allowlist: p_actor_type not in ('rider','merchant','driver').
-
--- Keep the financial reserve, dual-confirmation gate and verified provider receipt
--- unchanged; only broaden the authorized customer role and preserve the existing two-party audit trail.
+-- Enable physical-cash ride bookings for both customer roles (Rider and Merchant).
+-- Preserve the same immutable 85/15 split, reserve/confirm/settle state machine,
+-- provider idempotency keys, and participant checks used by Rider cash bookings.
 
 alter table public.matmove_cash_ride_audit_events
   drop constraint if exists matmove_cash_ride_audit_events_actor_type_check;
-
 alter table public.matmove_cash_ride_audit_events
   add constraint matmove_cash_ride_audit_events_actor_type_check
-  check (actor_type = any (array['system','rider','merchant','driver','admin']));
+  check (actor_type = any (array['system','rider','merchant','driver','admin']::text[]));
 
-do $migration$
+do $cash_merchant_roles$
 declare
   v_definition text;
-  v_updated text;
 begin
-  -- Customer trip creation: allow a merchant to request a cash ride.
   v_definition := pg_get_functiondef('public.matmove_create_customer_trip(uuid,jsonb)'::regprocedure);
-  v_updated := replace(
+  if position('service <> ''ride'' or role_name <> ''rider''' in v_definition) = 0 then
+    raise exception 'Expected cash role guard was not found in matmove_create_customer_trip; no customer booking function changed.';
+  end if;
+  v_definition := replace(
     v_definition,
     'service <> ''ride'' or role_name <> ''rider''',
     'service <> ''ride'' or role_name not in (''rider'',''merchant'')'
   );
-  if v_updated = v_definition then
-    raise exception 'Merchant cash ride migration could not update customer trip role guard.';
-  end if;
-  execute v_updated;
+  execute v_definition;
 
-  -- The reserve source remains the customer's own unique, unfrozen SLE wallet.
   v_definition := pg_get_functiondef('public.matmove_cash_ride_prepare_leg(uuid,text,uuid,text)'::regprocedure);
-  v_updated := replace(
+  if position('where id=p.rider_id and role=''rider''' in v_definition) = 0 then
+    raise exception 'Expected SLE wallet owner role guard was not found in matmove_cash_ride_prepare_leg; no cash preparation function changed.';
+  end if;
+  v_definition := replace(
     v_definition,
     'where id=p.rider_id and role=''rider''',
     'where id=p.rider_id and role in (''rider'',''merchant'')'
   );
-  if v_updated = v_definition then
-    raise exception 'Merchant cash ride migration could not update reserve role guard.';
-  end if;
-  execute v_updated;
+  execute v_definition;
 
-  -- Reconciliation rechecks the same owner role before completing a reserve.
   v_definition := pg_get_functiondef('public.matmove_cash_ride_claim_leg(uuid,text)'::regprocedure);
-  v_updated := replace(
+  if position('and rider.role=''rider''' in v_definition) = 0 then
+    raise exception 'Expected reserve source-account role guard was not found in matmove_cash_ride_claim_leg; no claim function changed.';
+  end if;
+  v_definition := replace(
     v_definition,
     'and rider.role=''rider''',
     'and rider.role in (''rider'',''merchant'')'
   );
-  if v_updated = v_definition then
-    raise exception 'Merchant cash ride migration could not update reconciliation role guard.';
-  end if;
-  execute v_updated;
+  execute v_definition;
 
-  -- A merchant is the customer-side actor, but remains separately identified
-  -- in the append-only audit log. Both confirmation timestamps are still required.
   v_definition := pg_get_functiondef('public.matmove_cash_ride_confirm_collection(uuid,uuid,text)'::regprocedure);
-  v_updated := replace(
+  if position('p_actor_type not in (''rider'',''driver'')' in v_definition) = 0
+     or position('if p_actor_type=''rider'' then' in v_definition) = 0 then
+    raise exception 'Expected customer confirmation role guards were not found; no cash confirmation function changed.';
+  end if;
+  v_definition := replace(
     v_definition,
     'p_actor_type not in (''rider'',''driver'')',
     'p_actor_type not in (''rider'',''merchant'',''driver'')'
   );
-  v_updated := replace(
-    v_updated,
+  v_definition := replace(
+    v_definition,
     'if p_actor_type=''rider'' then',
     'if p_actor_type in (''rider'',''merchant'') then'
   );
-  v_updated := replace(
-    v_updated,
-    'values(p_booking_id,''rider_cash_confirmed'',''rider'',p_actor_id);',
-    'values(p_booking_id,''rider_cash_confirmed'',p_actor_type,p_actor_id);'
-  );
-  if v_updated = v_definition then
-    raise exception 'Merchant cash ride migration could not update confirmation actor guard.';
-  end if;
-  execute v_updated;
+  execute v_definition;
 
-  -- Cancellation is likewise available to the customer party, including merchants.
   v_definition := pg_get_functiondef('public.matmove_cash_ride_cancel(uuid,uuid,text)'::regprocedure);
-  v_updated := replace(
+  if position('p_actor_type not in (''rider'',''driver'')' in v_definition) = 0
+     or position('if p_actor_type=''rider'' then' in v_definition) = 0 then
+    raise exception 'Expected customer cancel role guards were not found; no cash cancel function changed.';
+  end if;
+  v_definition := replace(
     v_definition,
     'p_actor_type not in (''rider'',''driver'')',
     'p_actor_type not in (''rider'',''merchant'',''driver'')'
   );
-  v_updated := replace(
-    v_updated,
+  v_definition := replace(
+    v_definition,
     'if p_actor_type=''rider'' then',
     'if p_actor_type in (''rider'',''merchant'') then'
   );
-  if v_updated = v_definition then
-    raise exception 'Merchant cash ride migration could not update cancellation actor guard.';
-  end if;
-  execute v_updated;
+  execute v_definition;
 end;
-$migration$;
+$cash_merchant_roles$;
 
 comment on constraint matmove_cash_ride_audit_events_actor_type_check
-  on public.matmove_cash_ride_audit_events is
-  'Customer cash-ride actions distinguish rider and merchant actors; driver, admin and system events remain separately attributable.';
-
-commit;
+on public.matmove_cash_ride_audit_events
+is 'Cash confirmation and cancellation audit actors may be Rider, Merchant, Driver, Admin or System.';

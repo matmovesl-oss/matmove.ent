@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
-const migration=await readFile(new URL('../supabase/migrations/20261119120000_matmove_hybrid_vehicle_fallback_v1.sql',import.meta.url),'utf8');
+const migration=await readFile(new URL('../supabase/migrations/20261119102446_matmove_hybrid_vehicle_fallback_v1.sql',import.meta.url),'utf8');
 const service=await readFile(new URL('../src/services/fareNegotiationService.ts',import.meta.url),'utf8');
 const ui=await readFile(new URL('../src/components/FareNegotiation.tsx',import.meta.url),'utf8');
 const driver=await readFile(new URL('../src/pages/DriverDashboard.tsx',import.meta.url),'utf8');

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 test('account closure is blocked while cash settlement or cash review is unresolved',async()=>{
- const sql=await readFile('supabase/migrations/20261117130000_matmove_account_deletion_cash_review_guard_v1.sql','utf8');
+ const sql=await readFile('supabase/migrations/20261117125711_matmove_account_deletion_cash_review_guard_v1.sql','utf8');
  assert.match(sql,/cash_review_required/);
  assert.match(sql,/matmove_cash_ride_payments/);
  assert.match(sql,/cp\.status not in \('settled','refunded','cancelled'\)/);

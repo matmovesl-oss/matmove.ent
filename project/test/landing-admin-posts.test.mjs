@@ -21,7 +21,7 @@ test('homepage post loading is cancelled safely on unmount', async () => {
 test('homepage post hard-delete migration deletes records and removes archived rows from Admin list', async () => {
   const [migration, baseMigration] = await Promise.all([
     readFile(new URL('../supabase/migrations/20261122022007_matmove_homepage_posts_permanent_delete_and_active_list_v1.sql', import.meta.url), 'utf8'),
-    readFile(new URL('../supabase/migrations/20261113110000_matmove_homepage_posts_and_enquiries.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/20261113105352_matmove_homepage_posts_and_enquiries.sql', import.meta.url), 'utf8'),
   ]);
   assert.match(migration, /'delete'/);
   assert.match(migration, /delete from public\.matmove_homepage_posts where id=p_id/i);

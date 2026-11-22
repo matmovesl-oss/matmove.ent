@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 test('production migration scopes Spin Admin RPC summaries and keeps base functions private', async () => {
-  const sql = await readFile(new URL('../supabase/migrations/20261111180000_matmove_spin_admin_snapshot_permission_scope.sql', import.meta.url), 'utf8');
+  const sql = await readFile(new URL('../supabase/migrations/20261112132330_matmove_spin_admin_snapshot_permission_scope_lockdown.sql', import.meta.url), 'utf8');
   assert.match(sql, /create or replace function public\.matmove_spin_admin_snapshot\(\)/i);
   assert.match(sql, /public\.matmove_admin_can\('games\.settings'\)/i);
   assert.match(sql, /public\.matmove_admin_can\('games\.entries'\)/i);

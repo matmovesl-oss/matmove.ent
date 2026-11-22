@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const migration = new URL(
-  '../supabase/migrations/20261112180000_matmove_cash_ride_ledger_foundation.sql',
+  '../supabase/migrations/20261113134641_matmove_cash_ride_ledger_foundation.sql',
   import.meta.url
 );
 
@@ -28,7 +28,7 @@ test('cash transfer legs are idempotent and require exact verified provider rece
   assert.match(sql, /request_key text not null unique/i);
   assert.match(sql, /matmove_cash_ride_leg_one_kind_per_booking/i);
   assert.match(sql, /cash reserve, capture and refund legs must equal the locked MatMove fee/i);
-  assert.match(sql, /reserve source must be the rider's currently linked SLE Monime account/i);
+  assert.match(sql, /select w\.monime_account_id into v_wallet_account[\s\S]*where w\.user_id = v_payment\.rider_id[\s\S]*and w\.currency = 'SLE'[\s\S]*new\.source_account_ref is distinct from v_wallet_account/i);
   assert.match(sql, /capture must debit the exact restricted account that received the reserve/i);
   assert.match(sql, /refund must reverse the original verified reserve accounts/i);
   assert.match(sql, /verified_amount_minor = amount_minor/i);

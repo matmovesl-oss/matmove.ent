@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const migration = new URL(
-  '../supabase/migrations/20261112173000_matmove_require_topup_provider_reference.sql',
+  '../supabase/migrations/20261113061517_matmove_require_topup_provider_reference.sql',
   import.meta.url
 );
 

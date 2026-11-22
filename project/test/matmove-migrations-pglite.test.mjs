@@ -94,8 +94,8 @@ test('MatMove rider-withdrawal and Loading Bonanza migrations apply in an isolat
       returns boolean language sql stable as $$ select true $$;
     `);
 
-    await db.exec(await migration('20261119190000_matmove_rider_withdrawal_eligibility.sql'));
-    await db.exec(await migration('20261119201500_matmove_loading_bonanza_cashback_v1.sql'));
+    await db.exec(await migration('20261119222418_matmove_rider_withdrawal_eligibility_v1.sql'));
+    await db.exec(await migration('20261119222422_matmove_loading_bonanza_cashback_v1.sql'));
 
     const objects = await db.query(`
       select table_name from information_schema.tables

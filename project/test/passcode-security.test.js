@@ -22,7 +22,7 @@ test('six-digit passcodes privately migrate and persist rate limits without KYC 
  `);
  const home=await readFile('docs/PORTAL_HOME_SETUP.sql','utf8');await pg.exec(home.slice(home.indexOf('create or replace function public.matmove_preferences_role('),home.indexOf('create or replace function public.matmove_home_preferences(')));
  const sql=await readFile('docs/PASSCODE_SECURITY_SETUP.sql','utf8');await pg.exec(sql);
- const nineDigitMigration=await readFile('supabase/migrations/20261113095000_matmove_passcode_new_pin_six_to_nine_digits.sql','utf8');await pg.exec(nineDigitMigration);
+ const nineDigitMigration=await readFile('docs/pending-migrations/matmove_passcode_new_pin_six_to_nine_digits.sql','utf8');await pg.exec(nineDigitMigration);
  const session=async(id,role='authenticated')=>{await pg.exec('reset role');await pg.query("select set_config('request.jwt.claim.sub',$1,false)",[id||'']);await pg.exec('set role '+role);};
  const rpc=async(action,pin=null,next=null)=>(await pg.query('select public.matmove_customer_passcode($1,$2,$3) d',[action,pin,next])).rows[0].d;
  await t.test('existing passcode is salted/hashed once and cleared from the readable profile',async()=>{
@@ -118,7 +118,7 @@ test('credential recovery screens are separate and each updates only its selecte
 });
 
 test('new passcodes use six through nine digits and preserve legacy verification',async()=>{
- const migration=await readFile('supabase/migrations/20261113095000_matmove_passcode_new_pin_six_to_nine_digits.sql','utf8');
+ const migration=await readFile('docs/pending-migrations/matmove_passcode_new_pin_six_to_nine_digits.sql','utf8');
  const component=await readFile('src/components/CustomerPasscode.tsx','utf8');
  const screen=await readFile('src/pages/UpdatePassword.tsx','utf8');
  assert.match(migration,/digits between 6 and 10/);

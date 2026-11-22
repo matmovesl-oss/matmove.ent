@@ -20,7 +20,7 @@ const reward = {
 };
 
 test('Loading Bonanza is fixed at one percent and requires a separate referral treasury', async () => {
-  const migration = await readFile(new URL('../supabase/migrations/20261119201500_matmove_loading_bonanza_cashback_v1.sql', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../supabase/migrations/20261119222422_matmove_loading_bonanza_cashback_v1.sql', import.meta.url), 'utf8');
   assert.match(migration, /cashback_bps integer not null default 100 check \(cashback_bps = 100\)/);
   assert.match(migration, /minimum_topup_minor bigint/);
   assert.match(migration, /after insert on public.matmove_loading_bonanza_topups/);
@@ -42,7 +42,7 @@ test('Loading Bonanza is fixed at one percent and requires a separate referral t
 });
 
 test('only a completed Monime SLE top-up can create a cashback reward', async () => {
-  const migration = await readFile(new URL('../supabase/migrations/20261119201500_matmove_loading_bonanza_cashback_v1.sql', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../supabase/migrations/20261119222422_matmove_loading_bonanza_cashback_v1.sql', import.meta.url), 'utf8');
   assert.match(migration, /p_provider_payment text/);
   assert.match(migration, /p_destination is null or p_destination !~ '\^fac-/);
   assert.match(migration, /upper\(currency\)='SLE'/);
