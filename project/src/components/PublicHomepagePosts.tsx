@@ -55,11 +55,16 @@ export default function PublicHomepagePosts() {
     void load();
     const refresh = window.setInterval(() => {
       if (!document.hidden) void load();
-    }, 30000);
+    }, 15000);
+    const refreshWhenVisible = () => {
+      if (!document.hidden) void load();
+    };
+    window.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
       active = false;
       window.clearInterval(refresh);
+      window.removeEventListener('visibilitychange', refreshWhenVisible);
     };
   }, []);
 
