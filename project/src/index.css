@@ -531,8 +531,7 @@ body {
   backdrop-filter: blur(17px) saturate(145%);
   -webkit-backdrop-filter: blur(17px) saturate(145%);
 }
-.portal-shell :is(section, article, aside)[class*="rounded-"][class*="border"]
-  :not([class*="bg-gradient"]):not([class*="border-amber"]):not([class*="border-red"]) {
+.portal-shell :is(section, article, aside)[class*="rounded-"][class*="border"]:not([class*="bg-gradient"]):not([class*="border-amber"]):not([class*="border-red"]) {
   border-color: rgba(255, 255, 255, .84);
 }
 .portal-shell :is(.service-card, .choice-card, .active-booking, .recent-list,
