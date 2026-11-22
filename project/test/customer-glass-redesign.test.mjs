@@ -35,3 +35,11 @@ test('glass motion and controls respect reduced-motion preferences', () => {
   assert.match(css, /mm-section-enter, \.portal-shell \.mm-portal-morph\s*\{\s*animation:\s*none/s);
   assert.match(css, /\.portal-shell \.mm-portal-nav/);
 });
+
+
+test('rounded white panels across account, wallet, trips and service sections use glass styling', () => {
+  assert.match(css, /\.portal-shell :is\(div, section, article, aside, form\)\[class\*="rounded-"\]\[class~="bg-white"\]/);
+  assert.match(css, /linear-gradient\(145deg, rgba\(255,255,255,\.88\), rgba\(242,249,255,\.72\)\)/);
+  assert.match(css, /backdrop-filter: blur\(17px\) saturate\(145%\)/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+});

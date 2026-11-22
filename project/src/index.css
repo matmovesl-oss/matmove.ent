@@ -688,3 +688,35 @@ body {
   .portal-shell :is(.service-card, .choice-card, .mm-service, .mm-place-tile, .mm-glass-tile,
     .mm-account-link, .mm-account-row, .mm-portal-nav button) { transition: none !important; }
 }
+
+
+/* Glass coverage for the remaining rounded customer panels across account,
+   wallet, trip, service and shop sections. Interactive controls are excluded. */
+.portal-shell :is(div, section, article, aside, form)[class*="rounded-"][class~="bg-white"]:not([class*="border-red"]):not([class*="border-amber"]) {
+  background: linear-gradient(145deg, rgba(255,255,255,.88), rgba(242,249,255,.72)) !important;
+  border: 1px solid rgba(255,255,255,.9);
+  box-shadow: var(--mm-glass-shadow);
+  backdrop-filter: blur(17px) saturate(145%);
+  -webkit-backdrop-filter: blur(17px) saturate(145%);
+  transition: background-color 220ms ease, border-color 220ms ease,
+    box-shadow 220ms ease;
+}
+.portal-shell :is(div, section, article, aside, form)[class*="rounded-"][class~="bg-white"]:not([class*="border-red"]):not([class*="border-amber"]):focus-within {
+  border-color: rgba(23,105,224,.24);
+  box-shadow: 0 16px 38px rgba(16,50,83,.10), 0 0 0 3px rgba(23,105,224,.055);
+}
+@supports not ((backdrop-filter: blur(1px))) {
+  .portal-shell :is(div, section, article, aside, form)[class*="rounded-"][class~="bg-white"]:not([class*="border-red"]):not([class*="border-amber"]) {
+    background: rgba(255,255,255,.96) !important;
+  }
+}
+@media (max-width: 640px) {
+  .portal-shell :is(div, section, article, aside, form)[class*="rounded-"][class~="bg-white"] {
+    box-shadow: 0 10px 26px rgba(16,50,83,.07);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-shell :is(div, section, article, aside, form)[class*="rounded-"][class~="bg-white"] {
+    transition: none;
+  }
+}
