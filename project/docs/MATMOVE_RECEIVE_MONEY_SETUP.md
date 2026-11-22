@@ -8,7 +8,7 @@ This feature is deployed behind server-side switches. Keep both switches disable
 - The owner can also share the short recipient code, formatted as `MM-XXXXXXXX`.
 - Smartphone users open the URL, confirm the displayed recipient, enter an amount in SLE and continue to Monime hosted checkout.
 - Basic-phone users dial the USSD access code published by Monime, select the MatMove Receive Money flow, enter the recipient code and amount, confirm the recipient, then approve with their mobile-money PIN.
-- Each USSD request creates a one-time Payment Code for the verified SLE receiving account, exact amount and MatMove reference. The code expires after 10 minutes.
+- The encrypted exchange resolves the short code to the recipient's verified SLE UVAN and supplies that UVAN only to Monime's `collect_payment` template. Each USSD session has its own MatMove payment reference and metadata.
 - MatMove only marks an incoming payment completed after retrieving the matching completed Monime object and checking its account, currency, amount, reference and private MatMove metadata.
 - An SMS receipt is optional. It is queued only after verified completion and only when the recipient has opted in.
 
@@ -67,13 +67,11 @@ Keep the existing MatMove events. Add these Caph events to the same signed webho
 - `checkout_session.completed`
 - `checkout_session.cancelled`
 - `checkout_session.expired`
-- `payment_code.completed`
-- `payment_code.cancelled`
-- `payment_code.expired`
+- `payment.processing_completed`
 
-The worker retrieves the full checkout session or Payment Code before it trusts the event. It checks the MatMove metadata ID, account ID, SLE amount, reference and terminal state. Unrelated checkout/payment-code events are ignored by the receive-money handler. Incomplete or mismatched provider data is not marked as a successful incoming payment.
+The worker retrieves the full checkout session or Payment before it trusts the event. It checks the MatMove metadata ID, account ID, SLE amount, reference and terminal state. Unrelated checkout/payment events are ignored by the receive-money handler. Incomplete or mismatched provider data is not marked as a successful incoming payment.
 
-Do not subscribe the receive-money flow to only `payment.processing_started` or `payment_code.processed`; those states do not mean funds have completed settlement.
+Do not treat `payment.processing_started` as a successful payment; only `payment.processing_completed` is accepted as final settlement.
 
 ## Configure and test the USSD flow
 
@@ -82,8 +80,8 @@ Do not subscribe the receive-money flow to only `payment.processing_started` or 
 3. Add the **Test public RSA key** under Flow Security.
 4. Keep the flow unpublished and leave `MATMOVE_RECEIVE_MONEY_ENABLED` and `MATMOVE_RECEIVE_USSD_ENABLED` off until the simulator passes.
 5. Use Monime's Simulator to test: invalid recipient, valid recipient, invalid amount, cancel, Orange Money, Afrimoney, successful payment, duplicate callback and a webhook arriving late.
-6. Confirm the Payment Code is one-time, amount-bound, settles to the recipient SLE financial account, carries `mmReceivePayId` metadata and expires after ten minutes.
-7. Confirm that only the matching `payment_code.completed` webhook marks the MatMove incoming-payment record completed.
+6. Confirm the UVAN target resolves to the intended SLE financial account, the template charges the displayed amount and carries the MatMove reference and metadata.
+7. Confirm that only the matching `payment.processing_completed` webhook marks the MatMove incoming-payment record completed.
 8. Only after Test mode is verified, configure the separate Live key and Live webhook subscriptions. Publish the Live flow and then activate the Production switches.
 
 Monime assigns the USSD dial code when the flow is published. MatMove must display only the dial code returned by Monime; do not invent or hardcode one.
@@ -104,7 +102,7 @@ If Apphive credentials are not configured, incoming payments still reconcile; SM
 - [ ] Test credentials and Live credentials are different.
 - [ ] Test and Live RSA pairs are different.
 - [ ] Monime Test exchange simulator passes.
-- [ ] Monime Test checkout and one-time Payment Code both settle to the intended account.
+- [ ] Monime Test checkout and USSD UVAN collection both settle to the intended account.
 - [ ] Duplicate webhook deliveries do not duplicate completed receipts or SMS.
 - [ ] Cancelled and expired sessions do not become successful receipts.
 - [ ] The full Monime provider object matches the expected account, amount, currency, reference and private MatMove metadata.
