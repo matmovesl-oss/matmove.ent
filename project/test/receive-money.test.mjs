@@ -158,10 +158,10 @@ test('Monime checkout success POST safely redirects to the MatMove confirmation 
   };
   receiveCheckoutReturn({
     method: 'POST',
-    query: { ref: 'MM-ABCDEF123456' }
+    query: { ref: 'MM-ABCDEF1234567890' }
   }, res);
   assert.equal(statusCode, 303);
-  assert.equal(location, 'https://matmove.space/pay/complete?ref=MM-ABCDEF123456');
+  assert.equal(location, 'https://matmove.space/pay/complete?ref=MM-ABCDEF1234567890');
   assert.equal(ended, true);
 });
 
