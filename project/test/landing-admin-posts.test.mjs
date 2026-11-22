@@ -29,3 +29,10 @@ test('homepage post hard-delete migration deletes records and removes archived r
   assert.match(migration, /'image_path',p\.image_path/);
   assert.match(baseMigration, /post_id uuid references public\.matmove_homepage_posts\(id\) on delete set null/i);
 });
+
+test('public homepage refreshes post changes frequently and when a hidden tab becomes visible', async () => {
+  const source = await readFile(new URL('../src/components/PublicHomepagePosts.tsx', import.meta.url), 'utf8');
+  assert.match(source, /}, 15000\)/);
+  assert.match(source, /addEventListener\('visibilitychange', refreshWhenVisible\)/);
+  assert.match(source, /removeEventListener\('visibilitychange', refreshWhenVisible\)/);
+});
