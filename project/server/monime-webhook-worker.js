@@ -343,10 +343,10 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 3, even
         ['payout.completed', 'payout.failed'].includes(event.event_type)
       ) || (
         event.object_type === 'payment_code' &&
-        event.event_type === 'payment_code.completed'
+        ['payment_code.completed', 'payment_code.cancelled', 'payment_code.expired'].includes(event.event_type)
       ) || (
         event.object_type === 'checkout_session' &&
-        event.event_type === 'checkout_session.completed'
+        ['checkout_session.completed', 'checkout_session.cancelled', 'checkout_session.expired'].includes(event.event_type)
       );
       if (!supportedEnvelope) {
         throw new ManualReviewError('Unsupported Monime event type or object for MatMove ledger reconciliation; manual review required.');
