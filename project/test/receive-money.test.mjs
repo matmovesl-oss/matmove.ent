@@ -174,7 +174,7 @@ test('Monime USSD RSA-OAEP-SHA256 and AES-128-GCM exchange decrypts and encrypts
   const payload = {
     global: { sessionId, networkProviderName: 'Orange Money' },
     currentPage: 'confirm_payment',
-    flowData: { enter_recipient: 'MM-ABCDEFGH', enter_amount: '25', confirm_payment: 'true' }
+    flowData: { enter_recipient: 'MM-ABCDEFGH', enter_amount: '25', confirm_payment: '1' }
   };
   const encrypted = encryptedRequest(payload, publicKey);
   const decoded = decryptUssdExchange(encrypted.body, privateKey);
@@ -230,7 +230,7 @@ test('USSD recipient confirmation returns the verified UVAN and a unique payment
   assert.equal(result.pageData.amount, 25);
   assert.equal(result.pageData.receiveLinkId, linkId);
   assert.equal(result.pageData.receivePaymentId, db.tables.matmove_received_payments[0].id);
-  assert.match(result.pageData.reference, /^MM-[A-F0-9]{12}$/);
+  assert.match(result.pageData.reference, /^MM-[A-F0-9]{16}$/);
   assert.equal(db.tables.matmove_received_payments[0].state, 'processing');
   assert.equal(db.tables.matmove_received_payments[0].provider_channel, 'ussd');
 });
