@@ -1,9 +1,11 @@
 # Supabase migration history
 
-The files in `supabase/migrations` were restored from the SQL statements recorded in the active MatMove.Ent production project's `supabase_migrations.schema_migrations` table on 2026-11-22.
+The files in `supabase/migrations` are the source of truth for the active MatMove.Ent production project's applied migration history.
 
-The active production migration history contains 124 applied versions. These filenames deliberately use the exact remote version and name; do not rename them or mark them reverted. This restores the repository source of truth and prevents a future `supabase db push` from replaying stale duplicate files.
+On 2026-11-22, the repository's stale 51-file migration directory was reconciled against the SQL statements retained in `supabase_migrations.schema_migrations`. All 124 previously applied migrations were restored with their exact production version and name; no historical migration was replayed and no migration history was reset.
 
-The separate file in `docs/pending-migrations` is not recorded as applied in production. It is a proposed customer passcode policy change and must only be moved into the active migration directory with a new migration version after its dedicated tests and production rollout are approved.
+After that reconciliation, the public homepage view security migration `20261122223335_matmove_public_homepage_posts_security_invoker_v1.sql` was applied through Supabase migration tooling and verified in production. The repository now contains that exact canonical migration file as well.
 
-Do not reset or repair production migration history as part of this reconciliation. No production SQL is executed by this repository change.
+The current production migration history contains 125 applied versions. The unrelated six-to-nine-digit passcode policy change remains under `docs/pending-migrations` and is not marked as applied; it must be reviewed and deployed separately.
+
+Do not reset or repair production migration history. New DDL must be added as a new migration and applied through the Supabase migration workflow.
