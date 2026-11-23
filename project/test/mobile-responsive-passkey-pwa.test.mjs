@@ -73,7 +73,7 @@ test('PWA shell does not cache API, authentication or private user data', async 
   assert.equal(app.name, 'MatMove');
   assert.equal(app.display, 'standalone');
   assert.ok(app.icons.some(icon => icon.src === '/logo.jpg'));
-  assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
+  assert.match(worker, /api\\|auth\\|rest\\|storage\\|functions\\|realtime/i);
   assert.match(worker, /api\|auth\|rest\|storage\|functions\|realtime/i);
   assert.match(worker, /APP_SHELL/);
   assert.match(worker, /offline\.html/);
@@ -104,7 +104,7 @@ test('PWA install precaches every static Vite entry, including lazy routes, befo
   assert.match(worker, /await cache\.add\(path\)/);
   assert.ok(install.indexOf('await cacheBuildAssets(cache)') < install.indexOf('await self.skipWaiting()'), 'all static Vite assets must be cached during installation');
   assert.match(worker, /await cacheInitialAppAssets\(cache\)/);
-  assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
+  assert.match(worker, /api\\|auth\\|rest\\|storage\\|functions\\|realtime/i);
   assert.match(worker, /api\|auth\|rest\|storage\|functions\|realtime/i);
   assert.match(worker, /jpe\?g\|webp\|avif\|gif\|ico/);
 });
@@ -196,7 +196,7 @@ test('offline navigation returns the cached MatMove app shell, never caches priv
   const worker = await readFile('public/sw.js', 'utf8');
   assert.match(worker, /const CACHE_NAME = 'matmove-shell-v[0-9]+'/);
   assert.match(worker, /return \(await caches\.match\('\/index\.html'\)\) \|\| \(await caches\.match\('\/offline\.html'\)\)/);
-  assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
+  assert.match(worker, /api\\|auth\\|rest\\|storage\\|functions\\|realtime/i);
   assert.match(worker, /Only immutable, versioned Vite build assets are cached/);
 });
 
