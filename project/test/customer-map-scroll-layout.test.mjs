@@ -50,7 +50,7 @@ test('all rider, merchant and driver map surfaces show a scroll cue that scrolls
 test('rider cash-review notice stays collapsed and retains the full reconciliation explanation', async () => {
   const rider = await readFile(new URL('../src/pages/RiderDashboard.tsx', import.meta.url), 'utf8');
   assert.match(rider, /Cash review · saved safely/);
-  assert.match(rider, /<details className="mx-3 mb-2 rounded-xl border border-blue-200 bg-blue-50 text-xs text-blue-950">/);
+  assert.match(rider, /<details aria-label="A previous cash request is under review" className="mx-3 mb-2 rounded-xl border border-blue-200 bg-blue-50 text-xs text-blue-950">/);
   assert.match(rider, /Its live dispatch has been closed/);
   assert.match(rider, /cash-return confirmations and fee reserve remain preserved for MatMove Support/);
   assert.match(rider, /No cash settlement or refund has been recorded/);
