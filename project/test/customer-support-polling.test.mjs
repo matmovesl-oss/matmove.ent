@@ -9,7 +9,9 @@ test('customer conversation polling does not fetch the ticket list twice', () =>
   const end = source.indexOf('\n },[userId]);', start);
   assert.ok(start >= 0 && end > start, 'loadMessages should be an independent callback');
   assert.equal(source.slice(start, end).includes('loadTickets'), false);
-  assert.ok(source.includes("if(document.visibilityState==='visible'){void loadTickets();if(selected)void loadMessages(selected);}"));
+  assert.ok(source.includes("if(document.visibilityState==='visible'){void loadTickets();if(selectedRef.current)void loadMessages(selectedRef.current);}"));
+  assert.ok(source.includes('selectedRef.current=selected;'));
+  assert.ok(source.includes('},[userId,open,showInbox,loadTickets,loadMessages]);'));
 });
 
 test('customer replies explicitly refresh both the conversation and ticket list', () => {
@@ -17,7 +19,7 @@ test('customer replies explicitly refresh both the conversation and ticket list'
 });
 
 test('customer inbox ignores out-of-order responses for tickets and conversations', () => {
-  assert.ok(source.includes('const ticketRequest=useRef(0),messageRequest=useRef(0)'));
+  assert.ok(source.includes('const ticketRequest=useRef(0),messageRequest=useRef(0),selectedRef=useRef<string|null>(null)'));
   assert.ok(source.includes('sequence!==ticketRequest.current'));
   assert.ok(source.includes('sequence!==messageRequest.current'));
   assert.ok(source.includes('ticketRequest.current++;messageRequest.current++;'));
