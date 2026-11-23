@@ -87,19 +87,6 @@ export async function walletFetch(
   }
 
   if (
-    !(
-      response.headers.get('content-type') || ''
-    ).includes('application/json')
-  ) {
-    throw new Error(
-      'The payment API is unavailable. Try again shortly.'
-    );
-  }
-
-  const data =
-    await response.clone().json();
-
-  if (
     url === '/api/create-monime-checkout' &&
     response.ok
   ) {
