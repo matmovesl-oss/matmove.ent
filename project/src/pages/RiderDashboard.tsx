@@ -617,7 +617,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
                 <span>Cash review · saved safely</span><span className="shrink-0 text-blue-700">View details</span>
               </summary>
               <div className="border-t border-blue-200 px-3 pb-3 pt-2">
-                <p className="leading-5">The original cash-return confirmations and fee reserve remain preserved for MatMove Support. No cash settlement or refund has been recorded. Do not make a duplicate payment for this case.</p>
+                <p className="leading-5">Its live dispatch has been closed. The original cash-return confirmations and fee reserve remain preserved for MatMove Support. No cash settlement or refund has been recorded. You can make a fresh request while the case remains visible in Trips. Do not make a duplicate payment for this case.</p>
                 <button type="button" onClick={() => onOpenTrips?.()} className="mt-2 min-h-10 rounded-lg bg-blue-700 px-3 text-xs font-bold text-white">Review in Trips</button>
               </div>
             </details>
