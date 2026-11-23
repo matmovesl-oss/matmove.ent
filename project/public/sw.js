@@ -1,10 +1,34 @@
-const CACHE_NAME = 'matmove-shell-v3';
+const CACHE_NAME = 'matmove-shell-v4';
 const APP_SHELL = ['/', '/index.html', '/offline.html', '/logo.jpg', '/image-unavailable.svg'];
+
+async function cacheInitialAppAssets(cache) {
+  const shell = await cache.match('/index.html');
+  if (!shell) return;
+
+  const html = await shell.text();
+  const references = [...html.matchAll(/(?:src|href)=["']([^"']+)["']/gi)]
+    .map(match => match[1].split(/[?#]/, 1)[0])
+    .filter(path =>
+      path.startsWith('/assets/') &&
+      /\.(?:js|mjs|css|woff2)$/.test(path)
+    );
+
+  // Module-preload links cover the entry point's static JS/CSS graph.
+  // Route-level dynamic chunks are cached when first used, preserving lazy loading.
+  await Promise.all([...new Set(references)].map(async path => {
+    try {
+      await cache.add(path);
+    } catch {
+      // A single optional asset must not prevent the offline shell installing.
+    }
+  }));
+}
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
     await cache.addAll(APP_SHELL);
+    await cacheInitialAppAssets(cache);
     await self.skipWaiting();
   })());
 });
