@@ -1,4 +1,4 @@
-import ActiveTripMap from '@/components/ActiveTripMap';
+
 import MapScrollCue from '@/components/MapScrollCue';
 import { CashMonimeSuccess } from '@/components/CashMonimeSuccess';
 import { SkeletonBlock, SkeletonList } from '@/components/Skeleton';
@@ -16,7 +16,7 @@ import TransactionHistory from '@/components/TransactionHistory';
 import TripHistory from '@/components/TripHistory';
 
 import PayoutPanel from '@/components/PayoutPanel';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { WalletTopUp } from '@/components/WalletTopUp';
 import { TransactionModal } from '@/components/TransactionModal';
@@ -29,6 +29,8 @@ import {
   Users, RefreshCw, Plus, Wallet, Activity, Copy,
   Check, Share2
 } from 'lucide-react';
+
+const ActiveTripMap = lazy(() => import('@/components/ActiveTripMap'));
 
 export function DriverDashboard(props: any) {
   if (props.activeSection === 'trips') {
@@ -703,7 +705,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
             )}
           </div>
 
-          {activeTrackedTrip?<div className="order-1 min-w-0 flex-1"><ActiveTripMap key={activeTrackedTrip.id} userId={profile.id} bookingId={activeTrackedTrip.id} driver/></div>:          <div style={{height:"clamp(340px, 58dvh, 620px)"}} className="order-1 min-w-0 flex-1 rounded-2xl overflow-hidden relative min-h-[280px] w-full border border-slate-200 bg-slate-100 shadow-inner z-0">
+          {activeTrackedTrip?<div className="order-1 min-w-0 flex-1"><Suspense fallback={<div role="status" aria-live="polite" className="flex min-h-[260px] w-full items-center justify-center rounded-2xl bg-slate-100 text-sm text-slate-600">Loading live trip map…</div>}><ActiveTripMap key={activeTrackedTrip.id} userId={profile.id} bookingId={activeTrackedTrip.id} driver/></Suspense></div>:          <div style={{height:"clamp(340px, 58dvh, 620px)"}} className="order-1 min-w-0 flex-1 rounded-2xl overflow-hidden relative min-h-[280px] w-full border border-slate-200 bg-slate-100 shadow-inner z-0">
             <div ref={mapContainer} className="absolute inset-0 w-full h-full" /><MapScrollCue/>
             {mapError ? <p role="alert" className="absolute left-3 right-3 top-3 z-10 rounded-xl bg-red-50 p-3 text-sm text-red-800">{mapError}<button type="button" className="min-h-10 px-2 font-bold underline" onClick={() => setMapRetry(n => n+1)}>Retry map</button></p> : !mapReady && <div role="status" aria-label="Loading radar map" className="absolute left-3 right-3 top-3 z-10 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-sm"><div className="mb-3 flex items-center gap-3"><SkeletonBlock className="h-9 w-9 shrink-0" rounded="rounded-full"/><div className="min-w-0 flex-1 space-y-2"><SkeletonBlock className="h-3 w-2/5" rounded="rounded-md"/><SkeletonBlock className="h-3 w-4/5" rounded="rounded-md"/></div></div><SkeletonBlock className="h-20 w-full" rounded="rounded-lg"/></div>}
           </div>}
