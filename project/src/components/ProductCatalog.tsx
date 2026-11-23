@@ -1,6 +1,8 @@
 import {useEffect,useRef,useState} from 'react';
 import {supabase} from '@/lib/supabase';
 import {beginProfilePhotoPicker} from '@/lib/profilePhotoPicker';
+import {catalogMoney,catalogCheckoutAllowed} from '@/lib/catalogMoney';
+export {catalogMoney,catalogCheckoutAllowed} from '@/lib/catalogMoney';
 
 const uidPattern=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const BUCKET='product_images';
@@ -8,8 +10,7 @@ type Draft={id:string;version:string|null;name:string;price:string;currency:'SLE
 type Save={p_id:string;p_expected:string|null;p_name:string;p_price:string;p_currency:'SLE'|'USD';p_description:string;p_whatsapp:string;p_image_paths:string[];p_available:boolean};
 const fresh=():Draft=>({id:crypto.randomUUID(),version:null,name:'',price:'',currency:'SLE',description:'',phone:'232',paths:[],available:true,legacy:''});
 function minor(value:unknown){const s=String(value??'');if(!/^\d{1,9}(\.\d{1,2})?$/.test(s))throw Error('Enter a positive price with up to two decimal places.');const[a,b='']=s.split('.'),n=BigInt(a)*100n+BigInt(b.padEnd(2,'0'));if(n<=0n||n>99999999999n)throw Error('Enter a valid product price.');return n;}
-export function catalogMoney(value:unknown,currency:unknown='SLE',quantity=1){try{if(!['SLE','USD'].includes(String(currency))||!Number.isSafeInteger(quantity)||quantity<1||quantity>100)throw Error();const n=minor(value)*BigInt(quantity);return `${currency} ${(n/100n).toLocaleString('en-US')}.${String(n%100n).padStart(2,'0')}`;}catch{return 'Price unavailable';}}
-export function catalogCheckoutAllowed(p:any){return !!p&&p.is_available!==false&&p.is_available!==null&&(p.currency===undefined?'SLE':p.currency)==='SLE'&&catalogMoney(p.price,p.currency??'SLE')!=='Price unavailable';}
+
 const ownPath=(path:unknown,userId:string):path is string=>typeof path==='string'&&uidPattern.test(userId)&&new RegExp(`^${userId}(/|-)[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\\.(jpg|jpeg|png|webp)$`).test(path);
 const publicUrl=(path:string)=>supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 function safeUrl(value:unknown){try{const u=new URL(String(value));return u.protocol==='https:'?u.href:'';}catch{return '';}}
