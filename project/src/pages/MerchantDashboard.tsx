@@ -1,5 +1,5 @@
 import {useTripRequest} from '@/lib/useTripRequest';
-import ActiveTripMap from '@/components/ActiveTripMap';
+
 import {MerchantProductCatalog, catalogMoney} from '@/components/ProductCatalog';
 import { SkeletonBlock, SkeletonList } from '@/components/Skeleton';
 
@@ -13,7 +13,7 @@ import TransactionHistory from '@/components/TransactionHistory';
 import TripHistory from '@/components/TripHistory';
 
 import PayoutPanel from '@/components/PayoutPanel';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { lazy, Suspense, useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { RideLocationPicker, TripLocations } from '@/components/RideLocationPicker';
 import { WalletTopUp } from '@/components/WalletTopUp';
@@ -21,7 +21,7 @@ import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
 import { updateRide, readRidePayment } from '@/services/rideService';
-import 'mapbox-gl/dist/mapbox-gl.css';
+
 import {
   Store, Plus, Package, RefreshCw, X, Loader2, MapPin,
   Car, CalendarClock, Phone, Minus, Smartphone,
@@ -29,6 +29,8 @@ import {
   Trash2, Wallet, Activity, Copy, Check, Share2,
   Image as ImageIcon, User, MessageCircle, ShieldCheck, Banknote
 } from 'lucide-react';
+
+const ActiveTripMap = lazy(() => import('@/components/ActiveTripMap'));
 
 type ServiceType = 'delivery' | 'ride' | 'scheduled';
 type VehicleType = 'keke' | 'bike' | 'car' | 'van';
@@ -529,7 +531,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
         </div>
       )}
 
-      {activeSection === 'home' && (activeBooking && ['accepted','in_progress'].includes(activeBooking.status) ? <ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/> : <RideLocationPicker layout="map-first" key={profile.id} userId={profile.id} onBack={onBack || (() => { setRouteEditing(true); setPickup(''); setDestination(''); setPickupCoords(null); setDestinationCoords(null); setTripDistanceKm(null); setOfferAmount(''); })} bookingReady={Boolean(pickupCoords && destinationCoords && !routeEditing)} onRouteEditingChange={setRouteEditing} onChange={(selection: TripLocations) => { setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />)}
+      {activeSection === 'home' && (activeBooking && ['accepted','in_progress'].includes(activeBooking.status) ? <Suspense fallback={<div role="status" aria-live="polite" className="flex min-h-[260px] w-full items-center justify-center rounded-2xl bg-slate-100 text-sm text-slate-600">Loading live trip map…</div>}><ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/></Suspense> : <RideLocationPicker layout="map-first" key={profile.id} userId={profile.id} onBack={onBack || (() => { setRouteEditing(true); setPickup(''); setDestination(''); setPickupCoords(null); setDestinationCoords(null); setTripDistanceKm(null); setOfferAmount(''); })} bookingReady={Boolean(pickupCoords && destinationCoords && !routeEditing)} onRouteEditingChange={setRouteEditing} onChange={(selection: TripLocations) => { setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />)}
 
       {activeSection === 'wallet' && (
         <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
