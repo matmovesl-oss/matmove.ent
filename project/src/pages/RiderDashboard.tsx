@@ -1,4 +1,4 @@
-import ActiveTripMap from '@/components/ActiveTripMap';
+
 import { CashMonimeSuccess } from '@/components/CashMonimeSuccess';
 import { ProductGallery, catalogMoney, catalogCheckoutAllowed } from '@/components/ProductCatalog';
 import FareNegotiation from '@/components/FareNegotiation';
@@ -15,9 +15,9 @@ import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
 import { updateRide } from '@/services/rideService';
 import { useTripRequest } from '@/lib/useTripRequest';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import 'mapbox-gl/dist/mapbox-gl.css';
+
 import {
   Car, CarFront, Bike, Truck, Package, MapPin, ShoppingBag, Loader2,
   CalendarClock, Plus, Minus, ArrowRight, Wallet,
@@ -25,6 +25,8 @@ import {
   ArrowUpRight, Users, ShoppingCart, Activity,
   Copy, Check, Share2, MessageCircle, Phone, Clock, FileText
 } from 'lucide-react';
+
+const ActiveTripMap = lazy(() => import('@/components/ActiveTripMap'));
 
 const WHATSAPP_NUMBER = '23290330362';
 
@@ -887,7 +889,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
             <div className="order-1 min-w-0">
               {activeBooking && ['accepted', 'in_progress'].includes(activeBooking.status) ? (
-                <ActiveTripMap key={activeBooking.id} userId={profile?.id} bookingId={activeBooking.id} />
+                <Suspense fallback={<div role="status" aria-live="polite" className="flex min-h-[260px] w-full items-center justify-center rounded-2xl bg-slate-100 text-sm text-slate-600">Loading live trip map…</div>}><ActiveTripMap key={activeBooking.id} userId={profile?.id} bookingId={activeBooking.id} /></Suspense>
               ) : (
                 <RideLocationPicker
                   layout="map-first"
