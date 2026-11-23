@@ -212,7 +212,7 @@ test('passcode keypad renders and accepts local entry while server status is loa
  const source=await readFile('src/components/CustomerPasscode.tsx','utf8');
  const statusStart=source.indexOf('{status&&<>');
  const keypad=source.indexOf('{keypad}',statusStart);
- const submit=source.indexOf('<button type="submit" disabled={busy||loadingStatus||!status}',keypad);
+ const submit=source.indexOf('<button type="submit" disabled={busy||loadingStatus||!status||!isOnline}',keypad);
  assert.ok(statusStart>=0&&keypad>statusStart&&submit>keypad);
  assert.match(source,/!status&&pinField\('Passcode',pin,'pin',9\)/);
  assert.match(source,/!status&&pinMirror\('Passcode',pin,'pin',setPin,9\)/);
