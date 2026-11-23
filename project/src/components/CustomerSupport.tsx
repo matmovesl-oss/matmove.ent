@@ -25,7 +25,7 @@ export default function CustomerSupport({userId}:{userId:string}){
  const [subject,setSubject]=useState(''),[category,setCategory]=useState('account'),[body,setBody]=useState(''),[reply,setReply]=useState('');
  const [contacts,setContacts]=useState<PublicContact[]>([]),[contactsLoading,setContactsLoading]=useState(true),[contactsError,setContactsError]=useState('');
  const live=useRef(false),identity=useRef(userId),request=useRef<string|null>(null);
- const ticketRequest=useRef(0),messageRequest=useRef(0);identity.current=userId;
+ const ticketRequest=useRef(0),messageRequest=useRef(0),selectedRef=useRef<string|null>(null);identity.current=userId;selectedRef.current=selected;
 
  const loadContacts=useCallback(async()=>{
   try{
@@ -91,9 +91,9 @@ export default function CustomerSupport({userId}:{userId:string}){
  useEffect(()=>{
   if(!open||!showInbox)return;
   live.current=true;ticketRequest.current++;messageRequest.current++;setTickets([]);setMessages([]);void loadTickets();
-  const timer=window.setInterval(()=>{if(document.visibilityState==='visible'){void loadTickets();if(selected)void loadMessages(selected);}},15000);
+  const timer=window.setInterval(()=>{if(document.visibilityState==='visible'){void loadTickets();if(selectedRef.current)void loadMessages(selectedRef.current);}},15000);
   return()=>{live.current=false;ticketRequest.current++;messageRequest.current++;window.clearInterval(timer);};
- },[userId,open,showInbox,loadTickets,loadMessages,selected]);
+ },[userId,open,showInbox,loadTickets,loadMessages]);
 
  async function openTicket(e:React.FormEvent){
   e.preventDefault();if(busy)return;setBusy(true);setError('');setNotice('');
