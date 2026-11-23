@@ -59,3 +59,18 @@ test('rider cash-review notice stays collapsed and retains the full reconciliati
   assert.match(rider, /Do not make a duplicate payment/i);
   assert.match(rider, /Review in Trips/);
 });
+
+test('map and Trips controls keep 44px phone touch targets without duplicate map back arrows', async () => {
+  const [app, picker, trips] = await Promise.all([
+    readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/RideLocationPicker.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/TripHistory.tsx', import.meta.url), 'utf8'),
+  ]);
+  assert.match(app, /activeSection !== 'services' && !\(activeSection === 'ride' && \(role === 'rider' \|\| role === 'merchant'\)\)/);
+  assert.match(picker, /aria-label="Back to MatMove home"[^>]*h-11 w-11/);
+  assert.doesNotMatch(picker, /min-h-9|min-h-10/);
+  assert.match(picker, /min-h-11 shrink-0 rounded-xl bg-slate-900[^>]*>Change locations/);
+  assert.doesNotMatch(trips, /min-h-9|min-h-10|h-8 min-h-8/);
+  assert.match(trips, /h-11 min-h-11 min-w-11 shrink-0[^>]*>Close<\/button>/);
+  assert.match(trips, /min-h-11 rounded-lg/);
+});
