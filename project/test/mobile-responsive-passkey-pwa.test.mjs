@@ -165,7 +165,7 @@ test('offline navigation returns the cached MatMove app shell, never caches priv
   assert.match(worker, /entry\.css/);
   assert.match(worker, /entry\.assets/);
   assert.match(worker, /precacheBuildAssets\(cache\)/);
-  assert.match(worker, /assets\\\\\//);
+  assert.ok(worker.includes('^assets\\/'));
   assert.doesNotMatch(worker, /cache\.put\([^\\n]*(?:wallet|payment|transaction|profile|booking)Data/i);
 });
 
