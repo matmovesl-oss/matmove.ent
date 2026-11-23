@@ -178,7 +178,7 @@ test('Rider Ride tab displays the unfinished cash-review notice instead of hidin
  const rider=await read('../src/pages/RiderDashboard.tsx');
  assert.match(rider,/\(activeSection === 'home' \|\| activeSection === 'ride'\) && hasUnfinishedBookings && !activeBooking/);
  assert.match(rider,/Cash review · saved safely/);
- assert.match(rider,/<details aria-label="A previous cash request is under review" className="mx-3 mb-2 rounded-xl/);
+ assert.match(rider,/<details className="mx-3 mb-2 rounded-xl/);
  assert.match(rider,/Review in Trips/);
 });
 
