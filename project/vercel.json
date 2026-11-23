@@ -50,5 +50,8 @@
       "path": "/api/reconcile-all-payments",
       "schedule": "0 0 * * *"
     }
+  ],
+  "regions": [
+    "dub1"
   ]
 }
