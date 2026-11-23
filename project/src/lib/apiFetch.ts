@@ -78,7 +78,7 @@ export async function walletFetch(
   } catch (requestError) {
     if (controller.signal.aborted) {
       throw new Error(
-        'The wallet request timed out. MatMove kept the same request reference. Refresh the transaction status before retrying.'
+        'The wallet request timed out. MatMove kept the same request reference. Refresh the latest wallet or transaction status before retrying.'
       );
     }
     throw requestError;
