@@ -15,6 +15,6 @@ test('customer announcements and product photos fall back when remote images fai
     assert.match(source, /currentTarget\.onerror=null/);
   }
   assert.match(fallback, /MatMove/);
-  assert.match(sw, /matmove-shell-v4/);
+  assert.match(sw, /matmove-shell-v5/);
   assert.ok(sw.includes('image-unavailable.svg'));
 });
