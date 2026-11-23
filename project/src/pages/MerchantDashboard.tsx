@@ -364,7 +364,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
   const displayedTransactions = txFilter === 'recent' ? validTransactions.slice(0, 5) : validTransactions;
 
   return (
-    <div className="min-h-screen flex-1 bg-slate-50">
+    <div className="mm-merchant-workspace min-h-screen flex-1 bg-slate-50">
       <header className={`sticky top-0 z-20 flex flex-nowrap items-center justify-between gap-2 border-b bg-white px-3 py-3 shadow-sm sm:px-6 sm:py-4 ${activeSection === 'wallet' ? 'hidden' : ''}`}>
         <div className="flex min-w-0 flex-1 items-center gap-2"><div className="shrink-0 rounded-xl bg-orange-100 p-2 text-orange-600"><Store size={18} /></div><h2 className="min-w-0 truncate text-sm font-bold text-slate-900 sm:text-base">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
         <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
@@ -622,7 +622,7 @@ function MerchantInventory({ profile }: any) {
   const displayedOrders = orders.filter(order => orderFilter === 'all' || order.status === orderFilter);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
+    <div className="mm-merchant-workspace mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
         <h1 className="text-3xl font-bold">Inventory & Orders</h1>
         <div className="flex rounded-xl bg-slate-100 p-1">
