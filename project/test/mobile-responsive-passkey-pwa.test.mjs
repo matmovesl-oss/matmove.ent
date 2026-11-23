@@ -80,6 +80,23 @@ test('PWA shell does not cache API, authentication or private user data', async 
   assert.ok(worker.includes("return (await caches.match('/index.html')) || (await caches.match('/offline.html'))"), 'offline navigation must prefer the cached app shell over the fallback page');
 });
 
+test('PWA install caches the initial versioned app assets before the first offline restart', async () => {
+  const worker = await readFile('public/sw.js', 'utf8');
+  const installStart = worker.indexOf("self.addEventListener('install'");
+  const activateStart = worker.indexOf("self.addEventListener('activate'");
+  const install = worker.slice(installStart, activateStart);
+  assert.match(worker, /const CACHE_NAME = 'matmove-shell-v4'/);
+  assert.match(worker, /async function cacheInitialAppAssets\(cache\)/);
+  assert.match(worker, /const shell = await cache\.match\('\/index\.html'\)/);
+  assert.match(worker, /html\.matchAll/);
+  assert.match(worker, /path\.startsWith\('\/assets\/'\)/);
+  assert.match(worker, /await cache\.add\(path\)/);
+  assert.ok(install.indexOf('await cacheInitialAppAssets(cache)') < install.indexOf('await self.skipWaiting()'), 'entry assets must be cached during installation');
+  assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
+  assert.match(worker, /auth\|wallet\|payment\|transaction\|profile\|booking/i);
+  assert.match(worker, /jpe\?g\|webp\|avif\|gif\|ico/);
+});
+
 test('customer account uses compact arrow rows and focused profile, referral and policy screens', async () => {
   const [app, css, profile, services] = await Promise.all([
     readFile('src/App.tsx', 'utf8'),
