@@ -14,13 +14,6 @@ import { reconcileReceivePaymentEvent, processReceiveSmsOutbox } from './receive
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ATTEMPTS = 12;
 
-class ManualReviewError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'ManualReviewError';
-  }
-}
-
 function client() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
