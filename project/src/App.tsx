@@ -36,6 +36,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { resolveCustomerRole } from '../shared/customer-access.js';
 import { catalogMoney, catalogCheckoutAllowed } from '@/lib/catalogMoney';
+import { customerPasscode } from '@/lib/customerPasscode';
 import { customerHelpSection } from '@/lib/customerHelpNavigation';
 
 import { LandingPage } from '@/pages/LandingPage';
