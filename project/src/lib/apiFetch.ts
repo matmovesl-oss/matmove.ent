@@ -45,31 +45,46 @@ export async function walletFetch(
     }
   }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization:
-        `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify({
-      ...body,
-      idempotencyKey: key,
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 30_000);
+  let response: Response;
+  let data: any;
 
-  if (
-    !(
-      response.headers.get('content-type') || ''
-    ).includes('application/json')
-  ) {
-    throw new Error(
-      'The payment API is unavailable. Try again shortly.'
-    );
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + session.access_token,
+      },
+      body: JSON.stringify({
+        ...body,
+        idempotencyKey: key,
+      }),
+      signal: controller.signal,
+    });
+
+    if (
+      !(
+        response.headers.get('content-type') || ''
+      ).includes('application/json')
+    ) {
+      throw new Error(
+        'The payment API is unavailable. Try again shortly.'
+      );
+    }
+
+    data = await response.clone().json();
+  } catch (requestError) {
+    if (controller.signal.aborted) {
+      throw new Error(
+        'The wallet request timed out. MatMove kept the same request reference. Refresh the latest wallet or transaction status before retrying.'
+      );
+    }
+    throw requestError;
+  } finally {
+    window.clearTimeout(timeout);
   }
-
-  const data =
-    await response.clone().json();
 
   if (
     url === '/api/create-monime-checkout' &&
