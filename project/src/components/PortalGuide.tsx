@@ -45,7 +45,7 @@ export default function PortalGuide({userId,role,verified,replay,onNavigate,onVe
   setOpen(false);
  }
  function move(next:number){setIndex(Math.max(0,Math.min(steps.length-1,next)));}
- return <dialog ref={dialog} aria-labelledby="mm-guide-title" aria-describedby="mm-guide-description" onCancel={e=>{e.preventDefault();finish('dismissed');}} className="m-auto max-h-[82dvh] w-[calc(100%_-_2rem)] max-w-md overflow-y-auto rounded-3xl border-0 bg-white p-0 shadow-2xl backdrop:bg-slate-950/55">
+ return <dialog ref={dialog} aria-labelledby="mm-guide-title" aria-describedby="mm-guide-description" onCancel={e=>{e.preventDefault();finish('dismissed');}} className="m-auto max-h-[72dvh] w-[calc(100%_-_2rem)] max-w-sm overflow-y-auto rounded-3xl border-0 bg-white p-0 shadow-2xl backdrop:bg-slate-950/55">
   <div className="p-4 sm:p-5"><div className="mb-4 flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-700"><Compass size={18}/>MatMove Quick guide</span><button type="button" aria-label="Skip app guide" onClick={()=>finish('dismissed')} className="min-h-11 min-w-11 rounded-xl border p-2 text-slate-600"><X size={18}/></button></div>
    <p className="text-xs font-semibold text-slate-500">{role==='driver'?'Driver':role==='merchant'?'Merchant':'Rider'} guide · {Math.min(index+1,steps.length)} of {steps.length}</p>
    <h2 id="mm-guide-title" tabIndex={-1} className="mt-2 text-xl font-black text-slate-950">{step.title}</h2>
