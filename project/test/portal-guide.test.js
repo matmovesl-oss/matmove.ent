@@ -41,7 +41,7 @@ for(const role of ['rider','driver','merchant'])test(`${role} tutorial starts on
 test('Skip records only a tour preference, never approval or KYC state, and Quick guide can replay it',()=>page(async h=>{
  assert.equal(h.open,false);await h.update({replay:1});assert.equal(h.open,true);
  await h.click('Skip tour · Start using');assert.equal(h.open,false);assert.equal(h.verifiedCalls,0);assert.deepEqual([...h.storage],[[h.key,'dismissed']]);
- await h.update({replay:1});assert.equal(h.open,true);assert.match(h.text,/Welcome to your MatMove Home/);
+ await h.update({replay:2});assert.equal(h.open,true);assert.match(h.text,/Welcome to your MatMove Home/);
 }));
 test('Completed tour stays closed until replay and verified users are never prompted to resubmit KYC',()=>page(async h=>{
  assert.equal(h.open,false);assert.deepEqual(h.navigation,[]);await h.update({replay:1});assert.equal(h.open,true);
@@ -60,7 +60,7 @@ test('Switching customers gives the new customer a separate guide preference and
 }));
 test('Account stays accessible at the top while the bottom navigation no longer has an Account tab',async()=>{
  const app=await readFile('src/App.tsx','utf8');const nav=app.slice(app.indexOf('function PortalNavigation'),app.indexOf('function PasscodeScreen'));
- assert.doesNotMatch(nav,/id: 'account'/);for(const section of ['home','ride','wallet','trips'])assert.ok(nav.includes(`id: '${section}'`));
+ assert.doesNotMatch(nav,/id: 'account'/);for(const section of ['home','ride','services','trips'])assert.ok(nav.includes(`id: '${section}'`));
  assert.match(app,/aria-label="Open your account"/);assert.match(app,/key=\{`\$\{profile.id\}:\$\{role\}`\} userId=\{profile.id\}/);assert.match(app,/onVerify=\{/);
  for(const file of ['RiderDashboard','DriverDashboard','MerchantDashboard']){
   const source=await readFile(`src/pages/${file}.tsx`,'utf8');const main=source.slice(source.indexOf("{activeSection === 'home' &&"),source.indexOf("{activeSection === 'wallet' &&"));
