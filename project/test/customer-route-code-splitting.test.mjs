@@ -46,6 +46,7 @@ test('customer public, recovery, payment and role routes are preserved', () => {
 
 test('lazy module changes preserve the shared customer role resolver and portal session guard', () => {
   assert.ok(app.includes("import { resolveCustomerRole } from '../shared/customer-access.js'"));
-  assert.ok(app.includes('if(!session?.user?.id)return <Navigate to="/login" replace/>;'));
+  assert.ok(app.includes('if (!session) {'));
+  assert.ok(app.includes('/login?returnTo=customer'));
   assert.ok(app.includes('<CustomerPasscode key={session.user.id}'));
 });
