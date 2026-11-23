@@ -85,7 +85,15 @@ test('PWA install precaches every static Vite entry, including lazy routes, befo
   const installStart = worker.indexOf("self.addEventListener('install'");
   const activateStart = worker.indexOf("self.addEventListener('activate'");
   const install = worker.slice(installStart, activateStart);
-  assert.match(vite, /manifest: 'manifest\.json'/);\n  assert.match(worker, /const CACHE_NAME = 'matmove-shell-v5'/);\n  assert.match(worker, /async function cacheBuildAssets\(cache\)/);\n  assert.match(worker, /fetch\('\/manifest\.json'/);\n  assert.match(worker, /Object\.values\(manifest\)/);\n  assert.match(worker, /entry\.file/);\n  assert.match(worker, /entry\.css/);\n  assert.match(worker, /entry\.assets/);\n  assert.match(worker, /assets\.add\('\/' \+ file\)/);
+  assert.match(vite, /manifest: 'manifest\.json'/);
+  assert.match(worker, /const CACHE_NAME = 'matmove-shell-v5'/);
+  assert.match(worker, /async function cacheBuildAssets\(cache\)/);
+  assert.match(worker, /fetch\('\/manifest\.json'/);
+  assert.match(worker, /Object\.values\(manifest\)/);
+  assert.match(worker, /entry\.file/);
+  assert.match(worker, /entry\.css/);
+  assert.match(worker, /entry\.assets/);
+  assert.match(worker, /assets\.add\('\/' \+ file\)/);
   for (const asset of ['/manifest.webmanifest', '/logo.jpg', '/wallet-icon.png', '/matmove-car.svg', '/matmove-bike.svg', '/matmove-keke.svg', '/matmove-van.svg']) {
     assert.ok(worker.includes(asset), 'offline shell must pre-cache ' + asset);
   }
@@ -94,7 +102,8 @@ test('PWA install precaches every static Vite entry, including lazy routes, befo
   assert.match(worker, /html\.matchAll/);
   assert.match(worker, /path\.startsWith\('\/assets\/'\)/);
   assert.match(worker, /await cache\.add\(path\)/);
-  assert.ok(install.indexOf('await cacheBuildAssets(cache)') < install.indexOf('await self.skipWaiting()'), 'all static Vite assets must be cached during installation');\n  assert.match(worker, /await cacheInitialAppAssets\(cache\)/);
+  assert.ok(install.indexOf('await cacheBuildAssets(cache)') < install.indexOf('await self.skipWaiting()'), 'all static Vite assets must be cached during installation');
+  assert.match(worker, /await cacheInitialAppAssets\(cache\)/);
   assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
   assert.match(worker, /api\|auth\|rest\|storage\|functions\|realtime/i);
   assert.match(worker, /jpe\?g\|webp\|avif\|gif\|ico/);
