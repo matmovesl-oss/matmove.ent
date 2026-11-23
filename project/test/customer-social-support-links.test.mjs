@@ -55,6 +55,6 @@ test('support opens as a compact mobile sheet and closes from the backdrop or Es
  assert.match(source,/event\.target===event\.currentTarget/);
  assert.match(source,/event\.key==='Escape'/);
  assert.match(source,/items-end[\s\S]{0,100}sm:items-center/);
- assert.match(source,/max-h-\[min\(88dvh,720px\)\]/);
+ assert.match(source,/max-h-\[min\(78dvh,620px\)\]/);
  assert.match(source,/title="Support & Socials"/);
 });
