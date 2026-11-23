@@ -841,3 +841,55 @@ body {
   .portal-shell .mm-glass-announcement-card:hover,
   .mm-glass-public-updates article:hover { transform: none !important; }
 }
+
+
+/* MatMove compact glass layout: keep more of each page visible without shrinking controls. */
+.portal-shell .welcome-row h1,
+.portal-shell .page-header h1 {
+  font-size: clamp(1.25rem, 1.9vw, 1.55rem);
+  line-height: 1.18;
+  letter-spacing: -.035em;
+}
+.portal-shell .wallet-hero h2 {
+  font-size: clamp(1.25rem, 1.8vw, 1.55rem);
+  line-height: 1.18;
+}
+.portal-shell .section-title h2 {
+  font-size: clamp(.9rem, 1.1vw, 1rem);
+}
+.mm-glass-public-updates h2 {
+  font-size: clamp(1.15rem, 1.8vw, 1.45rem) !important;
+  line-height: 1.2;
+}
+.portal-shell .page-content {
+  padding-top: 26px;
+}
+@media (max-width: 640px) {
+  .portal-shell .page-content {
+    padding: 18px 14px max(30px, env(safe-area-inset-bottom));
+  }
+  .portal-shell > header {
+    min-height: 58px;
+  }
+  .portal-shell .welcome-row,
+  .portal-shell .page-header {
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .portal-shell .welcome-row h1,
+  .portal-shell .page-header h1 {
+    font-size: clamp(1.2rem, 5vw, 1.4rem);
+  }
+  .portal-shell .wallet-hero {
+    padding: 18px 18px 15px;
+    min-height: 150px;
+  }
+  .portal-shell .wallet-hero h2 {
+    font-size: 1.35rem;
+  }
+}
+/* Keep 16px form controls to prevent mobile browser zoom and preserve clarity. */
+.portal-shell :is(input, select, textarea) {
+  font-size: max(16px, 1rem);
+}
