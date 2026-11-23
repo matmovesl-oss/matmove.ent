@@ -32,8 +32,8 @@ export function useWalletAccess(userId: string) {
           supabase.from('profiles')
             .select('id,role,kyc_status,is_wallet_frozen')
             .eq('id', userId)
-            .single()
-            .abortSignal(controller.signal),
+            .abortSignal(controller.signal)
+            .single(),
           supabase.from('wallets')
             .select('is_frozen')
             .eq('user_id', userId)
