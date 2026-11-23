@@ -1,5 +1,5 @@
 const CACHE_NAME = 'matmove-shell-v4';
-const APP_SHELL = ['/', '/index.html', '/offline.html', '/logo.jpg', '/image-unavailable.svg'];
+const APP_SHELL = ['/', '/index.html', '/offline.html', '/manifest.webmanifest', '/logo.jpg', '/image-unavailable.svg', '/wallet-icon.png', '/matmove-car.svg', '/matmove-bike.svg', '/matmove-keke.svg', '/matmove-van.svg', '/car.jpg', '/bike.jpg', '/keke.jpg', '/van.jpg'];
 
 async function cacheInitialAppAssets(cache) {
   const shell = await cache.match('/index.html');
