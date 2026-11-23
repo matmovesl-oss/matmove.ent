@@ -28,6 +28,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  const [enteredUser,setEnteredUser]=useState('');
  const [status,setStatus]=useState<Receipt|null>(null),[unlocked,setUnlocked]=useState(false),[upgrade,setUpgrade]=useState(false);
  const [pin,setPin]=useState(''),[next,setNext]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[loadingStatus,setLoadingStatus]=useState(true),[error,setError]=useState('');
+ const [isOnline,setIsOnline]=useState(()=>typeof navigator==='undefined'||navigator.onLine);
  const [activePinField,setActivePinField]=useState<'pin'|'next'|'confirm'>('pin');
  const [forgotMode, setForgotMode] = useState(false);
  const [resetEmail, setResetEmail] = useState('');
@@ -47,9 +48,10 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
   finally{if(valid(id,n)){mutex.current=false;setLoadingStatus(false);}}
  }
  
- useEffect(()=>{mounted.current=true;setStatus(null);lock();void load();const stop=watchPasscodeBackground(lock,userId,()=>unlockedNow.current);const resume=()=>{if(document.visibilityState==='visible'&&!statusNow.current&&!mutex.current)void load();};document.addEventListener('visibilitychange',resume);return()=>{document.removeEventListener('visibilitychange',resume);mounted.current=false;revision.current++;mutex.current=false;stop();};},[userId]);
+ useEffect(()=>{mounted.current=true;setStatus(null);lock();setIsOnline(typeof navigator==='undefined'||navigator.onLine);void load();const stop=watchPasscodeBackground(lock,userId,()=>unlockedNow.current);const resume=()=>{if(document.visibilityState==='visible'&&!statusNow.current&&!mutex.current&&navigator.onLine)void load();};const online=()=>{setIsOnline(true);if(!mutex.current)void load();};const offline=()=>setIsOnline(false);document.addEventListener('visibilitychange',resume);window.addEventListener('online',online);window.addEventListener('offline',offline);return()=>{document.removeEventListener('visibilitychange',resume);window.removeEventListener('online',online);window.removeEventListener('offline',offline);mounted.current=false;revision.current++;mutex.current=false;stop();};},[userId]);
  
  async function sendPasscodeReset(){
+  if(!isOnline){setError('You are offline. Reconnect to request a passcode reset.');return;}
   if(mutex.current||!resetEmail.trim())return;
   mutex.current=true;setBusy(true);setError('');setResetSent(false);
   try{
@@ -62,6 +64,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
  }
 
  async function submit(){
+  if(!isOnline){setError('You are offline. Your account remains locked. Reconnect to verify your passcode securely.');return;}
   if(mutex.current||!status||loadingStatus)return;
   const creating=!status.configured,changing=upgrade;
   if((creating||changing)&&(!/^\d{6,9}$/.test(next)||next!==confirm)){setError('Enter the same 6–9 digit passcode in both new passcode fields.');return;}
@@ -164,6 +167,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
 
            ) : (
              <>
+               {!isOnline&&<p role="status" aria-live="polite" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">You are offline. Your account remains locked and protected. Reconnect to verify your passcode; wallet, payments and account changes are unavailable offline.</p>}
                {status?.digits===4&&status.configured&&!upgrade&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Enter your existing four digits first, then choose a new 6–9 digit passcode.</p>}
                {!status&&<p role="status" className="text-center text-sm text-slate-600">{loadingStatus?'Checking your saved passcode settings…':'Passcode setup unavailable.'}</p>}
                {!status&&pinField('Passcode',pin,'pin',9)}
@@ -173,12 +177,12 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
                 {(creating||upgrade)&&<>{pinField('New passcode (6–9 digits)',next,'next',9)}{pinMirror('New passcode (6–9 digits)',next,'next',setNext,9)}{pinField('Confirm passcode',confirm,'confirm',9)}{pinMirror('Confirm passcode',confirm,'confirm',setConfirm,9)}</>}
                </>}
                {keypad}
-               <button type="submit" disabled={busy||loadingStatus||!status} className="h-12 w-full rounded-2xl bg-emerald-800 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50">{loadingStatus?'Checking settings…':!status?'Passcode unavailable':creating||upgrade?'Save passcode':'Unlock'}</button>
+               <button type="submit" disabled={busy||loadingStatus||!status||!isOnline} className="h-12 w-full rounded-2xl bg-emerald-800 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50">{!isOnline?'Reconnect to unlock':loadingStatus?'Checking settings…':!status?'Passcode unavailable':creating||upgrade?'Save passcode':'Unlock'}</button>
                
                {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p>}
                
                <div className="flex justify-between gap-3">
-                 <button type="button" disabled={busy||loadingStatus} onClick={()=>void load()} className="min-h-11 text-xs text-slate-600 underline">Reload passcode setup</button>
+                 <button type="button" disabled={busy||loadingStatus||!isOnline} onClick={()=>void load()} className="min-h-11 text-xs text-slate-600 underline">Reload passcode setup</button>
                  <button type="button" onClick={()=>{lock();void onLogout();}} className="min-h-11 text-xs text-slate-600 underline">Sign out</button>
                </div>
                
