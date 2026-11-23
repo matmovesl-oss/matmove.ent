@@ -191,6 +191,7 @@ test('customer portal keeps Guide and support in a compact tools popover and use
  assert.match(support,/max-h-\[min\(78dvh,620px\)\] w-full max-w-lg/);
  assert.match(guide,/max-h-\[72dvh\] w-\[calc\(100%_-_2rem\)\] max-w-sm/);
  assert.match(app,/aria-label=\{activeSection === 'ride' \? 'Back to Home' : 'Back to Services'\}/);
+ assert.match(app,/activeSection !== 'services' && !\(activeSection === 'ride' && \(role === 'rider' \|\| role === 'merchant'\)\)/,'Rider and Merchant map screens use the map back button instead of a duplicate app-shell arrow');
  assert.match(support,/event\.target===event\.currentTarget/);
  assert.match(guide,/const launched=replay>lastReplay\.current/);
  assert.match(rider,/grid w-\[min\(58vw,12rem\)\]/);
