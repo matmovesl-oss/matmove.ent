@@ -60,12 +60,6 @@
     },
     "api/*.ts": {
       "maxDuration": 30
-    },
-    "api/get-live-wallet.js": {
-      "maxDuration": 60
-    },
-    "api/monime-webhook.js": {
-      "maxDuration": 60
     }
   }
 }
