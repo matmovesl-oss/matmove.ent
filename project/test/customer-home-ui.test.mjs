@@ -186,6 +186,10 @@ test('customer portal keeps Guide and support in a compact tools popover and use
  ]);
  assert.match(app,/aria-label="Open help, guide and support"/);
  assert.match(app,/aria-expanded=\{helpMenuOpen\}/);
+ assert.match(app,/w-\[min\(20rem,calc\(100vw-5\.5rem\)\)\]/);
+ assert.doesNotMatch(app,/onClickCapture=\{\(\)=>setHelpMenuOpen\(false\)\}/);
+ assert.match(support,/max-h-\[min\(78dvh,620px\)\] w-full max-w-lg/);
+ assert.match(guide,/max-h-\[72dvh\] w-\[calc\(100%_-_2rem\)\] max-w-sm/);
  assert.match(app,/aria-label=\{activeSection === 'ride' \? 'Back to Home' : 'Back to Services'\}/);
  assert.match(support,/event\.target===event\.currentTarget/);
  assert.match(guide,/const launched=replay>lastReplay\.current/);
