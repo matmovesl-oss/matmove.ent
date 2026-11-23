@@ -16,6 +16,7 @@ test('all three wallet authorization reads use one bounded abort signal', () => 
   assert.match(source, /controller\.abort\(\)/);
   assert.match(source, /10_000/);
   assert.equal((source.match(/\.abortSignal\(controller\.signal\)/g) || []).length, 3);
+  assert.match(source, /\.eq\('id', userId\)\s*\.abortSignal\(controller\.signal\)\s*\.single\(\)/);
   assert.match(source, /window\.clearTimeout\(timeout\)/);
 });
 
