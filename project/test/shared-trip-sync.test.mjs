@@ -177,7 +177,9 @@ test('Rider and Merchant route editing use one synchronized sheet and wait for a
 test('Rider Ride tab displays the unfinished cash-review notice instead of hiding it on Home only',async()=>{
  const rider=await read('../src/pages/RiderDashboard.tsx');
  assert.match(rider,/\(activeSection === 'home' \|\| activeSection === 'ride'\) && hasUnfinishedBookings && !activeBooking/);
- assert.match(rider,/A previous cash request is under review/);
+ assert.match(rider,/Cash review · saved safely/);
+ assert.match(rider,/<details className="mx-3 mb-2 rounded-xl/);
+ assert.match(rider,/Review in Trips/);
 });
 
 test('stale cash requests with an exact verified fee reserve are closed from live matching without refunding or capturing',async()=>{
