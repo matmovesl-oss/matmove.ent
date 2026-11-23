@@ -81,10 +81,11 @@ test('PWA shell does not cache API, authentication or private user data', async 
 });
 
 test('customer account uses compact arrow rows and focused profile, referral and policy screens', async () => {
-  const [app, css, profile] = await Promise.all([
+  const [app, css, profile, services] = await Promise.all([
     readFile('src/App.tsx', 'utf8'),
     readFile('src/index.css', 'utf8'),
     readFile('src/components/AccountProfile.tsx', 'utf8'),
+    readFile('src/components/PortalHome.tsx', 'utf8'),
   ]);
   assert.match(app, /setActivePanel\('profile'\)/);
   assert.match(app, /setActivePanel\('invite'\)/);
@@ -99,6 +100,13 @@ test('customer account uses compact arrow rows and focused profile, referral and
   assert.match(css, /\.mm-account-row/);
   assert.match(css, /@media\(max-width:420px\)/);
   assert.match(profile, /<PasskeySecurity userId=\{userId\}\/>/);
+  assert.match(app, /aria-label="Back to Account" title="Back to Account"/);
+  assert.match(app, /aria-label="Back to Home" title="Back to Home" onClick=\{onBack\}/);
+  assert.doesNotMatch(app, /Back to Account<\\/button>|Back to portal<\\/button>/);
+  assert.match(services, /aria-label="Back to Services" title="Back to Services"/);
+  assert.match(services, /aria-label="Back to Home" title="Back to Home"/);
+  assert.doesNotMatch(services, /Back to Services<\\/button>|>Home<\\/button>/);
+  assert.match(css, /\\.mm-portal-nav button \\{[^}]*min-height:50px/s);
 });
 
 test('biometric controls stay on the Account hub while profile editing opens separately', async () => {
