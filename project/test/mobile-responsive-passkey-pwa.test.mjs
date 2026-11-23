@@ -102,11 +102,12 @@ test('customer account uses compact arrow rows and focused profile, referral and
   assert.match(profile, /<PasskeySecurity userId=\{userId\}\/>/);
   assert.match(app, /aria-label="Back to Account" title="Back to Account"/);
   assert.match(app, /aria-label="Back to Home" title="Back to Home" onClick=\{onBack\}/);
-  assert.doesNotMatch(app, /Back to Account<\\/button>|Back to portal<\\/button>/);
+  assert.doesNotMatch(app, /Back to Account<\/button>|Back to portal<\/button>/);
   assert.match(services, /aria-label="Back to Services" title="Back to Services"/);
+  assert.equal((services.match(/aria-label="Back to Services" title="Back to Services"/g) || []).length, 3);
   assert.match(services, /aria-label="Back to Home" title="Back to Home"/);
-  assert.doesNotMatch(services, /Back to Services<\\/button>|>Home<\\/button>/);
-  assert.match(css, /\\.mm-portal-nav button \\{[^}]*min-height:50px/s);
+  assert.doesNotMatch(services, /Back to Services<\/button>|>Home<\/button>/);
+  assert.match(css, /\.mm-portal-nav button \{[^}]*min-height:50px/s);
 });
 
 test('biometric controls stay on the Account hub while profile editing opens separately', async () => {
