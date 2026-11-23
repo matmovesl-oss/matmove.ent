@@ -65,7 +65,7 @@ self.addEventListener('fetch', event => {
   }
 
   // Only immutable, versioned Vite build assets are cached. API and user data are never cached.
-  if (/^\/assets\/.+\.(?:js|css|woff2)$/.test(url.pathname)) {
+  if (/^\/assets\/.+\.(?:js|mjs|css|woff2|woff|ttf|svg|png|jpe?g|webp|avif|gif|ico)$/.test(url.pathname)) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
       const cached = await cache.match(request);
