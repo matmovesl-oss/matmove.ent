@@ -198,5 +198,9 @@ test('customer portal keeps Guide and support in a compact tools popover and use
  assert.match(driver,/min-h-\[4\.5rem\]/);
  assert.match(merchant,/aria-label="Load wallet"/);
  assert.match(merchant,/Cash review · saved safely/);
+ assert.match(merchant,/<details aria-label="A previous cash request is under review" className="m-3 rounded-xl/);
+ assert.match(merchant,/Its live dispatch has been closed/);
+ assert.match(merchant,/No cash settlement or refund has been recorded/);
+ assert.match(merchant,/make a fresh request while the case remains visible in Trips/);
  assert.match(merchant,/min-h-\[4\.5rem\]/);
 });
