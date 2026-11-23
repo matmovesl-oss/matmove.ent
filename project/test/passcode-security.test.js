@@ -221,3 +221,16 @@ test('passcode keypad renders and accepts local entry while server status is loa
  assert.match(source,/setPin\(value=>value\.length<limit\?value\+digit:value\)/);
  assert.match(source,/setNext\(value=>value\|\|pin\.slice\(0,9\)\)/);
 });
+
+
+test('customer passcode remains locked offline and only retries verification after reconnect',async()=>{
+ const lock=await readFile('src/components/CustomerPasscode.tsx','utf8');
+ assert.match(lock,/const \[isOnline,setIsOnline\]=useState\(\(\)=>typeof navigator==='undefined'\|\|navigator\.onLine\)/);
+ assert.match(lock,/window\.addEventListener\('online',online\)/);
+ assert.match(lock,/window\.addEventListener\('offline',offline\)/);
+ assert.match(lock,/if\(!isOnline\)\{setError\('You are offline\. Your account remains locked\. Reconnect to verify your passcode securely\.'/);
+ assert.match(lock,/Your account remains locked and protected\. Reconnect to verify your passcode/);
+ assert.match(lock,/disabled=\{busy\|\|loadingStatus\|\|!status\|\|!isOnline\}/);
+ assert.match(lock,/if\(!isOnline\)\{setError\('You are offline\. Reconnect to request a passcode reset\.'/);
+ assert.doesNotMatch(lock,/if\(!navigator\.onLine\)[^;]*setUnlocked\(true\)/);
+});
