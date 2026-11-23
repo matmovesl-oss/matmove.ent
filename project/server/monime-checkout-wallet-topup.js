@@ -64,7 +64,9 @@ export function validateWalletTopupCheckoutSession(payment, wallet, session) {
   if (payment.metadata?.amount !== undefined && toMinorUnits(payment.metadata.amount) !== expectedMinor) reject('Stored MatMove top-up amount metadata does not match the payment record.');
   if (payment.metadata?.currency && payment.metadata.currency !== payment.currency) reject('Stored MatMove top-up currency metadata does not match the payment record.');
 
-  return { status: String(session.status || '').toLowerCase(), amountMinor: expectedMinor, currency: payment.currency, accountId: currentAccount };
+  const status = String(session.status || '').toLowerCase();
+  if (!['pending', 'processing', 'completed', 'cancelled', 'expired'].includes(status)) reject('Monime checkout has an unsupported status; manual review is required.');
+  return { status, amountMinor: expectedMinor, currency: payment.currency, accountId: currentAccount };
 }
 
 export async function reconcileWalletTopupCheckoutSession(db, session, { verifyAccount = verifiedAccount, now = () => new Date().toISOString() } = {}) {
