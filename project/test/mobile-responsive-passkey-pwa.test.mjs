@@ -139,7 +139,7 @@ test('production passkey domain, global place-search map label and receipt close
   assert.ok(map.includes('absolute right-4 top-[calc(env(safe-area-inset-top)+14px)]'));
   assert.ok(map.includes('MatMove · Global place search'));
   assert.equal(map.includes('FREETOWN · LIVE MAP'), false);
-  assert.ok(trips.includes('h-8 min-h-8 shrink-0 items-center justify-center whitespace-nowrap'));
+  assert.ok(trips.includes('h-11 min-h-11 min-w-11 shrink-0 items-center justify-center whitespace-nowrap'));
   assert.ok(trips.includes('text-xs font-semibold leading-none">Close</button>'));
   assert.ok(biometricGuide.includes('Relying Party ID to matmove.space'));
   assert.ok(biometricGuide.includes('https://matmove.space and https://www.matmove.space'));
