@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, Briefcase, Car, CreditCard, Eye, EyeOff, Home, L
 import { supabase } from '@/lib/supabase';
 import { walletFetch } from '@/lib/apiFetch';
 import { SkeletonBlock, SkeletonList } from '@/components/Skeleton';
-import ActiveTripMap, { tripPinFields } from '@/components/ActiveTripMap';
+import { tripPinFields } from '@/lib/tripPins';
 import { ProductGallery, catalogMoney, catalogCheckoutAllowed } from '@/components/ProductCatalog';
 import FareNegotiation from '@/components/FareNegotiation';
 import { useCustomerActiveRide } from '@/lib/useRideNegotiation';
@@ -19,7 +19,9 @@ import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { updateRide } from '@/services/rideService';
 import { locationVoiceAvailable, startLocationVoice } from '@/lib/voiceLocation';
-import 'mapbox-gl/dist/mapbox-gl.css';
+
+
+const ActiveTripMap = lazy(() => import('@/components/ActiveTripMap'));
 
 const ArcadeGames = lazy(() =>
   import('@/components/ArcadeGames').then(module => ({default: module.ArcadeGames}))
@@ -1111,7 +1113,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
 
             <div className="min-w-0">
               {activeBooking && ['accepted', 'in_progress'].includes(activeBooking.status) ? (
-                <ActiveTripMap key={activeBooking.id} userId={profile?.id} bookingId={activeBooking.id} />
+                <Suspense fallback={<div role="status" aria-live="polite" className="flex min-h-[260px] w-full items-center justify-center rounded-2xl bg-slate-100 text-sm text-slate-600">Loading live trip map…</div>}><ActiveTripMap key={activeBooking.id} userId={profile?.id} bookingId={activeBooking.id} /></Suspense>
               ) : (
                 <RideLocationPicker
                   key={profile?.id || 'location-picker'}
