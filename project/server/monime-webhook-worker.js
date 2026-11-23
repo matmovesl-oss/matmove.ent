@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { assertMonimeEnvironment } from './wallet-security.js';
+import { ManualReviewError, reconcileWalletTopupCheckoutSession } from './monime-checkout-wallet-topup.js';
 import { reconcileRide } from './ride-payments.js';
 import { reconcileCashRide } from './cash-ride-payments.js';
 import { reconcileMerchantPayment } from './merchant-payments.js';
@@ -12,13 +13,6 @@ import { reconcileReceivePaymentEvent, processReceiveSmsOutbox } from './receive
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ATTEMPTS = 12;
-
-class ManualReviewError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'ManualReviewError';
-  }
-}
 
 function client() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -369,7 +363,9 @@ export async function processMonimeWebhookBatch({ db = client(), limit = 3, even
       const result = receiveEvent
         ? hasReceiveMetadata
           ? await reconcileReceivePaymentEvent(db, event, providerObject)
-          : 'processed'
+          : event.object_type === 'checkout_session'
+            ? await reconcileWalletTopupCheckoutSession(db, providerObject)
+            : (() => { throw new ManualReviewError('Monime payment event is not linked to a supported MatMove payment; manual review required.'); })()
         : await processLinkedTransfer(db, event, providerObject);
       if (result === 'pending') {
         const { error: queueError } = await db.from('matmove_monime_webhook_events')
