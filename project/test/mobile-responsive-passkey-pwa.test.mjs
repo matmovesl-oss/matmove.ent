@@ -74,18 +74,18 @@ test('PWA shell does not cache API, authentication or private user data', async 
   assert.equal(app.display, 'standalone');
   assert.ok(app.icons.some(icon => icon.src === '/logo.jpg'));
   assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
-  assert.match(worker, /auth\|wallet\|payment\|transaction\|profile\|booking/i);
+  assert.match(worker, /api\|auth\|rest\|storage\|functions\|realtime/i);
   assert.match(worker, /APP_SHELL/);
   assert.match(worker, /offline\.html/);
   assert.ok(worker.includes("return (await caches.match('/index.html')) || (await caches.match('/offline.html'))"), 'offline navigation must prefer the cached app shell over the fallback page');
 });
 
-test('PWA install caches the initial versioned app assets before the first offline restart', async () => {
-  const worker = await readFile('public/sw.js', 'utf8');
+test('PWA install precaches every static Vite entry, including lazy routes, before the first offline restart', async () => {
+  const [worker, vite] = await Promise.all([readFile('public/sw.js', 'utf8'), readFile('vite.config.ts', 'utf8')]);
   const installStart = worker.indexOf("self.addEventListener('install'");
   const activateStart = worker.indexOf("self.addEventListener('activate'");
   const install = worker.slice(installStart, activateStart);
-  assert.match(worker, /const CACHE_NAME = 'matmove-shell-v4'/);
+  assert.match(vite, /manifest: 'manifest\.json'/);\n  assert.match(worker, /const CACHE_NAME = 'matmove-shell-v5'/);\n  assert.match(worker, /async function cacheBuildAssets\(cache\)/);\n  assert.match(worker, /fetch\('\/manifest\.json'/);\n  assert.match(worker, /Object\.values\(manifest\)/);\n  assert.match(worker, /entry\.file/);\n  assert.match(worker, /entry\.css/);\n  assert.match(worker, /entry\.assets/);\n  assert.match(worker, /assets\.add\('\/' \+ file\)/);
   for (const asset of ['/manifest.webmanifest', '/logo.jpg', '/wallet-icon.png', '/matmove-car.svg', '/matmove-bike.svg', '/matmove-keke.svg', '/matmove-van.svg']) {
     assert.ok(worker.includes(asset), 'offline shell must pre-cache ' + asset);
   }
@@ -94,9 +94,9 @@ test('PWA install caches the initial versioned app assets before the first offli
   assert.match(worker, /html\.matchAll/);
   assert.match(worker, /path\.startsWith\('\/assets\/'\)/);
   assert.match(worker, /await cache\.add\(path\)/);
-  assert.ok(install.indexOf('await cacheInitialAppAssets(cache)') < install.indexOf('await self.skipWaiting()'), 'entry assets must be cached during installation');
+  assert.ok(install.indexOf('await cacheBuildAssets(cache)') < install.indexOf('await self.skipWaiting()'), 'all static Vite assets must be cached during installation');\n  assert.match(worker, /await cacheInitialAppAssets\(cache\)/);
   assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
-  assert.match(worker, /auth\|wallet\|payment\|transaction\|profile\|booking/i);
+  assert.match(worker, /api\|auth\|rest\|storage\|functions\|realtime/i);
   assert.match(worker, /jpe\?g\|webp\|avif\|gif\|ico/);
 });
 
