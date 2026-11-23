@@ -276,10 +276,48 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
 
   useEffect(() => {
     if (!profile?.id) return;
-    const refresh = () => { if (document.visibilityState === 'visible') void fetchLiveBalance(); };
-    const timer = window.setInterval(refresh, 10000);
+    let active = true;
+    let queuedRefresh = false;
+
+    const refresh = () => {
+      if (!active || document.visibilityState !== 'visible') return;
+      if (balanceBusy.current) {
+        queuedRefresh = true;
+        return;
+      }
+      void fetchLiveBalance().finally(() => {
+        if (active && queuedRefresh && document.visibilityState === 'visible') {
+          queuedRefresh = false;
+          refresh();
+        }
+      });
+    };
+
+    // Wallet rows update through Realtime; this slower poll is a recovery path.
+    const timer = window.setInterval(refresh, 30_000);
+    document.addEventListener('visibilitychange', refresh);
     window.addEventListener('focus', refresh);
-    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+    window.addEventListener('online', refresh);
+
+    const channel = supabase
+      .channel('driver-wallet-balance:' + profile.id)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'wallets',
+        filter: 'user_id=eq.' + profile.id,
+      }, refresh)
+      .subscribe();
+
+    return () => {
+      active = false;
+      queuedRefresh = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('online', refresh);
+      void supabase.removeChannel(channel);
+    };
   }, [profile?.id]);
 
   const handleCopy = async (id: string) => {
