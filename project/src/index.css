@@ -720,3 +720,124 @@ body {
     transition: none;
   }
 }
+
+
+/* MatMove premium glass refinement — shared customer, driver and merchant surfaces. */
+:root {
+  --mm-glass-frost: rgba(255, 255, 255, .78);
+  --mm-glass-frost-strong: rgba(255, 255, 255, .92);
+  --mm-glass-stroke: rgba(255, 255, 255, .94);
+  --mm-glass-hairline: rgba(47, 104, 145, .13);
+  --mm-glass-depth: 0 18px 48px rgba(13, 49, 77, .09), 0 2px 8px rgba(13, 49, 77, .035);
+  --mm-glass-depth-hover: 0 24px 58px rgba(13, 49, 77, .14), 0 5px 14px rgba(13, 49, 77, .055);
+  --mm-glass-radius: 24px;
+  --mm-glass-ease: cubic-bezier(.2, .78, .22, 1);
+}
+.portal-shell .mm-glass-announcements {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid rgba(255, 255, 255, .94) !important;
+  border-radius: 28px !important;
+  background:
+    radial-gradient(ellipse at 4% 0%, rgba(16, 155, 113, .10), transparent 24rem),
+    radial-gradient(ellipse at 100% 0%, rgba(23, 105, 224, .10), transparent 26rem),
+    linear-gradient(145deg, rgba(255,255,255,.91), rgba(241,249,255,.78)) !important;
+  box-shadow: var(--mm-glass-depth);
+  backdrop-filter: blur(22px) saturate(155%);
+  -webkit-backdrop-filter: blur(22px) saturate(155%);
+}
+.portal-shell .mm-glass-announcements > div:first-child {
+  border-bottom: 1px solid rgba(255,255,255,.82);
+  background: linear-gradient(110deg, rgba(255,255,255,.42), rgba(232,246,255,.36));
+}
+.portal-shell .mm-glass-announcement-card {
+  border: 1px solid rgba(255,255,255,.96) !important;
+  border-radius: 22px !important;
+  background: linear-gradient(145deg, rgba(255,255,255,.94), rgba(244,250,255,.80)) !important;
+  box-shadow: 0 12px 34px rgba(19,58,88,.075);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  transition: transform 230ms var(--mm-glass-ease), box-shadow 230ms ease, border-color 230ms ease;
+}
+.portal-shell .mm-glass-announcement-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(23,105,224,.24) !important;
+  box-shadow: var(--mm-glass-depth-hover);
+}
+.portal-shell .mm-glass-announcement-card:focus-within {
+  border-color: rgba(16,155,113,.32) !important;
+  box-shadow: 0 0 0 3px rgba(16,155,113,.07), var(--mm-glass-depth);
+}
+.mm-glass-public-updates {
+  position: relative;
+  isolation: isolate;
+  border: 0 !important;
+  background:
+    radial-gradient(ellipse at 8% 8%, rgba(16,155,113,.09), transparent 28rem),
+    radial-gradient(ellipse at 96% 12%, rgba(23,105,224,.09), transparent 30rem),
+    linear-gradient(145deg, #f4fafb, #eef6fb 58%, #f8fbfd) !important;
+}
+.mm-glass-public-updates article {
+  border: 1px solid rgba(255,255,255,.94) !important;
+  border-radius: 24px !important;
+  background: linear-gradient(145deg, rgba(255,255,255,.92), rgba(244,250,255,.82)) !important;
+  box-shadow: var(--mm-glass-depth);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  transition: transform 230ms var(--mm-glass-ease), box-shadow 230ms ease;
+}
+.mm-glass-public-updates article:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--mm-glass-depth-hover);
+}
+.mm-glass-public-updates article > div:first-child {
+  background: linear-gradient(135deg, rgba(221,244,235,.72), rgba(224,239,255,.74)) !important;
+  border-bottom-color: rgba(255,255,255,.9) !important;
+}
+.portal-shell .mm-merchant-workspace {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  background:
+    radial-gradient(ellipse at 4% 0%, rgba(16,155,113,.075), transparent 27rem),
+    radial-gradient(ellipse at 98% 8%, rgba(23,105,224,.08), transparent 30rem),
+    linear-gradient(145deg, rgba(244,250,251,.72), rgba(239,247,252,.62)) !important;
+  color: var(--text);
+}
+.portal-shell .mm-merchant-workspace :is(section, article, aside, form)[class*="rounded-"][class*="border"]:not([role="alert"]) {
+  border-color: rgba(255,255,255,.91) !important;
+  background: linear-gradient(145deg, rgba(255,255,255,.88), rgba(241,249,255,.76));
+  box-shadow: 0 14px 36px rgba(16,50,83,.075);
+  backdrop-filter: blur(17px) saturate(148%);
+  -webkit-backdrop-filter: blur(17px) saturate(148%);
+}
+.portal-shell .mm-merchant-workspace :is(button, a)[class*="rounded-"] {
+  transition: transform 190ms var(--mm-glass-ease), box-shadow 190ms ease, background-color 190ms ease;
+}
+.portal-shell .mm-merchant-workspace :is(button, a)[class*="rounded-"]:active { transform: scale(.988); }
+.portal-shell .mm-merchant-workspace :is(input, select, textarea) {
+  border-color: rgba(69,119,157,.23);
+  border-radius: 13px;
+  background: rgba(255,255,255,.88);
+}
+@supports not ((backdrop-filter: blur(1px))) {
+  .portal-shell .mm-glass-announcements,
+  .portal-shell .mm-glass-announcement-card,
+  .mm-glass-public-updates article,
+  .portal-shell .mm-merchant-workspace :is(section, article, aside, form)[class*="rounded-"][class*="border"] {
+    background: rgba(255,255,255,.97) !important;
+  }
+}
+@media (max-width: 640px) {
+  .portal-shell .mm-glass-announcements { border-radius: 22px !important; }
+  .portal-shell .mm-glass-announcement-card,
+  .mm-glass-public-updates article { border-radius: 19px !important; }
+  .portal-shell .mm-merchant-workspace { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-shell .mm-glass-announcement-card,
+  .mm-glass-public-updates article,
+  .portal-shell .mm-merchant-workspace :is(button, a)[class*="rounded-"] { transition: none !important; }
+  .portal-shell .mm-glass-announcement-card:hover,
+  .mm-glass-public-updates article:hover { transform: none !important; }
+}
