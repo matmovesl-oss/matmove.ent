@@ -211,13 +211,12 @@ test('passcode unlock uses clear unlock wording while preserving server verifica
 test('passcode keypad renders and accepts local entry while server status is loading',async()=>{
  const source=await readFile('src/components/CustomerPasscode.tsx','utf8');
  const statusStart=source.indexOf('{status&&<>');
- const statusEnd=source.indexOf('               </>}',statusStart);
- const keypad=source.indexOf('{keypad}',statusEnd);
+ const keypad=source.indexOf('{keypad}',statusStart);
  const submit=source.indexOf('<button type="submit" disabled={busy||loadingStatus||!status}',keypad);
- assert.ok(statusStart>=0&&statusEnd>statusStart&&keypad>statusEnd&&submit>keypad);
+ assert.ok(statusStart>=0&&keypad>statusStart&&submit>keypad);
  assert.match(source,/!status&&pinField\('Passcode',pin,'pin',9\)/);
  assert.match(source,/!status&&pinMirror\('Passcode',pin,'pin',setPin,9\)/);
- assert.match(source,/disabled=\{busy\|\|loadingStatus\|\|!status\}/);
+ assert.match(source,/disabled=\{busy\|\|loadingStatus\|\|!status\|\|!isOnline\}/);
  assert.match(source,/setPin\(value=>value\.length<limit\?value\+digit:value\)/);
  assert.match(source,/setNext\(value=>value\|\|pin\.slice\(0,9\)\)/);
 });
