@@ -61,5 +61,6 @@
     "api/*.ts": {
       "maxDuration": 30
     }
-  }
+  },
+  "installCommand": "npm ci"
 }
