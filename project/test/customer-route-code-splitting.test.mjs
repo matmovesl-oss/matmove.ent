@@ -27,7 +27,7 @@ test('the application no longer eagerly imports the full ProductCatalog or help 
   assert.ok(app.includes("from '@/lib/customerHelpNavigation'"));
   assert.equal(app.includes("from '@/components/ProductCatalog'"), false);
   assert.equal(app.includes("from '@/components/MatMoveHelp'"), false);
-  assert.match(catalog, /from '@\\/lib\\/catalogMoney'/);
+  assert.ok(catalog.includes("from '@/lib/catalogMoney'"));
   assert.match(money, /export function catalogMoney/);
   assert.match(money, /export function catalogCheckoutAllowed/);
   assert.match(navigation, /export function customerHelpSection/);
