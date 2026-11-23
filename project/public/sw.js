@@ -1,10 +1,40 @@
-const CACHE_NAME = 'matmove-shell-v3';
+const CACHE_NAME = 'matmove-shell-v4';
 const APP_SHELL = ['/', '/index.html', '/offline.html', '/logo.jpg', '/image-unavailable.svg'];
+
+async function precacheBuildAssets(cache) {
+  try {
+    const manifestResponse = await fetch('/manifest.json', { cache: 'reload' });
+    if (!manifestResponse.ok) return;
+    await cache.put('/manifest.json', manifestResponse.clone());
+    const manifest = await manifestResponse.json();
+    const assets = new Set();
+    for (const entry of Object.values(manifest)) {
+      if (!entry || typeof entry !== 'object') continue;
+      for (const file of [entry.file, ...(entry.css || []), ...(entry.assets || [])]) {
+        if (typeof file === 'string' &&
+            /^assets\/(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._/-]+\.(?:js|mjs|css|woff2?|ttf|otf|svg|png|jpe?g|webp|avif|gif)$/i.test(file)) {
+          assets.add('/' + file);
+        }
+      }
+    }
+    await Promise.all([...assets].map(async path => {
+      try {
+        const response = await fetch(path, { cache: 'reload' });
+        if (response.ok && response.type === 'basic') await cache.put(path, response.clone());
+      } catch {
+        // A single optional static asset must not block offline-shell installation.
+      }
+    }));
+  } catch {
+    // Live functionality remains available online if the build manifest cannot be cached.
+  }
+}
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
     await cache.addAll(APP_SHELL);
+    await precacheBuildAssets(cache);
     await self.skipWaiting();
   })());
 });
@@ -40,8 +70,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Only immutable, versioned Vite build assets are cached. API and user data are never cached.
-  if (/^\/assets\/.+\.(?:js|css|woff2)$/.test(url.pathname)) {
+  if (/^\/assets\/[A-Za-z0-9._/-]+\.(?:js|mjs|css|woff2?|ttf|otf|svg|png|jpe?g|webp|avif|gif)$/i.test(url.pathname)) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
       const cached = await cache.match(request);
