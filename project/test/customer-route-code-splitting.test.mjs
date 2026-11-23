@@ -6,6 +6,7 @@ const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const catalog = readFileSync(new URL('../src/components/ProductCatalog.tsx', import.meta.url), 'utf8');
 const money = readFileSync(new URL('../src/lib/catalogMoney.ts', import.meta.url), 'utf8');
 const navigation = readFileSync(new URL('../src/lib/customerHelpNavigation.ts', import.meta.url), 'utf8');
+const recovery = readFileSync(new URL('../src/pages/UpdatePassword.tsx', import.meta.url), 'utf8');
 const passcode = readFileSync(new URL('../src/lib/customerPasscode.ts', import.meta.url), 'utf8');
 
 const lazyComponents = [
@@ -28,6 +29,8 @@ test('the application no longer eagerly imports the full ProductCatalog or help 
   assert.ok(app.includes("from '@/lib/customerHelpNavigation'"));
   assert.ok(app.includes("from '@/lib/customerPasscode'"));
   assert.match(passcode, /export async function customerPasscode/);
+  assert.ok(recovery.includes("from '@/lib/customerPasscode'"));
+  assert.equal(recovery.includes("from '@/components/CustomerPasscode'"), false);
   assert.equal(app.includes("from '@/components/ProductCatalog'"), false);
   assert.equal(app.includes("from '@/components/MatMoveHelp'"), false);
   assert.equal(app.includes("from '@/components/CustomerPasscode'"), false);
