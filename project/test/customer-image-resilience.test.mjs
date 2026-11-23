@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 test('customer announcements and product photos fall back when remote images fail', async () => {
-  const [home, publicPosts, catalog, fallback] = await Promise.all([
+  const [home, publicPosts, catalog, fallback, sw] = await Promise.all([
     readFile('src/components/CustomerHomePosts.tsx', 'utf8'),
     readFile('src/components/PublicHomepagePosts.tsx', 'utf8'),
     readFile('src/components/ProductCatalog.tsx', 'utf8'),
