@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { customerPasscode } from '@/components/CustomerPasscode';
+import { customerPasscode } from '@/lib/customerPasscode';
 import { hasVerifiedPasswordRecovery, clearVerifiedPasswordRecovery } from '@/services/authRecoveryState';
 import { LockKeyhole, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 

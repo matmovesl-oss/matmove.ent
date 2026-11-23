@@ -1,6 +1,8 @@
 import {useEffect,useRef,useState} from 'react';
 import {supabase} from '@/lib/supabase';
 import {beginProfilePhotoPicker} from '@/lib/profilePhotoPicker';
+import {catalogMoney,catalogCheckoutAllowed} from '@/lib/catalogMoney';
+export {catalogMoney,catalogCheckoutAllowed} from '@/lib/catalogMoney';
 
 const uidPattern=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const BUCKET='product_images';
@@ -8,8 +10,7 @@ type Draft={id:string;version:string|null;name:string;price:string;currency:'SLE
 type Save={p_id:string;p_expected:string|null;p_name:string;p_price:string;p_currency:'SLE'|'USD';p_description:string;p_whatsapp:string;p_image_paths:string[];p_available:boolean};
 const fresh=():Draft=>({id:crypto.randomUUID(),version:null,name:'',price:'',currency:'SLE',description:'',phone:'232',paths:[],available:true,legacy:''});
 function minor(value:unknown){const s=String(value??'');if(!/^\d{1,9}(\.\d{1,2})?$/.test(s))throw Error('Enter a positive price with up to two decimal places.');const[a,b='']=s.split('.'),n=BigInt(a)*100n+BigInt(b.padEnd(2,'0'));if(n<=0n||n>99999999999n)throw Error('Enter a valid product price.');return n;}
-export function catalogMoney(value:unknown,currency:unknown='SLE',quantity=1){try{if(!['SLE','USD'].includes(String(currency))||!Number.isSafeInteger(quantity)||quantity<1||quantity>100)throw Error();const n=minor(value)*BigInt(quantity);return `${currency} ${(n/100n).toLocaleString('en-US')}.${String(n%100n).padStart(2,'0')}`;}catch{return 'Price unavailable';}}
-export function catalogCheckoutAllowed(p:any){return !!p&&p.is_available!==false&&p.is_available!==null&&(p.currency===undefined?'SLE':p.currency)==='SLE'&&catalogMoney(p.price,p.currency??'SLE')!=='Price unavailable';}
+
 const ownPath=(path:unknown,userId:string):path is string=>typeof path==='string'&&uidPattern.test(userId)&&new RegExp(`^${userId}(/|-)[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\\.(jpg|jpeg|png|webp)$`).test(path);
 const publicUrl=(path:string)=>supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 function safeUrl(value:unknown){try{const u=new URL(String(value));return u.protocol==='https:'?u.href:'';}catch{return '';}}
@@ -21,7 +22,7 @@ export function catalogPhotos(p:any):string[]{
 function legacyPath(p:any,userId:string){try{const marker='__matmove_image__',base=publicUrl(marker),u=new URL(p.image_url),b=new URL(base);const prefix=b.pathname.slice(0,-marker.length);if(u.origin!==b.origin||!u.pathname.startsWith(prefix))return null;const path=decodeURIComponent(u.pathname.slice(prefix.length));return ownPath(path,userId)?path:null;}catch{return null;}}
 export function ProductGallery({product}:{product:any}){
  const urls=catalogPhotos(product),[index,setIndex]=useState(0);useEffect(()=>setIndex(0),[product?.id,urls.join('|')]);
- return <div className="bg-slate-100"><div className="flex h-44 items-center justify-center overflow-hidden">{urls.length?<img src={urls[index]||urls[0]} alt={`${product.name} — photo ${Math.min(index+1,urls.length)}`} loading="lazy" className="h-full w-full object-cover"/>:<p className="text-sm text-slate-500">No product photo</p>}</div>{urls.length>1&&<div className="flex gap-2 p-2" aria-label={`${product.name} photos`}>{urls.map((url,i)=><button type="button" key={url} aria-label={`Photo ${i+1} of ${product.name}`} aria-pressed={index===i} onClick={()=>setIndex(i)} className={`h-12 w-12 overflow-hidden rounded-lg border-2 ${index===i?'border-orange-600':'border-white'}`}><img src={url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover"/></button>)}</div>}</div>;
+ return <div className="bg-slate-100"><div className="flex h-44 items-center justify-center overflow-hidden">{urls.length?<img src={urls[index]||urls[0]} alt={`${product.name} — photo ${Math.min(index+1,urls.length)}`} loading="lazy" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src='/image-unavailable.svg';}} className="h-full w-full object-cover"/>:<p className="text-sm text-slate-500">No product photo</p>}</div>{urls.length>1&&<div className="flex gap-2 p-2" aria-label={`${product.name} photos`}>{urls.map((url,i)=><button type="button" key={url} aria-label={`Photo ${i+1} of ${product.name}`} aria-pressed={index===i} onClick={()=>setIndex(i)} className={`h-12 w-12 overflow-hidden rounded-lg border-2 ${index===i?'border-orange-600':'border-white'}`}><img src={url} alt="" loading="lazy" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src='/image-unavailable.svg';}} className="h-full w-full object-cover"/></button>)}</div>}</div>;
 }
 async function bounded<T>(work:PromiseLike<T>):Promise<T>{let timer=0;try{return await Promise.race([Promise.resolve(work),new Promise<never>((_,reject)=>{timer=window.setTimeout(()=>reject(Error('Request timed out. Check the saved product before retrying.')),20000);})]);}finally{window.clearTimeout(timer);}}
 async function sameUser(id:string){const r=await bounded(supabase.auth.getSession());if(r.error||r.data.session?.user.id!==id||!r.data.session.access_token)throw Error('Your sign-in changed. Reopen Business.');return r.data.session;}

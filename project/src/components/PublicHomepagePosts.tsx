@@ -101,7 +101,7 @@ export default function PublicHomepagePosts() {
                 <article key={post.id} className="mm-glass-announcement-card min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-[#fbfdfc] shadow-sm">
                   {image ? (
                     <div className="border-b border-slate-100 bg-slate-50">
-                      <img src={image} alt={`${post.title} announcement`} loading="lazy" className="block max-h-[420px] w-full object-contain" />
+                      <img src={image} alt={`${post.title} announcement`} loading="lazy" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src='/image-unavailable.svg';}} className="block max-h-[420px] w-full object-contain" />
                     </div>
                   ) : (
                     <div className="flex h-28 items-center gap-3 border-b border-emerald-100 bg-emerald-50 px-5 text-emerald-800">
