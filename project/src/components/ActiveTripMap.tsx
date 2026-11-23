@@ -4,7 +4,6 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import {supabase} from '@/lib/supabase';
 import {portalIsUnlocked,onPortalPrivacyChange} from '@/lib/portalPrivacy';
 import MapScrollCue from '@/components/MapScrollCue';
-import { tripPinFields } from '@/lib/tripPins';
 export { tripPinFields } from '@/lib/tripPins';
 type Point={lat:number;lng:number};
 type Snapshot={bookingId:string;viewerId:string;riderId:string;driverId:string;status:'accepted'|'in_progress';pickup:Point|null;destination:Point|null;position:(Point&{accuracy:number;observedAt:string;receivedAt:string})|null;locationState:'fresh'|'waiting'|'stale';serverTime:string};
