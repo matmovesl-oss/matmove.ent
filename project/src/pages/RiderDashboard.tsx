@@ -612,8 +612,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       <div className="mx-auto max-w-7xl px-0 pt-2 sm:px-4">
         {(activeSection === 'home' || activeSection === 'ride') && hasUnfinishedBookings && !activeBooking && (
           hasCashReviewCases ? (
-            <details className="mx-3 mb-2 rounded-xl border border-blue-200 bg-blue-50 text-xs text-blue-950">
-              <summary aria-label="A previous cash request is under review" className="flex min-h-11 cursor-pointer items-center justify-between gap-2 px-3 py-2 font-bold">
+            <details aria-label="A previous cash request is under review" className="mx-3 mb-2 rounded-xl border border-blue-200 bg-blue-50 text-xs text-blue-950">
+              <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 px-3 py-2 font-bold">
                 <span>Cash review · saved safely</span><span className="shrink-0 text-blue-700">View details</span>
               </summary>
               <div className="border-t border-blue-200 px-3 pb-3 pt-2">
