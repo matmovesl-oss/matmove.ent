@@ -74,3 +74,20 @@ test('map and Trips controls keep 44px phone touch targets without duplicate map
   assert.match(trips, /h-11 min-h-11 min-w-11 shrink-0[^>]*>Close<\/button>/);
   assert.match(trips, /min-h-11 rounded-lg/);
 });
+ 
+test('accepted-trip Mapbox code is lazy-loaded separately from wallet and Trips dashboards', async () => {
+  const [rider, driver, merchant, tripMap] = await Promise.all([
+    readFile(new URL('../src/pages/RiderDashboard.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/pages/DriverDashboard.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/pages/MerchantDashboard.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/ActiveTripMap.tsx', import.meta.url), 'utf8'),
+  ]);
+  for (const [role, source] of [['Rider', rider], ['Driver', driver], ['Merchant', merchant]]) {
+    assert.match(source, /const ActiveTripMap = lazy\(\(\) => import\('@\/components\/ActiveTripMap'\)\)/, role + ' must load Mapbox on demand');
+    assert.match(source, /<Suspense fallback=\{<div role="status"/, role + ' must show a local loading state while its live map loads');
+    assert.doesNotMatch(source, /import ActiveTripMap from ['"]@\/components\/ActiveTripMap['"]/, role + ' must not statically include the Mapbox component');
+    assert.doesNotMatch(source, /import ['"]mapbox-gl\/dist\/mapbox-gl\.css['"]/, role + ' must not preload Mapbox CSS on non-map screens');
+  }
+  assert.match(tripMap, /import mapboxgl from 'mapbox-gl'/);
+  assert.match(tripMap, /import 'mapbox-gl\/dist\/mapbox-gl\.css'/);
+});
