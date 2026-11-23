@@ -79,6 +79,8 @@ import {
   DollarSign,
   CheckCircle2,
   AlertCircle,
+  MoreHorizontal,
+  BookOpen,
 } from 'lucide-react';
 
 
@@ -228,6 +230,23 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     setResumeTripId(bookingId);
   };
   const [guideReplay,setGuideReplay]=useState(0);
+  const [helpMenuOpen,setHelpMenuOpen]=useState(false);
+  const helpMenuRef=useRef<HTMLDivElement|null>(null);
+  useEffect(()=>{
+    if(!helpMenuOpen)return;
+    const closeOutside=(event:PointerEvent)=>{
+      if(!helpMenuRef.current?.contains(event.target as Node))setHelpMenuOpen(false);
+    };
+    const closeOnEscape=(event:KeyboardEvent)=>{
+      if(event.key==='Escape')setHelpMenuOpen(false);
+    };
+    document.addEventListener('pointerdown',closeOutside);
+    document.addEventListener('keydown',closeOnEscape);
+    return()=>{
+      document.removeEventListener('pointerdown',closeOutside);
+      document.removeEventListener('keydown',closeOnEscape);
+    };
+  },[helpMenuOpen]);
   const [sectionTransitioning,setSectionTransitioning]=useState(false);
   const previousSectionRef=useRef(activeSection);
   useEffect(()=>{
@@ -417,7 +436,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
 
   const guide=<Suspense fallback={null}><PortalGuide key={`${profile.id}:${role}`} userId={profile.id} role={role} verified={profile.kyc_status==='approved'} replay={guideReplay} onNavigate={setActiveSection} onVerify={()=>{if(profile.kyc_status==='approved')return;sessionStorage.setItem('ob_role',role);navigate('/onboarding/personal?resume=1');}}/></Suspense>;
   const openHelpDestination=(destination:string)=>setActiveSection(customerHelpSection(destination,role));
-  const accountHeader=<header className="border-b border-slate-200 bg-white px-3 pt-[env(safe-area-inset-top)]"><div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-2 py-2"><div className="flex min-w-0 shrink-0 items-center gap-2"><span className="text-base font-black tracking-tight text-slate-950">MatMove</span><button type="button" aria-label="Replay Quick guide" onClick={()=>setGuideReplay(n=>n+1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border px-2 text-sm font-bold text-emerald-800"><span aria-hidden="true" className="sm:hidden">?</span><span className="hidden sm:inline">Quick guide</span></button><Suspense fallback={null}><MatMoveHelp key={`help:${profile.id}:${role}`} userId={profile.id} context={{role}} onNavigate={openHelpDestination}/><CustomerSupport key={`support:${profile.id}`} userId={profile.id}/><NotificationBell key={`notifications:${profile.id}:${role}`} userId={profile.id} onNavigate={openHelpDestination}/></Suspense></div><button type="button" aria-label="Open your account" aria-current={activeSection==='account'?'page':undefined} onClick={()=>setActiveSection('account')} className="flex min-h-11 min-w-0 max-w-[48%] items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-slate-50"><Suspense fallback={<span className="text-xs text-slate-500">Account</span>}><AccountIdentity key={profile.id} userId={profile.id} fallbackName={profile.full_name?.trim() || profile.email || 'Complete your profile'}/></Suspense></button></div></header>;
+  const accountHeader=<header className="border-b border-slate-200 bg-white px-3 pt-[env(safe-area-inset-top)]"><div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-2 py-2"><div className="flex min-w-0 items-center gap-2"><span className="shrink-0 text-base font-black tracking-tight text-slate-950">MatMove</span><div ref={helpMenuRef} className="relative shrink-0"><button type="button" aria-label="Open help, guide and support" aria-expanded={helpMenuOpen} aria-controls="matmove-help-menu" title="Help and support" onClick={()=>setHelpMenuOpen(value=>!value)} className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><MoreHorizontal size={21}/></button>{helpMenuOpen&&<div id="matmove-help-menu" role="group" aria-label="Guide, help, support and notifications" onClickCapture={()=>setHelpMenuOpen(false)} className="absolute left-0 top-full z-[130] mt-2 grid w-[min(20rem,calc(100vw-1.5rem))] grid-cols-4 gap-2 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-xl backdrop-blur-xl"><button type="button" aria-label="Open Quick guide" title="Quick guide" onClick={()=>{setGuideReplay(n=>n+1);setHelpMenuOpen(false);}} className="flex min-h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 p-1.5 text-[10px] font-bold text-emerald-800 hover:bg-emerald-50"><BookOpen size={18}/><span>Guide</span></button><div className="flex min-w-0 items-center justify-center"><Suspense fallback={null}><MatMoveHelp key={`help:${profile.id}:${role}`} userId={profile.id} context={{role}} onNavigate={openHelpDestination}/></Suspense></div><div className="flex min-w-0 items-center justify-center"><Suspense fallback={null}><CustomerSupport key={`support:${profile.id}`} userId={profile.id}/></Suspense></div><div className="flex min-w-0 items-center justify-center"><Suspense fallback={null}><NotificationBell key={`notifications:${profile.id}:${role}`} userId={profile.id} onNavigate={openHelpDestination}/></Suspense></div></div>}</div></div><button type="button" aria-label="Open your account" aria-current={activeSection==='account'?'page':undefined} onClick={()=>setActiveSection('account')} className="flex min-h-11 min-w-0 max-w-[58%] items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-slate-50"><Suspense fallback={<span className="text-xs text-slate-500">Account</span>}><AccountIdentity key={profile.id} userId={profile.id} fallbackName={profile.full_name?.trim() || profile.email || 'Complete your profile'}/></Suspense></button></div></header>
 
   if (
     activeSection === 'account'
@@ -459,8 +478,8 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
       <div className="mx-auto max-w-6xl px-4"><KycStatusNotice profile={profile} onVerify={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal?resume=1'); }}/></div>
       {activeSection !== 'home' && activeSection !== 'services' && (
         <div className="mx-auto max-w-6xl px-4 pt-3">
-          <button type="button" onClick={() => setActiveSection(activeSection === 'ride' ? 'home' : 'services')} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
-            <ArrowLeft size={16}/> {activeSection === 'ride' ? 'Back to Home' : 'Back to Services'}
+          <button type="button" aria-label={activeSection === 'ride' ? 'Back to Home' : 'Back to Services'} title={activeSection === 'ride' ? 'Back to Home' : 'Back to Services'} onClick={() => setActiveSection(activeSection === 'ride' ? 'home' : 'services')} className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
+            <ArrowLeft size={19}/>
           </button>
         </div>
       )}

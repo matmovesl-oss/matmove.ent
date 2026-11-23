@@ -49,3 +49,12 @@ test('database rejects unsafe social links, malformed WhatsApp numbers, and What
  assert.match(migration,/WhatsApp support cannot be deleted/);
  assert.match(migration,/version=version\+1/);
 });
+
+test('support opens as a compact mobile sheet and closes from the backdrop or Escape',async()=>{
+ const source=await readFile(new URL('../src/components/CustomerSupport.tsx',import.meta.url),'utf8');
+ assert.match(source,/event\.target===event\.currentTarget/);
+ assert.match(source,/event\.key==='Escape'/);
+ assert.match(source,/items-end[\s\S]{0,100}sm:items-center/);
+ assert.match(source,/max-h-\[min\(88dvh,720px\)\]/);
+ assert.match(source,/title="Support & Socials"/);
+});

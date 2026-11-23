@@ -30,7 +30,8 @@ async function page(fn,{role='rider',verified=false,seen=false,blocked=false,ser
  }finally{unmounted=true;for(const s of slots)s?.cleanup?.();if(old===undefined)delete globalThis.localStorage;else globalThis.localStorage=old;delete globalThis.__guideHooks;delete globalThis.__guideClaim;await rm(dir,{recursive:true,force:true});}
 }
 for(const role of ['rider','driver','merchant'])test(`${role} tutorial starts once, follows its own sections and only opens KYC after an explicit click`,()=>page(async h=>{
- assert.equal(h.open,true);assert.deepEqual(h.navigation,['home']);
+ assert.equal(h.open,false);assert.deepEqual(h.navigation,[]);
+ await h.update({replay:1});assert.equal(h.open,true);assert.deepEqual(h.navigation,['home']);
  const steps=h.steps(role,false);assert.equal(steps.at(-1).id,'kyc');
  assert.equal(steps.some(s=>s.section==='inventory'),role==='merchant');assert.equal(steps.some(s=>s.section==='shop'),role==='rider');
  for(let n=1;n<steps.length;n++)await h.click('Next');
@@ -38,6 +39,7 @@ for(const role of ['rider','driver','merchant'])test(`${role} tutorial starts on
  await h.click('Continue my KYC');assert.equal(h.verifiedCalls,1);assert.equal(h.open,false);assert.equal(h.storage.get(h.key),'dismissed');
 },{role}));
 test('Skip records only a tour preference, never approval or KYC state, and Quick guide can replay it',()=>page(async h=>{
+ assert.equal(h.open,false);await h.update({replay:1});assert.equal(h.open,true);
  await h.click('Skip tour · Start using');assert.equal(h.open,false);assert.equal(h.verifiedCalls,0);assert.deepEqual([...h.storage],[[h.key,'dismissed']]);
  await h.update({replay:1});assert.equal(h.open,true);assert.match(h.text,/Welcome to your MatMove Home/);
 }));
@@ -47,12 +49,14 @@ test('Completed tour stays closed until replay and verified users are never prom
  await h.click('Start using');assert.equal(h.open,false);assert.equal(h.verifiedCalls,0);assert.equal(h.storage.get(h.key),'completed');assert.equal(h.navigation.at(-1),'home');
 },{verified:true,seen:true}));
 test('Blocked browser storage does not trap a user in the guide; Escape can still dismiss it',()=>page(async h=>{
- assert.equal(h.open,true);assert.match(h.text,/Tour preferences are saved to your account/);let prevented=false;
+ assert.equal(h.open,false);await h.update({replay:1});assert.equal(h.open,true);assert.match(h.text,/Tour preferences are saved to your account/);let prevented=false;
  h.tree.props.onCancel({preventDefault(){prevented=true;}});await h.settle();assert.equal(prevented,true);assert.equal(h.open,false);assert.equal(h.verifiedCalls,0);
 },{blocked:true}));
 test('Switching customers gives the new customer a separate guide preference and never reuses the old account key',()=>page(async h=>{
- await h.click('Skip tour · Start using');await h.update({userId:'22222222-2222-4222-8222-222222222222'});assert.equal(h.open,true);
- await h.click('Skip tour · Start using');assert.equal(h.storage.size,2);assert.ok([...h.storage.keys()].every(k=>k.startsWith('matmove-guide:v1:')));
+ assert.equal(h.open,false);await h.update({replay:1});await h.click('Skip tour · Start using');
+ await h.update({userId:'22222222-2222-4222-8222-222222222222',replay:0});assert.equal(h.open,false);
+ await h.update({replay:1});assert.equal(h.open,true);await h.click('Skip tour · Start using');
+ assert.equal(h.storage.size,2);assert.ok([...h.storage.keys()].every(k=>k.startsWith('matmove-guide:v1:')));
 }));
 test('Account stays accessible at the top while the bottom navigation no longer has an Account tab',async()=>{
  const app=await readFile('src/App.tsx','utf8');const nav=app.slice(app.indexOf('function PortalNavigation'),app.indexOf('function PasscodeScreen'));
@@ -65,4 +69,8 @@ test('Account stays accessible at the top while the bottom navigation no longer 
 });
 
 test('an account whose guide was seen on another login or device stays closed without local storage, and replay stays explicit',()=>page(async h=>{assert.equal(h.open,false);await h.update({replay:1});assert.equal(h.open,true);},{serverSeen:true}));
-test('a guide is consumed on its first display rather than waiting for Skip or completion',()=>page(async h=>{assert.equal(h.open,true);assert.equal(h.storage.get(h.key),'opened');await h.update({role:'driver'});assert.equal(h.open,false);}));
+test('the guide never opens by itself and only records a preference after the user launches it',()=>page(async h=>{
+ assert.equal(h.open,false);assert.equal(h.storage.has(h.key),false);assert.deepEqual(h.navigation,[]);
+ await h.update({replay:1});assert.equal(h.open,true);assert.equal(h.storage.get(h.key),'opened');
+ await h.update({role:'driver'});assert.equal(h.open,false);
+}));

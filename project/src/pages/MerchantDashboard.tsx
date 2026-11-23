@@ -405,9 +405,9 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
     <div className="mm-merchant-workspace min-h-screen flex-1 bg-slate-50">
       <header className={`sticky top-0 z-20 flex flex-nowrap items-center justify-between gap-2 border-b bg-white px-3 py-3 shadow-sm sm:px-6 sm:py-4 ${activeSection === 'wallet' ? 'hidden' : ''}`}>
         <div className="flex min-w-0 flex-1 items-center gap-2"><div className="shrink-0 rounded-xl bg-orange-100 p-2 text-orange-600"><Store size={18} /></div><h2 className="min-w-0 truncate text-sm font-bold text-slate-900 sm:text-base">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
-        <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-          {!canTransact ? <span className="rounded-xl border border-red-200 bg-red-100 px-4 py-2 text-xs font-bold text-red-700">{isFrozen ? 'Wallet unavailable' : 'Approval pending'}</span> : (
-            <><button onClick={() => setIsLoadModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="shrink-0 whitespace-nowrap rounded-lg bg-blue-600 px-2.5 py-2 text-[11px] font-bold text-white sm:px-3 sm:text-xs">Load</button><button onClick={() => setIsPayoutModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="shrink-0 whitespace-nowrap rounded-lg bg-emerald-600 px-2.5 py-2 text-[11px] font-bold text-white sm:px-3 sm:text-xs">Withdraw</button><button onClick={() => setIsTransferModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="shrink-0 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-2 text-[11px] font-bold text-white sm:px-3 sm:text-xs">Transfer</button></>
+        <div className="grid w-[8.75rem] shrink-0 grid-cols-3 gap-1">
+          {!canTransact ? <span title={isFrozen ? 'Wallet unavailable' : 'Approval pending'} className="col-span-3 flex min-h-11 min-w-0 items-center justify-center truncate rounded-xl border border-red-200 bg-red-100 px-2 text-[10px] font-bold text-red-700">{isFrozen ? 'Wallet unavailable' : 'Approval pending'}</span> : (
+            <><button type="button" aria-label="Load wallet" title="Load wallet" onClick={() => setIsLoadModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50"><ArrowDownLeft size={18}/></button><button type="button" aria-label="Withdraw from wallet" title="Withdraw" onClick={() => setIsPayoutModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"><ArrowUpRight size={18}/></button><button type="button" aria-label="Transfer money" title="Transfer" onClick={() => setIsTransferModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"><Users size={18}/></button></>
           )}
         </div>
       </header>
@@ -416,11 +416,23 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
       {activeSection==='home'&&tripRequest.retained&&<section role="status" className="m-3 space-y-2 rounded-2xl border border-amber-300 bg-amber-50 p-4"><div><p className="font-extrabold text-amber-950">An earlier request needs checking</p><p className="mt-1 text-sm text-amber-900">MatMove retained the original request reference. Open Trips to check that exact booking before attempting another request.</p></div><button type="button" onClick={()=>onOpenTrips?.()} className="min-h-11 rounded-xl bg-amber-900 px-4 font-bold text-white">Go to Trips</button></section>}
       {activeSection==='home'&&tripRequest.error&&!tripRequest.retained&&<p role="alert" className="m-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{tripRequest.error}</p>}
       {activeSection === 'home' && hasUnfinishedBookings && !activeBooking && (
-        <section className="m-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-          <h2 className="font-bold text-blue-950">{hasCashReviewCases ? 'A previous cash request is under review' : 'You have an unfinished request'}</h2>
-          <p className="mt-1 text-sm text-blue-900">{hasCashReviewCases ? 'Its live dispatch has been closed. The original cash-return confirmations and fee reserve remain preserved for MatMove Support. No cash settlement or refund has been recorded. You can make a fresh request while the case remains visible in Trips.' : 'Existing requests are kept in Trips, separate from creating another request. Open Trips to review the original delivery or ride, verify cash or digital payment status and continue that same request.'}</p>
-          <button type="button" onClick={() => onOpenTrips?.()} className="mt-3 min-h-11 rounded-xl bg-blue-700 px-4 font-bold text-white">{hasCashReviewCases ? 'Review cash case in Trips' : 'Open Trips'}</button>
-        </section>
+        hasCashReviewCases ? (
+          <details className="m-3 rounded-xl border border-blue-200 bg-blue-50 text-xs text-blue-950">
+            <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 px-3 py-2 font-bold">
+              <span>Cash review · saved safely</span><span className="shrink-0 text-blue-700">View details</span>
+            </summary>
+            <div className="border-t border-blue-200 px-3 pb-3 pt-2">
+              <p className="leading-5">The original cash-return confirmations and fee reserve remain preserved for MatMove Support. No cash settlement or refund has been recorded. Do not make a duplicate payment for this case.</p>
+              <button type="button" onClick={() => onOpenTrips?.()} className="mt-2 min-h-10 rounded-lg bg-blue-700 px-3 text-xs font-bold text-white">Review cash case in Trips</button>
+            </div>
+          </details>
+        ) : (
+          <section className="m-3 rounded-2xl border border-blue-200 bg-blue-50 p-3">
+            <h2 className="text-sm font-bold text-blue-950">You have an unfinished request</h2>
+            <p className="mt-1 text-xs leading-5 text-blue-900">Existing requests are kept in Trips, separate from creating another request. Open Trips to review the original delivery or ride, verify cash or digital payment status and continue that same request.</p>
+            <button type="button" onClick={() => onOpenTrips?.()} className="mt-2 min-h-10 rounded-xl bg-blue-700 px-3 text-xs font-bold text-white">Open Trips</button>
+          </section>
+        )
       )}
       {activeSection === 'home' && (activeBooking || (pickupCoords && destinationCoords && !routeEditing)) && (
         <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
@@ -523,14 +535,14 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
         <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
           <h2 className="text-2xl font-bold">My Wallets</h2>
           {walletCards}
-          <div className="rounded-3xl border bg-white p-6 text-center">
-            <h3 className="text-xl font-bold">Wallet Actions</h3>
-            <p className="mb-6 mt-2 text-sm text-slate-500">Transfers support SLE to SLE and USD to USD.</p>
-            {!canTransact && <p className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{isFrozen ? 'Your wallet is frozen. Contact support.' : 'Approval pending. Complete verification in Account & Profile; wallet features unlock after administrator approval.'}</p>}
-            <div className="grid grid-cols-3 gap-3">
-              <button onClick={() => setIsLoadModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="flex flex-col items-center gap-3 rounded-2xl bg-blue-50 p-4 font-bold text-blue-700 disabled:opacity-50"><ArrowDownLeft size={24} /> Load</button>
-              <button onClick={() => setIsPayoutModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="flex flex-col items-center gap-3 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700 disabled:opacity-50"><ArrowUpRight size={24} /> Withdraw</button>
-              <button onClick={() => setIsTransferModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="flex flex-col items-center gap-3 rounded-2xl bg-purple-50 p-4 font-bold text-purple-700 disabled:opacity-50"><Users size={24} /> Transfer</button>
+          <div className="rounded-2xl border bg-white p-4 text-center">
+            <h3 className="text-base font-bold">Wallet Actions</h3>
+            <p className="mb-4 mt-1 text-xs text-slate-500">Transfers support SLE to SLE and USD to USD.</p>
+            {!canTransact && <p className="mb-3 rounded-xl bg-red-50 p-3 text-xs text-red-700">{isFrozen ? 'Your wallet is frozen. Contact support.' : 'Approval pending. Complete verification in Account & Profile; wallet features unlock after administrator approval.'}</p>}
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => setIsLoadModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="flex min-h-[4.5rem] min-w-0 flex-col items-center justify-center gap-1.5 rounded-xl bg-blue-50 p-2 text-xs font-semibold text-blue-700 disabled:opacity-50"><ArrowDownLeft size={19} /> Load</button>
+              <button onClick={() => setIsPayoutModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="flex min-h-[4.5rem] min-w-0 flex-col items-center justify-center gap-1.5 rounded-xl bg-emerald-50 p-2 text-xs font-semibold text-emerald-700 disabled:opacity-50"><ArrowUpRight size={19} /> Withdraw</button>
+              <button onClick={() => setIsTransferModalOpen(true)} disabled={!canTransact || !hasSleAccount || isSettingUpWallet} className="flex min-h-[4.5rem] min-w-0 flex-col items-center justify-center gap-1.5 rounded-xl bg-purple-50 p-2 text-xs font-semibold text-purple-700 disabled:opacity-50"><Users size={19} /> Transfer</button>
             </div>
           </div>
           <TransactionHistory transactions={transactions} onSelect={setSelectedTx} />

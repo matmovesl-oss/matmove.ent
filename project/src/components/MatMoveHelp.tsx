@@ -27,7 +27,7 @@ export default function MatMoveHelp({userId,context,onNavigate}:{userId:string;c
   const topic=helpTopics(latest.current).find(a=>a.id===id);if(!topic){setError('Your available sections changed. Choose a current topic.');return;}
   try{onNavigate(topic.action.destination);setOpen(false);setQuestion('');setReply(null);}catch{setError('This section could not be opened. Use the app navigation or try again.');}
  }
- return <><button type="button" aria-label="Open MatMove Help" onClick={()=>setOpen(true)} className="flex min-h-11 items-center gap-1 rounded-xl border px-3 text-sm font-bold text-emerald-800"><CircleHelp size={18}/><span className="hidden sm:inline">Help</span></button>
+ return <><button type="button" aria-label="Open MatMove Help" title="MatMove Help" onClick={()=>setOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 p-2 text-emerald-800 transition hover:bg-emerald-50"><CircleHelp size={18}/></button>
  <dialog ref={dialog} aria-label="MatMove Help" onCancel={e=>{e.preventDefault();setOpen(false);setQuestion('');setReply(null);}} className="m-auto max-h-[88dvh] w-[calc(100%_-_2rem)] max-w-xl overflow-y-auto rounded-3xl border-0 bg-white p-5 text-slate-900 shadow-2xl backdrop:bg-slate-950/55">
   <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-black">MatMove Help</h2><button type="button" aria-label="Close MatMove Help" onClick={()=>{setOpen(false);setQuestion('');setReply(null);}} className="min-h-11 min-w-11 rounded-xl border p-2"><X size={20}/></button></div>
   <p className="mt-2 text-sm text-slate-600">Your built-in app guide. Answers use our written help pages, not a live account check.</p>

@@ -174,3 +174,25 @@ test('services directory and games are excluded from the initial customer JavaSc
  assert.match(portal,/<Suspense fallback=\{/);
  assert.doesNotMatch(portal,/import\s*\{\s*ArcadeGames\s*\}\s*from\s*'@\/components\/ArcadeGames'/);
 });
+
+test('customer portal keeps Guide and support in a compact tools popover and uses an icon-only back control',async()=>{
+ const [app,support,guide,rider,driver,merchant]=await Promise.all([
+  readFile(new URL('../src/App.tsx',import.meta.url),'utf8'),
+  readFile(new URL('../src/components/CustomerSupport.tsx',import.meta.url),'utf8'),
+  readFile(new URL('../src/components/PortalGuide.tsx',import.meta.url),'utf8'),
+  readFile(new URL('../src/pages/RiderDashboard.tsx',import.meta.url),'utf8'),
+  readFile(new URL('../src/pages/DriverDashboard.tsx',import.meta.url),'utf8'),
+  readFile(new URL('../src/pages/MerchantDashboard.tsx',import.meta.url),'utf8')
+ ]);
+ assert.match(app,/aria-label="Open help, guide and support"/);
+ assert.match(app,/aria-expanded=\{helpMenuOpen\}/);
+ assert.match(app,/aria-label=\{activeSection === 'ride' \? 'Back to Home' : 'Back to Services'\}/);
+ assert.match(support,/event\.target===event\.currentTarget/);
+ assert.match(guide,/const launched=replay>lastReplay\.current/);
+ assert.match(rider,/grid w-\[min\(58vw,12rem\)\]/);
+ assert.match(rider,/Cash review · saved safely/);
+ assert.match(driver,/min-h-\[4\.5rem\]/);
+ assert.match(merchant,/aria-label="Load wallet"/);
+ assert.match(merchant,/Cash review · saved safely/);
+ assert.match(merchant,/min-h-\[4\.5rem\]/);
+});

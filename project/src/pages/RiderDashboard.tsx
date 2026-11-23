@@ -586,16 +586,16 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
     <div className="flex-1 bg-slate-50 min-h-screen">
       <CashMonimeSuccess open={cashSuccessOpen} onClose={() => setCashSuccessOpen(false)} />
       <header className={`sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur ${activeSection === 'wallet' ? 'hidden' : ''}`}>
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="mx-auto flex w-full max-w-7xl flex-row items-center justify-between gap-2 px-3 py-2 sm:px-6">
           <div className="min-w-0">
-            <h1 className="truncate text-base font-bold text-slate-900 sm:text-xl">
+            <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 sm:text-lg">
               Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋
             </h1>
           </div>
-          <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:min-w-[360px]">
-            <button type="button" onClick={() => setIsLoadModalOpen(true)} disabled={!networkOnline || !canLoad || !hasSleAccount || isSettingUpWallet} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-blue-600 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Load</button>
-            <button type="button" onClick={() => setIsPayoutModalOpen(true)} disabled={!networkOnline || !canSend || !hasSleAccount} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-emerald-600 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Withdraw</button>
-            <button type="button" onClick={() => setIsTransferModalOpen(true)} disabled={!networkOnline || !canSend || !hasSleAccount} className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-slate-900 px-2.5 text-xs font-bold text-white disabled:opacity-50 sm:px-4">Transfer</button>
+          <div className="grid w-[min(58vw,12rem)] shrink-0 grid-cols-3 gap-1.5 sm:w-auto sm:gap-2">
+            <button type="button" onClick={() => setIsLoadModalOpen(true)} disabled={!networkOnline || !canLoad || !hasSleAccount || isSettingUpWallet} aria-label="Load wallet" title="Load wallet" className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-blue-600 px-1.5 text-[11px] font-semibold text-white disabled:opacity-50 sm:px-3">Load</button>
+            <button type="button" onClick={() => setIsPayoutModalOpen(true)} disabled={!networkOnline || !canSend || !hasSleAccount} aria-label="Withdraw from wallet" title="Withdraw" className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-emerald-600 px-1.5 text-[11px] font-semibold text-white disabled:opacity-50 sm:px-3">Withdraw</button>
+            <button type="button" onClick={() => setIsTransferModalOpen(true)} disabled={!networkOnline || !canSend || !hasSleAccount} aria-label="Transfer money" title="Transfer" className="min-h-11 min-w-0 whitespace-nowrap rounded-xl bg-slate-900 px-1.5 text-[11px] font-semibold text-white disabled:opacity-50 sm:px-3">Transfer</button>
           </div>
         </div>
       </header>
@@ -611,19 +611,27 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
       <div className="mx-auto max-w-7xl px-0 pt-2 sm:px-4">
         {(activeSection === 'home' || activeSection === 'ride') && hasUnfinishedBookings && !activeBooking && (
-          <section className="mx-3 mb-3 rounded-2xl border border-blue-200 bg-blue-50 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="text-sm font-bold text-blue-950">{hasCashReviewCases ? 'A previous cash request is under review' : 'You have an unfinished request'}</h2>
-                <p className="mt-1 text-xs leading-5 text-blue-900">{hasCashReviewCases ? 'Your original cash case is safely preserved. Review it in Trips; do not make a duplicate payment.' : 'Open Trips to review the original request and continue from its saved status.'}</p>
+          hasCashReviewCases ? (
+            <details className="mx-3 mb-2 rounded-xl border border-blue-200 bg-blue-50 text-xs text-blue-950">
+              <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 px-3 py-2 font-bold">
+                <span>Cash review · saved safely</span><span className="shrink-0 text-blue-700">View details</span>
+              </summary>
+              <div className="border-t border-blue-200 px-3 pb-3 pt-2">
+                <p className="leading-5">The original cash-return confirmations and fee reserve remain preserved for MatMove Support. No cash settlement or refund has been recorded. Do not make a duplicate payment for this case.</p>
+                <button type="button" onClick={() => onOpenTrips?.()} className="mt-2 min-h-10 rounded-lg bg-blue-700 px-3 text-xs font-bold text-white">Review in Trips</button>
               </div>
-              <button type="button" onClick={() => onOpenTrips?.()} className="min-h-10 shrink-0 rounded-xl bg-blue-700 px-3 text-xs font-bold text-white">{hasCashReviewCases ? 'Review in Trips' : 'Open Trips'}</button>
-            </div>
-            {hasCashReviewCases && <details className="mt-2 border-t border-blue-200 pt-2 text-xs text-blue-900">
-              <summary className="min-h-9 cursor-pointer font-bold">View cash review details</summary>
-              <p className="pb-1 leading-5">Its live dispatch has been closed. The original cash-return confirmations and fee reserve remain preserved for MatMove Support. No cash settlement or refund has been recorded. You can make a fresh request while the case remains visible in Trips.</p>
-            </details>}
-          </section>
+            </details>
+          ) : (
+            <section className="mx-3 mb-3 rounded-2xl border border-blue-200 bg-blue-50 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold text-blue-950">You have an unfinished request</h2>
+                  <p className="mt-1 text-xs leading-5 text-blue-900">Open Trips to review the original request and continue from its saved status.</p>
+                </div>
+                <button type="button" onClick={() => onOpenTrips?.()} className="min-h-10 shrink-0 rounded-xl bg-blue-700 px-3 text-xs font-bold text-white">Open Trips</button>
+              </div>
+            </section>
+          )
         )}
       </div>
       <div className="mx-auto max-w-7xl space-y-4 px-0 pb-8 sm:px-4">
@@ -920,34 +928,34 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
           <div className="w-full space-y-6">
             <h2 className="text-2xl font-bold text-slate-900 mb-4 px-2">My Wallets</h2>
             {WalletCards}
-            <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm flex flex-col items-center text-center mt-6">
-              <h3 className="text-xl font-bold text-slate-900 mb-2">Wallet Actions</h3>
-              <p className="text-sm text-slate-500 mb-8">Load your wallet anytime. Verify your identity to transfer or withdraw.</p>
+            <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col items-center text-center mt-3">
+              <h3 className="text-base font-bold text-slate-900 mb-1">Wallet Actions</h3>
+              <p className="text-xs text-slate-500 mb-4">Load your wallet anytime. Verify your identity to transfer or withdraw.</p>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 w-full">
+              <div className="grid grid-cols-3 gap-2 w-full">
                 <button
                   onClick={() => setIsLoadModalOpen(true)}
                   disabled={!networkOnline || !canLoad || !hasSleAccount || isSettingUpWallet}
-                  className="p-4 sm:p-6 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
+                  className="min-h-[4.5rem] min-w-0 rounded-2xl p-2 bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex flex-col items-center justify-center gap-1.5 text-xs font-semibold disabled:opacity-50"
                 >
-                  <div className="p-3 bg-white rounded-full shadow-sm"><ArrowDownLeft size={24} /></div>
+                  <div className="p-2 bg-white rounded-full shadow-sm"><ArrowDownLeft size={19} /></div>
                   Load
                 </button>
 
                 <button
                   onClick={() => setIsPayoutModalOpen(true)}
                   disabled={!networkOnline || !canSend || !hasSleAccount}
-                  className="p-4 sm:p-6 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
+                  className="min-h-[4.5rem] min-w-0 rounded-2xl p-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex flex-col items-center justify-center gap-1.5 text-xs font-semibold disabled:opacity-50"
                 >
-                  <ArrowUpRight size={24} /> Withdraw
+                  <ArrowUpRight size={19} /> Withdraw
                 </button>
 
                 <button
                   onClick={() => setIsTransferModalOpen(true)}
                   disabled={!networkOnline || !canSend || !hasSleAccount}
-                  className="p-4 sm:p-6 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center gap-3 font-bold disabled:opacity-50"
+                  className="min-h-[4.5rem] min-w-0 rounded-2xl p-2 bg-purple-50 text-purple-700 hover:bg-purple-100 transition flex flex-col items-center justify-center gap-1.5 text-xs font-semibold disabled:opacity-50"
                 >
-                  <div className="p-3 bg-white rounded-full shadow-sm"><Users size={24} /></div>
+                  <div className="p-2 bg-white rounded-full shadow-sm"><Users size={19} /></div>
                   Transfer
                 </button>
               </div>
