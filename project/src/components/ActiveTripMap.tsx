@@ -4,14 +4,13 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import {supabase} from '@/lib/supabase';
 import {portalIsUnlocked,onPortalPrivacyChange} from '@/lib/portalPrivacy';
 import MapScrollCue from '@/components/MapScrollCue';
+import { tripPinFields } from '@/lib/tripPins';
+export { tripPinFields } from '@/lib/tripPins';
 type Point={lat:number;lng:number};
 type Snapshot={bookingId:string;viewerId:string;riderId:string;driverId:string;status:'accepted'|'in_progress';pickup:Point|null;destination:Point|null;position:(Point&{accuracy:number;observedAt:string;receivedAt:string})|null;locationState:'fresh'|'waiting'|'stale';serverTime:string};
 const pageVisible=(userId?:string)=>document.visibilityState!=='hidden'&&(!userId||portalIsUnlocked(userId));
 const point=(p:any)=>p&&typeof p.lat==='number'&&Number.isFinite(p.lat)&&Math.abs(p.lat)<=90&&typeof p.lng==='number'&&Number.isFinite(p.lng)&&Math.abs(p.lng)<=180;
-export function tripPinFields(pickup:[number,number],destination:[number,number]){
- if(!Array.isArray(pickup)||pickup.length!==2||!Array.isArray(destination)||destination.length!==2||!point({lng:pickup[0],lat:pickup[1]})||!point({lng:destination[0],lat:destination[1]}))throw Error('Confirm both map locations before requesting.');
- return{matmove_pickup_lat:pickup[1],matmove_pickup_lng:pickup[0],matmove_destination_lat:destination[1],matmove_destination_lng:destination[0]};
-}
+
 export function validateTripSnapshot(data:any,userId:string,bookingId:string,driver:boolean):Snapshot{
  if(data?.bookingId!==bookingId||data.viewerId!==userId||typeof data.riderId!=='string'||typeof data.driverId!=='string'||data.riderId===data.driverId||(driver?data.driverId:data.riderId)!==userId||!['accepted','in_progress'].includes(data.status)||!['fresh','waiting','stale'].includes(data.locationState)||!Number.isFinite(Date.parse(data.serverTime))||
   (data.pickup!==null&&!point(data.pickup))||(data.destination!==null&&!point(data.destination))||
