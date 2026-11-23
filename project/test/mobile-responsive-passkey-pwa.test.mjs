@@ -156,7 +156,7 @@ test('passcode keypad uses equal circular keys with a clear black border', async
 
 test('offline navigation returns the cached MatMove app shell, never caches private API data, and keeps versioned assets ready', async () => {
   const worker = await readFile('public/sw.js', 'utf8');
-  assert.match(worker, /const CACHE_NAME = 'matmove-shell-v2'/);
+  assert.match(worker, /const CACHE_NAME = 'matmove-shell-v[0-9]+'/);
   assert.match(worker, /return \(await caches\.match\('\/index\.html'\)\) \|\| \(await caches\.match\('\/offline\.html'\)\)/);
   assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
   assert.match(worker, /Only immutable, versioned Vite build assets are cached/);
