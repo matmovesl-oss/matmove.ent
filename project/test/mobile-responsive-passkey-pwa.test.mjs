@@ -86,6 +86,9 @@ test('PWA install caches the initial versioned app assets before the first offli
   const activateStart = worker.indexOf("self.addEventListener('activate'");
   const install = worker.slice(installStart, activateStart);
   assert.match(worker, /const CACHE_NAME = 'matmove-shell-v4'/);
+  for (const asset of ['/manifest.webmanifest', '/logo.jpg', '/wallet-icon.png', '/matmove-car.svg', '/matmove-bike.svg', '/matmove-keke.svg', '/matmove-van.svg']) {
+    assert.ok(worker.includes(asset), 'offline shell must pre-cache ' + asset);
+  }
   assert.match(worker, /async function cacheInitialAppAssets\(cache\)/);
   assert.match(worker, /const shell = await cache\.match\('\/index\.html'\)/);
   assert.match(worker, /html\.matchAll/);
