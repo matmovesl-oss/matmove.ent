@@ -1320,7 +1320,7 @@ function AccountSection({
         : <MerchantDashboard profile={profile} wallet={wallet} activeSection="wallet" />;
     return <div className="min-h-screen bg-slate-50 px-4 pb-24 pt-4">
       <div className="mx-auto mb-3 max-w-6xl">
-        <button type="button" onClick={() => setViewingWallet(false)} className="min-h-11 rounded-xl border bg-white px-4 text-sm font-bold text-slate-700">← Back to Account</button>
+        <button type="button" aria-label="Back to Account" title="Back to Account" onClick={() => setViewingWallet(false)} className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><ArrowLeft size={19}/></button>
       </div>
       {walletPage}
     </div>;
@@ -1329,9 +1329,7 @@ function AccountSection({
   if (activePanel === 'profile') {
     return (
       <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
-        <button type="button" onClick={() => setActivePanel(null)} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
-          <ArrowLeft size={17}/> Back to Account
-        </button>
+        <button type="button" aria-label="Back to Account" title="Back to Account" onClick={() => setActivePanel(null)} className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><ArrowLeft size={19}/></button>
         <h1 className="mb-4 text-2xl font-bold text-slate-900">Profile</h1>
         <AccountProfile key={profile.id} userId={profile.id} showPasskey={false}/>
         <section aria-labelledby="mm-verified-details-title" className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
@@ -1356,7 +1354,7 @@ function AccountSection({
 
   if (activePanel === 'invite') {
     return <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
-      <button type="button" onClick={() => setActivePanel(null)} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Account</button>
+      <button type="button" aria-label="Back to Account" title="Back to Account" onClick={() => setActivePanel(null)} className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><ArrowLeft size={19}/></button>
       <h1 className="mb-4 text-2xl font-bold text-slate-900">Invite & Earn</h1>
       <InviteEarn key={`referrals:${profile.id}`} userId={profile.id}/>
     </section>;
@@ -1364,7 +1362,7 @@ function AccountSection({
 
   if (activePanel === 'policy') {
     return <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
-      <button type="button" onClick={() => setActivePanel(null)} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Account</button>
+      <button type="button" aria-label="Back to Account" title="Back to Account" onClick={() => setActivePanel(null)} className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><ArrowLeft size={19}/></button>
       <h1 className="mb-4 text-2xl font-bold text-slate-900">Safety & Compliance</h1>
       <AccountPolicy />
     </section>;
@@ -1372,7 +1370,7 @@ function AccountSection({
 
   return (
     <div className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
-      <button type="button" onClick={onBack} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"><ArrowLeft size={17}/> Back to portal</button>
+      <button type="button" aria-label="Back to Home" title="Back to Home" onClick={onBack} className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><ArrowLeft size={19}/></button>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-xs font-bold uppercase tracking-wider text-emerald-700">MatMove account</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Account & Profile</h1></div>
         <button type="button" onClick={onLock} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><LockKeyhole size={17}/> Lock app</button>
