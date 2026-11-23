@@ -75,19 +75,26 @@ test('map and Trips controls keep 44px phone touch targets without duplicate map
   assert.match(trips, /min-h-11 rounded-lg/);
 });
  
-test('accepted-trip Mapbox code is lazy-loaded separately from wallet and Trips dashboards', async () => {
-  const [rider, driver, merchant, tripMap] = await Promise.all([
+test('accepted-trip Mapbox code is lazy-loaded separately from customer wallet, Trips and Services screens', async () => {
+  const [rider, driver, merchant, services, tripMap, tripPins] = await Promise.all([
     readFile(new URL('../src/pages/RiderDashboard.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/pages/DriverDashboard.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/pages/MerchantDashboard.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/PortalHome.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/ActiveTripMap.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/lib/tripPins.ts', import.meta.url), 'utf8'),
   ]);
-  for (const [role, source] of [['Rider', rider], ['Driver', driver], ['Merchant', merchant]]) {
+  for (const [role, source] of [['Rider', rider], ['Driver', driver], ['Merchant', merchant], ['Services', services]]) {
     assert.match(source, /const ActiveTripMap = lazy\(\(\) => import\('@\/components\/ActiveTripMap'\)\)/, role + ' must load Mapbox on demand');
     assert.match(source, /<Suspense fallback=\{<div role="status"/, role + ' must show a local loading state while its live map loads');
     assert.doesNotMatch(source, /import ActiveTripMap from ['"]@\/components\/ActiveTripMap['"]/, role + ' must not statically include the Mapbox component');
     assert.doesNotMatch(source, /import ['"]mapbox-gl\/dist\/mapbox-gl\.css['"]/, role + ' must not preload Mapbox CSS on non-map screens');
   }
+  assert.match(services, /import \{ tripPinFields \} from ['"]@\/lib\/tripPins['"]/);
+  assert.doesNotMatch(services, /tripPinFields.*from ['"]@\/components\/ActiveTripMap['"]/);
   assert.match(tripMap, /import mapboxgl from 'mapbox-gl'/);
   assert.match(tripMap, /import 'mapbox-gl\/dist\/mapbox-gl\.css'/);
+  assert.match(tripMap, /export \{ tripPinFields \} from ['"]@\/lib\/tripPins['"]/);
+  assert.match(tripPins, /export function tripPinFields/);
 });
+
