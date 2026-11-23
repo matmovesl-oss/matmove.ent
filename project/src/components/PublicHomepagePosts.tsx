@@ -74,7 +74,7 @@ export default function PublicHomepagePosts() {
   if (!loading && posts.length === 0) return null;
 
   return (
-    <section aria-labelledby="matmove-public-updates-title" className="border-y border-slate-200 bg-white py-12 sm:py-16">
+    <section aria-labelledby="matmove-public-updates-title" className="mm-glass-public-updates border-y border-slate-200 bg-white py-12 sm:py-16">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <div className="mb-7 flex items-end justify-between gap-4">
           <div className="min-w-0">
@@ -98,7 +98,7 @@ export default function PublicHomepagePosts() {
               const image = imageUrl(post.image_path);
               const price = postPrice(post.price_amount, post.price_currency);
               return (
-                <article key={post.id} className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-[#fbfdfc] shadow-sm">
+                <article key={post.id} className="mm-glass-announcement-card min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-[#fbfdfc] shadow-sm">
                   {image ? (
                     <div className="border-b border-slate-100 bg-slate-50">
                       <img src={image} alt={`${post.title} announcement`} loading="lazy" className="block max-h-[420px] w-full object-contain" />
