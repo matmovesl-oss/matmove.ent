@@ -476,7 +476,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
       {accountHeader}
         <OfflineStatus />
       <div className="mx-auto max-w-6xl px-4"><KycStatusNotice profile={profile} onVerify={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal?resume=1'); }}/></div>
-      {activeSection !== 'home' && activeSection !== 'services' && (
+      {activeSection !== 'home' && activeSection !== 'services' && !(activeSection === 'ride' && (role === 'rider' || role === 'merchant')) && (
         <div className="mx-auto max-w-6xl px-4 pt-3">
           <button type="button" aria-label={activeSection === 'ride' ? 'Back to Home' : 'Back to Services'} title={activeSection === 'ride' ? 'Back to Home' : 'Back to Services'} onClick={() => setActiveSection(activeSection === 'ride' ? 'home' : 'services')} className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
             <ArrowLeft size={19}/>
