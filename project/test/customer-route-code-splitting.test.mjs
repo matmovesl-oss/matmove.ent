@@ -6,6 +6,7 @@ const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const catalog = readFileSync(new URL('../src/components/ProductCatalog.tsx', import.meta.url), 'utf8');
 const money = readFileSync(new URL('../src/lib/catalogMoney.ts', import.meta.url), 'utf8');
 const navigation = readFileSync(new URL('../src/lib/customerHelpNavigation.ts', import.meta.url), 'utf8');
+const passcode = readFileSync(new URL('../src/lib/customerPasscode.ts', import.meta.url), 'utf8');
 
 const lazyComponents = [
   'CustomerPasscode', 'InviteEarn', 'MatMoveHelp', 'CustomerSupport', 'NotificationBell',
@@ -25,8 +26,11 @@ test('customer portal and onboarding modules load lazily behind a route fallback
 test('the application no longer eagerly imports the full ProductCatalog or help articles for small helpers', () => {
   assert.ok(app.includes("from '@/lib/catalogMoney'"));
   assert.ok(app.includes("from '@/lib/customerHelpNavigation'"));
+  assert.ok(app.includes("from '@/lib/customerPasscode'"));
+  assert.match(passcode, /export async function customerPasscode/);
   assert.equal(app.includes("from '@/components/ProductCatalog'"), false);
   assert.equal(app.includes("from '@/components/MatMoveHelp'"), false);
+  assert.equal(app.includes("from '@/components/CustomerPasscode'"), false);
   assert.ok(catalog.includes("from '@/lib/catalogMoney'"));
   assert.match(money, /export function catalogMoney/);
   assert.match(money, /export function catalogCheckoutAllowed/);
