@@ -48,18 +48,7 @@ import {
   UpdatePassword,
 } from '@/pages/UpdatePassword';
 
-import {
-  RoleSelectionPage,
-  KycWorkspace,
-  PersonalInfoPage,
-  IdentityPage,
-  DocumentsPage,
-  SelfiePage,
-  VehicleSelectionPage,
-  ReviewPage,
-  SubmittedPage,
-  VerificationPage,
-} from '@/pages/OnboardingPages';
+
 
 
 import {
