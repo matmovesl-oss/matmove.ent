@@ -197,7 +197,7 @@ test('offline navigation returns the cached MatMove app shell, never caches priv
   assert.match(worker, /const CACHE_NAME = 'matmove-shell-v[0-9]+'/);
   assert.match(worker, /return \(await caches\.match\('\/index\.html'\)\) \|\| \(await caches\.match\('\/offline\.html'\)\)/);
   assert.match(worker, /api\\|auth\\|rest\\|storage\\|functions\\|realtime/i);
-  assert.match(worker, /Only immutable, versioned Vite build assets are cached/);
+  assert.match(worker, /Only static, versioned Vite assets are cached/);
 });
 
 test('wallet background refresh keeps only a minimal last-confirmed snapshot and never replaces it with a loading state on network loss', async () => {
