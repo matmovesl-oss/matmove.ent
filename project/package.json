@@ -43,5 +43,10 @@
   },
   "allowScripts": {
     "esbuild@0.21.5": true
+  },
+  "overrides": {
+    "sucrase": {
+      "glob": "14.0.6"
+    }
   }
 }

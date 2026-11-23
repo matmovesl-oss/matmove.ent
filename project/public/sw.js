@@ -1,5 +1,5 @@
-const CACHE_NAME = 'matmove-shell-v2';
-const APP_SHELL = ['/', '/index.html', '/offline.html', '/logo.jpg'];
+const CACHE_NAME = 'matmove-shell-v3';
+const APP_SHELL = ['/', '/index.html', '/offline.html', '/logo.jpg', '/image-unavailable.svg'];
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
