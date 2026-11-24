@@ -36,9 +36,14 @@ test('Support Media routes WhatsApp to wa.me and social channels to verified HTT
  assert.match(page,/Ghost/);
 });
 
-test('the direct WhatsApp support number remains separate from the Support Media page',async()=>{
+test('Support Media is the only Account contact entry and uses the centrally managed WhatsApp number',async()=>{
  const app=await readFile(new URL('../src/App.tsx',import.meta.url),'utf8');
- assert.match(app,/Chat with Support \(\+232 90 330 362\)/);
- assert.match(app,/Support Media/);
- assert.match(app,/Customer Support/);
+ const page=await readFile(new URL('../src/components/SupportMediaPage.tsx',import.meta.url),'utf8');
+ const account=app.slice(app.indexOf('function AccountSection('));
+ assert.equal(account.includes('Chat with Support'),false);
+ assert.equal(account.includes('WHATSAPP_NUMBER'),false);
+ assert.equal(account.includes('wa.me'),false);
+ assert.ok(account.includes('<b>Support Media</b>'));
+ assert.ok(page.includes("from('matmove_public_contacts')"));
+ assert.ok(page.includes('item.whatsapp_phone'));
 });
