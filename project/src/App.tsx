@@ -605,7 +605,7 @@ function AccountSection({
       'all' | 'pending' | 'completed'
     >('all');
 
-  const fetchCartAndOrders = async () => {
+  const fetchCartAndOrders = useCallback(async () => {
     if (
       profile.role !== 'rider'
     ) {
@@ -648,9 +648,9 @@ function AccountSection({
           : []
       );
     }
-  };
+  }, [profile.id, profile.role]);
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     const now = new Date();
     const timeLimit = new Date();
 
@@ -840,23 +840,26 @@ function AccountSection({
           (bookings?.length || 0),
       });
     }
-  };
+  }, [analyticsTimeframe, profile.id, profile.role]);
 
   useEffect(() => {
     if (
       profile.role === 'rider'
     ) {
-      fetchCartAndOrders();
+      void fetchCartAndOrders();
     }
 
     if (viewingAnalytics && !['rider', 'driver', 'merchant'].includes(profile.role)) {
-      fetchAnalytics();
+      void fetchAnalytics();
     }
   }, [
     profile.id,
+    profile.role,
     analyticsTimeframe,
     viewingAnalytics,
     viewingCartOrders,
+    fetchCartAndOrders,
+    fetchAnalytics,
   ]);
 
   const deletionBusy = useRef(false);
