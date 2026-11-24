@@ -107,7 +107,6 @@ test('redundant permissive policy cleanup preserves wallet, transaction, ticket 
       grant update on public.event_tickets to authenticated;
     `);
 
-    await db.exec(await migration('20261124000100_matmove_rls_auth_uid_initplan_v1.sql'));
     await db.exec(await migration('20261124000200_matmove_remove_redundant_permissive_select_policies_v1.sql'));
 
     const policyRows = await db.query(`
@@ -172,6 +171,7 @@ test('redundant permissive policy cleanup preserves wallet, transaction, ticket 
     assert.equal(checked.rows[0].checked_in, true, 'event staff retain check-in updates');
     await db.exec('reset role');
 
+    await db.query("select set_config('request.jwt.claim.sub','',false)");
     await db.exec('set role anon');
     const anonWallets = await db.query('select id from public.wallets');
     const anonTransactions = await db.query('select id from public.wallet_transactions');
