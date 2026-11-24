@@ -131,6 +131,7 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
           <p className="mt-1 text-sm leading-5 text-slate-600">Receive money securely into your MatMove SLE wallet.</p>
         </div>
         <button type="button" onClick={onClose} aria-label="Close Get paid" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/70 text-slate-600"><X size={19}/></button>
+        </div>
       </div>
 
       {loading ? (
