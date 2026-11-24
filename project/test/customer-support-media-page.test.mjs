@@ -40,5 +40,5 @@ test('the direct WhatsApp support number remains separate from the Support Media
  const app=await readFile(new URL('../src/App.tsx',import.meta.url),'utf8');
  assert.match(app,/Chat with Support \(\+232 90 330 362\)/);
  assert.match(app,/Support Media/);
- assert.match(app,/In-app Support/);
+ assert.match(app,/Customer Support/);
 });
