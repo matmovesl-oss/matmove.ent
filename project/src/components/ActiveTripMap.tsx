@@ -1,9 +1,16 @@
 import {useEffect,useRef,useState} from 'react';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import type mapboxgl from 'mapbox-gl';
 import {supabase} from '@/lib/supabase';
 import {portalIsUnlocked,onPortalPrivacyChange} from '@/lib/portalPrivacy';
 import MapScrollCue from '@/components/MapScrollCue';
+type MapboxModule = typeof import('mapbox-gl');
+const loadMapbox = async (): Promise<MapboxModule> => {
+ const [module] = await Promise.all([
+  import('mapbox-gl'),
+  import('mapbox-gl/dist/mapbox-gl.css'),
+ ]);
+ return module;
+};
 type Point={lat:number;lng:number};
 type Snapshot={bookingId:string;viewerId:string;riderId:string;driverId:string;status:'accepted'|'in_progress';pickup:Point|null;destination:Point|null;position:(Point&{accuracy:number;observedAt:string;receivedAt:string})|null;locationState:'fresh'|'waiting'|'stale';serverTime:string};
 const pageVisible=(userId?:string)=>document.visibilityState!=='hidden'&&(!userId||portalIsUnlocked(userId));
@@ -33,7 +40,7 @@ export default function ActiveTripMap({userId,bookingId,driver=false}:{userId:st
  const routeAttempt=useRef(0),routeTimer=useRef<ReturnType<typeof setTimeout>|null>(null),routeController=useRef<AbortController|null>(null),lastRoute=useRef({key:'',time:0});
  const snapshotNow=useRef<Snapshot|null>(null);
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[retry,setRetry]=useState(0),[sharing,setSharing]=useState(false),[gpsError,setGpsError]=useState(''),[mapError,setMapError]=useState(''),[mapReady,setMapReady]=useState(false),[mapRetry,setMapRetry]=useState(0);
- const host=useRef<HTMLDivElement>(null),map=useRef<mapboxgl.Map|null>(null),markers=useRef<Record<string,mapboxgl.Marker>>({}),centered=useRef(false),latest=useRef({userId,bookingId});latest.current={userId,bookingId};
+ const host=useRef<HTMLDivElement>(null),map=useRef<mapboxgl.Map|null>(null),mapboxModule=useRef<MapboxModule|null>(null),markers=useRef<Record<string,mapboxgl.Marker>>({}),centered=useRef(false),latest=useRef({userId,bookingId});latest.current={userId,bookingId};
  snapshotNow.current=snapshot;
  const acceptSnapshot=(d:Snapshot)=>setSnapshot(old=>!old||Date.parse(d.serverTime)>=Date.parse(old.serverTime)?d:old);
  useEffect(()=>{let live=true,busy=false,epoch=0;setSnapshot(null);setError('');setLoading(true);setSharing(false);wantsSharing.current=false;setGpsError('');setCustomerSnapshot(null);setCustomerLocationError('');
@@ -66,30 +73,36 @@ export default function ActiveTripMap({userId,bookingId,driver=false}:{userId:st
   })();
   return()=>{live=false;if(watch!==undefined)navigator.geolocation.clearWatch(watch);if(shareKey)void tripLocationRpc(userId,bookingId,'clear',undefined,shareKey,!driver).catch(()=>{});};
  },[userId,bookingId,driver,sharing]);
- useEffect(()=>{let live=true;setMapReady(false);setMapError('');centered.current=false;
+ useEffect(()=>{let live=true,instance:mapboxgl.Map|null=null,loadedModule:MapboxModule|null=null;setMapReady(false);setMapError('');centered.current=false;mapboxModule.current=null;
   const token=import.meta.env.VITE_MAPBOX_TOKEN||'';
-  if(!token){setMapError('Mapbox is not configured for this deployment.');return;}
-  mapboxgl.accessToken=token;
-  const instance=new mapboxgl.Map({container:host.current!,style:'mapbox://styles/mapbox/streets-v12',center:[-13.2290,8.4808],zoom:13,attributionControl:true});
-  map.current=instance;
-  instance.addControl(new mapboxgl.NavigationControl({showCompass:true}),'top-right');
-  instance.once('load',()=>{if(live)setMapReady(true);});
-  instance.on('error',()=>{if(live&&!instance.loaded())setMapError('Mapbox could not load the map. Check token permissions and allowed origins.');});
-  return()=>{live=false;for(const m of Object.values(markers.current))m.remove();markers.current={};routeAttempt.current++;routeController.current?.abort();routeController.current=null;if(routeTimer.current)clearTimeout(routeTimer.current);if(map.current===instance)map.current=null;instance.remove();};
+  if(!token){setMapError('Mapbox is not configured for this deployment.');return()=>{live=false;};}
+  void loadMapbox().then(module=>{
+   if(!live||!host.current)return;
+   loadedModule=module;mapboxModule.current=module;
+   const mapbox=module.default;
+   mapbox.accessToken=token;
+   const created=new mapbox.Map({container:host.current,style:'mapbox://styles/mapbox/streets-v12',center:[-13.2290,8.4808],zoom:13,attributionControl:true});
+   instance=created;map.current=created;
+   created.addControl(new mapbox.NavigationControl({showCompass:true}),'top-right');
+   created.once('load',()=>{if(live)setMapReady(true);});
+   created.on('error',()=>{if(live&&!created.loaded())setMapError('Mapbox could not load the map. Check token permissions and allowed origins.');});
+  }).catch(()=>{if(live)setMapError('Mapbox could not be loaded. Check your connection and retry the trip map.');});
+  return()=>{live=false;for(const m of Object.values(markers.current))m.remove();markers.current={};routeAttempt.current++;routeController.current?.abort();routeController.current=null;if(routeTimer.current)clearTimeout(routeTimer.current);if(map.current===instance)map.current=null;if(mapboxModule.current===loadedModule)mapboxModule.current=null;instance?.remove();};
  },[bookingId,mapRetry]);
- useEffect(()=>{if(!map.current||!mapReady)return;
+ useEffect(()=>{const mapbox=mapboxModule.current?.default;if(!map.current||!mapReady||!mapbox)return;
   const positions:Record<string,Point|null>={pickup:snapshot?.pickup||null,destination:snapshot?.destination||null,driver:snapshot?.position||null,customer:customerSnapshot?.position||null};
   const colors:Record<string,string>={pickup:'#16a34a',destination:'#dc2626',driver:'#2563eb',customer:'#7c3aed'};
   for(const name of Object.keys(positions)){const p=positions[name];if(!p){markers.current[name]?.remove();delete markers.current[name];continue;}
-   if(!markers.current[name])markers.current[name]=new mapboxgl.Marker({color:colors[name]}).setLngLat([p.lng,p.lat]).setPopup(new mapboxgl.Popup({offset:22}).setText(name==='driver'?'Assigned driver':name==='customer'?'Trip customer':name==='pickup'?'Pickup':'Destination')).addTo(map.current);
+   if(!markers.current[name])markers.current[name]=new mapbox.Marker({color:colors[name]}).setLngLat([p.lng,p.lat]).setPopup(new mapbox.Popup({offset:22}).setText(name==='driver'?'Assigned driver':name==='customer'?'Trip customer':name==='pickup'?'Pickup':'Destination')).addTo(map.current);
    else markers.current[name].setLngLat([p.lng,p.lat]);
   }
   if(snapshot&&!centered.current){const p=snapshot.position||snapshot.pickup||snapshot.destination;if(p){map.current.easeTo({center:[p.lng,p.lat],duration:500});centered.current=true;}}
  },[snapshot,customerSnapshot,mapReady]);
  useEffect(()=>{
+  const mapbox=mapboxModule.current?.default;
   const trip=snapshot,position=trip?.locationState==='fresh'?trip.position:null;
   const target=trip?.status==='accepted'?trip.pickup:trip?.destination;
-  if(!trip||!navigating||!driver||!mapReady||!position||!target||!pageVisible(userId)){
+  if(!trip||!mapbox||!navigating||!driver||!mapReady||!position||!target||!pageVisible(userId)){
    routeAttempt.current++;routeController.current?.abort();routeController.current=null;if(routeTimer.current)clearTimeout(routeTimer.current);
    if(map.current?.getSource('matmove-active-route')){map.current.removeLayer('matmove-active-route');map.current.removeSource('matmove-active-route');}
    lastRoute.current={key:'',time:0};setRouteSteps([]);setRouteText(navigating?'Waiting for a fresh shared GPS location and saved trip pins.':'');return;
@@ -112,7 +125,7 @@ export default function ActiveTripMap({userId,bookingId,driver=false}:{userId:st
    else if(map.current){map.current.addSource('matmove-active-route',{type:'geojson',data:feature as any});map.current.addLayer({id:'matmove-active-route',type:'line',source:'matmove-active-route',layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#2563eb','line-width':5,'line-opacity':0.85}});}
    setRouteText(`${(route.distance/1000).toFixed(1)} km · about ${Math.max(1,Math.round(route.duration/60))} min to ${trip.status==='accepted'?'pickup':'destination'}`);
    setRouteSteps((leg.steps||[]).slice(0,30).map((step:any)=>String(step.maneuver?.instruction||step.name||'').replace(/<[^>]*>/g,' ').replace(/\\s+/g,' ').trim()).filter(Boolean));
-   const bounds=coordinates.reduce((b:any,c:any)=>b.extend(c),new mapboxgl.LngLatBounds(coordinates[0],coordinates[0]));
+   const bounds=coordinates.reduce((b:any,c:any)=>b.extend(c),new mapbox.LngLatBounds(coordinates[0],coordinates[0]));
    map.current?.fitBounds(bounds,{padding:48,maxZoom:16,duration:500});
   }).catch(()=>{if(routeTimer.current)clearTimeout(routeTimer.current);if(routeController.current===controller)routeController.current=null;if(routeAttempt.current===attempt)setRouteText('Mapbox route unavailable. Check connection, token permissions and Directions API access.');});
  },[navigating,driver,mapReady,snapshot,userId,bookingId]);
