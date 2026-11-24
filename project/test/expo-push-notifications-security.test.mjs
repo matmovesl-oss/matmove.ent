@@ -64,6 +64,7 @@ test('Expo push token SQL applies and enforces authenticated ownership in isolat
    create function public.matmove_notification_customer(p_user uuid)
      returns boolean language sql stable as $$ select p_user is not null $$;
    insert into auth.users(id) values ('10000000-0000-4000-8000-000000000001');
+   select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',false);
   `);
   await db.exec(sql);
   const registered = await db.query(
