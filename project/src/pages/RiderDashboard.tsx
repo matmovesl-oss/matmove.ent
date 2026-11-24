@@ -18,7 +18,7 @@ import { useTripRequest } from '@/lib/useTripRequest';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  Car, Package, CalendarClock, Plus, Minus, ArrowRight,
+  Car, CarFront, Bike, Truck, Package, CalendarClock, Plus, Minus, ArrowRight,
   X, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ShoppingCart,
   Check, Clock, Loader2
 } from 'lucide-react';
@@ -684,12 +684,13 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
                         const label = v === 'bike' ? 'Bike' : v === 'keke' ? 'Keke' : v === 'car' ? 'Car' : 'Van';
                         const selected = vehicleType === v;
                         const artwork = v==='keke'?'/matmove-keke.svg':v==='bike'?'/matmove-bike.svg':v==='car'?'/matmove-car.svg':'/matmove-van.svg';
+                        const VehicleIcon = v === 'bike' ? Bike : v === 'van' ? Truck : CarFront;
                         const detail = v==='keke'?'City three-wheeler':v==='bike'?'Quick solo ride':v==='car'?'Comfort ride':'Extra space';
                         return (
                           <button key={v} type="button" onClick={() => setVehicleType(v)} aria-label={`Choose ${label}`} aria-pressed={selected}
                             className={`group relative flex min-h-[132px] flex-col items-center justify-between overflow-hidden rounded-2xl border px-2 py-2.5 text-center transition duration-200 ${selected ? 'border-emerald-400 bg-gradient-to-br from-emerald-50 via-white to-sky-50 shadow-[0_8px_24px_rgba(5,150,105,.12)] ring-1 ring-emerald-200' : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md'}`}>
                             <span className="relative flex h-[76px] w-full items-center justify-center rounded-xl bg-gradient-to-br from-slate-50 to-white"><img src={artwork} alt="" className="h-[72px] w-full object-contain transition duration-300 group-hover:scale-[1.04]"/>{selected&&<span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white"><Check size={12} strokeWidth={3}/></span>}</span>
-                            <span className="mt-1 block text-xs font-black text-slate-900">{label}</span><span className="block text-[9px] font-medium text-slate-400">{detail}</span>
+                            <span className="mt-1 flex items-center justify-center gap-1 text-xs font-black text-slate-900"><VehicleIcon size={12} aria-hidden="true" />{label}</span><span className="block text-[9px] font-medium text-slate-400">{detail}</span>
                           </button>
                         );
                       })}
