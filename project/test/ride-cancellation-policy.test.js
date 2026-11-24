@@ -316,5 +316,5 @@ test('Rider UI fails closed for accepted-trip cancellation until the agreed fee 
   assert.match(source.slice(guard, cancellationRequest), /agreed cancellation fee is configured/i);
   assert.match(source.slice(guard, cancellationRequest), /No cancellation or refund has been submitted/i);
   assert.match(source.slice(guard, cancellationRequest), /return;/);
-  assert.doesNotMatch(source, /1%\\s+dispatch fee|penaltyAmount|driverShare|escrowShare/);
+  assert.doesNotMatch(source, /1%\s+dispatch fee|penaltyAmount|driverShare|escrowShare/);
 });
