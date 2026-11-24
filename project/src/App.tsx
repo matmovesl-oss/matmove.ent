@@ -346,7 +346,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
       } finally {
         setLoading(false);
       }
-    }, [location.pathname, profile?.id, navigate]);
+    }, [profile?.id, navigate]);
 
   useEffect(() => {
     fetchUserData();
