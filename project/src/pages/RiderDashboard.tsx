@@ -27,6 +27,7 @@ type RiderProfile = {
   id: string;
   role?: string | null;
   full_name?: string | null;
+  first_name?: string | null;
   email?: string | null;
   phone?: string | null;
   phone_number?: string | null;
@@ -50,7 +51,7 @@ type RiderProduct = {
 type RiderDashboardProps = {
   profile: RiderProfile; wallet?: WalletRecord | null; activeSection?: string;
   onBack?: () => void; resumeTripId?: string | null;
-  onOpenTrips?: (bookingId?: string) => void; onResumeTrip?: (bookingId: string) => void;
+  onOpenTrips?: (bookingId?: string | null) => void; onResumeTrip?: (bookingId: string) => void;
 };
 const DEFAULT_RIDER_PRICING: Record<string, RiderPricingRate> = {
   bike: { min: 15, perKm: 3 }, keke: { min: 20, perKm: 5 },
@@ -1123,7 +1124,7 @@ function RiderShop({ profile }: { profile: RiderProfile }) {
 }
 
 function RiderTrips({ profile, onResume }: { profile: RiderProfile; onResume?: (bookingId: string) => void }) {
-  return <TripHistory userId={profile?.id} role="rider" accountLabel={profile?.full_name || 'Rider'} accountEmail={profile?.email} onResume={onResume} />;
+  return <TripHistory userId={profile.id} role="rider" accountLabel={profile?.full_name || 'Rider'} accountEmail={profile?.email} onResume={onResume} />;
 }
 
 function PolicyModal({ onAccept }: { onAccept: () => void }) {
