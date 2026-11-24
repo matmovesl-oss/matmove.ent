@@ -582,24 +582,25 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
     <div className="flex-1 bg-slate-50 min-h-screen flex flex-col">
       <CashMonimeSuccess open={cashSuccessOpen} onClose={() => setCashSuccessOpen(false)} />
       {(rideNotice || walletNotice) && <div role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{rideNotice && <p>{rideNotice}</p>}{walletNotice && <p>{walletNotice}</p>}</div>}
-      <header className={`bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm ${activeSection === 'wallet' ? 'hidden' : ''}`}>
-        <div className="flex items-center gap-4">
-          <button type="button" aria-label={isOnline ? 'Go offline' : 'Go online'} aria-pressed={isOnline} onClick={toggleOnline} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+      <header className={`mm-role-header bg-white border-b border-slate-200 px-3 py-2 flex justify-between items-center gap-2 sticky top-0 z-20 shadow-sm sm:px-6 sm:py-4 ${activeSection === 'wallet' ? 'hidden' : ''}`}>
+        <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+          <button type="button" aria-label={isOnline ? 'Go offline' : 'Go online'} aria-pressed={isOnline} onClick={toggleOnline} className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}>
             <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${isOnline ? 'translate-x-7' : 'translate-x-1'}`} />
           </button>
-          <div><h2 className="font-bold text-slate-900 text-lg">{isOnline ? 'You are Online' : 'You are Offline'}</h2></div>
+          <div className="min-w-0"><h2 className="truncate text-xs font-bold text-slate-900 sm:text-lg">{isOnline ? 'You are Online' : 'You are Offline'}</h2></div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {!canTransact ? (
-            <span className="bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-200">
-              {isFrozen ? 'Wallet unavailable' : 'Approval pending'}
+            <span className="rounded-xl border border-red-200 bg-red-100 px-2 py-2 text-[10px] font-bold text-red-700 shadow-sm sm:px-4 sm:text-xs">
+              <span className="sm:hidden">{isFrozen ? 'Locked' : 'Pending'}</span>
+              <span className="hidden sm:inline">{isFrozen ? 'Wallet unavailable' : 'Approval pending'}</span>
             </span>
           ) : (
             <>
-              <button onClick={() => setIsLoadModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition">Load</button>
-              <button onClick={() => setIsPayoutModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition">Withdraw</button>
-              <button onClick={() => setIsTransferModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800 transition">Transfer</button>
+              <button type="button" aria-label="Load wallet" title="Load wallet" onClick={() => setIsLoadModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="flex min-h-10 min-w-10 items-center justify-center gap-1 rounded-xl bg-blue-600 px-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50 sm:px-3.5"><ArrowDownLeft size={17} className="sm:hidden"/><span className="hidden sm:inline">Load</span></button>
+              <button type="button" aria-label="Withdraw from wallet" title="Withdraw" onClick={() => setIsPayoutModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="flex min-h-10 min-w-10 items-center justify-center gap-1 rounded-xl bg-emerald-600 px-2 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50 sm:px-3.5"><ArrowUpRight size={17} className="sm:hidden"/><span className="hidden sm:inline">Withdraw</span></button>
+              <button type="button" aria-label="Transfer between wallets" title="Transfer" onClick={() => setIsTransferModalOpen(true)} disabled={!hasSleAccount || isSettingUpWallet} className="flex min-h-10 min-w-10 items-center justify-center gap-1 rounded-xl bg-slate-900 px-2 text-xs font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50 sm:px-3.5"><Smartphone size={17} className="sm:hidden"/><span className="hidden sm:inline">Transfer</span></button>
             </>
           )}
         </div>
