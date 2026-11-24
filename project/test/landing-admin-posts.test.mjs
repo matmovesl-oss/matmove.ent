@@ -30,9 +30,12 @@ test('homepage post hard-delete migration deletes records and removes archived r
   assert.match(baseMigration, /post_id uuid references public\.matmove_homepage_posts\(id\) on delete set null/i);
 });
 
-test('public homepage refreshes post changes frequently and when a hidden tab becomes visible', async () => {
+test('public homepage refreshes from Realtime and retains a 15-second hidden-tab-safe fallback', async () => {
   const source = await readFile(new URL('../src/components/PublicHomepagePosts.tsx', import.meta.url), 'utf8');
-  assert.match(source, /}, 15000\)/);
-  assert.match(source, /addEventListener\('visibilitychange', refreshWhenVisible\)/);
-  assert.match(source, /removeEventListener\('visibilitychange', refreshWhenVisible\)/);
+  assert.match(source, /window\.setInterval\(refreshWhenVisible, 15000\)/);
+  assert.match(source, /supabase\.channel\('matmove-public-homepage-posts'\)/);
+  assert.match(source, /table:\s*'matmove_homepage_post_feed_events'/);
+  assert.match(source, /document\.addEventListener\('visibilitychange', refreshWhenVisible\)/);
+  assert.match(source, /document\.removeEventListener\('visibilitychange', refreshWhenVisible\)/);
+  assert.match(source, /removeChannel\(channel\)/);
 });
