@@ -68,7 +68,7 @@ test('customer trip and order history indexes support owner/newest-first lookups
       const index = indexes.rows.find(row => row.indexname === name);
       assert.ok(index, name + ' exists');
       assert.equal(index.tablename, table);
-      assert.match(index.indexdef, new RegExp('\\(' + ownerColumn + ', created_at DESC\\)', 'i'));
+      assert.ok(index.indexdef.toLowerCase().includes(`(${ownerColumn.toLowerCase()}, ${dateSort.toLowerCase()})`));
       assert.match(index.indexdef, /USING btree/i);
     }
 
