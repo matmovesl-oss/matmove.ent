@@ -239,7 +239,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .mm-surface { padding:15px;margin-top:14px; }
   .mm-place-tile { padding:12px;gap:8px; }
   .mm-form-grid { grid-template-columns:1fr;gap:0; }
-  .portal-shell header.sticky { flex-wrap:wrap;gap:10px;padding:12px 14px; }
+  .portal-shell header.sticky.mm-role-header { flex-wrap:nowrap;gap:8px;padding:8px 12px; }
   .portal-shell h2.text-3xl,.portal-shell h1.text-3xl { font-size:24px;line-height:1.25; }
   .portal-shell .p-6 { padding:16px; }
   .portal-shell input:not([type=checkbox]):not([type=radio]),.portal-shell select,.portal-shell textarea { font-size:16px; }
