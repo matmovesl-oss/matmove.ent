@@ -25,15 +25,18 @@ test('Account contains the notification bell at the right side of its heading', 
   assert.match(app.slice(heading, nextSection), /onNavigate={onNavigate}/);
 });
 
-test('Account keeps the direct WhatsApp contact and places Support & Socials beside it', async () => {
+test('Account keeps direct WhatsApp support separate from the Support Media page and inbox', async () => {
   const app = await readFile('src/App.tsx', 'utf8');
-  const section = app.indexOf('<section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">', app.indexOf('function AccountSection('));
-  const support = app.indexOf('<CustomerSupport', section);
-  const whatsapp = app.indexOf('https://wa.me/${WHATSAPP_NUMBER}', section);
-  const nextSection = app.indexOf('<section className="mb-4 rounded-2xl border border-red-100 bg-white p-4">', section);
-  assert.ok(section >= 0 && support > section && whatsapp > support && nextSection > whatsapp);
-  assert.match(app.slice(section, nextSection), /Chat with Support \(\+232 90 330 362\)/);
-  assert.match(app.slice(section, nextSection), /Support & Socials/);
+  const account = app.indexOf('function AccountSection(');
+  const mediaRow = app.indexOf("setActivePanel('support-media')", account);
+  const supportSection = app.indexOf('<section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">', account);
+  const support = app.indexOf('<CustomerSupport', supportSection);
+  const whatsapp = app.indexOf('https://wa.me/${WHATSAPP_NUMBER}', supportSection);
+  const nextSection = app.indexOf('<section className="mb-4 rounded-2xl border border-red-100 bg-white p-4">', supportSection);
+  assert.ok(account >= 0 && mediaRow > account && supportSection > mediaRow && support > supportSection && whatsapp > support && nextSection > whatsapp);
+  assert.match(app.slice(supportSection, nextSection), /Chat with Support \\(+232 90 330 362\\)/);
+  assert.match(app.slice(supportSection, nextSection), /In-app Support/);
+  assert.match(app.slice(account, supportSection), /<b>Support Media<\\/b>/);
 });
 
 test('Account Support & Socials does not duplicate the separate WhatsApp link', async () => {
