@@ -129,7 +129,7 @@ test('a delayed verification after backgrounding cannot reopen the dashboard',as
  },{respond:c=>c.args.p_action==='status'?{data:receipt()}:new Promise(r=>{release=r;})});
 });
 test('existing Portal routes, Account tools and deletion request use the shared gate without plaintext comparisons',async()=>{
- const app=await readFile('src/App.tsx','utf8');assert.match(app,/<CustomerPasscode key=\{session.user.id\}/);assert.match(app,/onLock=\{onPrivacyLock\}/);assert.match(app,/customerPasscode\(profile.id,'verify',deletePin\)/);assert.doesNotMatch(app,/profile\.passcode|IDLE_LOCK_MS|IDLE_LOGOUT_MS|enteredPin ===/);for(const name of ['ProductCatalog','NotificationBell','InviteEarn','PortalGuide','KycWorkspace','ArcadeGames'])assert.ok(app.includes(name));
+ const app=await readFile('src/App.tsx','utf8');assert.match(app,/<CustomerPasscode key=\{session.user.id\}/);assert.match(app,/onLock=\{onPrivacyLock\}/);assert.match(app,/customerPasscode\(profile.id,'verify',deletePin\)/);assert.doesNotMatch(app,/profile\.passcode|IDLE_LOCK_MS|IDLE_LOGOUT_MS|enteredPin ===/);for(const name of ['NotificationBell','InviteEarn','PortalGuide','KycWorkspace','ArcadeGames'])assert.ok(app.includes(name));const rider=await readFile('src/pages/RiderDashboard.tsx','utf8');assert.ok(rider.includes('@/components/ProductCatalog'),'Product catalog must remain integrated through the Rider dashboard');
 });
 
 }
