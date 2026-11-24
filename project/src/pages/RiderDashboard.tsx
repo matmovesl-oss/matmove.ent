@@ -20,7 +20,7 @@ import { supabase } from '@/lib/supabase';
 import {
   Car, Package, CalendarClock, Plus, Minus, ArrowRight,
   X, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ShoppingCart,
-  Check, Clock
+  Check, Clock, Loader2
 } from 'lucide-react';
 
 type RiderProfile = {
@@ -50,7 +50,7 @@ type RiderProduct = {
 type RiderDashboardProps = {
   profile: RiderProfile; wallet?: WalletRecord | null; activeSection?: string;
   onBack?: () => void; resumeTripId?: string | null;
-  onOpenTrips?: (bookingId?: string) => void; onResumeTrip?: (bookingId?: string) => void;
+  onOpenTrips?: (bookingId?: string) => void; onResumeTrip?: (bookingId: string) => void;
 };
 const DEFAULT_RIDER_PRICING: Record<string, RiderPricingRate> = {
   bike: { min: 15, perKm: 3 }, keke: { min: 20, perKm: 5 },
@@ -388,7 +388,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       return;
     }
 
-    const minFare = pricingRates?.[vehicleType]?.min || defaultPricing[vehicleType].min;
+    const minFare = pricingRates?.[vehicleType]?.min || DEFAULT_RIDER_PRICING[vehicleType].min;
     if (finalAmount < minFare) {
       setRideNotice(`Minimum fare for ${vehicleType.toUpperCase()} is SLE ${minFare}.`);
       return;
@@ -399,7 +399,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
     const requiredWalletAmount = paymentMethod === 'cash'
       ? (fareMinor - driverCashMinor) / 100
       : finalAmount;
-    if ((sleWallet?.balance || 0) < requiredWalletAmount) {
+    if (Number(sleWallet?.balance || 0) < requiredWalletAmount) {
       setRideNotice(paymentMethod === 'cash'
         ? `Insufficient SLE wallet balance. You need SLE ${requiredWalletAmount.toFixed(2)} to secure MatMove's 15% cash-ride fee.`
         : `Insufficient balance. You need SLE ${finalAmount} to request this trip. Please load your wallet.`);
@@ -1122,7 +1122,7 @@ function RiderShop({ profile }: { profile: RiderProfile }) {
   );
 }
 
-function RiderTrips({ profile, onResume }: { profile: RiderProfile; onResume?: (bookingId?: string) => void }) {
+function RiderTrips({ profile, onResume }: { profile: RiderProfile; onResume?: (bookingId: string) => void }) {
   return <TripHistory userId={profile?.id} role="rider" accountLabel={profile?.full_name || 'Rider'} accountEmail={profile?.email} onResume={onResume} />;
 }
 
