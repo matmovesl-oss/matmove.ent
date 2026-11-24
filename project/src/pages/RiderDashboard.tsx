@@ -264,7 +264,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
     setShowPolicy(false);
   };
 
-  const fetchLiveBalance = async () => {
+  const fetchLiveBalance = useCallback(async () => {
     if (!profile?.id || balanceBusy.current) return;
     balanceBusy.current = true;
     setIsRefreshing(true);
@@ -282,7 +282,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       balanceBusy.current = false;
       setIsRefreshing(false);
     }
-  };
+  }, [profile?.id, networkOnline]);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -290,7 +290,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   }, [profile?.id]);
 
   const hasSleAccount = /^fac-[A-Za-z0-9_-]+$/.test(String(sleWallet?.monime_account_id || sleWallet?.metadata?.monime_account_id || ''));
-  const setupSleWallet = async () => {
+  const setupSleWallet = useCallback(async () => {
     if (!networkOnline || !canLoad || setupBusy.current) return;
     setupBusy.current = true;
     setIsSettingUpWallet(true);
@@ -309,11 +309,11 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       setupBusy.current = false;
       setIsSettingUpWallet(false);
     }
-  };
+  }, [networkOnline, canLoad, fetchLiveBalance]);
 
   useEffect(() => {
     if (canLoad && !hasSleAccount) void setupSleWallet();
-  }, [profile?.id, canLoad]);
+  }, [canLoad, hasSleAccount, setupSleWallet]);
 
   const walletSetupPanel = canLoad && !hasSleAccount ? (
     <section role="status" className="m-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
@@ -325,8 +325,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   ) : null;
 
   useEffect(() => {
-    fetchLiveBalance();
-  }, [profile?.id]);
+    void fetchLiveBalance();
+  }, [fetchLiveBalance]);
 
   const handleCreateUsdWallet = async () => {
     if (!networkOnline) { setWalletNotice('Connect to the internet before creating a wallet.'); return; }
