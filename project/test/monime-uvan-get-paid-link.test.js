@@ -69,15 +69,21 @@ test('USD wallet does not show the SLE mobile-money Get Paid URL', async () => {
   assert.equal(result.usdWallet.monime_payment_url, undefined);
 });
 
-test('Wallet Cards only opens Monime HTTPS Get Paid URLs and provides copy/share actions', async () => {
+test('Wallet Cards keeps provider identifiers off the card and opens a role-branded Get paid panel', async () => {
   const source = await readFile(new URL('../src/components/WalletCards.tsx', import.meta.url), 'utf8');
+  const panel = await readFile(new URL('../src/components/ReceiveMoneyPanel.tsx', import.meta.url), 'utf8');
 
-  assert.match(source, /wallet\?\.monime_payment_url/);
-  assert.match(source, /parsed\.protocol === 'https:'/);
-  assert.match(source, /parsed\.hostname === 'pay\.monime\.io'/);
-  assert.match(source, /Copy Get Paid link/);
-  assert.match(source, /Share payment link/);
-  assert.match(source, /rel="noopener noreferrer"/);
+  assert.match(source, /Get paid/);
+  assert.match(source, /setGetPaidOpen\(true\)/);
+  assert.match(source, /role=\{role\}/);
+  assert.doesNotMatch(source, /Monime UVAN|monime_uvan|pay\.monime\.io|Account ID:/);
+  assert.doesNotMatch(source, /wallet\?\.monime_payment_url/);
+  assert.match(panel, /MatMove Rider Get Paid/);
+  assert.match(panel, /MatMove Driver Get Paid/);
+  assert.match(panel, /MatMove Merchant Get Paid/);
+  assert.match(panel, /role="dialog"/);
+  assert.match(panel, /Copy link/);
+  assert.match(panel, /Share details/);
 });
 
 test('Get Paid link is delivered through the existing wallet API; the twelve-route limit remains unchanged', async () => {
