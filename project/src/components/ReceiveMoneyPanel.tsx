@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Copy, Link2, Loader2, Share2, Smartphone, ShieldCheck } from 'lucide-react';
+import { Copy, Link2, Loader2, Share2, Smartphone, ShieldCheck, X } from 'lucide-react';
 import { walletFetch } from '@/lib/apiFetch';
 
 type ReceiveLink = {
@@ -11,7 +11,7 @@ type ReceiveLink = {
   smsReceiptsEnabled: boolean;
 };
 
-export default function ReceiveMoneyPanel({ sleWallet }: { sleWallet: any }) {
+export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWallet: any; role: 'rider' | 'driver' | 'merchant'; onClose: () => void }) {
   const [link, setLink] = useState<ReceiveLink | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -116,18 +116,21 @@ export default function ReceiveMoneyPanel({ sleWallet }: { sleWallet: any }) {
 
   if (!available) return null;
 
+  const roleTitle = role === 'driver' ? 'MatMove Driver Get Paid' : role === 'merchant' ? 'MatMove Merchant Get Paid' : 'MatMove Rider Get Paid';
+
   return (
-    <section className="mm-glass-tile mt-4 rounded-3xl p-4 text-slate-800 sm:p-5" aria-labelledby="receive-money-title">
-      <div className="flex items-start gap-3">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/45 p-2 backdrop-blur-sm sm:items-center sm:p-4">
+    <section role="dialog" aria-modal="true" className="mm-glass-tile max-h-[min(88dvh,760px)] w-full max-w-lg overflow-y-auto rounded-3xl p-4 text-slate-800 shadow-2xl sm:p-5" aria-labelledby="receive-money-title">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
         <div className="mm-glass-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl">
           <Link2 size={21}/>
         </div>
         <div className="min-w-0 flex-1">
-          <h3 id="receive-money-title" className="text-base font-extrabold">Receive money</h3>
-          <p className="mt-1 text-sm leading-5 text-slate-600">
-            Create one secure MatMove link for your SLE wallet. Share it with someone who needs to pay you.
-          </p>
+          <h3 id="receive-money-title" className="text-base font-extrabold">{roleTitle}</h3>
+          <p className="mt-1 text-sm leading-5 text-slate-600">Receive money securely into your MatMove SLE wallet.</p>
         </div>
+        <button type="button" onClick={onClose} aria-label="Close Get paid" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/70 text-slate-600"><X size={19}/></button>
       </div>
 
       {loading ? (
@@ -154,10 +157,10 @@ export default function ReceiveMoneyPanel({ sleWallet }: { sleWallet: any }) {
             <input type="checkbox" checked={smsEnabled} disabled={saving} onChange={event => void setSmsPreference(event.target.checked)} className="mt-1 h-4 w-4 accent-emerald-700"/>
             <span className="min-w-0">
               <span className="flex items-center gap-2 text-sm font-bold text-slate-800"><Smartphone size={15}/> SMS receipt to my phone</span>
-              <span className="mt-1 block text-xs leading-5 text-slate-500">Send me an SMS after Monime confirms an incoming payment. Your registered MatMove phone number is used.</span>
+              <span className="mt-1 block text-xs leading-5 text-slate-500">Send me an SMS after MatMove confirms an incoming payment. Your registered MatMove phone number is used.</span>
             </span>
           </label>
-          <p className="flex items-start gap-2 text-xs leading-5 text-slate-500"><ShieldCheck size={15} className="mt-0.5 shrink-0 text-emerald-700"/> Payments are confirmed from Monime's verified transaction record. A payment link never exposes your Monime account number.</p>
+          <p className="flex items-start gap-2 text-xs leading-5 text-slate-500"><ShieldCheck size={15} className="mt-0.5 shrink-0 text-emerald-700"/> MatMove verifies incoming payments before crediting your wallet. Your payment link does not expose provider account details.</p>
           <button type="button" disabled={saving} onClick={() => void disableLink()} className="text-xs font-semibold text-slate-500 underline underline-offset-4 disabled:opacity-50">{saving ? 'Saving…' : 'Disable this payment link'}</button>
         </div>
       ) : link?.featureEnabled === false ? (
@@ -177,5 +180,6 @@ export default function ReceiveMoneyPanel({ sleWallet }: { sleWallet: any }) {
       {notice && <p role="status" className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
       {error && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     </section>
+    </div>
   );
 }
