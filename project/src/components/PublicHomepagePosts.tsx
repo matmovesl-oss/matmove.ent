@@ -33,8 +33,16 @@ export default function PublicHomepagePosts() {
 
   useEffect(() => {
     let active = true;
+    let loadingRequest = false;
+    let reloadQueued = false;
 
     const load = async () => {
+      if (!active) return;
+      if (loadingRequest) {
+        reloadQueued = true;
+        return;
+      }
+      loadingRequest = true;
       try {
         const { data, error } = await supabase
           .from('matmove_public_homepage_posts')
@@ -48,23 +56,39 @@ export default function PublicHomepagePosts() {
       } catch {
         if (active) setPosts([]);
       } finally {
+        loadingRequest = false;
         if (active) setLoading(false);
+        if (active && reloadQueued) {
+          reloadQueued = false;
+          void load();
+        }
       }
     };
 
-    void load();
-    const refresh = window.setInterval(() => {
-      if (!document.hidden) void load();
-    }, 15000);
     const refreshWhenVisible = () => {
       if (!document.hidden) void load();
     };
-    window.addEventListener('visibilitychange', refreshWhenVisible);
+    void load();
+
+    // The database emits only a lightweight public feed signal. Post content is
+    // always re-read from the restricted, published-post view above.
+    const channel = supabase.channel('matmove-public-homepage-posts')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'matmove_homepage_post_feed_events'
+      }, refreshWhenVisible)
+      .subscribe();
+
+    // Keep polling as a fallback if the Realtime connection is interrupted.
+    const refresh = window.setInterval(refreshWhenVisible, 15000);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
       active = false;
       window.clearInterval(refresh);
-      window.removeEventListener('visibilitychange', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      void supabase.removeChannel(channel);
     };
   }, []);
 
