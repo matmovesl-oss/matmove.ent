@@ -18,6 +18,11 @@ export default function MerchantCheckout({ userId, items, initialPhone = '', onP
   const inFlight = useRef(false);
   const mounted = useRef(true);
   const notified = useRef<string | null>(null);
+  const syncingPaid = useRef(false);
+  const onPaidRef = useRef(onPaid);
+  onPaidRef.current = onPaid;
+  const [cartSyncError, setCartSyncError] = useState('');
+  const [cartSyncBusy, setCartSyncBusy] = useState(false);
   const inputKey = JSON.stringify(items);
   useEffect(() => { setQuote(null); }, [inputKey]);
   useEffect(() => {
@@ -27,16 +32,15 @@ export default function MerchantCheckout({ userId, items, initialPhone = '', onP
       if (raw) {
         const value = JSON.parse(raw) as Saved;
         if (value.request?.action === 'merchant_submit' && typeof value.request.idempotencyKey === 'string') {
-          if (value.payment && ['completed', 'failed'].includes(value.payment.state)) localStorage.removeItem(storageKey);
-          else setSaved(value);
+          setSaved(value);
         }
       }
     } catch { setStorageAvailable(false); setError('Enable browser storage before making a payment.'); }
     return () => { mounted.current = false; };
   }, [storageKey]);
   function persist(value: Saved) {
-    if (value.payment && ['completed', 'failed'].includes(value.payment.state)) localStorage.removeItem(storageKey);
-    else localStorage.setItem(storageKey, JSON.stringify(value));
+    // Keep the exact request and provider receipt until all post-payment work is confirmed.
+    localStorage.setItem(storageKey, JSON.stringify(value));
     setSaved(value);
   }
   async function review() {
@@ -49,6 +53,27 @@ export default function MerchantCheckout({ userId, items, initialPhone = '', onP
     } catch (e: any) { if (mounted.current) setError(e.message); }
     finally { inFlight.current = false; if (mounted.current) setBusy(false); }
   }
+  async function notifyPaid(payment: MerchantPayment) {
+    if (notified.current === payment.id || syncingPaid.current) return;
+    syncingPaid.current = true;
+    if (mounted.current) {
+      setCartSyncBusy(true);
+      setCartSyncError('');
+    }
+    try {
+      await onPaidRef.current?.(payment);
+      localStorage.removeItem(storageKey);
+      notified.current = payment.id;
+      if (mounted.current) setCartSyncError('');
+    } catch {
+      if (mounted.current) {
+        setCartSyncError('Payment is complete, but your cart update was not confirmed. Retry this same cart update before paying again.');
+      }
+    } finally {
+      syncingPaid.current = false;
+      if (mounted.current) setCartSyncBusy(false);
+    }
+  }
   async function submitOrCheck() {
     if (inFlight.current || (!saved && (!quote?.affordable || !storageAvailable))) return;
     inFlight.current = true; setBusy(true); setError('');
@@ -58,9 +83,8 @@ export default function MerchantCheckout({ userId, items, initialPhone = '', onP
       const result = await merchantPaymentRequest(value.payment ? { action: 'merchant_status', paymentId: value.payment.id } : value.request);
       if (!result.payment) throw new Error('No payment receipt returned.');
       if (mounted.current) persist({ ...value, payment: result.payment });
-      if (result.payment.state === 'completed' && notified.current !== result.payment.id) {
-        notified.current = result.payment.id;
-        try { await onPaid?.(result.payment); } catch { /* Payment remains completed even if the cart refresh fails. */ }
+      if (result.payment.state === 'completed') {
+        await notifyPaid(result.payment);
       }
     } catch (e: any) {
       if (mounted.current) {
@@ -73,7 +97,12 @@ export default function MerchantCheckout({ userId, items, initialPhone = '', onP
     finally { inFlight.current = false; if (mounted.current) setBusy(false); }
   }
   useEffect(() => {
-    if (!saved || busy || (saved.payment && terminal(saved.payment.state))) return;
+    if (!saved || busy) return;
+    if (saved.payment?.state === 'completed') {
+      if (notified.current !== saved.payment.id) void notifyPaid(saved.payment);
+      return;
+    }
+    if (saved.payment && terminal(saved.payment.state)) return;
     const timer = window.setTimeout(() => { void submitOrCheck(); }, 5000);
     return () => window.clearTimeout(timer);
   }, [saved, busy]);
@@ -81,8 +110,14 @@ export default function MerchantCheckout({ userId, items, initialPhone = '', onP
   const breakdown = payment || quote;
   const resetQuote = () => { setQuote(null); setError(''); };
   function newPayment() {
-    try { localStorage.removeItem(storageKey); setSaved(null); setQuote(null); setError(''); }
-    catch { setError('Unable to clear completed payment.'); }
+    try {
+      localStorage.removeItem(storageKey);
+      notified.current = null;
+      setSaved(null);
+      setQuote(null);
+      setError('');
+      setCartSyncError('');
+    } catch { setError('Unable to clear completed payment.'); }
   }
   if (!items.length && !saved) return null;
   return <section className="my-4 space-y-4 rounded-2xl border border-blue-200 bg-white p-5">
@@ -107,6 +142,10 @@ export default function MerchantCheckout({ userId, items, initialPhone = '', onP
     </dl>}
     {quote && !quote.affordable && !saved && <p role="alert" className="text-red-700">Insufficient balance for this payment and fees.</p>}
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
+    {cartSyncError && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+      <p>{cartSyncError}</p>
+      <button type="button" disabled={cartSyncBusy} onClick={() => payment && void notifyPaid(payment)} className="mt-2 rounded-lg border border-amber-300 bg-white px-3 py-2 font-semibold disabled:opacity-50">{cartSyncBusy ? 'Updating cart...' : 'Retry cart update'}</button>
+    </div>}
     {payment && <div role="status" className={`rounded-xl p-4 ${payment.state === 'completed' ? 'bg-emerald-50' : 'bg-amber-50'}`}>
       <strong>{payment.state === 'completed' ? 'Payment completed — merchant credited' : payment.state === 'failed' ? 'Payment failed — merchant was not credited' : payment.state === 'review_required' ? 'Support review required' : 'Payment processing — checking automatically'}</strong>
       {payment.error && <p className="mt-2">{payment.error}</p>}
@@ -116,6 +155,6 @@ export default function MerchantCheckout({ userId, items, initialPhone = '', onP
       {payment.state === 'review_required' && <p className="mt-2">Keep this reference for support. Do not pay for this order again.</p>}
     </div>}
     {(saved || quote) && (!payment || !terminal(payment.state)) && <button disabled={busy || (!saved && (!quote?.affordable || !storageAvailable))} onClick={() => void submitOrCheck()} className="rounded-xl bg-blue-600 px-4 py-3 font-bold text-white disabled:opacity-50">{busy ? 'Processing...' : saved ? 'Check payment status' : `Confirm payment — ${sle(quote!.totalMinor)}`}</button>}
-    {payment && ['completed', 'failed'].includes(payment.state) && <button disabled={busy} onClick={newPayment} className="rounded-xl border px-4 py-3 font-bold">New payment</button>}
+    {payment && ['completed', 'failed'].includes(payment.state) && <button disabled={busy || cartSyncBusy || (payment.state === 'completed' && Boolean(cartSyncError))} onClick={newPayment} className="rounded-xl border px-4 py-3 font-bold">New payment</button>}
   </section>;
 }
