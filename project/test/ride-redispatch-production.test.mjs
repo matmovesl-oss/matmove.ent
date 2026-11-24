@@ -96,7 +96,7 @@ test('driver cancellation retry reaches the database idempotency check after the
   const cancelBranch = ridePayments.slice(retryBranchStart, retryBranchEnd);
   assert.match(cancelBranch, /matmove_driver_cancel_redispatch/);
   assert.doesNotMatch(cancelBranch, /booking\.driver_id\s*!==\s*user\.id/);
-  assert.match(cashPayments, /if \(actorType === 'driver'\)[\s\S]*matmove_driver_cancel_redispatch/);
+  assert.match(cashPayments, /booking\.status === 'in_progress' \|\| booking\.started_at[\s\S]*matmove_driver_cancel_redispatch/);
 });
 
 
