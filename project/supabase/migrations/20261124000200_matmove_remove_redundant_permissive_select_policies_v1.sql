@@ -13,6 +13,8 @@ drop policy wallet_transactions_select_own on public.wallet_transactions;
 drop policy matmove_event_tickets_owner_read on public.event_tickets;
 drop policy matmove_event_tickets_staff_checkin_update on public.event_tickets;
 
+drop policy withdrawal_requests_select_own on public.withdrawal_requests;
+
 notify pgrst, 'reload schema';
 
 commit;
