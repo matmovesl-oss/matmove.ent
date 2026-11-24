@@ -304,3 +304,17 @@ test('API submits same-booking redispatch for the assigned driver and confirms t
   assert.equal(db.calls[0].args.p_driver_id, driver);
   assert.equal(db.calls[0].args.p_request_id, '00000000-0000-4000-8000-000000000099');
 });
+
+
+test('Rider UI fails closed for accepted-trip cancellation until the agreed fee is configured', async () => {
+  const source = await readFile(new URL('../src/pages/RiderDashboard.tsx', import.meta.url), 'utf8');
+  const guard = source.indexOf("if (activeBooking.status === 'accepted') {");
+  const cancellationRequest = source.indexOf("await updateRide('cancel', activeBooking.id)");
+
+  assert.notEqual(guard, -1, 'accepted bookings must have an explicit UI guard');
+  assert.ok(cancellationRequest > guard, 'the guard must run before the cancellation API request');
+  assert.match(source.slice(guard, cancellationRequest), /agreed cancellation fee is configured/i);
+  assert.match(source.slice(guard, cancellationRequest), /No cancellation or refund has been submitted/i);
+  assert.match(source.slice(guard, cancellationRequest), /return;/);
+  assert.doesNotMatch(source, /1%\\s+dispatch fee|penaltyAmount|driverShare|escrowShare/);
+});
