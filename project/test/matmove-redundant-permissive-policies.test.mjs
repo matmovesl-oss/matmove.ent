@@ -161,7 +161,7 @@ test('redundant permissive policy cleanup preserves wallet, transaction, ticket,
       'withdrawal_requests.matmove_staff_allow_select'
     ];
     for (const name of retained) assert.equal(names.has(name), true, `${name} must remain`);
-    assert.equal(policyRows.rows.length, 15);
+    assert.equal(policyRows.rows.length, 16);
 
     const user1 = '10000000-0000-4000-8000-000000000001';
     const user2 = '10000000-0000-4000-8000-000000000002';
