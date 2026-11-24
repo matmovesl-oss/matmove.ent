@@ -241,30 +241,30 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
 
   const [loggingOut, setLoggingOut] =
     useState(false);
+  const [logoutError, setLogoutError] = useState('');
 
   const handleLogout = async () => {
     if (loggingOut) return;
 
     setLoggingOut(true);
+    setLogoutError('');
 
     try {
-      localStorage.removeItem(
-        'matmove_last_active'
-      );
-
-      const { error } =
-        await supabase.auth.signOut();
-
+      const { error } = await supabase.auth.signOut();
       if (error) throw error;
 
-      navigate('/login', {
-        replace: true,
-      });
+      try {
+        localStorage.removeItem('matmove_last_active');
+      } catch {
+        // Sign-out has succeeded; local cleanup is best-effort.
+      }
+
+      navigate('/login', { replace: true });
     } catch (err: any) {
-      alert(
-        err?.message ||
-        'Unable to sign out.'
-      );
+      const message = typeof err?.message === 'string' && err.message.trim()
+        ? err.message.trim()
+        : 'Unable to sign out. Check your connection and try again.';
+      setLogoutError(message);
     } finally {
       setLoggingOut(false);
     }
@@ -389,6 +389,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
           </h2>
 
           <p>{portalError}</p>
+          {logoutError && <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{logoutError}</p>}
 
           <button
             onClick={() =>
@@ -427,6 +428,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
       <div className="portal-shell min-h-screen bg-slate-50 pb-28">
         {accountHeader}
         <OfflineStatus />
+        {logoutError && <p role="alert" className="mx-auto mt-3 max-w-6xl rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{logoutError}</p>}
         <div className={sectionTransitioning ? 'mm-section-enter' : undefined}>
           <AccountSection
             profile={profile}
