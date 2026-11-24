@@ -36,3 +36,21 @@ test('public homepage view uses invoker security with narrowly scoped anonymous 
   assert.doesNotMatch(migration, /created_by|updated_by|owner_id/i);
   assert.match(migration, /notify pgrst/i);
 });
+
+test('public homepage posts refresh from the restricted Realtime feed signal with polling fallback', async () => {
+  const component = await read('../src/components/PublicHomepagePosts.tsx');
+  const migration = await read('../supabase/migrations/20261120171707_matmove_public_homepage_posts_scheduled_realtime_v1.sql');
+
+  assert.match(component, /supabase\.channel\('matmove-public-homepage-posts'\)/);
+  assert.match(component, /event:\s*'INSERT'/);
+  assert.match(component, /table:\s*'matmove_homepage_post_feed_events'/);
+  assert.match(component, /from\('matmove_public_homepage_posts'\)/);
+  assert.match(component, /window\.setInterval\(refreshWhenVisible, 15000\)/);
+  assert.match(component, /document\.addEventListener\('visibilitychange'/);
+  assert.match(component, /document\.removeEventListener\('visibilitychange'/);
+  assert.match(component, /removeChannel\(channel\)/);
+  assert.match(component, /reloadQueued/);
+  assert.match(migration, /create table if not exists public\.matmove_homepage_post_feed_events/i);
+  assert.match(migration, /alter publication supabase_realtime add table public\.matmove_homepage_post_feed_events/i);
+  assert.doesNotMatch(component, /from\('matmove_homepage_posts'\)/);
+});
