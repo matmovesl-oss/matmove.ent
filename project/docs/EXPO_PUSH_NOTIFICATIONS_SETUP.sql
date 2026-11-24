@@ -14,7 +14,7 @@ create table if not exists public.matmove_push_tokens (
   constraint matmove_push_tokens_token_unique unique (expo_push_token),
   constraint matmove_push_tokens_token_format check (
     length(expo_push_token) between 20 and 512
-    and expo_push_token ~ '^(ExponentPushToken|ExpoPushToken)\\[[A-Za-z0-9_-]+\\]$'
+    and expo_push_token ~ '^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$'
   )
 );
 
@@ -47,7 +47,7 @@ begin
   if p_platform is null or p_platform not in ('ios', 'android')
      or p_token is null
      or length(p_token) not between 20 and 512
-     or p_token !~ '^(ExponentPushToken|ExpoPushToken)\\[[A-Za-z0-9_-]+\\]$' then
+     or p_token !~ '^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$' then
     raise exception 'INVALID: MatMove received an invalid device notification token.';
   end if;
 
@@ -88,7 +88,7 @@ begin
     raise exception 'ACCESS: A verified MatMove customer account is required.';
   end if;
   if p_token is null or length(p_token) not between 20 and 512
-     or p_token !~ '^(ExponentPushToken|ExpoPushToken)\\[[A-Za-z0-9_-]+\\]$' then
+     or p_token !~ '^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$' then
     raise exception 'INVALID: MatMove received an invalid device notification token.';
   end if;
 
