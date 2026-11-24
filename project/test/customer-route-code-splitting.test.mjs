@@ -10,7 +10,7 @@ const recovery = readFileSync(new URL('../src/pages/UpdatePassword.tsx', import.
 const passcode = readFileSync(new URL('../src/lib/customerPasscode.ts', import.meta.url), 'utf8');
 
 const lazyComponents = [
-  'CustomerPasscode', 'InviteEarn', 'MatMoveHelp', 'CustomerSupport', 'NotificationBell',
+  'CustomerPasscode', 'InviteEarn', 'MatMoveHelp', 'SupportMediaPage', 'NotificationBell',
   'ReceivePayLinkPage', 'ReceivePaymentCompletePage', 'CustomerHome', 'PortalGuide',
   'AccountProfile', 'AccountIdentity', 'PasskeySecurity', 'MerchantCheckout', 'AccountPolicy',
   'RoleSelectionPage', 'KycWorkspace', 'PersonalInfoPage', 'IdentityPage', 'DocumentsPage',
