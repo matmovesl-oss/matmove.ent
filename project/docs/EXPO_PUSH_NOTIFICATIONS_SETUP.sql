@@ -20,6 +20,7 @@ create table if not exists public.matmove_push_tokens (
 
 alter table public.matmove_push_tokens enable row level security;
 revoke all on table public.matmove_push_tokens from public, anon, authenticated;
+grant select, update on table public.matmove_push_tokens to service_role;
 
 create index if not exists matmove_push_tokens_user_active_idx
   on public.matmove_push_tokens (user_id, last_seen_at desc)
