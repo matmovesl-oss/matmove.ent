@@ -37,7 +37,6 @@ export default function WalletCards({
     const el = rail.current;
     if (el) el.scrollTo({left: el.clientWidth * next, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
   }
-  const [notice, setNotice] = useState('');
   const [getPaidOpen, setGetPaidOpen] = useState(false);
 
 
@@ -63,18 +62,6 @@ export default function WalletCards({
           const id =
             wallet?.monime_account_id ||
             wallet?.metadata?.monime_account_id;
-
-          const paymentUrl = (() => {
-            if (currency !== 'SLE' || typeof wallet?.monime_payment_url !== 'string') return null;
-            try {
-              const parsed = new URL(wallet.monime_payment_url);
-              return parsed.protocol === 'https:' && parsed.hostname === 'pay.monime.io'
-                ? parsed.toString()
-                : null;
-            } catch {
-              return null;
-            }
-          })();
 
           const available =
             wallet?.balanceAvailable === true &&
@@ -161,18 +148,10 @@ export default function WalletCards({
         })}
       </div>
 
-      {getPaidOpen && <ReceiveMoneyPanel sleWallet={sleWallet} role={role} onClose={() => setGetPaidOpen(false)}/ >}
+      {getPaidOpen && <ReceiveMoneyPanel sleWallet={sleWallet} role={role} onClose={() => setGetPaidOpen(false)} />}
       <div className="flex justify-center gap-3" aria-label="Choose wallet">
         {['SLE','USD'].map((currency,index)=><button type="button" key={currency} aria-label={`Show ${currency} wallet`} aria-current={active===index?'true':undefined} onClick={()=>move(index)} className={`rounded-full px-4 py-1 text-xs font-bold ${active===index?'bg-slate-900 text-white':'bg-slate-100 text-slate-600'}`}>{currency}</button>)}
       </div>
-      {notice && (
-        <p
-          role="status"
-          className="rounded-xl bg-blue-50 p-3 text-sm text-blue-800"
-        >
-          {notice}
-        </p>
-      )}
     </div>
   );
 }
