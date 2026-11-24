@@ -65,15 +65,11 @@ import {
   ShoppingBag,
   Store,
   LockKeyhole,
-  Delete,
   ShoppingCart,
   ArrowRight,
   ArrowLeft,
-  Loader2,
   Trash2,
   BarChart2,
-  MapPin,
-  Phone,
   Clock,
   TrendingUp,
   DollarSign,
@@ -137,29 +133,35 @@ type CustomerRole =
   | 'driver'
   | 'merchant';
 
+type CustomerProfile = {
+  id: string; role: CustomerRole; email?: string | null; phone?: string | null;
+  phone_number?: string | null; first_name?: string | null; last_name?: string | null;
+  full_name?: string | null; kyc_status?: string | null; kyc_rejection_reason?: string | null;
+  [key: string]: unknown;
+};
+type CustomerWallet = { balance?: number | string | null; wallets?: unknown[]; [key: string]: unknown };
+type MerchantSummary = { business_name?: string | null; full_name?: string | null };
+type CartProduct = { id: string; merchant_id?: string | null; merchant?: MerchantSummary | null; name?: string | null; price?: number | string | null; currency?: string | null; [key: string]: unknown };
+type CustomerCartItem = { id: string; product_id?: string | null; product?: CartProduct | null; quantity?: number | null; [key: string]: unknown };
+type CustomerOrder = { status?: string | null; price?: number | string | null; [key: string]: unknown };
+type CustomerBooking = { status?: string | null; fare_amount?: number | string | null; [key: string]: unknown };
+type AnalyticsSummary = { primaryMetric: number; completed: number; pending: number; totalCount: number };
+type AccountSectionProps = { profile: CustomerProfile; wallet: CustomerWallet | null; loggingOut: boolean; onLogout: () => void; onBack: () => void; onLock: () => void; onServices: () => void };
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = error.message;
+    if (typeof message === 'string' && message.trim()) return message.trim();
+  }
+  return fallback;
+}
+
 
 
 const WHATSAPP_NUMBER = '23290330362';
 
-function getRoleFromPath(
-  pathname: string
-): CustomerRole | null {
-  if (pathname.includes('/driver')) {
-    return 'driver';
-  }
-
-  if (pathname.includes('/merchant')) {
-    return 'merchant';
-  }
-
-  if (pathname.includes('/rider')) {
-    return 'rider';
-  }
-
-  return null;
-}
-
-export function PortalApp() {
+function PortalApp() {
   const {session,signOut}=useAuth();
   if(!session?.user?.id)return <Navigate to="/login" replace/>;
   return <CustomerPasscode key={session.user.id} userId={session.user.id} onLogout={signOut}>{lock=><PortalContent onPrivacyLock={lock}/>}</CustomerPasscode>;
@@ -196,10 +198,10 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
   }:null;
 
   const [profile, setProfile] =
-    useState<any>(initialProfile);
+    useState<CustomerProfile | null>(initialProfile as CustomerProfile | null);
 
   const [wallet, setWallet] =
-    useState<any>(null);
+    useState<CustomerWallet | null>(null);
 
   const [loading, setLoading] =
     useState(!initialProfile);
@@ -237,7 +239,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     const timeout=window.setTimeout(()=>setSectionTransitioning(false),260);
     return ()=>window.clearTimeout(timeout);
   },[activeSection]);
-  useEffect(()=>{if(!sectionOwner||profile?.id!==sectionOwner)return;const sections=['home','ride','services','wallet','trips','account',...(profile.role==='rider'?['shop']:profile.role==='merchant'?['inventory']:[])];if(!sections.includes(activeSection)){setActiveSection('home');return;}try{sessionStorage.setItem(`matmove:portal-section:v1:${sectionOwner}`,activeSection);}catch{}},[sectionOwner,profile?.id,profile?.role,activeSection]);
+  useEffect(()=>{if(!sectionOwner||profile?.id!==sectionOwner)return;const sections=['home','ride','services','wallet','trips','account',...(profile.role==='rider'?['shop']:profile.role==='merchant'?['inventory']:[])];if(!sections.includes(activeSection)){setActiveSection('home');return;}try{sessionStorage.setItem(`matmove:portal-section:v1:${sectionOwner}`,activeSection);}catch{/* Session storage may be unavailable. */}},[sectionOwner,profile?.id,profile?.role,activeSection]);
 
   const [loggingOut, setLoggingOut] =
     useState(false);
@@ -260,11 +262,8 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
       }
 
       navigate('/login', { replace: true });
-    } catch (err: any) {
-      const message = typeof err?.message === 'string' && err.message.trim()
-        ? err.message.trim()
-        : 'Unable to sign out. Check your connection and try again.';
-      setLogoutError(message);
+    } catch (err: unknown) {
+      setLogoutError(errorMessage(err, 'Unable to sign out. Check your connection and try again.'));
     } finally {
       setLoggingOut(false);
     }
@@ -342,12 +341,12 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
           }),
           wallets: walletData || [],
         });
-      } catch (err: any) {
-        if (!profile?.id) setPortalError(err.message || 'Unable to load your account.');
+      } catch (err: unknown) {
+        if (!profile?.id) setPortalError(errorMessage(err, 'Unable to load your account.'));
       } finally {
         setLoading(false);
       }
-    }, [location.pathname, profile?.id]);
+    }, [location.pathname, profile?.id, navigate]);
 
   useEffect(() => {
     fetchUserData();
@@ -359,7 +358,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     let active = true;
     const refresh = async () => {
       const {data, error} = await supabase.from('profiles').select('*').eq('id', userId).single();
-      if (active && !error && data) setProfile((old: any) => old?.id === userId ? {...old, ...data} : old);
+      if (active && !error && data) setProfile(old => old?.id === userId ? { ...old, ...data } as CustomerProfile : old);
     };
     const channel = supabase.channel(`customer-kyc-status:${userId}`).on('postgres_changes', {event:'UPDATE', schema:'public', table:'profiles', filter:`id=eq.${userId}`}, () => void refresh()).subscribe();
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 15000);
@@ -529,7 +528,7 @@ function CustomerWorkspaceLoading({label='Loading your MatMove workspace...'}:{l
   );
 }
 
-function KycStatusNotice({profile, onVerify}: {profile: any; onVerify: () => void}) {
+function KycStatusNotice({profile, onVerify}: {profile: CustomerProfile | null; onVerify: () => void}) {
   if (!profile || profile.kyc_status === 'approved') return null;
   const rejected = ['rejected','declined','resubmission_required'].includes(profile.kyc_status);
   const pending = profile.role !== 'rider' && ['submitted','pending','under_review'].includes(profile.kyc_status);
@@ -548,7 +547,7 @@ function AccountSection({
   onBack,
   onLock,
   onServices,
-}: any) {
+}: AccountSectionProps) {
   const navigate = useNavigate();
   const resumeVerification = () => { if (profile.kyc_status === 'approved') return; sessionStorage.setItem('ob_role', profile.role); navigate('/onboarding/personal?resume=1'); };
   const [activePanel, setActivePanel] = useState<string | null>(null);
@@ -580,7 +579,7 @@ function AccountSection({
   const [
     analyticsData,
     setAnalyticsData,
-  ] = useState<any>({
+  ] = useState<AnalyticsSummary>({
     primaryMetric: 0,
     completed: 0,
     pending: 0,
@@ -588,10 +587,10 @@ function AccountSection({
   });
 
   const [cartItems, setCartItems] =
-    useState<any[]>([]);
+    useState<CustomerCartItem[]>([]);
 
   const [riderOrders, setRiderOrders] =
-    useState<any[]>([]);
+    useState<CustomerOrder[]>([]);
 
   const [
     viewingCartOrders,
@@ -698,7 +697,7 @@ function AccountSection({
         let comp = 0;
         let pend = 0;
 
-        data.forEach((o: any) => {
+        data.forEach((o: CustomerOrder) => {
           if (
             o.status === 'completed'
           ) {
@@ -739,7 +738,7 @@ function AccountSection({
         let comp = 0;
         let pend = 0;
 
-        data.forEach((b: any) => {
+        data.forEach((b: CustomerBooking) => {
           if (
             b.status === 'completed'
           ) {
@@ -799,7 +798,7 @@ function AccountSection({
       let pend = 0;
 
       (orders || []).forEach(
-        (o: any) => {
+        (o: CustomerOrder) => {
           if (
             o.status === 'completed'
           ) {
@@ -814,7 +813,7 @@ function AccountSection({
       );
 
       (bookings || []).forEach(
-        (b: any) => {
+        (b: CustomerBooking) => {
           if (
             b.status === 'completed'
           ) {
@@ -898,10 +897,10 @@ function AccountSection({
   };
 
   const [checkoutMerchant, setCheckoutMerchant] = useState('');
-  const merchantChoices = [...new Set(cartItems.map((item: any) => String(item.product?.merchant_id || '')).filter(Boolean))];
+  const merchantChoices = [...new Set(cartItems.map(item => String(item.product?.merchant_id || '')).filter(Boolean))];
   const selectedMerchant = merchantChoices.includes(checkoutMerchant) ? checkoutMerchant : merchantChoices[0];
-  const checkoutItems = cartItems.filter((item: any) => item.product?.merchant_id === selectedMerchant);
-  const checkoutListingsReady = checkoutItems.length>0 && checkoutItems.every((item:any)=>catalogCheckoutAllowed(item.product));
+  const checkoutItems = cartItems.filter(item => item.product?.merchant_id === selectedMerchant);
+  const checkoutListingsReady = checkoutItems.length>0 && checkoutItems.every(item =>catalogCheckoutAllowed(item.product));
 
 
   const filteredRiderOrders =
@@ -969,7 +968,7 @@ function AccountSection({
 
           <select
             value={analyticsTimeframe}
-            onChange={(e: any) =>
+            onChange={e =>
               setAnalyticsTimeframe(
                 e.target.value
               )
@@ -1169,20 +1168,20 @@ function AccountSection({
         {cartOrderTab === 'cart' && <div className="rounded-2xl border bg-white p-4">
           {merchantChoices.length > 1 && <label className="block font-bold">Choose merchant to pay
             <select value={selectedMerchant || ''} onChange={e => setCheckoutMerchant(e.target.value)} className="mt-2 w-full rounded-xl border p-3">
-              {merchantChoices.map(id => <option key={id} value={id}>{cartItems.find((x: any) => x.product?.merchant_id === id)?.product?.merchant?.business_name || cartItems.find((x: any) => x.product?.merchant_id === id)?.product?.merchant?.full_name || `Merchant ${id.slice(0,8)}`}</option>)}
+              {merchantChoices.map(id => <option key={id} value={id}>{cartItems.find(x => x.product?.merchant_id === id)?.product?.merchant?.business_name || cartItems.find(x => x.product?.merchant_id === id)?.product?.merchant?.full_name || `Merchant ${id.slice(0,8)}`}</option>)}
             </select>
           </label>}
           {!checkoutListingsReady&&checkoutItems.length>0&&<p role="alert" className="my-3 text-sm text-amber-900">Remove sold or unsupported-currency products before wallet checkout. No currency conversion is applied.</p>}
           <MerchantCheckout userId={profile.id} initialPhone={profile.phone || profile.phone_number || ''}
-            items={checkoutListingsReady?checkoutItems.map((item: any) => ({productId:item.product.id,quantity:item.quantity || 1})):[]}
+            items={checkoutListingsReady ? checkoutItems.map(item => ({productId: item.product?.id || item.product_id || '', quantity: item.quantity || 1})) : []}
             onPaid={async payment => {
-              const paidRows = cartItems.filter((row: any) => payment.items.some(item => {
+              const paidRows = cartItems.filter(row => payment.items.some(item => {
                 if (item.productId !== (row.product_id || row.product?.id)) return false;
-                const rows = cartItems.filter((x: any) => (x.product_id || x.product?.id) === item.productId);
-                return rows.reduce((sum: number, x: any) => sum + (x.quantity || 1), 0) === item.quantity;
+                const rows = cartItems.filter(x => (x.product_id || x.product?.id) === item.productId);
+                return rows.reduce((sum: number, x) => sum + (x.quantity || 1), 0) === item.quantity;
               }));
               if (paidRows.length) {
-                const result = await supabase.from('cart_items').delete().eq('rider_id', profile.id).in('id', paidRows.map((x: any) => x.id));
+                const result = await supabase.from('cart_items').delete().eq('rider_id', profile.id).in('id', paidRows.map(x => x.id));
                 if (result.error) throw result.error;
               }
               await fetchCartAndOrders();
@@ -1404,7 +1403,7 @@ function AccountSection({
   );
 }
 
-function PortalNavigation({ activeSection, onNavigate, role }: any) {
+function PortalNavigation({ activeSection, onNavigate, role }: { activeSection: PortalSection; onNavigate: (section: PortalSection) => void; role: CustomerRole }) {
   const tabs = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'ride', label: role === 'driver' ? 'Ride' : 'Ride', icon: role === 'driver' ? Navigation : Car },
