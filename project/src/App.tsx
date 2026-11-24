@@ -146,7 +146,7 @@ type CustomerCartItem = { id: string; product_id?: string | null; product?: Cart
 type CustomerOrder = { id: string; status?: string | null; price?: number | string | null; product_name?: string | null; quantity?: number | null; wallet_payment_status?: string | null; wallet_payment_id?: string | null; merchant?: MerchantSummary | null; created_at?: string | null; [key: string]: unknown };
 type CustomerBooking = { status?: string | null; fare_amount?: number | string | null; [key: string]: unknown };
 type AnalyticsSummary = { primaryMetric: number; completed: number; pending: number; totalCount: number };
-type AccountSectionProps = { profile: CustomerProfile; wallet: CustomerWallet | null; loggingOut: boolean; onLogout: () => void; onBack: () => void; onLock: () => void; onServices: () => void };
+type AccountSectionProps = { profile: CustomerProfile; wallet: CustomerWallet | null; loggingOut: boolean; onLogout: () => void; onBack: () => void; onLock: () => void; onServices: () => void; onNavigate: (destination: string) => void };
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) return error.message.trim();
@@ -420,7 +420,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
 
   const guide=<Suspense fallback={null}><PortalGuide key={`${profile.id}:${role}`} userId={profile.id} role={role} verified={profile.kyc_status==='approved'} replay={guideReplay} onNavigate={setActiveSection} onVerify={()=>{if(profile.kyc_status==='approved')return;sessionStorage.setItem('ob_role',role);navigate('/onboarding/personal?resume=1');}}/></Suspense>;
   const openHelpDestination=(destination:string)=>setActiveSection(customerHelpSection(destination,role) as PortalSection);
-  const accountHeader=<header className="border-b border-slate-200 bg-white px-3 pt-[env(safe-area-inset-top)]"><div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-2 py-2"><div className="flex min-w-0 shrink-0 items-center gap-2"><span className="text-base font-black tracking-tight text-slate-950">MatMove</span><button type="button" aria-label="Replay Quick guide" onClick={()=>setGuideReplay(n=>n+1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border px-2 text-sm font-bold text-emerald-800"><span aria-hidden="true" className="sm:hidden">?</span><span className="hidden sm:inline">Quick guide</span></button><Suspense fallback={null}><MatMoveHelp key={`help:${profile.id}:${role}`} userId={profile.id} context={{role}} onNavigate={openHelpDestination}/><CustomerSupport key={`support:${profile.id}`} userId={profile.id}/><NotificationBell key={`notifications:${profile.id}:${role}`} userId={profile.id} onNavigate={openHelpDestination}/></Suspense></div><button type="button" aria-label="Open your account" aria-current={activeSection==='account'?'page':undefined} onClick={()=>setActiveSection('account')} className="flex min-h-11 min-w-0 max-w-[48%] items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-slate-50"><Suspense fallback={<span className="text-xs text-slate-500">Account</span>}><AccountIdentity key={profile.id} userId={profile.id} fallbackName={profile.full_name?.trim() || profile.email || 'Complete your profile'}/></Suspense></button></div></header>;
+  const accountHeader=<header className="border-b border-slate-200 bg-white px-3 pt-[env(safe-area-inset-top)]"><div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-2 py-2"><div className="flex min-w-0 shrink-0 items-center gap-2"><span className="text-base font-black tracking-tight text-slate-950">MatMove</span><button type="button" aria-label="Replay Quick guide" onClick={()=>setGuideReplay(n=>n+1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border px-2 text-sm font-bold text-emerald-800"><span aria-hidden="true" className="sm:hidden">?</span><span className="hidden sm:inline">Quick guide</span></button><Suspense fallback={null}><MatMoveHelp key={`help:${profile.id}:${role}`} userId={profile.id} context={{role}} onNavigate={openHelpDestination}/></Suspense></div><button type="button" aria-label="Open your account" aria-current={activeSection==='account'?'page':undefined} onClick={()=>setActiveSection('account')} className="flex min-h-11 min-w-0 max-w-[48%] items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-slate-50"><Suspense fallback={<span className="text-xs text-slate-500">Account</span>}><AccountIdentity key={profile.id} userId={profile.id} fallbackName={profile.full_name?.trim() || profile.email || 'Complete your profile'}/></Suspense></button></div></header>;
 
   if (
     activeSection === 'account'
@@ -442,6 +442,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
               setActiveSection('home')
             }
             onServices={() => setActiveSection('services')}
+            onNavigate={openHelpDestination}
           />
         </div>
 
@@ -551,6 +552,7 @@ function AccountSection({
   onBack,
   onLock,
   onServices,
+  onNavigate,
 }: AccountSectionProps) {
   const navigate = useNavigate();
   const resumeVerification = () => { if (profile.kyc_status === 'approved') return; sessionStorage.setItem('ob_role', profile.role); navigate('/onboarding/personal?resume=1'); };
@@ -1358,7 +1360,12 @@ function AccountSection({
       <button type="button" onClick={onBack} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"><ArrowLeft size={17}/> Back to portal</button>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-xs font-bold uppercase tracking-wider text-emerald-700">MatMove account</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Account & Profile</h1></div>
-        <button type="button" onClick={onLock} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><LockKeyhole size={17}/> Lock app</button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Suspense fallback={<span className="min-h-11 min-w-11" />}>
+            <NotificationBell key={`notifications:${profile.id}`} userId={profile.id} onNavigate={onNavigate}/>
+          </Suspense>
+          <button type="button" onClick={onLock} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><LockKeyhole size={17}/> Lock app</button>
+        </div>
       </div>
 
       <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -1381,9 +1388,14 @@ function AccountSection({
       </button>
 
       <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
-        <h2 className="flex items-center gap-2 font-bold text-slate-900"><MessageSquare size={18} className="text-emerald-600"/>Customer Support</h2>
-        <p className="mt-2 text-sm text-slate-500">Contact our team directly on WhatsApp for instant assistance.</p>
-        <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700"><MessageSquare size={17}/> Chat with Support (+232 90 330 362)</a>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 font-bold text-slate-900"><MessageSquare size={18} className="text-emerald-600"/>Customer Support</h2>
+          <Suspense fallback={<span className="text-xs text-slate-500">Support options</span>}>
+            <CustomerSupport key={`support:${profile.id}`} userId={profile.id} hideWhatsappLink/>
+          </Suspense>
+        </div>
+        <p className="mt-2 text-sm text-slate-500">Choose WhatsApp for direct help, or open Support & Socials for the in-app support inbox and MatMove’s official channels.</p>
+        <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=Hello%20MatMove%20Support`} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700"><MessageSquare size={17}/> Chat with Support (+232 90 330 362)</a>
       </section>
 
       <section className="mb-4 rounded-2xl border border-red-100 bg-white p-4">

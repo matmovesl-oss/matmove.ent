@@ -18,7 +18,7 @@ function ContactGlyph({icon}:{icon:string}){
  return <span aria-hidden="true" className="text-sm font-black">{glyphs[icon]||'↗'}</span>;
 }
 
-export default function CustomerSupport({userId}:{userId:string}){
+export default function CustomerSupport({userId,hideWhatsappLink=false}:{userId:string;hideWhatsappLink?:boolean}){
  const [open,setOpen]=useState(false),[showInbox,setShowInbox]=useState(false);
  const [tickets,setTickets]=useState<Ticket[]>([]),[selected,setSelected]=useState<string|null>(null),[messages,setMessages]=useState<Message[]>([]);
  const [loading,setLoading]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
@@ -134,10 +134,10 @@ export default function CustomerSupport({userId}:{userId:string}){
  const activeWhatsapp=contacts.find(c=>c.kind==='whatsapp');
  const socialLinks=contacts.filter(c=>c.kind==='social'&&safeHttps(c.link_url));
  const whatsappDigits=phoneDigits(activeWhatsapp?.whatsapp_phone||null);
- const whatsappHref=whatsappDigits?'https://wa.me/'+whatsappDigits+'?text='+encodeURIComponent('Hello MatMove Support'):null;
+ const whatsappHref=!hideWhatsappLink&&whatsappDigits?'https://wa.me/'+whatsappDigits+'?text='+encodeURIComponent('Hello MatMove Support'):null;
 
  return <>
-  <button ref={triggerButton} type="button" onClick={()=>{setOpen(true);setShowInbox(false);messageRequest.current++;setSelected(null);setError('');setNotice('');void loadContacts();}} className="flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-2 text-sm font-bold text-emerald-800 sm:px-3" aria-label="Open MatMove support and social links" title="Support & Socials"><MessageCircle size={18}/><span className="hidden sm:inline">Support & Socials</span><ChevronDown size={15} className="hidden sm:inline"/>{tickets.some(t=>t.unread_count>0)&&<span className="rounded-full bg-rose-600 px-2 py-0.5 text-[10px] text-white">{tickets.reduce((n,t)=>n+Number(t.unread_count||0),0)}</span>}</button>
+  <button ref={triggerButton} type="button" onClick={()=>{setOpen(true);setShowInbox(false);messageRequest.current++;setSelected(null);setError('');setNotice('');void loadContacts();}} className="flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-2 text-sm font-bold text-emerald-800 sm:px-3" aria-label="Open MatMove support and social links" title="Support & Socials"><MessageCircle size={18}/><span className={hideWhatsappLink?"inline":"hidden sm:inline"}>Support & Socials</span><ChevronDown size={15} className={hideWhatsappLink?"inline":"hidden sm:inline"}/>{tickets.some(t=>t.unread_count>0)&&<span className="rounded-full bg-rose-600 px-2 py-0.5 text-[10px] text-white">{tickets.reduce((n,t)=>n+Number(t.unread_count||0),0)}</span>}</button>
   {open&&<div role="presentation" tabIndex={-1} onClick={e=>{if(e.target===e.currentTarget)closeSupport();}} onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();closeSupport();}}} className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/55 p-3 sm:p-5"><section role="dialog" aria-modal="true" aria-label="MatMove Support & Socials" tabIndex={-1} className="flex max-h-[min(92dvh,760px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
    <header className="flex shrink-0 items-center justify-between gap-3 border-b p-3 sm:p-4"><div className="min-w-0"><h2 className="truncate text-base font-black sm:text-lg">MatMove Support & Socials</h2><p className="text-xs text-slate-500">{showInbox?'Talk directly with the MatMove support team.':'Official MatMove channels and support contacts.'}</p></div><button ref={closeButton} type="button" aria-label="Close support" onClick={closeSupport} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50"><X size={19}/></button></header>
    <div className="min-h-0 flex-1 overflow-y-auto p-4">

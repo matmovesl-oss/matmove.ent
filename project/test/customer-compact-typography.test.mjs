@@ -34,7 +34,7 @@ test('Support can be dismissed by its close control, Escape and backdrop without
   assert.match(support, /aria-label="Close support"/);
   assert.match(support, /e\.key==='Escape'/);
   assert.match(support, /e\.target===e\.currentTarget/);
-  assert.match(support, /hidden sm:inline">Support & Socials/);
+  assert.match(support, /hideWhatsappLink\?"inline":"hidden sm:inline"/);
   assert.match(support, /max-h-\[min\(92dvh,760px\)\]/);
   assert.match(support, /Message MatMove Support/);
 });
