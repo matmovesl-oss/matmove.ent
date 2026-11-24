@@ -182,7 +182,6 @@ function OfflineStatus(){
 
 function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
   const navigate = useNavigate();
-  const location = useLocation();
   const {session:portalSession}=useAuth();
   const sectionOwner=portalSession?.user.id||'';
   const sessionUser=portalSession?.user;
