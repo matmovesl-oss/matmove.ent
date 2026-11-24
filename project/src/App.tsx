@@ -534,10 +534,11 @@ function CustomerWorkspaceLoading({label='Loading your MatMove workspace...'}:{l
 
 function KycStatusNotice({profile, onVerify}: {profile: CustomerProfile | null; onVerify: () => void}) {
   if (!profile || profile.kyc_status === 'approved') return null;
-  const rejected = ['rejected','declined','resubmission_required'].includes(profile.kyc_status);
-  const pending = profile.role !== 'rider' && ['submitted','pending','under_review'].includes(profile.kyc_status);
+  const status = profile.kyc_status || '';
+  const rejected = ['rejected','declined','resubmission_required'].includes(status);
+  const pending = profile.role !== 'rider' && ['submitted','pending','under_review'].includes(status);
   return <section role="status" className={`my-4 rounded-2xl border p-4 ${rejected ? 'border-red-200 bg-red-50 text-red-900' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
-    <h2 className="font-bold">{rejected ? profile.kyc_status === 'resubmission_required' ? 'Verification update required' : 'Verification rejected' : pending ? 'Approval pending' : 'Verify your identity'}</h2>
+    <h2 className="font-bold">{rejected ? status === 'resubmission_required' ? 'Verification update required' : 'Verification rejected' : pending ? 'Approval pending' : 'Verify your identity'}</h2>
     <p className="mt-1 whitespace-pre-wrap text-sm">{rejected ? profile.kyc_rejection_reason || 'Contact MatMove support for your review details.' : pending ? 'Your dashboard is available. Wallet features unlock after administrator approval.' : 'You can load your rider wallet. Complete verification to unlock transfers and withdrawals.'}</p>
     <button type="button" onClick={onVerify} className="mt-3 font-bold underline">{rejected ? 'Correct and resubmit verification' : pending ? 'Continue verification draft' : 'Verify identity →'}</button>
   </section>;
@@ -1265,9 +1266,7 @@ function AccountSection({
 
                       <div className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
                         <Clock size={12} />
-                        {new Date(
-                          o.created_at
-                        ).toLocaleString()}
+                        {new Date(o.created_at || 0).toLocaleString()}
                       </div>
                     </div>
 
@@ -1417,7 +1416,7 @@ function PortalNavigation({ activeSection, onNavigate, role }: { activeSection: 
     <div>{tabs.map(item => {
       const Icon = item.icon;
       const active = activeSection === item.id;
-      return <button key={item.id} type="button" aria-current={active ? 'page' : undefined} onClick={() => onNavigate(item.id)}><Icon size={20}/><span>{item.label}</span></button>;
+      return <button key={item.id} type="button" aria-current={active ? 'page' : undefined} onClick={() => onNavigate(item.id as PortalSection)}><Icon size={20}/><span>{item.label}</span></button>;
     })}</div>
   </nav>;
 }
