@@ -97,7 +97,6 @@ const MerchantAnalytics = lazy(() => import('@/components/MerchantAnalytics'));
 const CustomerPasscode = lazy(() => import('@/components/CustomerPasscode'));
 const InviteEarn = lazy(() => import('@/components/InviteEarn'));
 const MatMoveHelp = lazy(() => import('@/components/MatMoveHelp'));
-const CustomerSupport = lazy(() => import('@/components/CustomerSupport'));
 const SupportMediaPage = lazy(() => import('@/components/SupportMediaPage'));
 const NotificationBell = lazy(() => import('@/components/NotificationBell'));
 const ReceivePayLinkPage = lazy(() => import('@/pages/ReceivePayLinkPage'));
@@ -159,10 +158,6 @@ function errorMessage(error: unknown, fallback: string): string {
   }
   return fallback;
 }
-
-
-
-const WHATSAPP_NUMBER = '23290330362';
 
 export function PortalApp() {
   const {session,signOut}=useAuth();
@@ -1397,16 +1392,7 @@ function AccountSection({
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-amber-300"><Gift size={20}/></span><span className="min-w-0 flex-1"><b className="block text-sm text-amber-300">Games — Spin & Win</b><small className="mt-1 block text-xs text-slate-300">Choose a fee · Six segments · One possible free bonus · 18+</small></span><ArrowRight size={18} className="text-amber-300"/>
       </button>
 
-      <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 font-bold text-slate-900"><MessageSquare size={18} className="text-emerald-600"/>Customer Support</h2>
-          <Suspense fallback={<span className="text-xs text-slate-500">Support options</span>}>
-            <CustomerSupport key={`support:${profile.id}`} userId={profile.id} hideWhatsappLink inboxOnly/>
-          </Suspense>
-        </div>
-        <p className="mt-2 text-sm text-slate-500">Create a support request and follow replies from the MatMove team. Visit Support Media above for our official social channels.</p>
-        <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=Hello%20MatMove%20Support`} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700"><MessageSquare size={17}/> Chat with Support (+232 90 330 362)</a>
-      </section>
+
 
       <section className="mb-4 rounded-2xl border border-red-100 bg-white p-4">
         <h2 className="mb-2 flex items-center gap-2 font-bold text-red-600"><ShieldAlert size={18}/>Danger Zone</h2>
