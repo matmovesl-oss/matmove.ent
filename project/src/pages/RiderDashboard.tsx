@@ -17,7 +17,6 @@ import { updateRide } from '@/services/rideService';
 import { useTripRequest } from '@/lib/useTripRequest';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import 'mapbox-gl/dist/mapbox-gl.css';
 import {
   Car, CarFront, Bike, Truck, Package, MapPin, ShoppingBag, Loader2,
   CalendarClock, Plus, Minus, ArrowRight, Wallet,
