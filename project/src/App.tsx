@@ -260,11 +260,14 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
       }
 
       navigate('/login', { replace: true });
-    } catch (err: any) {
-      const message = typeof err?.message === 'string' && err.message.trim()
-        ? err.message.trim()
-        : 'Unable to sign out. Check your connection and try again.';
-      setLogoutError(message);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string'
+            ? err.message
+            : 'Unable to sign out. Check your connection and try again.';
+      setLogoutError(message.trim() || 'Unable to sign out. Check your connection and try again.');
     } finally {
       setLoggingOut(false);
     }
