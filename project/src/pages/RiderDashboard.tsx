@@ -18,18 +18,14 @@ import { useTripRequest } from '@/lib/useTripRequest';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  Car, CarFront, Bike, Truck, Package, MapPin, ShoppingBag, Loader2,
-  CalendarClock, Plus, Minus, ArrowRight, Wallet,
-  RefreshCw, X, Smartphone, ArrowDownLeft,
-  ArrowUpRight, Users, ShoppingCart, Activity,
-  Copy, Check, Share2, MessageCircle, Phone, Clock, FileText
+  Car, Package, CalendarClock, Plus, Minus, ArrowRight,
+  X, Smartphone, ArrowDownLeft, ArrowUpRight, Users, ShoppingCart,
+  Check, Clock
 } from 'lucide-react';
-
-const WHATSAPP_NUMBER = '23290330362';
 
 export function RiderDashboard(props: any) {
   if (props.activeSection === 'shop') {
-    return <RiderShop profile={props.profile} wallet={props.wallet} />;
+    return <RiderShop profile={props.profile} />;
   }
 
   if (props.activeSection === 'trips') {
@@ -50,10 +46,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   const [walletSetupError, setWalletSetupError] = useState('');
   const [usdWallet, setUsdWallet] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [txFilter, setTxFilter] = useState<'recent' | 'all'>('recent');
   const [isCreatingUsd, setIsCreatingUsd] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedTx, setSelectedTx] = useState<any>(null);
 
   const defaultPricing = {
@@ -106,21 +100,6 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   }, [resumeTripId, activeBooking?.id]);
   const tripRequest = useTripRequest(profile?.id || '');
 
-  const [cancellingRequestId,setCancellingRequestId]=useState<string|null>(null);
-  const handleCancelCustomerRequest=async(id:string)=>{
-    if(!networkOnline){setRideNotice('Connect to the internet before changing this request. No cancellation was submitted.');return;}
-    if(cancellingRequestId)return;
-    setCancellingRequestId(id);setRideNotice('');
-    try{
-      const result=await updateRide('cancel',id);
-      if(result.booking)setActiveBooking(result.booking);
-      retryTrip();
-      setRideNotice(result.pending?'Cancellation received. Any required refund is still being verified. Keep this same request open and do not submit another payment.':result.message||'Request cancellation verified.');
-    }catch(error:any){setRideNotice(error?.message||'Cancellation could not be verified. Refresh this original request before trying again.');}
-    finally{setCancellingRequestId(null);}
-  };
-
-
   useEffect(() => {
     let timer: any;
     if (activeBooking && activeBooking.status === 'accepted' && activeBooking.accepted_at) {
@@ -138,10 +117,6 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
-  const [payoutAmount, setPayoutAmount] = useState('');
-  const [payoutPhone, setPayoutPhone] = useState('');
-  const [networkProvider, setNetworkProvider] = useState<'orange' | 'afrimoney'>('orange');
-  const [isProcessingPayout, setIsProcessingPayout] = useState(false);
 
 
 
@@ -222,12 +197,6 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       ).toString()
     );
   }, [tripDistanceKm, vehicleType, pricingRates]);
-
-  const handleCopy = (id: string) => {
-    navigator.clipboard.writeText(id);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
 
   useEffect(() => {
     supabase
@@ -438,16 +407,9 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
     if (!networkOnline) { setRideNotice('Connect to the internet before changing this trip. No cancellation was submitted.'); return; }
     if (!activeBooking || isRequesting) return;
     
-    const isAfterFiveMinutes = elapsedSeconds > 300;
-    const penaltyAmount = Number(activeBooking.fare_amount || 0) * 0.01;
-    const driverShare = penaltyAmount * 0.5;
-    const escrowShare = penaltyAmount * 0.5;
-
-    if (activeBooking.status === 'accepted' && isAfterFiveMinutes) {
-      const confirmed = window.confirm(
-        `It has been over 5 minutes since driver acceptance. Cancelling now incurs a 1% dispatch fee (SLE ${penaltyAmount.toFixed(2)}), split 50/50 between the driver (SLE ${driverShare.toFixed(2)}) and escrow (SLE ${escrowShare.toFixed(2)}). Continue?`
-      );
-      if (!confirmed) return;
+    if (activeBooking.status === 'accepted') {
+      setRideNotice('Cancellation after driver acceptance is unavailable until the agreed cancellation fee is configured. No cancellation or refund has been submitted.');
+      return;
     }
 
     setIsRequesting(true);
@@ -455,15 +417,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
     try {
       const result = await updateRide('cancel', activeBooking.id);
       
-      if (activeBooking.status === 'accepted') {
-        setRideNotice(
-          isAfterFiveMinutes
-            ? `Trip cancelled. A 1% dispatch fee of SLE ${penaltyAmount.toFixed(2)} was split 50/50 between driver and escrow.`
-            : 'Trip cancelled within the 5-minute free window. Full refund returned to your wallet.'
-        );
-      } else {
-        setRideNotice(result.pending ? 'Refund is processing. The cancellation is not settled yet.' : 'Trip cancelled. Any held fare has been returned to your wallet.');
-      }
+      setRideNotice(result.pending ? 'Refund is processing. The cancellation is not settled yet.' : 'Trip cancelled. Any held fare has been returned to your wallet.');
       
       setActiveBooking(result.pending ? { ...activeBooking, ...result.booking } : null);
       await fetchLiveBalance();
@@ -512,12 +466,9 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
     setIsLoadModalOpen(false);
     setIsPayoutModalOpen(false);
     setIsTransferModalOpen(false);
-    setIsProcessingPayout(false);
     setIsProcessingTransfer(false);
-    setPayoutAmount('');
     setTransferAmount('');
     setTransferRecipient('');
-    setPayoutPhone('');
   };
 
   const executeTransfer = async () => {
@@ -629,7 +580,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
         {(activeSection === 'home' || activeSection === 'ride' || !activeSection) && (
           <div className="relative flex min-h-[100dvh] min-w-0 flex-col gap-0 overflow-visible">
             {(activeBooking || (pickupCoords && destinationCoords && !routeEditing)) && <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-5xl min-h-[148px] max-h-[min(66dvh,700px)] overscroll-contain overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white px-4 pb-5 pt-3 shadow-[0_-18px_50px_rgba(15,23,42,0.2)] space-y-4 sm:px-6" style={{height:bookingSheetDragging?`clamp(148px,calc(${sheetDragStartHeight.current}px - ${bookingSheetDragDelta}px),min(66dvh,700px))`:bookingSheetExpanded?'min(66dvh,700px)':'148px',transition:bookingSheetDragging?'none':'height 380ms cubic-bezier(.22,1,.36,1)',willChange:'height'}}>
-              <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded} onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;sheetDragStartHeight.current=bookingSheetExpanded?Math.min(window.innerHeight*.66,700):148;setBookingSheetDragging(true);setBookingSheetDragDelta(0);event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={event=>{if(sheetPointerStart.current!==null){const maxHeight=Math.min(window.innerHeight*.66,700),base=sheetDragStartHeight.current,delta=event.clientY-sheetPointerStart.current;setBookingSheetDragDelta(Math.max(base-maxHeight,Math.min(base-148,delta)));}}} onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start,base=sheetDragStartHeight.current,maxHeight=Math.min(window.innerHeight*.66,700),nextHeight=Math.max(148,Math.min(maxHeight,base-delta));if(Math.abs(delta)>6){sheetDragged.current=true;setBookingSheetExpanded(delta < -6 ? true : delta > 80 ? false : bookingSheetExpanded);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}} onPointerCancel={()=>{sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}} onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}} className="mx-auto flex h-6 w-16 touch-none select-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button><div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><p className="mt-1 text-sm text-slate-500">Choose a service, set your route and review your fare.</p></div>
+              <button type="button" aria-label="Drag or tap to expand or collapse ride booking panel" aria-expanded={bookingSheetExpanded} onPointerDown={event=>{sheetDragged.current=false;sheetPointerStart.current=event.clientY;sheetDragStartHeight.current=bookingSheetExpanded?Math.min(window.innerHeight*.66,700):148;setBookingSheetDragging(true);setBookingSheetDragDelta(0);event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={event=>{if(sheetPointerStart.current!==null){const maxHeight=Math.min(window.innerHeight*.66,700),base=sheetDragStartHeight.current,delta=event.clientY-sheetPointerStart.current;setBookingSheetDragDelta(Math.max(base-maxHeight,Math.min(base-148,delta)));}}} onPointerUp={event=>{const start=sheetPointerStart.current;if(start===null)return;const delta=event.clientY-start;if(Math.abs(delta)>6){sheetDragged.current=true;setBookingSheetExpanded(delta < -6 ? true : delta > 80 ? false : bookingSheetExpanded);}sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}} onPointerCancel={()=>{sheetPointerStart.current=null;setBookingSheetDragDelta(0);setBookingSheetDragging(false);}} onClick={()=>{if(sheetDragged.current){sheetDragged.current=false;return;}setBookingSheetExpanded(value=>!value);}} className="mx-auto flex h-6 w-16 touch-none select-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><span className="h-1.5 w-12 rounded-full bg-slate-300"/></button><div><p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-700">Move around Freetown</p><p className="mt-1 text-sm text-slate-500">Choose a service, set your route and review your fare.</p></div>
               {(tripError || tripRequest.error || (rideNotice && !tripRequest.retained)) && (
                 <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">
                   {tripRequest.error || (rideNotice && !tripRequest.retained) || tripError}
@@ -1022,7 +973,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   );
 }
 
-function RiderShop({ profile, wallet }: any) {
+function RiderShop({ profile }: any) {
   const [products, setProducts] = useState<any[]>([]);
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
