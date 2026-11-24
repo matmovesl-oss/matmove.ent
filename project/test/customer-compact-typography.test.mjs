@@ -29,12 +29,12 @@ test('Rider, Driver and Merchant role headers stay compact without wrapping on p
   assert.match(merchant, /Merchant Store/);
 });
 
-test('Support can be dismissed by its close control, Escape and backdrop without losing its in-app path', async () => {
+test('Support is a full-screen section with back navigation, Escape and an in-app inbox', async () => {
   const support = await readFile('src/components/CustomerSupport.tsx', 'utf8');
-  assert.match(support, /aria-label="Close support"/);
-  assert.match(support, /e\.key==='Escape'/);
-  assert.match(support, /e\.target===e\.currentTarget/);
+  assert.match(support, /aria-label=\\{showInbox\\?'Back to Support & Socials':'Back to account'\\}/);
+  assert.match(support, /e\\.key==='Escape'/);
   assert.match(support, /hideWhatsappLink\?"inline":"hidden sm:inline"/);
-  assert.match(support, /max-h-\[min\(92dvh,760px\)\]/);
+  assert.match(support, /min-h-\\[100dvh\\]/);
+  assert.match(support, /No links have been added yet/);
   assert.match(support, /Message MatMove Support/);
 });
