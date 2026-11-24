@@ -35,7 +35,7 @@ test('Account keeps direct WhatsApp support separate from the Support Media page
   const nextSection = app.indexOf('<section className="mb-4 rounded-2xl border border-red-100 bg-white p-4">', supportSection);
   assert.ok(account >= 0 && mediaRow > account && supportSection > mediaRow && support > supportSection && whatsapp > support && nextSection > whatsapp);
   assert.match(app.slice(supportSection, nextSection), /Chat with Support \(\+232 90 330 362\)/);
-  assert.match(app.slice(supportSection, nextSection), /In-app Support/);
+  assert.match(app.slice(supportSection, nextSection), /Customer Support/);
   assert.match(app.slice(account, supportSection), /<b>Support Media<\/b>/);
 });
 
