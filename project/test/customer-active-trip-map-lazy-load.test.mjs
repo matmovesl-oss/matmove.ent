@@ -21,7 +21,7 @@ test('Mapbox JavaScript and styles load only when the active-trip map is mounted
   assert.doesNotMatch(map, /^import\s+['"]mapbox-gl\/dist\/mapbox-gl\.css['"]/m);
 
   for (const [name, source] of [['Rider', rider], ['Driver', driver], ['Merchant', merchant]]) {
-    assert.match(source, /ActiveTripMap/ , name + ' keeps the active trip map');
+    assert.match(source, /ActiveTripMap/, name + ' keeps the active trip map');
     assert.doesNotMatch(source, /^import\s+['"]mapbox-gl\/dist\/mapbox-gl\.css['"]/m,
       name + ' must not load Mapbox CSS with the dashboard');
   }
