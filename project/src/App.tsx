@@ -121,6 +121,7 @@ const VerificationPage = lazy(() => import('@/pages/OnboardingPages').then(m => 
 type PortalSection =
   | 'home'
   | 'ride'
+  | 'delivery'
   | 'services'
   | 'wallet'
   | 'trips'
@@ -209,7 +210,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     useState('');
 
   // Restore the same portal tab and booking after a passcode lock, reload or app resume.
-  const savedSections: PortalSection[] = ['home','ride','services','wallet','trips','account',...(portalSession?.roles?.[0]==='rider'?['shop' as PortalSection]:portalSession?.roles?.[0]==='merchant'?['inventory' as PortalSection]:[])];
+  const savedSections: PortalSection[] = ['home','ride','services','wallet','trips','account',...(portalSession?.roles?.[0]==='rider'?['shop' as PortalSection,'delivery' as PortalSection]:portalSession?.roles?.[0]==='merchant'?['inventory' as PortalSection]:[])];
   const [activeSection, setActiveSection] = useState<PortalSection>(() => {
     try {
       const saved = sessionStorage.getItem(`matmove:portal-section:v1:${sectionOwner}`) as PortalSection | null;
@@ -238,7 +239,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
     const timeout=window.setTimeout(()=>setSectionTransitioning(false),260);
     return ()=>window.clearTimeout(timeout);
   },[activeSection]);
-  useEffect(()=>{if(!sectionOwner||profile?.id!==sectionOwner)return;const sections=['home','ride','services','wallet','trips','account',...(profile.role==='rider'?['shop']:profile.role==='merchant'?['inventory']:[])];if(!sections.includes(activeSection)){setActiveSection('home');return;}try{sessionStorage.setItem(`matmove:portal-section:v1:${sectionOwner}`,activeSection);}catch{/* Session storage may be unavailable. */}},[sectionOwner,profile?.id,profile?.role,activeSection]);
+  useEffect(()=>{if(!sectionOwner||profile?.id!==sectionOwner)return;const sections=['home','ride','services','wallet','trips','account',...(profile.role==='rider'?['shop','delivery']:profile.role==='merchant'?['inventory']:[])];if(!sections.includes(activeSection)){setActiveSection('home');return;}try{sessionStorage.setItem(`matmove:portal-section:v1:${sectionOwner}`,activeSection);}catch{/* Session storage may be unavailable. */}},[sectionOwner,profile?.id,profile?.role,activeSection]);
 
   const [loggingOut, setLoggingOut] =
     useState(false);
@@ -464,8 +465,8 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
       <div className="mx-auto max-w-6xl px-4"><KycStatusNotice profile={profile} onVerify={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal?resume=1'); }}/></div>
       {activeSection !== 'home' && activeSection !== 'services' && (
         <div className="mx-auto max-w-6xl px-4 pt-3">
-          <button type="button" onClick={() => setActiveSection(activeSection === 'ride' ? 'home' : 'services')} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
-            <ArrowLeft size={16}/> {activeSection === 'ride' ? 'Back to Home' : 'Back to Services'}
+          <button type="button" onClick={() => setActiveSection(activeSection === 'ride' || activeSection === 'delivery' ? 'home' : 'services')} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
+            <ArrowLeft size={16}/> {activeSection === 'ride' || activeSection === 'delivery' ? 'Back to Home' : 'Back to Services'}
           </button>
         </div>
       )}
@@ -1426,7 +1427,7 @@ function PortalNavigation({ activeSection, onNavigate, role }: { activeSection: 
   return <nav className="mm-portal-nav" aria-label="Main navigation">
     <div>{tabs.map(item => {
       const Icon = item.icon;
-      const active = activeSection === item.id;
+      const active = activeSection === item.id || (activeSection === 'delivery' && item.id === 'ride');
       return <button key={item.id} type="button" aria-current={active ? 'page' : undefined} onClick={() => onNavigate(item.id as PortalSection)}><Icon size={20}/><span>{item.label}</span></button>;
     })}</div>
   </nav>;
