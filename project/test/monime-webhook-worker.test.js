@@ -5,6 +5,23 @@ import { processMonimeWebhookBatch } from '../server/monime-webhook-worker.js';
 const paymentId = '00000000-0000-4000-8000-000000000123';
 const secretValues = ['MONIME_API_KEY', 'MONIME_SPACE_ID'];
 
+const originalDeploymentMode = process.env.VERCEL_ENV;
+const originalMonimeMode = process.env.MONIME_ENVIRONMENT;
+
+// Tests that simulate Monime's Test token must run in an isolated Preview-like
+// environment, even when Vercel executes the production build with VERCEL_ENV=production.
+test.beforeEach(() => {
+  process.env.VERCEL_ENV = 'preview';
+  process.env.MONIME_ENVIRONMENT = 'test';
+});
+
+test.afterEach(() => {
+  if (originalDeploymentMode === undefined) delete process.env.VERCEL_ENV;
+  else process.env.VERCEL_ENV = originalDeploymentMode;
+  if (originalMonimeMode === undefined) delete process.env.MONIME_ENVIRONMENT;
+  else process.env.MONIME_ENVIRONMENT = originalMonimeMode;
+});
+
 function fixture(status = 'completed', signatureVerified = true, failEventFinalization = false) {
   const event = {
     event_id: 'wke-worker-test',
