@@ -12,14 +12,17 @@ test('map-first ride location picker participates in page flow and leaves the ma
   assert.doesNotMatch(source, /fixed bottom-\[calc\(82px/);
 });
 
-test('merchant wallet actions stay in one compact row without wrapping or shrinking', async () => {
+test('merchant wallet actions stay compact and accessible on phones and desktop', async () => {
   const source = await readFile(new URL('../src/pages/MerchantDashboard.tsx', import.meta.url), 'utf8');
   assert.match(source, /flex flex-nowrap items-center justify-between gap-2/);
   assert.match(source, /flex shrink-0 items-center gap-1\.5 whitespace-nowrap/);
-  assert.ok((source.match(/shrink-0 whitespace-nowrap rounded-lg/g) || []).length >= 3, 'All three wallet actions must remain compact and non-wrapping');
-  assert.match(source, />Load<\/button>/);
-  assert.match(source, />Withdraw<\/button>/);
-  assert.match(source, />Transfer<\/button>/);
+  for (const action of ['Load wallet', 'Withdraw from wallet', 'Transfer between wallets']) {
+    assert.ok(source.includes(`aria-label="${action}"`), `Missing accessible action label: ${action}`);
+  }
+  assert.ok((source.match(/min-h-10 min-w-10 shrink-0/g) || []).length >= 3, 'All three wallet actions must retain a non-shrinking mobile touch target');
+  for (const label of ['Load', 'Withdraw', 'Transfer']) {
+    assert.ok(source.includes(`<span className="hidden sm:inline">${label}</span>`), `Desktop label should remain visible for ${label}`);
+  }
 });
 
 test('merchant ride booking panel stays in normal page flow and map keeps one-finger gestures', async () => {
