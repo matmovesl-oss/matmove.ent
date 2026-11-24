@@ -21,7 +21,6 @@ import { TransactionModal } from '@/components/TransactionModal';
 import { useWalletAccess } from '@/lib/useWalletAccess';
 import { walletFetch } from '@/lib/apiFetch';
 import { updateRide, readRidePayment } from '@/services/rideService';
-import 'mapbox-gl/dist/mapbox-gl.css';
 import {
   Store, Plus, Package, RefreshCw, X, Loader2, MapPin,
   Car, CalendarClock, Phone, Minus, Smartphone,
