@@ -1,7 +1,7 @@
 import {ArrowRight,Car,MapPin,Wallet,Store,ShoppingBag,Package,Utensils,KeyRound,Navigation,Sparkles} from 'lucide-react';
 import CustomerHomePosts from '@/components/CustomerHomePosts';
 
-type Props={profile:any;onNavigate:(section:'ride'|'account'|'services'|'trips'|'shop'|'inventory')=>void};
+type Props={profile:any;onNavigate:(section:'ride'|'delivery'|'account'|'services'|'trips'|'shop'|'inventory')=>void};
 
 const customerServices=[
  {label:'Ride',detail:'Book a Keke, bike or car',icon:Car,illustration:'/matmove-car.svg',accent:'bg-emerald-50 text-emerald-700'},
@@ -50,7 +50,7 @@ export default function CustomerHome({profile,onNavigate}:Props){
   <section aria-labelledby="quick-services-title">
    <div className="mb-3 flex items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.16em] text-slate-400">Made for your day</p><h2 id="quick-services-title" className="mt-1 text-xl font-black text-slate-950">Quick access</h2></div><button type="button" onClick={()=>onNavigate('services')} className="inline-flex min-h-10 items-center gap-1 text-sm font-bold text-emerald-700">All services <ArrowRight size={16}/></button></div>
    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-    {services.map(item=>{const Icon=item.icon;return <button key={item.label} type="button" onClick={()=>onNavigate(driver?(item.label==='Driver radar'?'ride':item.label==='My trips'?'trips':item.label==='Earnings'?'account':'services'):merchant?(item.label==='My shop'||item.label==='Orders'?'inventory':item.label==='Earnings'?'account':'services'):item.label==='Ride'?'ride':item.label==='Food'?'shop':'services')} className="mm-glass-tile group min-h-36 rounded-3xl p-4 text-left transition hover:-translate-y-0.5"><span className={`mb-4 flex h-14 w-16 items-center justify-center rounded-2xl ${item.illustration?"bg-gradient-to-br from-emerald-50 to-sky-50":""} ${item.accent}`}>{item.illustration?<img src={item.illustration} alt="" className="h-12 w-14 object-contain"/>:<Icon size={22} strokeWidth={2}/>}</span><span className="block font-bold text-slate-950">{item.label}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{item.detail}</span></button>})}
+    {services.map(item=>{const Icon=item.icon;return <button key={item.label} type="button" onClick={()=>onNavigate(driver?(item.label==='Driver radar'?'ride':item.label==='My trips'?'trips':item.label==='Earnings'?'account':'services'):merchant?(item.label==='My shop'||item.label==='Orders'?'inventory':item.label==='Earnings'?'account':'services'):item.label==='Ride'?'ride':item.label==='Food'?'shop':item.label==='Package'?'delivery':'services')} className="mm-glass-tile group min-h-36 rounded-3xl p-4 text-left transition hover:-translate-y-0.5"><span className={`mb-4 flex h-14 w-16 items-center justify-center rounded-2xl ${item.illustration?"bg-gradient-to-br from-emerald-50 to-sky-50":""} ${item.accent}`}>{item.illustration?<img src={item.illustration} alt="" className="h-12 w-14 object-contain"/>:<Icon size={22} strokeWidth={2}/>}</span><span className="block font-bold text-slate-950">{item.label}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{item.detail}</span></button>})}
    </div>
   </section>
 

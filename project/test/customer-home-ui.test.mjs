@@ -174,3 +174,20 @@ test('services directory and games are excluded from the initial customer JavaSc
  assert.match(portal,/<Suspense fallback=\{/);
  assert.doesNotMatch(portal,/import\s*\{\s*ArcadeGames\s*\}\s*from\s*'@\/components\/ArcadeGames'/);
 });
+
+test('Package quick access opens the existing delivery request directly',async()=>{
+ const [home,app,ride]=await Promise.all([
+  read('../src/components/CustomerHome.tsx'),
+  read('../src/App.tsx'),
+  read('../src/pages/RiderDashboard.tsx')
+ ]);
+ assert.match(home,/item\.label==='Package'\?'delivery':'services'/,'Package must not route through the general services hub');
+ assert.match(app,/profile\.role==='rider'\?\['shop','delivery'\]/,'Delivery intent must be valid and restorable only for Rider accounts');
+ assert.match(app,/activeSection=\{activeSection === 'ride' \? 'home' : activeSection\}/,'App must pass Delivery intent to the Rider dashboard');
+ assert.match(app,/activeSection === 'delivery' && item\.id === 'ride'/,'Ride navigation should remain selected for Delivery requests');
+ assert.match(app,/activeSection === 'ride' \|\| activeSection === 'delivery' \? 'home' : 'services'/,'Delivery back action should return to Home');
+ assert.match(ride,/const deliveryIntent = props\.activeSection === 'delivery'/);
+ assert.match(ride,/initialServiceType=\{deliveryIntent \? 'delivery' : 'ride'\}/);
+ assert.match(ride,/setServiceType\(initialServiceType \|\| 'ride'\)/);
+ assert.match(ride,/serviceType === 'delivery'/,'The existing delivery form should render in Delivery mode');
+});

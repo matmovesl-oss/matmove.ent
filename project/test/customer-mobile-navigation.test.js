@@ -82,7 +82,7 @@ test('all customer roles have a clear back path from services and role dashboard
   const services = await readFile('src/components/PortalHome.tsx', 'utf8');
   assert.ok(app.includes('Back to Services'));
   assert.ok(app.includes('Back to Home'));
-  assert.ok(app.includes("setActiveSection(activeSection === 'ride' ? 'home' : 'services')"));
+  assert.ok(app.includes("setActiveSection(activeSection === 'ride' || activeSection === 'delivery' ? 'home' : 'services')"));
   assert.ok(services.includes('aria-label="Back to Home"'));
   assert.ok(services.includes("onNavigate('home')"));
 });

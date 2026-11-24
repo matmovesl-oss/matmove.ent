@@ -50,6 +50,7 @@ type RiderProduct = {
 };
 type RiderDashboardProps = {
   profile: RiderProfile; wallet?: WalletRecord | null; activeSection?: string;
+  initialServiceType?: 'ride' | 'delivery' | 'scheduled';
   onBack?: () => void; resumeTripId?: string | null;
   onOpenTrips?: (bookingId?: string | null) => void; onResumeTrip?: (bookingId: string) => void;
 };
@@ -75,10 +76,16 @@ export function RiderDashboard(props: RiderDashboardProps) {
     return <RiderTrips profile={props.profile} onResume={props.onResumeTrip} />;
   }
 
-  return <RiderMain key={props.profile?.id || 'rider-main'} {...props} />;
+  const deliveryIntent = props.activeSection === 'delivery';
+  return <RiderMain
+    key={props.profile?.id || 'rider-main'}
+    {...props}
+    activeSection={deliveryIntent ? 'home' : props.activeSection}
+    initialServiceType={deliveryIntent ? 'delivery' : 'ride'}
+  />;
 }
 
-function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpenTrips }: RiderDashboardProps) {
+function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpenTrips, initialServiceType }: RiderDashboardProps) {
   const [sleWallet, setSleWallet] = useState<WalletRecord | null>(wallet || null);
   const [rideNotice, setRideNotice] = useState('');
   const [cashSuccessOpen, setCashSuccessOpen] = useState(false);
@@ -100,7 +107,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
 
   const [viewMode, setViewMode] = useState<'active' | 'new'>(resumeTripId ? 'active' : 'new');
-  const [serviceType, setServiceType] = useState<'ride' | 'delivery' | 'scheduled'>('ride');
+  const [serviceType, setServiceType] = useState<'ride' | 'delivery' | 'scheduled'>(initialServiceType || 'ride');
+  useEffect(() => { setServiceType(initialServiceType || 'ride'); }, [initialServiceType]);
   const [vehicleType, setVehicleType] = useState<'keke' | 'bike' | 'car' | 'van'>('car');
   const [offerAmount, setOfferAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'digital' | 'cash'>('digital');
