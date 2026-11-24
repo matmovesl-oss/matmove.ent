@@ -56,7 +56,6 @@ import {
   UserCircle,
   Gift,
   LogOut,
-  MessageSquare,
   Globe,
   ShieldAlert,
   Home,
