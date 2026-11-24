@@ -267,7 +267,7 @@ test('RLS auth.uid initplan migration preserves its 33 live policy targets and p
   const uidCalls = [...sql.matchAll(/auth\.uid\(\)/gi)];
   assert.ok(uidCalls.length > 0);
   for (const call of uidCalls) {
-    assert.match(sql.slice(Math.max(0, call.index - 40), call.index), /SELECT\s*$/i, 'every auth.uid call must be inside a scalar SELECT');
+    assert.match(executableSql.slice(Math.max(0, call.index - 40), call.index), /SELECT\s*$/i, 'every auth.uid call must be inside a scalar SELECT');
   }
 
   const db = new PGlite();
