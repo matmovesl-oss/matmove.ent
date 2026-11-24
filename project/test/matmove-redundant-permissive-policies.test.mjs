@@ -5,7 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 
 const migration = async (name) => readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8');
 
-test('redundant permissive policy cleanup preserves wallet, transaction, ticket and staff access', async () => {
+test('redundant permissive policy cleanup preserves wallet, transaction, ticket, withdrawal and staff access', async () => {
   const db = new PGlite();
   try {
     await db.exec(`
@@ -28,10 +28,12 @@ test('redundant permissive policy cleanup preserves wallet, transaction, ticket 
       create table public.wallets (id integer primary key, user_id uuid not null, currency text not null);
       create table public.wallet_transactions (id integer primary key, wallet_id integer not null);
       create table public.event_tickets (id integer primary key, user_id uuid not null, checked_in boolean not null default false);
+      create table public.withdrawal_requests (id integer primary key, user_id uuid not null);
 
       alter table public.wallets enable row level security;
       alter table public.wallet_transactions enable row level security;
       alter table public.event_tickets enable row level security;
+      alter table public.withdrawal_requests enable row level security;
 
       create policy "Service role full access on wallets" on public.wallets
         for all to service_role using (true) with check (true);
@@ -103,7 +105,21 @@ test('redundant permissive policy cleanup preserves wallet, transaction, ticket 
           public.matmove_admin_any(array['events.sales'::text, 'events.checkin'::text])
         );
 
-      grant select on public.wallets, public.wallet_transactions, public.event_tickets to anon, authenticated;
+      create policy "Users can create withdrawal requests" on public.withdrawal_requests
+        for insert to public with check (auth.uid() = user_id);
+      create policy "Users can view own withdrawal requests" on public.withdrawal_requests
+        for select to public using (auth.uid() = user_id);
+      create policy matmove_lock_withdrawal_requests_select on public.withdrawal_requests
+        as restrictive for select to authenticated using (
+          (user_id = (select auth.uid())) or public.matmove_admin_can('payouts')
+        );
+      create policy matmove_staff_allow_select on public.withdrawal_requests
+        for select to authenticated using (public.matmove_admin_any(array['payouts'::text]));
+      create policy withdrawal_requests_select_own on public.withdrawal_requests
+        for select to authenticated using (user_id = auth.uid());
+
+      grant select on public.wallets, public.wallet_transactions, public.event_tickets, public.withdrawal_requests to anon, authenticated;
+      grant insert on public.withdrawal_requests to authenticated;
       grant update on public.event_tickets to authenticated;
     `);
 
@@ -122,7 +138,8 @@ test('redundant permissive policy cleanup preserves wallet, transaction, ticket 
       'wallets.wallets_select_own',
       'wallet_transactions.wallet_transactions_select_own',
       'event_tickets.matmove_event_tickets_owner_read',
-      'event_tickets.matmove_event_tickets_staff_checkin_update'
+      'event_tickets.matmove_event_tickets_staff_checkin_update',
+      'withdrawal_requests.withdrawal_requests_select_own'
     ];
     for (const name of removed) assert.equal(names.has(name), false, `${name} should be removed`);
 
@@ -137,10 +154,14 @@ test('redundant permissive policy cleanup preserves wallet, transaction, ticket 
       'event_tickets.matmove_event_tickets_checkin_update',
       'event_tickets.matmove_event_tickets_staff_checkin',
       'event_tickets.matmove_event_tickets_staff_read',
-      'event_tickets.matmove_lock_event_tickets_select'
+      'event_tickets.matmove_lock_event_tickets_select',
+      'withdrawal_requests.Users can create withdrawal requests',
+      'withdrawal_requests.Users can view own withdrawal requests',
+      'withdrawal_requests.matmove_lock_withdrawal_requests_select',
+      'withdrawal_requests.matmove_staff_allow_select'
     ];
     for (const name of retained) assert.equal(names.has(name), true, `${name} must remain`);
-    assert.equal(policyRows.rows.length, 12);
+    assert.equal(policyRows.rows.length, 15);
 
     const user1 = '10000000-0000-4000-8000-000000000001';
     const user2 = '10000000-0000-4000-8000-000000000002';
@@ -148,24 +169,29 @@ test('redundant permissive policy cleanup preserves wallet, transaction, ticket 
     await db.query('insert into public.wallets(id,user_id,currency) values (1,$1,$2),(2,$3,$2)', [user1,'SLE',user2]);
     await db.query('insert into public.wallet_transactions(id,wallet_id) values (11,1),(22,2)');
     await db.query('insert into public.event_tickets(id,user_id) values (101,$1),(202,$2)', [user1,user2]);
+    await db.query('insert into public.withdrawal_requests(id,user_id) values (301,$1),(302,$2)', [user1,user2]);
 
     await db.query("select set_config('request.jwt.claim.sub',$1,false)", [user1]);
     await db.exec('set role authenticated');
     const ownWallets = await db.query('select id from public.wallets order by id');
     const ownTransactions = await db.query('select id from public.wallet_transactions order by id');
     const ownTickets = await db.query('select id from public.event_tickets order by id');
+    const ownWithdrawals = await db.query('select id from public.withdrawal_requests order by id');
     assert.deepEqual(ownWallets.rows.map((row) => row.id), [1]);
     assert.deepEqual(ownTransactions.rows.map((row) => row.id), [11]);
     assert.deepEqual(ownTickets.rows.map((row) => row.id), [101]);
+    assert.deepEqual(ownWithdrawals.rows.map((row) => row.id), [301]);
 
     await db.query("select set_config('request.jwt.claim.sub',$1,false)", [admin]);
     await db.query("select set_config('test.matmove_admin','true',false)");
     const staffWallets = await db.query('select id from public.wallets order by id');
     const staffTransactions = await db.query('select id from public.wallet_transactions order by id');
     const staffTickets = await db.query('select id from public.event_tickets order by id');
+    const staffWithdrawals = await db.query('select id from public.withdrawal_requests order by id');
     assert.deepEqual(staffWallets.rows.map((row) => row.id), [1,2], 'financial staff retain wallet review');
     assert.deepEqual(staffTransactions.rows.map((row) => row.id), [11,22], 'financial staff retain transaction review');
     assert.deepEqual(staffTickets.rows.map((row) => row.id), [101,202], 'event staff retain ticket review');
+    assert.deepEqual(staffWithdrawals.rows.map((row) => row.id), [301,302], 'payout staff retain withdrawal review');
     await db.query('update public.event_tickets set checked_in=true where id=101');
     const checked = await db.query('select checked_in from public.event_tickets where id=101');
     assert.equal(checked.rows[0].checked_in, true, 'event staff retain check-in updates');
@@ -176,9 +202,11 @@ test('redundant permissive policy cleanup preserves wallet, transaction, ticket 
     const anonWallets = await db.query('select id from public.wallets');
     const anonTransactions = await db.query('select id from public.wallet_transactions');
     const anonTickets = await db.query('select id from public.event_tickets');
+    const anonWithdrawals = await db.query('select id from public.withdrawal_requests');
     assert.equal(anonWallets.rows.length, 0);
     assert.equal(anonTransactions.rows.length, 0);
     assert.equal(anonTickets.rows.length, 0);
+    assert.equal(anonWithdrawals.rows.length, 0);
     await db.exec('reset role');
   } finally {
     await db.close();
