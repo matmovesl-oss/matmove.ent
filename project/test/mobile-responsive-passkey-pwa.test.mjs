@@ -94,7 +94,7 @@ test('customer account uses compact arrow rows and focused profile, referral and
   assert.match(app, /Verified · Locked/);
   assert.match(app, /setViewingAnalytics\(true\)/);
   assert.match(app, /setViewingCartOrders\(true\)/);
-  assert.match(app, /Customer Support/);
+  assert.match(app, /Support Media/);
   assert.match(app, /Request Account Deletion/);
   assert.match(css, /\.mm-account-row/);
   assert.match(css, /@media\(max-width:420px\)/);
