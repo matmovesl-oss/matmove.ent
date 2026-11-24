@@ -573,6 +573,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
   };
 
   const walletCards = <WalletCardsView sleWallet={sleWallet} usdWallet={usdWallet}
+      role="driver"
     refresh={fetchLiveBalance} refreshing={isRefreshing} createUsd={handleCreateUsdWallet} creatingUsd={isCreatingUsd} />;
 
   const validTransactions = Array.isArray(transactions) ? transactions : [];

@@ -569,6 +569,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
     <WalletCardsView
       sleWallet={sleWallet}
       usdWallet={usdWallet}
+      role="rider"
       refresh={fetchLiveBalance}
       refreshing={isRefreshing}
       createUsd={handleCreateUsdWallet}

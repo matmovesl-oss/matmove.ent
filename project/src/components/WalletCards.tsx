@@ -5,10 +5,8 @@ import ReceiveMoneyPanel from '@/components/ReceiveMoneyPanel';
 import {
   Wallet,
   RefreshCw,
-  Copy,
-  Share2,
   Plus,
-  Eye, EyeOff, ChevronLeft, ChevronRight, ExternalLink,
+  Eye, EyeOff, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 
 type Props = {
@@ -18,6 +16,7 @@ type Props = {
   refreshing: boolean;
   createUsd: () => unknown;
   creatingUsd: boolean;
+  role: 'rider' | 'driver' | 'merchant';
 };
 
 export default function WalletCards({
@@ -27,6 +26,7 @@ export default function WalletCards({
   refreshing,
   createUsd,
   creatingUsd,
+  role,
 }: Props) {
   const [visible, setVisible] = useState<Record<string, boolean>>({});
   const [active, setActive] = useState(0);
@@ -37,78 +37,8 @@ export default function WalletCards({
     const el = rail.current;
     if (el) el.scrollTo({left: el.clientWidth * next, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
   }
-  const [notice, setNotice] = useState('');
+  const [getPaidOpen, setGetPaidOpen] = useState(false);
 
-  async function share(wallet: any, currency: string) {
-    const id =
-      wallet?.monime_account_id ||
-      wallet?.metadata?.monime_account_id;
-
-    if (!id) {
-      setNotice('Wallet account is not ready to share.');
-      return;
-    }
-
-    const text =
-      `MatMove ${currency} wallet\n` +
-      `Account ID: ${id}\n` +
-      `Send ${currency} only to this account.`;
-
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: `MatMove ${currency} wallet`,
-          text,
-        });
-      } else {
-        await navigator.clipboard.writeText(text);
-        setNotice('Wallet account details copied.');
-      }
-    } catch (error: any) {
-      if (error.name !== 'AbortError') {
-        setNotice(
-          'Unable to share. Use Copy account instead.'
-        );
-      }
-    }
-  }
-
-  async function copyAccount(id: string) {
-    try {
-      await navigator.clipboard.writeText(id);
-      setNotice('Account ID copied.');
-    } catch {
-      setNotice('Could not copy account ID.');
-    }
-  }
-
-  async function copyPaymentLink(url: string) {
-    try {
-      await navigator.clipboard.writeText(url);
-      setNotice('Monime Get Paid link copied.');
-    } catch {
-      setNotice('Could not copy the payment link. Open it and copy the address instead.');
-    }
-  }
-
-  async function sharePaymentLink(url: string) {
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: 'MatMove — Receive Money',
-          text: 'Pay this MatMove SLE wallet securely through Monime.',
-          url,
-        });
-      } else {
-        await navigator.clipboard.writeText(url);
-        setNotice('Monime Get Paid link copied.');
-      }
-    } catch (error: any) {
-      if (error?.name !== 'AbortError') {
-        setNotice('Unable to share the payment link. You can copy it instead.');
-      }
-    }
-  }
 
   return (
     <div className="space-y-3">
@@ -133,18 +63,6 @@ export default function WalletCards({
             wallet?.monime_account_id ||
             wallet?.metadata?.monime_account_id;
 
-          const paymentUrl = (() => {
-            if (currency !== 'SLE' || typeof wallet?.monime_payment_url !== 'string') return null;
-            try {
-              const parsed = new URL(wallet.monime_payment_url);
-              return parsed.protocol === 'https:' && parsed.hostname === 'pay.monime.io'
-                ? parsed.toString()
-                : null;
-            } catch {
-              return null;
-            }
-          })();
-
           const available =
             wallet?.balanceAvailable === true &&
             typeof wallet.balance === 'number' &&
@@ -159,7 +77,7 @@ export default function WalletCards({
             <article
               key={currency}
               aria-label={`${currency} wallet`}
-              className={`relative w-full min-w-0 shrink-0 snap-center overflow-hidden rounded-3xl p-6 text-white shadow-xl ${colour}`}
+              className={`relative w-full min-w-0 shrink-0 snap-center overflow-hidden rounded-3xl p-4 text-white shadow-xl ${colour}`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/95">
@@ -181,14 +99,14 @@ export default function WalletCards({
                 </button>
               </div>
 
-              <p className="mt-5 text-xs font-bold uppercase tracking-widest text-white/80">
+              <p className="mt-4 text-xs font-bold uppercase tracking-widest text-white/80">
                 {currency === 'SLE'
                   ? 'Leone wallet'
                   : 'US dollar wallet'}
               </p>
 
               <div className="mt-2 flex items-center gap-3">
-                <p className="min-w-0 break-words text-3xl font-black" aria-live="polite">
+                <p className="min-w-0 break-words text-2xl font-black" aria-live="polite">
                   {currency} {visible[currency] ? (available ? Number(wallet.balance).toFixed(2) : id ? 'Unavailable' : 'Not created') : <span aria-label="Balance hidden">••••••</span>}
                 </p>
                 <button type="button" aria-label={`${visible[currency] ? 'Hide' : 'Show'} ${currency} balance`} aria-pressed={!!visible[currency]}
@@ -199,67 +117,15 @@ export default function WalletCards({
               </div>
 
               {id ? (
-                <>
-                  <p className="mt-4 break-all font-mono text-xs text-white/80">
-                    {id}
-                  </p>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      className="flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-sm"
-                      onClick={() => void copyAccount(id)}
-                    >
-                      <Copy size={14} />
-                      Copy account
-                    </button>
-
-                    <button
-                      className="flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-sm"
-                      onClick={() =>
-                        void share(wallet, currency)
-                      }
-                    >
-                      <Share2 size={14} />
-                      Share wallet
-                    </button>
-                  </div>
-                  {currency === 'SLE' && paymentUrl && (
-                    <div className="mt-4 rounded-2xl border border-white/20 bg-white/10 p-3">
-                      <p className="text-xs font-bold uppercase tracking-wider text-white/75">Monime UVAN</p>
-                      <p className="mt-1 break-all font-mono text-lg font-bold">{wallet.monime_uvan || 'Available through Get Paid'}</p>
-                      <a
-                        href={paymentUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-bold underline underline-offset-4"
-                      >
-                        Open Get Paid link <ExternalLink size={14}/>
-                      </a>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className="flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-sm"
-                          onClick={() => void copyPaymentLink(paymentUrl)}
-                        >
-                          <Copy size={14}/> Copy Get Paid link
-                        </button>
-                        <button
-                          type="button"
-                          className="flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-sm"
-                          onClick={() => void sharePaymentLink(paymentUrl)}
-                        >
-                          <Share2 size={14}/> Share payment link
-                        </button>
-                      </div>
-                      <p className="mt-2 text-xs text-white/75">Payments are processed by Monime and settle to this SLE account.</p>
-                    </div>
-                  )}
-                  {currency === 'SLE' && !paymentUrl && (
-                    <p className="mt-3 rounded-xl bg-white/10 p-3 text-xs text-white/85">
-                      Your Monime Get Paid link is not available yet. Refresh your wallet after the receiving alias is provisioned.
-                    </p>
-                  )}
-                </>
+                currency === 'SLE' ? (
+                  <button
+                    type="button"
+                    onClick={() => setGetPaidOpen(true)}
+                    className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-extrabold text-emerald-800 shadow-sm transition hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+                  >
+                    Get paid <ChevronRight size={16}/>
+                  </button>
+                ) : null
               ) : currency === 'USD' ? (
                 <button
                   disabled={creatingUsd}
@@ -282,18 +148,10 @@ export default function WalletCards({
         })}
       </div>
 
-      <ReceiveMoneyPanel sleWallet={sleWallet}/>
+      {getPaidOpen && <ReceiveMoneyPanel sleWallet={sleWallet} role={role} onClose={() => setGetPaidOpen(false)} />}
       <div className="flex justify-center gap-3" aria-label="Choose wallet">
         {['SLE','USD'].map((currency,index)=><button type="button" key={currency} aria-label={`Show ${currency} wallet`} aria-current={active===index?'true':undefined} onClick={()=>move(index)} className={`rounded-full px-4 py-1 text-xs font-bold ${active===index?'bg-slate-900 text-white':'bg-slate-100 text-slate-600'}`}>{currency}</button>)}
       </div>
-      {notice && (
-        <p
-          role="status"
-          className="rounded-xl bg-blue-50 p-3 text-sm text-blue-800"
-        >
-          {notice}
-        </p>
-      )}
     </div>
   );
 }

@@ -871,6 +871,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
       refreshing={isRefreshing}
       createUsd={handleCreateUsdWallet}
       creatingUsd={isCreatingUsd}
+      role={profile?.role === 'driver' || profile?.role === 'merchant' ? profile.role : 'rider'}
     />
   );
 

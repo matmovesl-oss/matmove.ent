@@ -31,21 +31,20 @@ async function page(which,fn,{reply=base(),failure=null}={}){
  }finally{if(!unmounted)for(const s of slots)s?.cleanup?.();for(const[k,v]of Object.entries(original)){if(v===undefined)delete globalThis[k];else globalThis[k]=v;}delete globalThis.__assistanceHooks;delete globalThis.__assistanceDb;await rm(dir,{recursive:true,force:true});}
 }
 
-test('Customer Support closes through its close button, Escape and backdrop tap',()=>page('CustomerSupport',async h=>{
+test('Customer Support is a full-screen section with back navigation and Escape support',()=>page('CustomerSupport',async h=>{
  const trigger='Open MatMove support and social links';
  const isOpen=()=>h.nodes.some(n=>n.props?.role==='dialog'&&n.props['aria-label']==='MatMove Support & Socials');
  await h.click(trigger);assert.equal(isOpen(),true);
- await h.click('Close support');assert.equal(isOpen(),false);
+ await h.click('Back to account');assert.equal(isOpen(),false);
 
  await h.click(trigger);assert.equal(isOpen(),true);
- let overlay=h.nodes.find(n=>n.props?.role==='presentation');assert.ok(overlay);
+ const overlay=h.nodes.find(n=>n.props?.role==='presentation');assert.ok(overlay);
  overlay.props.onKeyDown({key:'Escape',preventDefault(){}});await h.settle();
  assert.equal(isOpen(),false);
 
  await h.click(trigger);assert.equal(isOpen(),true);
- overlay=h.nodes.find(n=>n.props?.role==='presentation');assert.ok(overlay);
- overlay.props.onClick({target:overlay,currentTarget:overlay});await h.settle();
- assert.equal(isOpen(),false);
+ await h.click('Message MatMove Support');assert.equal(h.text.includes('Create a support request'),true);
+ await h.click('Back to Support & Socials');assert.equal(h.text.includes('Connect with MatMove'),true);
 }));
 
 for(const role of ['rider','driver','merchant'])test(`${role} Help navigates only to role-supported screens without any API call`,()=>page('MatMoveHelp',async h=>{
