@@ -168,3 +168,22 @@ test('an already authorized receipt can recover after a listing is marked sold, 
   await f.invoke();await f.pg.exec("update products set is_available=false,currency='USD'");const receipt=await f.invoke();assert.equal(receipt.body.payment.state,'completed');assert.equal(f.counts.post,2);
  }finally{await f.pg.close();}
 });
+
+test('completed merchant checkout keeps its exact receipt until cart cleanup is acknowledged', async () => {
+  const source = await readFile(new URL('../src/components/MerchantCheckout.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf('async function notifyPaid');
+  const end = source.indexOf('async function submitOrCheck', start);
+  assert.ok(start >= 0 && end > start, 'paid receipt acknowledgement should be explicit');
+  const acknowledge = source.slice(start, end);
+
+  assert.match(source, /localStorage\.setItem\(storageKey, JSON\.stringify\(value\)\)/);
+  assert.match(source, /if \(saved\.payment\?\.state === 'completed'\)[\s\S]*?void notifyPaid\(saved\.payment\)/);
+  assert.match(acknowledge, /await onPaidRef\.current\?\.\(payment\)/);
+  assert.ok(
+    acknowledge.indexOf('await onPaidRef.current?.(payment)') < acknowledge.indexOf('localStorage.removeItem(storageKey)'),
+    'the cart callback must succeed before the completed checkout reference is removed'
+  );
+  assert.match(acknowledge, /catch \{[\s\S]*?setCartSyncError/);
+  assert.match(source, /Retry cart update/);
+  assert.match(source, /payment\.state === 'completed' && Boolean\(cartSyncError\)/);
+});
