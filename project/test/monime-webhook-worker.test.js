@@ -5,6 +5,16 @@ import { processMonimeWebhookBatch } from '../server/monime-webhook-worker.js';
 const paymentId = '00000000-0000-4000-8000-000000000123';
 const secretValues = ['MONIME_API_KEY', 'MONIME_SPACE_ID'];
 
+// Vercel injects VERCEL_ENV=production into production build commands.
+// This file uses mocked Test-mode Monime credentials, so isolate the fixture
+// from deployment environment settings. The explicit production-guard test
+// below sets VERCEL_ENV=production itself and verifies that mismatch fails.
+// Keep safe test credentials as the default for every case in this file.
+process.env.MONIME_ENVIRONMENT = 'test';
+process.env.MONIME_API_KEY = 'mon_test_matmove_worker_default';
+process.env.MONIME_SPACE_ID = 'space-test';
+delete process.env.VERCEL_ENV;
+
 function fixture(status = 'completed', signatureVerified = true, failEventFinalization = false) {
   const event = {
     event_id: 'wke-worker-test',
