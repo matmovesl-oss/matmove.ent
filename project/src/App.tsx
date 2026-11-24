@@ -1399,7 +1399,7 @@ function AccountSection({
 
       <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 font-bold text-slate-900"><MessageSquare size={18} className="text-emerald-600"/>In-app Support</h2>
+          <h2 className="flex items-center gap-2 font-bold text-slate-900"><MessageSquare size={18} className="text-emerald-600"/>Customer Support</h2>
           <Suspense fallback={<span className="text-xs text-slate-500">Support options</span>}>
             <CustomerSupport key={`support:${profile.id}`} userId={profile.id} hideWhatsappLink inboxOnly/>
           </Suspense>
