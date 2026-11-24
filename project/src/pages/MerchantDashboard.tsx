@@ -395,6 +395,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
   };
 
   const walletCards = <WalletCardsView sleWallet={sleWallet} usdWallet={usdWallet}
+      role="merchant"
     refresh={fetchLiveBalance} refreshing={isRefreshing} createUsd={handleCreateUsdWallet} creatingUsd={isCreatingUsd} />;
 
   const validTransactions = Array.isArray(transactions) ? transactions : [];
