@@ -23,7 +23,49 @@ import {
   Check, Clock
 } from 'lucide-react';
 
-export function RiderDashboard(props: any) {
+type RiderProfile = {
+  id: string;
+  role?: string | null;
+  full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  phone_number?: string | null;
+  [key: string]: unknown;
+};
+type WalletRecord = {
+  balance?: number | string | null;
+  currency?: string | null;
+  monime_account_id?: string | null;
+  metadata?: Record<string, unknown>;
+  balanceAvailable?: boolean;
+  balanceError?: string | null;
+  [key: string]: unknown;
+};
+type RiderPricingRate = { min: number; perKm: number };
+type RiderProduct = {
+  id: string; name: string; price: number | string;
+  currency?: string | null; description?: string | null; deleted_at?: string | null;
+  [key: string]: unknown;
+};
+type RiderDashboardProps = {
+  profile: RiderProfile; wallet?: WalletRecord | null; activeSection?: string;
+  onBack?: () => void; resumeTripId?: string | null;
+  onOpenTrips?: (bookingId?: string) => void; onResumeTrip?: (bookingId?: string) => void;
+};
+const DEFAULT_RIDER_PRICING: Record<string, RiderPricingRate> = {
+  bike: { min: 15, perKm: 3 }, keke: { min: 20, perKm: 5 },
+  car: { min: 30, perKm: 8 }, van: { min: 50, perKm: 15 }
+};
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = error.message;
+    if (typeof message === 'string' && message.trim()) return message.trim();
+  }
+  return fallback;
+}
+
+export function RiderDashboard(props: RiderDashboardProps) {
   if (props.activeSection === 'shop') {
     return <RiderShop profile={props.profile} />;
   }
@@ -35,8 +77,8 @@ export function RiderDashboard(props: any) {
   return <RiderMain key={props.profile?.id || 'rider-main'} {...props} />;
 }
 
-function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpenTrips }: any) {
-  const [sleWallet, setSleWallet] = useState<any>(wallet);
+function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpenTrips }: RiderDashboardProps) {
+  const [sleWallet, setSleWallet] = useState<WalletRecord | null>(wallet || null);
   const [rideNotice, setRideNotice] = useState('');
   const [cashSuccessOpen, setCashSuccessOpen] = useState(false);
   const [walletNotice, setWalletNotice] = useState('');
@@ -44,20 +86,13 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   const setupBusy = useRef(false);
   const [isSettingUpWallet, setIsSettingUpWallet] = useState(false);
   const [walletSetupError, setWalletSetupError] = useState('');
-  const [usdWallet, setUsdWallet] = useState<any>(null);
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [usdWallet, setUsdWallet] = useState<WalletRecord | null>(null);
+  const [transactions, setTransactions] = useState<Record<string, unknown>[]>([]);
   const [isCreatingUsd, setIsCreatingUsd] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selectedTx, setSelectedTx] = useState<any>(null);
+  const [selectedTx, setSelectedTx] = useState<Record<string, unknown> | null>(null);
 
-  const defaultPricing = {
-    bike: { min: 15, perKm: 3 },
-    keke: { min: 20, perKm: 5 },
-    car: { min: 30, perKm: 8 },
-    van: { min: 50, perKm: 15 }
-  };
-
-  const [pricingRates, setPricingRates] = useState<any>(defaultPricing);
+  const [pricingRates, setPricingRates] = useState<Record<string, RiderPricingRate>>(DEFAULT_RIDER_PRICING);
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
@@ -101,7 +136,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   const tripRequest = useTripRequest(profile?.id || '');
 
   useEffect(() => {
-    let timer: any;
+    let timer: ReturnType<typeof window.setInterval> | undefined;
     if (activeBooking && activeBooking.status === 'accepted' && activeBooking.accepted_at) {
       const updateElapsed = () => {
         const diff = Math.floor((Date.now() - new Date(activeBooking.accepted_at).getTime()) / 1000);
@@ -189,7 +224,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
 
   useEffect(() => {
     if (tripDistanceKm === null) return;
-    const rate = pricingRates?.[vehicleType] || defaultPricing[vehicleType] || { min: 15, perKm: 3 };
+    const rate = pricingRates?.[vehicleType] || DEFAULT_RIDER_PRICING[vehicleType] || { min: 15, perKm: 3 };
     setOfferAmount(
       Math.max(
         rate.min,
@@ -204,7 +239,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       .select('*')
       .then(({ data }) => {
         if (data && data.length > 0) {
-          const rates: any = {};
+          const rates: Record<string, RiderPricingRate> = {};
           data.forEach(r => {
             rates[r.vehicle_type] = {
               min: Number(r.min_fare),
@@ -241,8 +276,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       if (data.usdWallet) setUsdWallet(data.usdWallet);
       if (data.transactions) setTransactions(data.transactions);
       setWalletNotice(data.sleWallet?.balanceAvailable === false ? data.sleWallet.balanceError || 'Balance unavailable.' : (data.warnings || []).join(' '));
-    } catch (err: any) {
-      setWalletNotice(!networkOnline ? 'Offline · showing your last confirmed wallet information.' : err.message || 'Wallet refresh failed.');
+    } catch (err: unknown) {
+      setWalletNotice(!networkOnline ? 'Offline · showing your last confirmed wallet information.' : errorMessage(err, 'Wallet refresh failed.'));
     } finally {
       balanceBusy.current = false;
       setIsRefreshing(false);
@@ -268,8 +303,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       finish();
       setSleWallet({ ...data.wallet, balance: null, balanceAvailable: false });
       await fetchLiveBalance();
-    } catch (error: any) {
-      setWalletSetupError(error.message || 'Wallet setup is unavailable. Please retry.');
+    } catch (error: unknown) {
+      setWalletSetupError(errorMessage(error, 'Wallet setup is unavailable. Please retry.'));
     } finally {
       setupBusy.current = false;
       setIsSettingUpWallet(false);
@@ -304,8 +339,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       finish();
       setWalletNotice('USD wallet created successfully.');
       fetchLiveBalance();
-    } catch (err: any) {
-      setWalletNotice(err.message || 'Unable to create USD wallet.');
+    } catch (err: unknown) {
+      setWalletNotice(errorMessage(err, 'Unable to create USD wallet.'));
     } finally {
       setIsCreatingUsd(false);
     }
@@ -326,8 +361,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
           onOpenTrips?.(restored.id);
           return;
         }
-      } catch (error: any) {
-        setRideNotice(error?.message || 'The earlier request could not be verified. Open Trips before trying again.');
+      } catch (error: unknown) {
+        setRideNotice(errorMessage(error, 'The earlier request could not be verified. Open Trips before trying again.'));
         onOpenTrips?.();
         return;
       }
@@ -396,8 +431,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       setViewMode('active');
       setRideNotice('');
       onOpenTrips?.(booking.id);
-    } catch (err: any) {
-      setRideNotice(err?.message || 'Trip request could not be confirmed. Check the original request before trying again.');
+    } catch (err: unknown) {
+      setRideNotice(errorMessage(err, 'Trip request could not be confirmed. Check the original request before trying again.'));
     } finally {
       setIsRequesting(false);
     }
@@ -421,8 +456,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       
       setActiveBooking(result.pending ? { ...activeBooking, ...result.booking } : null);
       await fetchLiveBalance();
-    } catch (err: any) {
-      setRideNotice(err.message);
+    } catch (err: unknown) {
+      setRideNotice(errorMessage(err, 'The trip action could not be verified.'));
     } finally {
       setIsRequesting(false);
     }
@@ -451,12 +486,12 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
         return;
       }
       if (!result.pending && result.payment?.settled !== true) throw new Error('Driver credit is not confirmed.');
-      const driverLeg = result.payment?.transfers?.find((leg: any) => leg.kind === 'driver');
+      const driverLeg = result.payment?.transfers?.find((leg: { kind?: string; transferId?: string }) => leg.kind === 'driver');
       setRideNotice(`Driver credited SLE ${Number(result.payment.driverEarnings).toFixed(2)}. Receipt: ${driverLeg?.transferId || 'Settled'}.`);
       setActiveBooking(result.pending ? { ...activeBooking, ...result.booking } : null);
       await fetchLiveBalance();
-    } catch (err: any) {
-      setRideNotice(err.message);
+    } catch (err: unknown) {
+      setRideNotice(errorMessage(err, 'Ride payment could not be verified.'));
     } finally {
       setIsRequesting(false);
     }
@@ -514,8 +549,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
       }
 
       await fetchLiveBalance();
-    } catch (err: any) {
-      setTransferError(err.message || 'Transfer failed.');
+    } catch (err: unknown) {
+      setTransferError(errorMessage(err, 'Transfer failed.'));
     } finally {
       setIsProcessingTransfer(false);
     }
@@ -849,7 +884,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
                     setTripDistanceKm(selection.distanceKm);
 
                     if (selection.distanceKm !== null) {
-                      const rate = pricingRates?.[vehicleType] || defaultPricing[vehicleType] || { min: 15, perKm: 3 };
+                      const rate = pricingRates?.[vehicleType] || DEFAULT_RIDER_PRICING[vehicleType] || { min: 15, perKm: 3 };
                       setOfferAmount(
                         Math.max(
                           rate.min,
@@ -973,10 +1008,10 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   );
 }
 
-function RiderShop({ profile }: any) {
-  const [products, setProducts] = useState<any[]>([]);
+function RiderShop({ profile }: { profile: RiderProfile }) {
+  const [products, setProducts] = useState<RiderProduct[]>([]);
   const [orderModalOpen, setOrderModalOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [selectedProduct, setSelectedProduct] = useState<RiderProduct | null>(null);
   const [orderQty, setOrderQty] = useState(1);
   const checkoutDialog = useRef<HTMLDialogElement | null>(null);
   useEffect(() => {
@@ -1007,7 +1042,7 @@ function RiderShop({ profile }: any) {
     void fetchShopProducts();
   }, [fetchShopProducts]);
 
-  const handleAddToCart = async (product: any) => {
+  const handleAddToCart = async (product: RiderProduct) => {
     if (cartWriteLock.current || !catalogCheckoutAllowed(product)) return;
     cartWriteLock.current = true; setCartBusy(true);
     try {
@@ -1020,8 +1055,8 @@ function RiderShop({ profile }: any) {
       });
       if (error) throw error;
       setCartNotice(`${product.name} added to cart.`);
-    } catch (e: any) {
-      setCartNotice(e.message || 'Could not update cart.');
+    } catch (e: unknown) {
+      setCartNotice(errorMessage(e, 'Could not update cart.'));
     } finally {
       cartWriteLock.current = false; setCartBusy(false);
     }
@@ -1087,7 +1122,7 @@ function RiderShop({ profile }: any) {
   );
 }
 
-function RiderTrips({ profile, onResume }: any) {
+function RiderTrips({ profile, onResume }: { profile: RiderProfile; onResume?: (bookingId?: string) => void }) {
   return <TripHistory userId={profile?.id} role="rider" accountLabel={profile?.full_name || 'Rider'} accountEmail={profile?.email} onResume={onResume} />;
 }
 
