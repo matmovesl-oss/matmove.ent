@@ -31,10 +31,10 @@ test('Rider, Driver and Merchant role headers stay compact without wrapping on p
 
 test('Support is a full-screen section with back navigation, Escape and an in-app inbox', async () => {
   const support = await readFile('src/components/CustomerSupport.tsx', 'utf8');
-  assert.match(support, /aria-label=\\{showInbox\\?'Back to Support & Socials':'Back to account'\\}/);
-  assert.match(support, /e\\.key==='Escape'/);
+  assert.match(support, /aria-label=\{showInbox\\?'Back to Support & Socials':'Back to account'\}/);
+  assert.match(support, /e\.key==='Escape'/);
   assert.match(support, /hideWhatsappLink\?"inline":"hidden sm:inline"/);
-  assert.match(support, /min-h-\\[100dvh\\]/);
+  assert.match(support, /min-h-\[100dvh\]/);
   assert.match(support, /No links have been added yet/);
   assert.match(support, /Message MatMove Support/);
 });
