@@ -57,6 +57,7 @@ import {
   Gift,
   LogOut,
   MessageSquare,
+  Globe,
   ShieldAlert,
   Home,
   Car,
@@ -97,6 +98,7 @@ const CustomerPasscode = lazy(() => import('@/components/CustomerPasscode'));
 const InviteEarn = lazy(() => import('@/components/InviteEarn'));
 const MatMoveHelp = lazy(() => import('@/components/MatMoveHelp'));
 const CustomerSupport = lazy(() => import('@/components/CustomerSupport'));
+const SupportMediaPage = lazy(() => import('@/components/SupportMediaPage'));
 const NotificationBell = lazy(() => import('@/components/NotificationBell'));
 const ReceivePayLinkPage = lazy(() => import('@/pages/ReceivePayLinkPage'));
 const ReceivePaymentCompletePage = lazy(() => import('@/pages/ReceivePayLinkPage').then(m => ({default: m.ReceivePaymentCompletePage})));
@@ -1312,6 +1314,12 @@ function AccountSection({
     </div>;
   }
 
+  if (activePanel === 'support-media') {
+    return <Suspense fallback={<div className="min-h-[100dvh] grid place-items-center text-sm text-slate-500">Loading Support Media…</div>}>
+      <SupportMediaPage onBack={() => setActivePanel(null)}/>
+    </Suspense>;
+  }
+
   if (activePanel === 'profile') {
     return (
       <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
@@ -1378,6 +1386,7 @@ function AccountSection({
 
       <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white divide-y divide-slate-100">
         <button type="button" onClick={() => setActivePanel('profile')} className="mm-account-row"><span className="mm-account-link-icon bg-blue-50 text-blue-700"><UserCircle size={19}/></span><span className="min-w-0 flex-1"><b>Profile & personal details</b><small>Profile photo, display name, email, phone and verified identity</small></span><ArrowRight size={18}/></button>
+        <button type="button" onClick={() => setActivePanel('support-media')} className="mm-account-row"><span className="mm-account-link-icon bg-sky-50 text-sky-700"><Globe size={19}/></span><span className="min-w-0 flex-1"><b>Support Media</b><small>WhatsApp, Instagram and official MatMove channels</small></span><ArrowRight size={18}/></button>
         <button type="button" onClick={() => setActivePanel('invite')} className="mm-account-row"><span className="mm-account-link-icon bg-amber-50 text-amber-700"><Gift size={19}/></span><span className="min-w-0 flex-1"><b>Invite & Earn</b><small>Your referral code, friends and rewards</small></span><ArrowRight size={18}/></button>
         <button type="button" onClick={() => setActivePanel('policy')} className="mm-account-row"><span className="mm-account-link-icon bg-orange-50 text-orange-700"><ShieldAlert size={19}/></span><span className="min-w-0 flex-1"><b>Safety & Compliance</b><small>MatMove safety rules and user policy</small></span><ArrowRight size={18}/></button>
         <button type="button" onClick={() => setViewingAnalytics(true)} className="mm-account-row"><span className="mm-account-link-icon bg-violet-50 text-violet-700"><BarChart2 size={19}/></span><span className="min-w-0 flex-1"><b>{profile.role === 'merchant' ? 'Business Analytics' : profile.role === 'driver' ? 'Driving Analytics' : 'Rider Analytics'}</b><small>Performance, activity and reports</small></span><ArrowRight size={18}/></button>
@@ -1392,10 +1401,10 @@ function AccountSection({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 font-bold text-slate-900"><MessageSquare size={18} className="text-emerald-600"/>Customer Support</h2>
           <Suspense fallback={<span className="text-xs text-slate-500">Support options</span>}>
-            <CustomerSupport key={`support:${profile.id}`} userId={profile.id} hideWhatsappLink/>
+            <CustomerSupport key={`support:${profile.id}`} userId={profile.id} hideWhatsappLink inboxOnly/>
           </Suspense>
         </div>
-        <p className="mt-2 text-sm text-slate-500">Choose WhatsApp for direct help, or open Support & Socials for the in-app support inbox and MatMove’s official channels.</p>
+        <p className="mt-2 text-sm text-slate-500">Create a support request and follow replies from the MatMove team. Visit Support Media above for our official social channels.</p>
         <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=Hello%20MatMove%20Support`} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700"><MessageSquare size={17}/> Chat with Support (+232 90 330 362)</a>
       </section>
 
