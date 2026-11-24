@@ -13,7 +13,7 @@ test('customer logout failure stays in the app and preserves recovery state', as
 
   const handler = app.slice(start, end);
   assert.match(handler, /setLogoutError\(''\)/, 'a new attempt clears the previous error');
-  assert.match(handler, /setLogoutError\(message\)/, 'a failure is retained in React state');
+  assert.match(handler, /setLogoutError\(errorMessage\(err,/, 'a failure is normalized and retained in React state');
   assert.doesNotMatch(handler, /\balert\s*\(/, 'logout must not open a blocking browser alert');
   assert.ok(
     handler.indexOf('if (error) throw error;') < handler.indexOf("localStorage.removeItem('matmove_last_active')"),
