@@ -6,6 +6,7 @@ const riderFile = new URL('../src/pages/RiderDashboard.tsx', import.meta.url);
 const driverFile = new URL('../src/pages/DriverDashboard.tsx', import.meta.url);
 const tripHookFile = new URL('../src/lib/useTripRequest.ts', import.meta.url);
 const rideServiceFile = new URL('../src/services/rideService.ts', import.meta.url);
+const cashPaymentsFile = new URL('../server/cash-ride-payments.js', import.meta.url);
 
 test('rider cash option is gated by server cash configuration and only applies to Ride', async () => {
   const code = await readFile(riderFile, 'utf8');
@@ -41,11 +42,14 @@ test('assigned driver must explicitly confirm physical cash received', async () 
   assert.match(code, /booking\.payment_method === 'cash'/);
 });
 
-test('driver cash cancellation does not report a refund before provider verification', async () => {
-  const code = await readFile(driverFile, 'utf8');
-  assert.match(code, /if \(result\.redispatched === true\)[\s\S]*?original MatMove fee reserve remains protected/i);
-  assert.match(code, /else if \(result\.reviewRequired === true\)[\s\S]*?Admin investigation has been opened/i);
-  assert.doesNotMatch(code, /cash fee refund is still being verified/i);
+test('Driver cash cancellation refunds the verified fee reserve and retries only the stored refund leg', async () => {
+  const [code,server] = await Promise.all([readFile(driverFile, 'utf8'),readFile(cashPaymentsFile, 'utf8')]);
+  assert.match(server, /cashRpc\(db, 'matmove_cash_ride_cancel'/);
+  assert.match(server, /payment\.status === 'refund_pending'[\s\S]*finishCashLeg\(db, bookingId, 'refund', user\.id, provider\)/);
+  assert.match(server, /payment\.status === 'refunded'[\s\S]*full reserved MatMove fee refund was already verified/i);
+  assert.match(code, /full reserved MatMove fee refund is being verified/i);
+  assert.match(code, /Cash ride cancelled and the full reserved MatMove fee refund is verified/i);
+  assert.doesNotMatch(code, /original MatMove fee reserve remains protected/i);
 });
 
 test('cash trip submission uses the same booking ID for fee reservation recovery', async () => {

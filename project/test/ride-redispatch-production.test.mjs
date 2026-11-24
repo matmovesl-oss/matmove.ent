@@ -37,10 +37,22 @@ test('both re-dispatch database functions are service-role only and idempotent b
   assert.match(migration, /select \* into prior[\s\S]*from public\.matmove_dispatch_audit[\s\S]*where request_id = p_request_id/i);
 });
 
-test('the API sends driver cancellations through redispatch and never through customer refund', () => {
-  assert.match(ridePayments, /const isDriver = profile\.role === 'driver'[\s\S]*matmove_driver_cancel_redispatch/);
-  assert.match(cashPayments, /if \(actorType === 'driver'\)[\s\S]*matmove_driver_cancel_redispatch/);
-  assert.match(cashPayments, /Driver cancellation re-dispatched the same request/);
+test('accepted, unstarted Driver cancellation uses full refund ledgers for digital and cash rides', () => {
+  const start = ridePayments.indexOf('if (isDriver) {');
+  const end = ridePayments.indexOf('// Do not silently turn an accepted rider cancellation', start);
+  const branch = ridePayments.slice(start, end);
+  assert.match(branch, /booking\.status === 'in_progress' \|\| booking\.started_at/);
+  assert.match(ridePayments, /prepare_ride_payment/);
+  assert.match(cashPayments, /booking\.status === 'accepted'[\s\S]*payment\.status === 'refund_pending'[\s\S]*finishCashLeg\(db, bookingId, 'refund', user\.id, provider\)/);
+  assert.match(cashPayments, /cashRpc\(db, 'matmove_cash_ride_cancel'/);
+  assert.doesNotMatch(cashPayments, /Driver cancellation re-dispatched the same request/);
+});
+
+test('post-start Driver cancellation remains an Admin-review path for both payment types', () => {
+  assert.match(ridePayments, /booking\.status === 'in_progress' \|\| booking\.started_at[\s\S]*matmove_driver_cancel_redispatch/);
+  assert.match(cashPayments, /booking\.status === 'in_progress' \|\| booking\.started_at[\s\S]*matmove_driver_cancel_redispatch/);
+  assert.match(ridePayments, /no automatic refund or new transfer was started/i);
+  assert.match(cashPayments, /no fee refund or additional transfer was started/i);
 });
 
 test('the digital replacement acceptance path does not create another customer debit or escrow hold', () => {
@@ -56,10 +68,12 @@ test('browser retries preserve the same idempotency request ID for accept and ca
   assert.match(rideService, /clearRideActionRequestId\(action, bookingId\)/);
 });
 
-test('driver radar excludes the driver who cancelled while other eligible drivers can see the same pending request', () => {
-  assert.match(driver, /matmove_excluded_driver_ids/);
-  assert.match(driver, /same booking is back in driver matching/i);
-  assert.match(driver, /result\.redispatched === true/);
+test('Driver accepted-trip cancellation is labelled as a full Rider refund, not re-dispatch', () => {
+  assert.match(driver, /Cancel trip & refund Rider/);
+  assert.match(driver, /Rider[’']s full fare refund is being verified/);
+  assert.match(driver, /full reserved MatMove fee refund is verified/i);
+  assert.doesNotMatch(driver, /Cancel & Find Another Driver/);
+  assert.doesNotMatch(driver, /same booking is back in driver matching/i);
 });
 
 test('Admin trip review surfaces the actual digital payout beneficiary and keeps assignment history in the timeline', () => {

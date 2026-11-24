@@ -511,22 +511,24 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
       const result = await updateRide('cancel', booking.id);
       if (!mounted.current || currentDriver.current !== userId) return;
       radarMutation.current++;
-      if (result.redispatched === true) {
-        setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
-        setRideNotice(booking.payment_method === 'cash'
-          ? 'You cancelled before starting. The same booking is back in driver matching, your driver account is excluded, and the original MatMove fee reserve remains protected.'
-          : 'You cancelled before starting. The same booking is back in driver matching, your driver account is excluded, and the customer escrow hold remains protected. No second debit or refund was created.');
-      } else if (result.reviewRequired === true) {
+      if (result.reviewRequired === true) {
         setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
-        setRideNotice('This trip had already started or its escrow/reserve state is uncertain. It was not re-dispatched. An Admin investigation has been opened; do not initiate a refund or another transfer.');
+        setRideNotice('This trip has started or its payment state is uncertain. It was sent to Admin for review; no automatic refund or additional transfer was started.');
       } else if (result.pending) {
         setActiveRequests(previous => previous.map(item => item.id === booking.id ? mergeRideRow(item, { ...item, ...result.booking }) : item));
-        setRideNotice('This request needs payment review. Do not collect cash or attempt another transfer.');
+        const refundPending = booking.payment_method === 'cash'
+          ? result.payment?.status === 'refund_pending'
+          : result.payment?.state === 'refunding';
+        setRideNotice(refundPending
+          ? booking.payment_method === 'cash'
+            ? 'The full reserved MatMove fee refund is being verified. Do not collect cash or repeat the cancellation.'
+            : 'The Rider’s full fare refund is being verified. Do not create another transfer.'
+          : 'This request needs payment review. Do not collect cash or attempt another transfer.');
       } else {
         setActiveRequests(previous => previous.filter(item => item.id !== booking.id));
         setRideNotice(booking.payment_method === 'cash'
-          ? 'Cash ride cancelled and the reserved MatMove fee refund is verified.'
-          : 'Trip cancelled successfully. The verified refund has been issued to the customer.');
+          ? 'Cash ride cancelled and the full reserved MatMove fee refund is verified.'
+          : 'Trip cancelled and the Rider’s full fare refund is verified.');
       }
     } catch (err: any) { if (mounted.current) setRideNotice(err.message); }
     finally { tripMutex.current = false; if (mounted.current) setAcceptingId(null); }
@@ -676,7 +678,7 @@ function DriverMain({ profile, wallet, activeSection, resumeTripId }: any) {
                           {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Arrived / Start'}
                         </button>
                         <button onClick={() => void handleCancelRide(r)} disabled={acceptingId === r.id} className="flex-1 bg-red-50 text-red-600 border border-red-200 font-bold py-3.5 rounded-xl hover:bg-red-100 disabled:opacity-50">
-                          {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Cancel & Find Another Driver'}
+                          {acceptingId === r.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Cancel trip & refund Rider'}
                         </button>
                       </div>
                     )}
