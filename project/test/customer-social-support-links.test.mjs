@@ -49,3 +49,15 @@ test('database rejects unsafe social links, malformed WhatsApp numbers, and What
  assert.match(migration,/WhatsApp support cannot be deleted/);
  assert.match(migration,/version=version\+1/);
 });
+
+test('customer Support & Socials opens as a full-screen MatMove section with back navigation',async()=>{
+ const source=await readFile(new URL('../src/components/CustomerSupport.tsx',import.meta.url),'utf8');
+ assert.match(source,/fixed inset-0 z-\[150\] overflow-y-auto/);
+ assert.match(source,/min-h-\[100dvh\]/);
+ assert.match(source,/aria-label=\{showInbox\?'Back to Support & Socials':'Back to account'\}/);
+ assert.match(source,/setShowInbox\(false\);setSelected\(null\);setMessages\(\[\]\)/);
+ assert.match(source,/No links have been added yet/);
+ assert.match(source,/Message MatMove Support/);
+ assert.doesNotMatch(source,/ChevronDown/);
+ assert.doesNotMatch(source,/Close support/);
+});
