@@ -2,18 +2,16 @@ import { createClient } from '@supabase/supabase-js';
 import { observePasswordRecoveryEvent } from '@/services/authRecoveryState';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing Supabase environment variables. Check your .env file.'
-  );
-}
+// Preview deployments must never fall back to the live production database.
+// main.tsx uses this flag to render a safe, disconnected preview notice instead
+// of mounting AuthProvider when preview credentials are intentionally absent.
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 export const supabase = createClient(
-  supabaseUrl,
-  supabaseAnonKey,
+  supabaseUrl || 'https://not-configured.invalid',
+  supabaseAnonKey || 'not-configured',
   {
     auth: {
       // Supabase Auth passkeys use the platform WebAuthn authenticator:
@@ -25,6 +23,9 @@ export const supabase = createClient(
 
 // Capture the one-time recovery event as soon as the shared Supabase client
 // initializes, before route components can mount or read the recovery URL.
-supabase.auth.onAuthStateChange((event, session) => {
-  observePasswordRecoveryEvent(event, session?.user.id);
-});
+// The disconnected-preview branch never mounts AuthProvider.
+if (isSupabaseConfigured) {
+  supabase.auth.onAuthStateChange((event, session) => {
+    observePasswordRecoveryEvent(event, session?.user.id);
+  });
+}
