@@ -1124,7 +1124,7 @@ function RiderShop({ profile }: { profile: RiderProfile }) {
 }
 
 function RiderTrips({ profile, onResume }: { profile: RiderProfile; onResume?: (bookingId: string) => void }) {
-  return <TripHistory userId={profile.id} role="rider" accountLabel={profile?.full_name || 'Rider'} accountEmail={profile?.email} onResume={onResume} />;
+  return <TripHistory userId={profile.id} role="rider" accountLabel={profile?.full_name || 'Rider'} accountEmail={profile?.email || undefined} onResume={onResume} />;
 }
 
 function PolicyModal({ onAccept }: { onAccept: () => void }) {
