@@ -7,7 +7,7 @@ revoke all on schema private from public, anon, authenticated, service_role;
 
 create table if not exists private.matmove_push_tokens (
   expo_push_token text primary key
-    check (expo_push_token ~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,256}\]$'),
+    check (expo_push_token ~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,255}\]$'),
   user_id uuid not null references auth.users(id) on delete cascade,
   platform text not null check (platform in ('ios', 'android')),
   created_at timestamptz not null default clock_timestamp(),
@@ -47,7 +47,7 @@ begin
   if v_platform not in ('ios', 'android')
      or v_token is null
      or length(v_token) not between 24 and 300
-     or v_token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,256}\]$' then
+     or v_token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,255}\]$' then
     raise exception 'INVALID: The device notification token or platform is invalid.';
   end if;
 
@@ -86,7 +86,7 @@ begin
 
   if p_token is null
      or length(btrim(p_token)) not between 24 and 300
-     or btrim(p_token) !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,256}\]$' then
+     or btrim(p_token) !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,255}\]$' then
     raise exception 'INVALID: The device notification token is invalid.';
   end if;
 
