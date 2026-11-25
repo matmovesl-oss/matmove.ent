@@ -37,10 +37,10 @@ begin
     raise exception 'AUTH: Sign in before enabling phone notifications.';
   end if;
 
-  perform public.matmove_preferences_role(actor);
   if not public.matmove_notification_customer(actor) then
     raise exception 'ACCESS: A verified MatMove customer account is required.';
   end if;
+  perform public.matmove_preferences_role(actor);
 
   if p_token is null
     or p_token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,256}\]$'
