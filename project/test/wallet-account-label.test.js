@@ -27,7 +27,7 @@ test('Monime account label fails closed when no verified MatMove role is present
 test('Monime account label falls back to the MatMove username when a full name is unavailable', () => {
   assert.equal(
     monimeWalletDisplayName({ username: 'sahr_driver', role: 'driver' }, 'SLE'),
-    'sahr_driver · Driver · SLE'
+    'MatMove User · @sahr_driver · Driver · SLE'
   );
 });
 
@@ -35,7 +35,7 @@ test('wallet refresh label reconciliation repairs every linked currency account 
   const { syncMonimeWalletLabels } = await import('../server/create-wallet.js');
   const seen = [];
   const result = await syncMonimeWalletLabels({
-    profile: { full_name: 'Musa Kamara', role: 'driver', roles: ['driver'] },
+    profile: { full_name: 'Musa Kamara', username: 'musa_k', role: 'driver', roles: ['driver'] },
     wallets: [
       { currency: 'SLE', monime_account_id: 'fac-sle' },
       { currency: 'USD', monime_account_id: 'fac-usd' }
@@ -48,8 +48,8 @@ test('wallet refresh label reconciliation repairs every linked currency account 
     }
   });
   assert.deepEqual(seen, [
-    { id: 'fac-sle', name: 'Musa Kamara · Driver · SLE' },
-    { id: 'fac-usd', name: 'Musa Kamara · Driver · USD' }
+    { id: 'fac-sle', name: 'Musa Kamara · @musa_k · Driver · SLE' },
+    { id: 'fac-usd', name: 'Musa Kamara · @musa_k · Driver · USD' }
   ]);
   assert.deepEqual(result, { labelsUpdated: 2, pending: [] });
 });
