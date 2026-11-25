@@ -130,7 +130,7 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
   // The receiving alias comes from the authenticated wallet API, which verifies
   // ownership of this user's Monime financial account before returning it.
   // Preserve leading zeroes and build only the documented Monime payment URL.
-  const monimeUvan = typeof sleWallet?.monime_uvan === 'string' && /^\\d{6,20}$/.test(sleWallet.monime_uvan.trim())
+  const monimeUvan = typeof sleWallet?.monime_uvan === 'string' && /^\d{6,20}$/.test(sleWallet.monime_uvan.trim())
     ? sleWallet.monime_uvan.trim()
     : null;
   const monimePaymentUrl = monimeUvan
