@@ -297,8 +297,8 @@ export async function syncMonimeWalletLabels(context, { verify = verifiedAccount
     const currency = String(wallet?.currency || '').toUpperCase();
     if (!['SLE', 'USD'].includes(currency) || !(wallet.monime_account_id || wallet.metadata?.monime_account_id)) continue;
     try {
-      const account = await verifiedAccount(context.db, wallet);
-      const labelled = await labelExistingAccount(account, context.profile, currency);
+      const account = await verify(context.db, wallet);
+      const labelled = await label(account, context.profile, currency);
       results.push({ currency, synced: !labelled.pending });
     } catch {
       results.push({ currency, synced: false });
