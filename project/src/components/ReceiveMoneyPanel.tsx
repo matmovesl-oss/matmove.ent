@@ -140,7 +140,7 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
   async function shareMonimeLink() {
     if (!monimePaymentUrl) return;
     try {
-      const shareText = `Pay me securely through Monime: ${monimePaymentUrl}\\nMonime UVAN: ${monimeUvan}`;
+      const shareText = `Pay me securely through Monime: ${monimePaymentUrl}\nMonime UVAN: ${monimeUvan}`;
       if (navigator.share) {
         await navigator.share({ title: 'MatMove — Get Paid', text: shareText, url: monimePaymentUrl });
       } else {
