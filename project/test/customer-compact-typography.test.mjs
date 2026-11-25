@@ -24,7 +24,8 @@ test('Rider, Driver and Merchant role headers stay compact without wrapping on p
     assert.match(source, /aria-label="Withdraw from wallet"/);
     assert.match(source, /aria-label="Transfer between wallets"/);
   }
-  assert.doesNotMatch(rider, /Where to, \\{profile/);\n  assert.match(rider, /activeSection === 'wallet' \\|\\| activeSection === 'home' \\? 'hidden' : ''/);
+  assert.doesNotMatch(rider, /Where to, \\{profile/);
+  assert.match(rider, /activeSection === 'wallet' \\|\\| activeSection === 'home' \\? 'hidden' : ''/);
   assert.match(driver, /Go offline/);
   assert.match(merchant, /Merchant Store/);
 });
