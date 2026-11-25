@@ -2,27 +2,28 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-test('customer global header is uncluttered: no Support trigger or notification bell', async () => {
+test('customer header places notifications beside Quick guide on Home and Account only', async () => {
   const app = await readFile('src/App.tsx', 'utf8');
   const start = app.indexOf('const accountHeader=');
-  const end = app.indexOf('</header>;', start);
+  const end = app.indexOf('</header>', start);
   assert.ok(start >= 0 && end > start, 'customer header should be present');
   const header = app.slice(start, end);
   assert.doesNotMatch(header, /<CustomerSupport/);
-  assert.doesNotMatch(header, /<NotificationBell/);
+  assert.match(header, /Quick guide/);
+  assert.match(header, /<NotificationBell/);
+  assert.match(header, /activeSection==='home'\\|\\|activeSection==='account'/);
   assert.match(header, /<MatMoveHelp/);
 });
 
-test('Account contains the notification bell at the right side of its heading', async () => {
+test('Account does not duplicate the header notification bell', async () => {
   const app = await readFile('src/App.tsx', 'utf8');
   const start = app.indexOf('function AccountSection(');
-  const heading = app.indexOf('<div className="mb-4 flex flex-wrap items-center justify-between gap-3">', start);
-  const bell = app.indexOf('<NotificationBell', heading);
-  const lock = app.indexOf('Lock app</button>', heading);
-  const nextSection = app.indexOf('<div className="mb-3 grid', heading);
-  assert.ok(start >= 0 && heading > start && bell > heading && lock > bell && nextSection > lock);
-  assert.match(app.slice(heading, nextSection), /items-center gap-2/);
-  assert.match(app.slice(heading, nextSection), /onNavigate={onNavigate}/);
+  const nextSection = app.indexOf('function PortalNavigation', start);
+  assert.ok(start >= 0 && nextSection > start);
+  const account = app.slice(start, nextSection);
+  assert.doesNotMatch(account, /<NotificationBell/);
+  assert.match(account, /aria-label="Lock app"/);
+  assert.match(account, /Account & Profile/);
 });
 
 test('Account keeps one Support Media entry and removes the legacy Customer Support card', async () => {

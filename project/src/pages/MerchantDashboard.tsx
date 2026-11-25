@@ -403,7 +403,7 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
 
   return (
     <div className="mm-merchant-workspace min-h-screen flex-1 bg-slate-50">
-      <header className={`mm-role-header sticky top-0 z-20 flex flex-nowrap items-center justify-between gap-2 border-b bg-white px-3 py-2 shadow-sm sm:px-6 sm:py-4 ${activeSection === 'wallet' ? 'hidden' : ''}`}>
+      <header className={`mm-role-header sticky top-0 z-20 flex flex-nowrap items-center justify-between gap-2 border-b bg-white px-3 py-2 shadow-sm sm:px-6 sm:py-4 ${activeSection === 'wallet' || activeSection === 'home' ? 'hidden' : ''}`}>
         <div className="flex min-w-0 flex-1 items-center gap-2"><div className="shrink-0 rounded-xl bg-orange-100 p-2 text-orange-600"><Store size={18} /></div><h2 className="min-w-0 truncate text-xs font-bold text-slate-900 sm:text-base">{profile?.business_name || profile?.full_name || 'Merchant Store'}</h2></div>
         <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
           {!canTransact ? <span className="rounded-xl border border-red-200 bg-red-100 px-2 py-2 text-[10px] font-bold text-red-700 sm:px-4 sm:text-xs"><span className="sm:hidden">{isFrozen ? 'Locked' : 'Pending'}</span><span className="hidden sm:inline">{isFrozen ? 'Wallet unavailable' : 'Approval pending'}</span></span> : (
@@ -517,7 +517,43 @@ function MerchantMain({ profile, wallet, activeSection, resumeTripId, onOpenTrip
         </div>
       )}
 
-      {activeSection === 'home' && (activeBooking && ['accepted','in_progress'].includes(activeBooking.status) ? <ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/> : <RideLocationPicker layout="map-first" key={profile.id} userId={profile.id} onBack={onBack || (() => { setRouteEditing(true); setPickup(''); setDestination(''); setPickupCoords(null); setDestinationCoords(null); setTripDistanceKm(null); setOfferAmount(''); })} bookingReady={Boolean(pickupCoords && destinationCoords && !routeEditing)} onRouteEditingChange={setRouteEditing} onChange={(selection: TripLocations) => { setPickup(selection.pickup?.address || ''); setDestination(selection.destination?.address || ''); setPickupCoords(selection.pickup?.coords || null); setDestinationCoords(selection.destination?.coords || null); setTripDistanceKm(selection.distanceKm); if (selection.distanceKm !== null) { setOfferAmount(Math.max(pricingRates[vehicleType]?.min || 15, Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5).toString()); } else { setOfferAmount(''); } }} />)}
+      {activeSection === 'home' && (
+        activeBooking && ['accepted','in_progress'].includes(activeBooking.status)
+          ? <ActiveTripMap key={activeBooking.id} userId={profile.id} bookingId={activeBooking.id}/>
+          : <RideLocationPicker
+              layout="map-first"
+              key={profile.id}
+              userId={profile.id}
+              onBack={onBack || (() => {
+                setRouteEditing(true);
+                setPickup('');
+                setDestination('');
+                setPickupCoords(null);
+                setDestinationCoords(null);
+                setTripDistanceKm(null);
+                setOfferAmount('');
+              })}
+              hasSelectedRoute={Boolean(pickupCoords && destinationCoords)}
+              onBackToSelection={() => setRouteEditing(false)}
+              bookingReady={Boolean(pickupCoords && destinationCoords && !routeEditing)}
+              onRouteEditingChange={setRouteEditing}
+              onChange={(selection: TripLocations) => {
+                setPickup(selection.pickup?.address || '');
+                setDestination(selection.destination?.address || '');
+                setPickupCoords(selection.pickup?.coords || null);
+                setDestinationCoords(selection.destination?.coords || null);
+                setTripDistanceKm(selection.distanceKm);
+                if (selection.distanceKm !== null) {
+                  setOfferAmount(Math.max(
+                    pricingRates[vehicleType]?.min || 15,
+                    Math.ceil(((pricingRates[vehicleType]?.min || 15) + selection.distanceKm * (pricingRates[vehicleType]?.perKm || 3)) / 5) * 5
+                  ).toString());
+                } else {
+                  setOfferAmount('');
+                }
+              }}
+            />
+      )}
 
       {activeSection === 'wallet' && (
         <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">

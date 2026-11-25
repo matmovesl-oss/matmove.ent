@@ -402,7 +402,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
     <main className="fixed inset-0 z-[100] min-h-[100dvh] overflow-y-auto bg-slate-50 px-4 pb-10 pt-[calc(env(safe-area-inset-top)+16px)]">
       <div className="mx-auto max-w-4xl">
         <header className="mb-5 flex items-center justify-between gap-3">
-          <button type="button" onClick={() => setServicePage(null)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Services</button>
+          <button type="button" onClick={() => setServicePage(null)} aria-label="Back to Services" title="Services" className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"><ArrowLeft size={19}/></button>
           <span className="text-xs font-bold text-slate-500">MATMOVE GAMES</span>
         </header>
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
@@ -424,7 +424,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
     <main className="fixed inset-0 z-[100] min-h-[100dvh] overflow-y-auto bg-slate-50 px-4 pb-10 pt-[calc(env(safe-area-inset-top)+16px)]">
       <div className="mx-auto max-w-3xl">
         <header className="mb-5 flex items-center justify-between gap-3">
-          <button type="button" onClick={() => setServicePage(null)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Services</button>
+          <button type="button" onClick={() => setServicePage(null)} aria-label="Back to Services" title="Services" className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"><ArrowLeft size={19}/></button>
           <span className="text-xs font-bold text-slate-500">MATMOVE CONCIERGE</span>
         </header>
         <ConciergeServices userId={uid}/>
@@ -436,7 +436,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
     <main className="fixed inset-0 z-[100] min-h-[100dvh] overflow-y-auto bg-slate-50 px-4 pb-10 pt-[calc(env(safe-area-inset-top)+16px)]">
       <div className="mx-auto max-w-3xl">
         <header className="mb-5 flex items-center justify-between gap-3">
-          <button type="button" onClick={() => setServicePage(null)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Services</button>
+          <button type="button" onClick={() => setServicePage(null)} aria-label="Back to Services" title="Services" className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"><ArrowLeft size={19}/></button>
           <span className="text-xs font-bold text-slate-500">MATMOVE TRAVEL</span>
         </header>
         <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
@@ -460,7 +460,7 @@ export default function PortalHome({ profile, onNavigate, mode = 'services' }: P
   return (
     <main className="mm-portal-morph mx-auto min-h-[calc(100dvh-120px)] max-w-3xl space-y-5 px-4 pb-28 pt-4">
       <header className="flex items-center justify-between gap-3">
-        <button type="button" onClick={() => onNavigate('home')} aria-label="Back to Home" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><ArrowLeft size={18}/> Home</button>
+        <button type="button" onClick={() => onNavigate('home')} aria-label="Back to Home" title="Home" className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"><ArrowLeft size={19}/></button>
         <span className="text-sm font-black tracking-tight text-slate-950">MATMOVE</span>
         <button type="button" onClick={() => onNavigate('account')} aria-label="Open your account" className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700"><ShieldCheck size={19}/></button>
       </header>
@@ -880,7 +880,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
         <div>
           <h1 className="text-xl font-bold text-slate-900">
-            Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋
+            Your MatMove services
           </h1>
         </div>
 

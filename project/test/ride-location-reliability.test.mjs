@@ -22,13 +22,18 @@ test('active-trip GPS sharing explains permission failures and browser backgroun
   assert.match(activeTrip, /Backgrounding or closing this screen stops sharing/);
 });
 
-test('rider and merchant ride-map back arrows return to the customer home screen', () => {
+test('ride page back returns Home while map back returns to vehicle selection', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   const merchant = readFileSync(new URL('../src/pages/MerchantDashboard.tsx', import.meta.url), 'utf8');
   const rider = readFileSync(new URL('../src/pages/RiderDashboard.tsx', import.meta.url), 'utf8');
   assert.match(app, /onBack=\{\(\) => setActiveSection\('home'\)\}/);
   assert.match(merchant, /function MerchantMain\(\{ profile, wallet, activeSection, resumeTripId, onOpenTrips, onBack \}: any\)/);
-  assert.match(merchant, /onBack=\{onBack \|\| \(\(\) => \{ setRouteEditing\(true\)/);
+  assert.match(merchant, /onBack=\{onBack \|\| \(\(\) => \{\s*setRouteEditing\(true\)/);
+  assert.match(rider, /hasSelectedRoute=\{Boolean\(pickupCoords && destinationCoords\)\}/);
+  assert.match(merchant, /hasSelectedRoute=\{Boolean\(pickupCoords && destinationCoords\)\}/);
+  assert.match(rider, /onBackToSelection=\{\(\) => \{ setRouteEditing\(false\); setViewMode\('new'\); setBookingSheetExpanded\(true\); \}\}/);
+  assert.match(merchant, /onBackToSelection=\{\(\) => setRouteEditing\(false\)\}/);
+  assert.match(picker, /aria-label=\{hasSelectedRoute&&onBackToSelection\?"Back to vehicle selection":"Back to Home"\}/);
   for (const source of [rider, merchant]) {
     assert.match(source, /document\.documentElement\.style\.overflow = 'hidden'/);
     assert.match(source, /document\.body\.style\.overflow = 'hidden'/);

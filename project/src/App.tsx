@@ -103,7 +103,6 @@ const ReceivePaymentCompletePage = lazy(() => import('@/pages/ReceivePayLinkPage
 const CustomerHome = lazy(() => import('@/components/CustomerHome'));
 const PortalGuide = lazy(() => import('@/components/PortalGuide'));
 const AccountProfile = lazy(() => import('@/components/AccountProfile'));
-const AccountIdentity = lazy(() => import('@/components/AccountProfile').then(m => ({default: m.AccountIdentity})));
 const PasskeySecurity = lazy(() => import('@/components/AccountProfile').then(m => ({default: m.PasskeySecurity})));
 const MerchantCheckout = lazy(() => import('@/components/MerchantCheckout'));
 const AccountPolicy = lazy(() => import('@/components/AccountPolicy').then(m => ({default: m.AccountPolicy})));
@@ -147,7 +146,7 @@ type CustomerCartItem = { id: string; product_id?: string | null; product?: Cart
 type CustomerOrder = { id: string; status?: string | null; price?: number | string | null; product_name?: string | null; quantity?: number | null; wallet_payment_status?: string | null; wallet_payment_id?: string | null; merchant?: MerchantSummary | null; created_at?: string | null; [key: string]: unknown };
 type CustomerBooking = { status?: string | null; fare_amount?: number | string | null; [key: string]: unknown };
 type AnalyticsSummary = { primaryMetric: number; completed: number; pending: number; totalCount: number };
-type AccountSectionProps = { profile: CustomerProfile; wallet: CustomerWallet | null; loggingOut: boolean; onLogout: () => void; onBack: () => void; onLock: () => void; onServices: () => void; onNavigate: (destination: string) => void };
+type AccountSectionProps = { profile: CustomerProfile; wallet: CustomerWallet | null; loggingOut: boolean; onLogout: () => void; onBack: () => void; onLock: () => void; onServices: () => void; };
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) return error.message.trim();
@@ -417,7 +416,22 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
 
   const guide=<Suspense fallback={null}><PortalGuide key={`${profile.id}:${role}`} userId={profile.id} role={role} verified={profile.kyc_status==='approved'} replay={guideReplay} onNavigate={setActiveSection} onVerify={()=>{if(profile.kyc_status==='approved')return;sessionStorage.setItem('ob_role',role);navigate('/onboarding/personal?resume=1');}}/></Suspense>;
   const openHelpDestination=(destination:string)=>setActiveSection(customerHelpSection(destination,role) as PortalSection);
-  const accountHeader=<header className="border-b border-slate-200 bg-white px-3 pt-[env(safe-area-inset-top)]"><div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-2 py-2"><div className="flex min-w-0 shrink-0 items-center gap-2"><span className="text-base font-black tracking-tight text-slate-950">MatMove</span><button type="button" aria-label="Replay Quick guide" onClick={()=>setGuideReplay(n=>n+1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border px-2 text-sm font-bold text-emerald-800"><span aria-hidden="true" className="sm:hidden">?</span><span className="hidden sm:inline">Quick guide</span></button><Suspense fallback={null}><MatMoveHelp key={`help:${profile.id}:${role}`} userId={profile.id} context={{role}} onNavigate={openHelpDestination}/></Suspense></div><button type="button" aria-label="Open your account" aria-current={activeSection==='account'?'page':undefined} onClick={()=>setActiveSection('account')} className="flex min-h-11 min-w-0 max-w-[48%] items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-slate-50"><Suspense fallback={<span className="text-xs text-slate-500">Account</span>}><AccountIdentity key={profile.id} userId={profile.id} fallbackName={profile.full_name?.trim() || profile.email || 'Complete your profile'}/></Suspense></button></div></header>;
+  const accountHeader=(
+    <header className="border-b border-slate-200 bg-white/95 px-3 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur">
+      <div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <button type="button" aria-label="Replay Quick guide" title="Quick guide" onClick={()=>setGuideReplay(n=>n+1)} className="flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-emerald-800 hover:bg-emerald-50">Quick guide</button>
+          {(activeSection==='home'||activeSection==='account')&&(
+            <Suspense fallback={<span className="h-11 w-11" />}>
+              <NotificationBell key={`header-notifications:${profile.id}`} userId={profile.id} onNavigate={openHelpDestination}/>
+            </Suspense>
+          )}
+          <Suspense fallback={null}><MatMoveHelp key={`help:${profile.id}:${role}`} userId={profile.id} context={{role}} onNavigate={openHelpDestination}/></Suspense>
+        </div>
+        <button type="button" aria-label="Open your account" title="Account" aria-current={activeSection==='account'?'page':undefined} onClick={()=>setActiveSection('account')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><UserCircle size={20}/></button>
+      </div>
+    </header>
+  );
 
   if (
     activeSection === 'account'
@@ -439,7 +453,6 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
               setActiveSection('home')
             }
             onServices={() => setActiveSection('services')}
-            onNavigate={openHelpDestination}
           />
         </div>
 
@@ -460,9 +473,9 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
         <OfflineStatus />
       <div className="mx-auto max-w-6xl px-4"><KycStatusNotice profile={profile} onVerify={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal?resume=1'); }}/></div>
       {activeSection !== 'home' && activeSection !== 'services' && (
-        <div className="mx-auto max-w-6xl px-4 pt-3">
-          <button type="button" onClick={() => setActiveSection(activeSection === 'ride' || activeSection === 'delivery' ? 'home' : 'services')} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
-            <ArrowLeft size={16}/> {activeSection === 'ride' || activeSection === 'delivery' ? 'Back to Home' : 'Back to Services'}
+        <div className="mx-auto flex max-w-6xl justify-start px-4 pt-4 pb-1">
+          <button type="button" aria-label={activeSection === 'ride' || activeSection === 'delivery' ? 'Back to Home' : 'Back to Services'} title={activeSection === 'ride' || activeSection === 'delivery' ? 'Home' : 'Services'} onClick={() => setActiveSection(activeSection === 'ride' || activeSection === 'delivery' ? 'home' : 'services')} className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
+            <ArrowLeft size={19}/>
           </button>
         </div>
       )}
@@ -549,7 +562,6 @@ function AccountSection({
   onBack,
   onLock,
   onServices,
-  onNavigate,
 }: AccountSectionProps) {
   const navigate = useNavigate();
   const resumeVerification = () => { if (profile.kyc_status === 'approved') return; sessionStorage.setItem('ob_role', profile.role); navigate('/onboarding/personal?resume=1'); };
@@ -959,12 +971,13 @@ function AccountSection({
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         <button
-          onClick={() =>
-            setViewingAnalytics(false)
-          }
-          className="text-sm font-semibold text-slate-500 hover:text-blue-600 transition mb-5 flex items-center gap-2"
+          type="button"
+          aria-label="Back to Profile"
+          title="Profile"
+          onClick={() => setViewingAnalytics(false)}
+          className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
         >
-          ← Back to Profile
+          <ArrowLeft size={19}/>
         </button>
 
         <div className="flex justify-between items-center mb-6">
@@ -1066,12 +1079,13 @@ function AccountSection({
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         <button
-          onClick={() =>
-            setViewingCartOrders(false)
-          }
-          className="text-sm font-semibold text-slate-500 hover:text-blue-600 transition mb-5 flex items-center gap-2"
+          type="button"
+          aria-label="Back to Profile"
+          title="Profile"
+          onClick={() => setViewingCartOrders(false)}
+          className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
         >
-          ← Back to Profile
+          <ArrowLeft size={19}/>
         </button>
 
         <h1 className="text-3xl font-bold text-slate-900 mb-6">
@@ -1302,7 +1316,7 @@ function AccountSection({
         : <MerchantDashboard profile={profile} wallet={wallet} activeSection="wallet" />;
     return <div className="min-h-screen bg-slate-50 px-4 pb-24 pt-4">
       <div className="mx-auto mb-3 max-w-6xl">
-        <button type="button" onClick={() => setViewingWallet(false)} className="min-h-11 rounded-xl border bg-white px-4 text-sm font-bold text-slate-700">← Back to Account</button>
+        <button type="button" onClick={() => setViewingWallet(false)} aria-label="Back to Account" title="Account" className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm"><ArrowLeft size={19}/></button>
       </div>
       {walletPage}
     </div>;
@@ -1317,8 +1331,8 @@ function AccountSection({
   if (activePanel === 'profile') {
     return (
       <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
-        <button type="button" onClick={() => setActivePanel(null)} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
-          <ArrowLeft size={17}/> Back to Account
+        <button type="button" onClick={() => setActivePanel(null)} aria-label="Back to Account" title="Account" className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50">
+          <ArrowLeft size={19}/>
         </button>
         <h1 className="mb-4 text-2xl font-bold text-slate-900">Profile</h1>
         <AccountProfile key={profile.id} userId={profile.id} showPasskey={false}/>
@@ -1344,7 +1358,7 @@ function AccountSection({
 
   if (activePanel === 'invite') {
     return <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
-      <button type="button" onClick={() => setActivePanel(null)} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Account</button>
+      <button type="button" onClick={() => setActivePanel(null)} aria-label="Back to Account" title="Account" className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm"><ArrowLeft size={19}/></button>
       <h1 className="mb-4 text-2xl font-bold text-slate-900">Invite & Earn</h1>
       <InviteEarn key={`referrals:${profile.id}`} userId={profile.id}/>
     </section>;
@@ -1352,7 +1366,7 @@ function AccountSection({
 
   if (activePanel === 'policy') {
     return <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
-      <button type="button" onClick={() => setActivePanel(null)} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Account</button>
+      <button type="button" onClick={() => setActivePanel(null)} aria-label="Back to Account" title="Account" className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm"><ArrowLeft size={19}/></button>
       <h1 className="mb-4 text-2xl font-bold text-slate-900">Safety & Compliance</h1>
       <AccountPolicy />
     </section>;
@@ -1360,14 +1374,11 @@ function AccountSection({
 
   return (
     <div className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
-      <button type="button" onClick={onBack} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"><ArrowLeft size={17}/> Back to portal</button>
+      <button type="button" onClick={onBack} aria-label="Back to portal" title="Portal" className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"><ArrowLeft size={19}/></button>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-xs font-bold uppercase tracking-wider text-emerald-700">MatMove account</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Account & Profile</h1></div>
         <div className="flex shrink-0 items-center gap-2">
-          <Suspense fallback={<span className="min-h-11 min-w-11" />}>
-            <NotificationBell key={`notifications:${profile.id}`} userId={profile.id} onNavigate={onNavigate}/>
-          </Suspense>
-          <button type="button" onClick={onLock} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><LockKeyhole size={17}/> Lock app</button>
+          <button type="button" onClick={onLock} aria-label="Lock app" title="Lock app" className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700"><LockKeyhole size={18}/></button>
         </div>
       </div>
 

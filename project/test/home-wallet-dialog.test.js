@@ -53,7 +53,7 @@ for(const role of ['rider','driver','merchant'])test(`${role} Services opens the
  const button=h.nodes.find(n=>n.type==='button'&&text(n).includes('RICH DICE'));assert.ok(button);button.props.onClick();await h.settle();
  assert.equal(h.tree.props.initialGame,'dice');assert.equal(h.tree.props.userId,uid);assert.equal(h.calls.filter(c=>c.kind==='payout').length,0);
  h.tree.props.onBack();await h.settle();assert.match(h.text,/Play MatMove Games/);
- const back=h.nodes.find(n=>n.type==='button'&&text(n).includes('Back to Services'));assert.ok(back);back.props.onClick();await h.settle();assert.match(h.text,/Services/);
+ const back=h.nodes.find(n=>n.type==='button'&&n.props['aria-label']==='Back to Services');assert.ok(back);back.props.onClick();await h.settle();assert.match(h.text,/Services/);
 },{role}));
 test('Home shows the actionable preferences error without claiming the user has no saved places',()=>page('PortalHome',async h=>{
  assert.match(h.text,/ACCESS: Customer account setup required/);assert.doesNotMatch(h.text,/Add your home address/);

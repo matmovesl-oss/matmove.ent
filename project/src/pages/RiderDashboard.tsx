@@ -580,11 +580,11 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
   return (
     <div className="flex-1 bg-slate-50 min-h-screen">
       <CashMonimeSuccess open={cashSuccessOpen} onClose={() => setCashSuccessOpen(false)} />
-      <header className={`mm-role-header sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur ${activeSection === 'wallet' ? 'hidden' : ''}`}>
+      <header className={`mm-role-header sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur ${activeSection === 'wallet' || activeSection === 'home' ? 'hidden' : ''}`}>
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:gap-4 sm:px-6 sm:py-3">
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-bold text-slate-900 sm:text-xl">
-              Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋
+              {activeSection === 'trips' ? 'Your trips' : activeSection === 'shop' ? 'Shop local' : activeSection === 'delivery' ? 'Package delivery' : 'MatMove'}
             </h1>
           </div>
           <div className="grid shrink-0 grid-cols-3 gap-1 sm:w-auto sm:min-w-[360px] sm:gap-2">
@@ -882,6 +882,8 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
                   key={profile?.id || 'location-picker'}
                   userId={profile?.id}
                   onBack={onBack}
+                  hasSelectedRoute={Boolean(pickupCoords && destinationCoords)}
+                  onBackToSelection={() => { setRouteEditing(false); setViewMode('new'); setBookingSheetExpanded(true); }}
                   bookingReady={Boolean(pickupCoords && destinationCoords && !routeEditing)}
                   bookingSheetExpanded={bookingSheetExpanded}
                   onRouteEditingChange={setRouteEditing}
