@@ -25,3 +25,24 @@ test('native push webhook authenticates server-to-server calls and sends generic
   assert.doesNotMatch(source, /payload\.record\.title/);
   assert.match(source, /x-matmove-push-secret/);
 });
+
+
+test('native push delivery uses a Vault-backed secret and only dispatches after inbox fan-out', async () => {
+  const source = await functionSource();
+  const migration = await readFile(
+    new URL('../supabase/migrations/20261125151000_matmove_native_push_webhook_v1.sql', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(source, /matmove_push_verify_webhook_secret/);
+  assert.match(source, /SUPABASE_SECRET_KEYS/);
+  assert.ok(source.includes("Authorization: `Bearer ${apiKey}`"));
+  assert.match(migration, /vault\.create_secret/);
+  assert.match(migration, /matmove_push_verify_webhook_secret/);
+  assert.match(migration, /grant execute on function public\.matmove_push_verify_webhook_secret\(text\)\s+to service_role/i);
+  assert.match(migration, /net\.http_post/);
+  assert.match(migration, /x-matmove-push-secret/);
+  assert.match(migration, /after update of recipient_count/i);
+  assert.match(migration, /when \(new\.recipient_count > old\.recipient_count\)/i);
+  assert.doesNotMatch(migration, /EXPO_ACCESS_TOKEN\s*[:=]/i);
+});

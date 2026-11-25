@@ -63,10 +63,12 @@ async function callServiceRpc<T>(name: string, body: Record<string, unknown>): P
   const baseUrl = Deno.env.get('SUPABASE_URL')?.trim().replace(/\/+$/, '');
   if (!baseUrl) throw new Error('Supabase URL is not configured.');
 
+  const apiKey = getSupabaseApiKey();
   const response = await fetch(`${baseUrl}/rest/v1/rpc/${name}`, {
     method: 'POST',
     headers: {
-      apikey: getSupabaseApiKey(),
+      apikey: apiKey,
+      ...(apiKey.startsWith('sb_secret_') ? {} : { Authorization: `Bearer ${apiKey}` }),
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(body)
@@ -98,14 +100,30 @@ async function removeInvalidToken(token: string): Promise<void> {
 Deno.serve(async (request: Request) => {
   if (request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
 
-  const configuredSecret = Deno.env.get('MATMOVE_PUSH_WEBHOOK_SECRET')?.trim();
-  if (!configuredSecret || configuredSecret.length < 32) {
-    return json({ error: 'Push webhook authentication is not configured.' }, 503);
+  const suppliedSecret = request.headers.get('x-matmove-push-secret') ?? '';
+  if (!/^[0-9a-f]{64}$/.test(suppliedSecret)) {
+    return json({ error: 'Unauthorized.' }, 401);
   }
 
-  const suppliedSecret = request.headers.get('x-matmove-push-secret') ?? '';
-  if (!constantTimeEqual(suppliedSecret, configuredSecret)) {
-    return json({ error: 'Unauthorized.' }, 401);
+  const configuredSecret = Deno.env.get('MATMOVE_PUSH_WEBHOOK_SECRET')?.trim();
+  if (configuredSecret) {
+    if (!constantTimeEqual(suppliedSecret, configuredSecret)) {
+      return json({ error: 'Unauthorized.' }, 401);
+    }
+  } else {
+    // The database keeps the shared secret in Supabase Vault. The Edge Function
+    // checks it through a service-only RPC so no webhook secret needs to be
+    // copied into this deployment's environment or committed to source control.
+    try {
+      const valid = await callServiceRpc<boolean>(
+        'matmove_push_verify_webhook_secret',
+        { p_secret: suppliedSecret }
+      );
+      if (valid !== true) return json({ error: 'Unauthorized.' }, 401);
+    } catch {
+      console.error('MatMove could not verify the push webhook secret.');
+      return json({ error: 'Push webhook authentication is temporarily unavailable.' }, 503);
+    }
   }
 
   let payload: WebhookPayload;
