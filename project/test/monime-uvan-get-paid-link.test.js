@@ -84,8 +84,8 @@ test('Wallet Cards keeps provider identifiers off the card and opens a role-bran
   assert.match(panel, /role="dialog"/);
   assert.match(panel, /Copy link/);
   assert.match(panel, /Share details/);
-  assert.match(panel, /sleWallet\\?\\.monime_uvan/);
-  assert.match(panel, /https:\\/\\/pay\\.monime\\.io\\//);
+  assert.ok(panel.includes('sleWallet?.monime_uvan'));
+  assert.ok(panel.includes('https://pay.monime.io/'));
   assert.match(panel, /Monime Get Paid/);
   assert.match(panel, /Copy UVAN/);
   assert.match(panel, /Share Monime link/);
