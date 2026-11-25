@@ -10,8 +10,11 @@ export function monimeWalletDisplayName(profile, currency) {
   const roles = [...new Set((Array.isArray(profile?.roles) ? profile.roles : [profile?.role]).map(role => String(role || '').toLowerCase()).filter(role => roleLabels[role]))];
   if (!roles.length) throw new HttpError(403, 'A verified MatMove customer role is required.');
   const fullName = String(profile?.full_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'MatMove User').trim().replace(/\s+/g, ' ');
+  const rawUsername = String(profile?.username || profile?.user_name || '').trim().replace(/^@/, '');
+  const username = rawUsername && rawUsername.toLowerCase() !== fullName.toLowerCase() ? '@' + rawUsername : '';
+  const identity = [fullName, username].filter(Boolean).join(' · ');
   const suffix = ' · ' + roles.map(role => roleLabels[role]).join('/') + ' · ' + currency;
-  return fullName.slice(0, Math.max(1, 100 - suffix.length)).trim() + suffix;
+  return identity.slice(0, Math.max(1, 100 - suffix.length)).trim() + suffix;
 }
 
 async function labelExistingAccount(account, profile, currency) {
@@ -288,14 +291,14 @@ export async function createWallet(
   });
 }
 
-export async function syncMonimeWalletLabels(context) {
+export async function syncMonimeWalletLabels(context, { verify = verifiedAccount, label = labelExistingAccount } = {}) {
   const results = [];
   for (const wallet of context.wallets || []) {
     const currency = String(wallet?.currency || '').toUpperCase();
     if (!['SLE', 'USD'].includes(currency) || !(wallet.monime_account_id || wallet.metadata?.monime_account_id)) continue;
     try {
-      const account = await verifiedAccount(context.db, wallet);
-      const labelled = await labelExistingAccount(account, context.profile, currency);
+      const account = await verify(context.db, wallet);
+      const labelled = await label(account, context.profile, currency);
       results.push({ currency, synced: !labelled.pending });
     } catch {
       results.push({ currency, synced: false });
