@@ -36,7 +36,7 @@ test('native push delivery uses a Vault-backed secret and only dispatches after 
 
   assert.match(source, /matmove_push_verify_webhook_secret/);
   assert.match(source, /SUPABASE_SECRET_KEYS/);
-  assert.match(source, /Authorization: `Bearer ${apiKey}`/);
+  assert.ok(source.includes("Authorization: `Bearer ${apiKey}`"));
   assert.match(migration, /vault\.create_secret/);
   assert.match(migration, /matmove_push_verify_webhook_secret/);
   assert.match(migration, /grant execute on function public\.matmove_push_verify_webhook_secret\(text\)\s+to service_role/i);
