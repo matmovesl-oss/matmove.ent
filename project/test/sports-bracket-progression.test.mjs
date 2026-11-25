@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const migration = readFileSync(new URL('../supabase/migrations/20261125183616_matmove_sports_tournament_management_v1.sql', import.meta.url), 'utf8');
 const prizePatch = readFileSync(new URL('../supabase/migrations/20261125185208_matmove_sports_overall_winner_prize_only.sql', import.meta.url), 'utf8');
+const rosterLockPatch = readFileSync(new URL('../supabase/migrations/20261125185310_matmove_sports_lock_roster_after_bracket.sql', import.meta.url), 'utf8');
 
 test('16-player Sports bracket creates both group finals and links each champion to the grand final', () => {
   assert.match(migration, /matches_created',15/);
@@ -23,4 +24,10 @@ test('Sports results require confirmation before a winner advances and only conf
 
 test('the 16-player cash prize can only be recorded for the overall champion', () => {
   assert.match(prizePatch, /Only the overall champion can receive the cash prize/);
+});
+
+test('player approvals, rejections and group seeding lock after bracket generation', () => {
+  assert.match(rosterLockPatch, /Player approval is closed because the tournament bracket has started/);
+  assert.match(rosterLockPatch, /Player registrations are locked because the tournament bracket has started/);
+  assert.match(rosterLockPatch, /Group assignments are locked because the tournament bracket has started/);
 });
