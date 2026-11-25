@@ -7,12 +7,8 @@ const EXPO_TOKEN = /^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,256}\]$/;
 const DESTINATIONS = new Set(["home", "wallet", "trips", "games", "account", "kyc"]);
 const EXPO_SEND_URL = "https://exp.host/--/api/v2/push/send";
 
-type InboxRecord = {
-  id: string | number;
-  user_id: string;
-  message_id: string;
-};
-type PushTokenRow = { expo_push_token: string };
+type MessageRecord = { id: string };
+type PushTokenRow = { user_id: string; expo_push_token: string };
 type ExpoTicket = { status?: string; details?: { error?: string } };
 
 function json(status: number, body: Record<string, unknown>) {
@@ -20,16 +16,6 @@ function json(status: number, body: Record<string, unknown>) {
     status,
     headers: { "content-type": "application/json; charset=utf-8" },
   });
-}
-
-function validInboxId(value: unknown): value is string | number {
-  const text = String(value ?? "");
-  if (!/^[1-9][0-9]{0,18}$/.test(text)) return false;
-  try {
-    return BigInt(text) <= 9223372036854775807n;
-  } catch {
-    return false;
-  }
 }
 
 function restUrl(table: string, filters: Record<string, string>, select: string) {
@@ -80,7 +66,7 @@ Deno.serve(async (request: Request) => {
     return json(503, { error: "Native push delivery is not configured on this server." });
   }
 
-  let payload: { type?: unknown; table?: unknown; schema?: unknown; record?: InboxRecord };
+  let payload: { type?: unknown; table?: unknown; schema?: unknown; record?: MessageRecord };
   try {
     payload = await request.json();
   } catch {
@@ -88,59 +74,53 @@ Deno.serve(async (request: Request) => {
   }
 
   if (payload.type !== "INSERT" || payload.schema !== "public" ||
-      payload.table !== "matmove_notification_inbox") {
+      payload.table !== "matmove_notification_messages") {
     return json(400, { error: "Unsupported notification event." });
   }
 
   const record = payload.record;
-  if (!record || !validInboxId(record.id) ||
-      typeof record.user_id !== "string" || !UUID.test(record.user_id) ||
-      typeof record.message_id !== "string" || !UUID.test(record.message_id)) {
-    return json(400, { error: "Invalid notification recipient record." });
+  if (!record || typeof record.id !== "string" || !UUID.test(record.id)) {
+    return json(400, { error: "Invalid notification message reference." });
   }
 
   try {
-    // Confirm the webhook references a real inbox row and recipient before using service access.
-    const inboxRows = await supabaseRest<Array<{ id: string }>>(
-      "matmove_notification_inbox",
-      {
-        id: "eq." + String(record.id),
-        user_id: "eq." + record.user_id,
-        message_id: "eq." + record.message_id,
-      },
-      "id",
-    );
-    if (inboxRows.length !== 1) return json(202, { ok: true, skipped: "Inbox row no longer exists." });
-
-    const messages = await supabaseRest<Array<{ destination: string | null }>>(
+    // One webhook per Admin message; resolve its recipients from the trusted inbox table.
+    const messages = await supabaseRest<Array<{ id: string; destination: string | null }>>(
       "matmove_notification_messages",
-      { id: "eq." + record.message_id },
-      "destination",
+      { id: "eq." + record.id },
+      "id,destination",
     );
     if (messages.length !== 1) return json(202, { ok: true, skipped: "Notification message no longer exists." });
+
+    const recipients = await supabaseRest<Array<{ user_id: string }>>(
+      "matmove_notification_inbox",
+      { message_id: "eq." + record.id },
+      "user_id",
+    );
+    const userIds = [...new Set(recipients.map((row) => row.user_id).filter((id) => UUID.test(id)))];
+    if (!userIds.length) return json(200, { ok: true, recipients: 0, devices: 0, sent: 0 });
 
     const destination = messages[0].destination;
     const safeDestination = typeof destination === "string" && DESTINATIONS.has(destination)
       ? destination
       : null;
 
-    const rows = await supabaseRest<PushTokenRow[]>(
+    const tokenRows = await supabaseRest<PushTokenRow[]>(
       "matmove_push_tokens",
-      { user_id: "eq." + record.user_id },
-      "expo_push_token",
+      { user_id: "in.(" + userIds.join(",") + ")" },
+      "user_id,expo_push_token",
     );
-    const tokens = [...new Set(rows
-      .map((row) => row.expo_push_token)
-      .filter((token) => EXPO_TOKEN.test(token)))];
+    const tokens = tokenRows
+      .filter((row) => UUID.test(row.user_id) && EXPO_TOKEN.test(row.expo_push_token));
 
-    if (!tokens.length) return json(200, { ok: true, devices: 0, sent: 0 });
+    if (!tokens.length) return json(200, { ok: true, recipients: userIds.length, devices: 0, sent: 0 });
 
     let sent = 0;
     let failed = 0;
     for (let offset = 0; offset < tokens.length; offset += 100) {
       const batch = tokens.slice(offset, offset + 100);
-      const messagesToSend = batch.map((to) => ({
-        to,
+      const messagesToSend = batch.map((row) => ({
+        to: row.expo_push_token,
         title: "MatMove",
         // Do not expose private inbox text on a lock screen.
         body: "You have a new notification. Open MatMove to view it.",
@@ -172,7 +152,7 @@ Deno.serve(async (request: Request) => {
         if (ticket?.status === "ok") {
           sent += 1;
         } else if (ticket?.details?.error === "DeviceNotRegistered") {
-          await removeDeadToken(record.user_id, batch[index]);
+          await removeDeadToken(batch[index].user_id, batch[index].expo_push_token);
         } else {
           failed += 1;
         }
@@ -180,7 +160,7 @@ Deno.serve(async (request: Request) => {
     }
 
     if (failed > 0) return json(502, { error: "One or more push notifications could not be accepted.", sent, failed });
-    return json(200, { ok: true, devices: tokens.length, sent, failed });
+    return json(200, { ok: true, recipients: userIds.length, devices: tokens.length, sent, failed });
   } catch (error) {
     console.error("MatMove native push delivery failed:", error instanceof Error ? error.message : "Unknown error");
     return json(502, { error: "MatMove could not deliver this device notification." });
