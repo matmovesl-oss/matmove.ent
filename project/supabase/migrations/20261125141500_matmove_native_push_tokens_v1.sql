@@ -51,16 +51,15 @@ begin
 
   insert into public.matmove_push_tokens(user_id,expo_push_token,platform)
   values(actor,p_token,p_platform)
+  -- One Expo token represents one app installation. If the authenticated
+  -- customer switches accounts on that same device, move the token to the
+  -- currently signed-in account so notifications never fan out to old accounts.
   on conflict (expo_push_token) do update
-    set platform=excluded.platform,
+    set user_id=excluded.user_id,
+        platform=excluded.platform,
         updated_at=clock_timestamp(),
         last_seen_at=clock_timestamp()
-    where public.matmove_push_tokens.user_id=excluded.user_id
   returning id into saved_id;
-
-  if saved_id is null then
-    raise exception 'CONFLICT: This device token is already linked to another MatMove account. Sign out of that account on this device first.';
-  end if;
 
   return jsonb_build_object(
     'user_id',actor,
