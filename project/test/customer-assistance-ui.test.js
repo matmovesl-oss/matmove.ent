@@ -83,8 +83,21 @@ test('polls pause while the inbox is open and a delayed read cannot publish afte
  await h.click('Open notifications, 1 unread');const count=h.calls.length;const poll=[...h.intervals.values()].find(v=>v.ms===30000);poll.fn();await h.settle();assert.equal(h.calls.length,count);
  await h.click('Close notifications');let resolve;h.setHandler(()=>new Promise(r=>resolve=r));h.button('Refresh').props.onClick();await h.settle();assert.ok(resolve);h.unmount();resolve({data:{...base(),items:[{...item,title:'Late update'}]},error:null});await h.settle();assert.ok(!h.text.includes('Late update'));
 }));
-test('header integration retains profile, guide, top Account and the original twelve API files',async()=>{
- const app=await readFile('src/App.tsx','utf8');for(const name of ['MatMoveHelp','NotificationBell','AccountIdentity','AccountProfile','PortalGuide'])assert.ok(app.includes(name));assert.match(app,/customerHelpSection\(destination,role\)/);const accountStart=app.indexOf('function AccountSection('),accountEnd=app.indexOf('function PortalNavigation',accountStart);const account=app.slice(accountStart,accountEnd);assert.ok(account.includes('<NotificationBell key={`notifications:${profile.id}`}'));assert.doesNotMatch(app.slice(app.indexOf('const accountHeader='),app.indexOf('</header>;',app.indexOf('const accountHeader='))),/<NotificationBell/);assert.match(app,/<CustomerPasscode key=\{session.user.id\}/);assert.match(app,/<PortalContent onPrivacyLock=\{lock\}/);
+test('header integration places one notification bell beside Quick guide on Home and Account only',async()=>{
+ const app=await readFile('src/App.tsx','utf8');
+ for(const name of ['MatMoveHelp','NotificationBell','AccountProfile','PortalGuide'])assert.ok(app.includes(name));
+ assert.doesNotMatch(app,/const AccountIdentity =/);
+ assert.match(app,/aria-label="Open your account"/);
+ assert.match(app,/customerHelpSection\(destination,role\)/);
+ const accountStart=app.indexOf('function AccountSection('),accountEnd=app.indexOf('function PortalNavigation',accountStart);
+ const account=app.slice(accountStart,accountEnd);
+ assert.doesNotMatch(account,/<NotificationBell/);
+ const headerStart=app.indexOf('const accountHeader='),headerEnd=app.indexOf('</header>',headerStart);
+ const header=app.slice(headerStart,headerEnd);
+ assert.match(header,/<NotificationBell/);
+ assert.match(header,/activeSection==='home'\|\|activeSection==='account'/);
+ assert.match(app,/<CustomerPasscode key=\{session.user.id\}/);
+ assert.match(app,/<PortalContent onPrivacyLock=\{lock\}/);
 });
 
 // Privacy lock regressions share this existing assistance test file.
