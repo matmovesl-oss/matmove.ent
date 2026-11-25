@@ -191,6 +191,8 @@ declare
   v_qf uuid[];
   v_sf uuid[];
   v_group_final uuid;
+  v_group_final_a uuid;
+  v_group_final_b uuid;
   v_grand uuid;
   v_p1 uuid;
   v_p2 uuid;
@@ -336,15 +338,18 @@ begin
       update public.matmove_sports_matches set next_match_id=v_group_final,next_slot='player1' where id=v_sf[1];
       update public.matmove_sports_matches set next_match_id=v_group_final,next_slot='player2' where id=v_sf[2];
       if v_group='A' then
-        v_p1:=v_group_final;
+        v_group_final_a:=v_group_final;
       else
-        v_p2:=v_group_final;
+        v_group_final_b:=v_group_final;
       end if;
     end loop;
     insert into public.matmove_sports_matches(competition_id,stage,match_number,status)
     values(v_comp,'grand_final',1,'waiting') returning id into v_grand;
-    update public.matmove_sports_matches set next_match_id=v_grand,next_slot='player1' where id=v_p1;
-    update public.matmove_sports_matches set next_match_id=v_grand,next_slot='player2' where id=v_p2;
+    if v_group_final_a is null or v_group_final_b is null then
+      raise exception 'INVALID: Both group finals must be created before the grand final.';
+    end if;
+    update public.matmove_sports_matches set next_match_id=v_grand,next_slot='player1' where id=v_group_final_a;
+    update public.matmove_sports_matches set next_match_id=v_grand,next_slot='player2' where id=v_group_final_b;
     update public.matmove_sports_competitions set status='in_progress',updated_at=now() where id=v_comp;
     v_result:=jsonb_build_object('competition_id',v_comp,'matches_created',15,'status','in_progress');
 
@@ -438,6 +443,7 @@ begin
   return v_result;
 end;
 $function$
+
 
 revoke all on function public.matmove_sports_admin_snapshot(uuid) from public,anon,authenticated;
 grant execute on function public.matmove_sports_admin_snapshot(uuid) to authenticated;
