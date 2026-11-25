@@ -15,6 +15,7 @@ test('native push webhook authenticates server-to-server calls and sends generic
   assert.match(source, /constantTimeEqual/);
   assert.match(source, /payload\.type !== 'UPDATE'/);
   assert.match(source, /payload\.table !== 'matmove_notification_messages'/);
+  assert.match(source, /payload\.record\.recipient_count <= payload\.old_record\.recipient_count/);
   assert.match(source, /matmove_push_dispatch_context/);
   assert.match(source, /EXPO_ACCESS_TOKEN/);
   assert.match(source, /DeviceNotRegistered/);
