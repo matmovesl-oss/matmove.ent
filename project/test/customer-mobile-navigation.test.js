@@ -45,7 +45,10 @@ test('ride booking uses the full map-first location picker for rider and merchan
   const driver = await readFile('src/pages/DriverDashboard.tsx', 'utf8');
   assert.ok(picker.includes("layout === 'map-first'"));
   assert.ok(picker.includes("min(56dvh,520px)"));
-  assert.ok(picker.includes("Back to MatMove home"));
+  assert.ok(picker.includes('Back to vehicle selection'));
+  assert.ok(picker.includes('hasSelectedRoute&&onBackToSelection'));
+  assert.ok(rider.includes('onBackToSelection={() => { setRouteEditing(false); setViewMode(\'new\'); setBookingSheetExpanded(true); }}'));
+  assert.ok(merchant.includes('onBackToSelection={() => setRouteEditing(false)}'));
   assert.ok(picker.includes("Change locations"));
   assert.ok(rider.includes('layout="map-first"'));
   assert.ok(merchant.includes('layout="map-first"'));
@@ -117,4 +120,26 @@ test('Account Services entry is compact and the Services directory uses separate
   assert.match(services, /fixed inset-0 z-\[120\]/);
   assert.match(services, /fixed inset-0 z-\[130\]/);
   assert.match(services, /Back to Services/);
+});
+
+
+test('Get Paid opens the secure payment URL and gives a one-second copy confirmation', async () => {
+  const panel = await readFile('src/components/ReceiveMoneyPanel.tsx', 'utf8');
+  assert.match(panel, /href=\{link\.publicUrl\} target="_blank" rel="noopener noreferrer"/);
+  assert.match(panel, /aria-label="Open your personal MatMove payment page in a new tab"/);
+  assert.match(panel, /navigator\.clipboard\.writeText\(value\)/);
+  assert.match(panel, /setTimeout\(\(\) => setCopiedLabel\(''\), 1000\)/);
+  assert.match(panel, /role="status" aria-live="polite"/);
+  assert.match(panel, /copiedLabel === 'Payment link' \? 'Copied ✓' : 'Copy link'/);
+});
+
+test('customer header keeps the bell beside Quick guide on Home and Account only', async () => {
+  const app = await readFile('src/App.tsx', 'utf8');
+  const home = await readFile('src/components/CustomerHome.tsx', 'utf8');
+  assert.match(app, /\(activeSection==='home'\|\|activeSection==='account'\)&&\(/);
+  assert.match(app, /header-notifications:/);
+  assert.match(app, /Quick guide/);
+  assert.doesNotMatch(app, /const AccountIdentity =/);
+  assert.match(home, /Hello, \{name\}\./);
+  assert.doesNotMatch(app, /Where to, \{profile\?\.first_name/);
 });
