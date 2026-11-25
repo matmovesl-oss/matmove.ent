@@ -127,6 +127,30 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
 
   const roleTitle = role === 'driver' ? 'MatMove Driver Get Paid' : role === 'merchant' ? 'MatMove Merchant Get Paid' : 'MatMove Rider Get Paid';
 
+  // The receiving alias comes from the authenticated wallet API, which verifies
+  // ownership of this user's Monime financial account before returning it.
+  // Preserve leading zeroes and build only the documented Monime payment URL.
+  const monimeUvan = typeof sleWallet?.monime_uvan === 'string' && /^\d{6,20}$/.test(sleWallet.monime_uvan.trim())
+    ? sleWallet.monime_uvan.trim()
+    : null;
+  const monimePaymentUrl = monimeUvan
+    ? `https://pay.monime.io/${monimeUvan}`
+    : null;
+
+  async function shareMonimeLink() {
+    if (!monimePaymentUrl) return;
+    try {
+      const shareText = `Pay me securely through Monime: ${monimePaymentUrl}\nMonime UVAN: ${monimeUvan}`;
+      if (navigator.share) {
+        await navigator.share({ title: 'MatMove — Get Paid', text: shareText, url: monimePaymentUrl });
+      } else {
+        await copy(monimePaymentUrl, 'Monime Get Paid link');
+      }
+    } catch (cause: any) {
+      if (cause?.name !== 'AbortError') setError('Unable to share your Monime link. Copy it instead.');
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/45 p-2 backdrop-blur-sm sm:items-center sm:p-4">
     <section role="dialog" aria-modal="true" className="mm-glass-tile max-h-[min(88dvh,760px)] w-full max-w-lg overflow-y-auto rounded-3xl p-4 text-slate-800 shadow-2xl sm:p-5" aria-labelledby="receive-money-title">
@@ -143,8 +167,25 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
         </div>
       </div>
 
+      {monimePaymentUrl && (
+        <div className="mt-4 space-y-3 rounded-2xl border border-emerald-100 bg-white/75 p-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Monime Get Paid</p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">Your personal Monime receiving number and payment link. This link is unique to your verified SLE wallet.</p>
+            <p className="mt-2 break-all font-mono text-lg font-extrabold tracking-wide text-slate-900">{monimeUvan}</p>
+            <a href={monimePaymentUrl} target="_blank" rel="noopener noreferrer" className="mt-2 block break-all text-sm font-bold text-blue-800 underline underline-offset-4"> {monimePaymentUrl} </a>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <a href={monimePaymentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-700 px-3 py-2 text-sm font-bold text-white"><ExternalLink size={15}/> Open Monime</a>
+            <button type="button" onClick={() => void copy(monimePaymentUrl, 'Monime Get Paid link')} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700"><Copy size={15}/>{copiedLabel === 'Monime Get Paid link' ? 'Copied ✓' : 'Copy link'}</button>
+            <button type="button" onClick={() => void copy(monimeUvan, 'Monime UVAN')} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700"><Copy size={15}/>{copiedLabel === 'Monime UVAN' ? 'Copied ✓' : 'Copy UVAN'}</button>
+            <button type="button" onClick={() => void shareMonimeLink()} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-blue-700 px-3 py-2 text-sm font-bold text-white"><Share2 size={15}/> Share Monime link</button>
+          </div>
+        </div>
+      )}
+
       {loading ? (
-        <div className="mt-4 flex items-center gap-2 text-sm text-slate-500" role="status"><Loader2 className="animate-spin" size={16}/> Checking your payment link…</div>
+        <div className="mt-4 flex items-center gap-2 text-sm text-slate-500" role="status"><Loader2 className="animate-spin" size={16}/> Checking your MatMove payment page…</div>
       ) : link?.enabled && link.publicUrl ? (
         <div className="mt-4 space-y-3">
           <div className="rounded-2xl border border-white/90 bg-white/65 p-3">
@@ -176,7 +217,9 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
         </div>
       ) : link?.featureEnabled === false ? (
         <p className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/75 p-3 text-sm leading-6 text-blue-900">
-          Secure MatMove receiving is being connected to the live payment provider. Your share link will appear here once provider verification is complete.
+          {monimePaymentUrl
+            ? 'Your direct Monime Get Paid link is ready above. The additional MatMove-branded payment page is not enabled yet.'
+            : 'Monime has not returned a valid receiving number for this wallet yet. Refresh your wallet and try again, or contact MatMove support.'}
         </p>
       ) : (
         <div className="mt-4">

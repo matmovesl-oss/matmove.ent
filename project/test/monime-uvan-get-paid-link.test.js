@@ -84,6 +84,13 @@ test('Wallet Cards keeps provider identifiers off the card and opens a role-bran
   assert.match(panel, /role="dialog"/);
   assert.match(panel, /Copy link/);
   assert.match(panel, /Share details/);
+  assert.ok(panel.includes('sleWallet?.monime_uvan'));
+  assert.ok(panel.includes('https://pay.monime.io/'));
+  assert.match(panel, /Monime Get Paid/);
+  assert.match(panel, /Copy UVAN/);
+  assert.match(panel, /Share Monime link/);
+  assert.match(panel, /Open Monime/);
+  assert.match(panel, /direct Monime Get Paid link is ready above/);
 });
 
 test('Get Paid link is delivered through the existing wallet API; the twelve-route limit remains unchanged', async () => {
