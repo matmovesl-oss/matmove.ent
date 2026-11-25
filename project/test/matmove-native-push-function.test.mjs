@@ -30,7 +30,7 @@ test('native push webhook authenticates server-to-server calls and sends generic
 test('native push delivery uses a Vault-backed secret and only dispatches after inbox fan-out', async () => {
   const source = await functionSource();
   const migration = await readFile(
-    new URL('../supabase/migrations/20261125151000_matmove_native_push_webhook_v1.sql', import.meta.url),
+    new URL('../supabase/migrations/20261125151604_matmove_native_push_webhook_v1.sql', import.meta.url),
     'utf8'
   );
 
