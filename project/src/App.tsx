@@ -1333,7 +1333,7 @@ function AccountSection({
   if (activePanel === 'profile') {
     return (
       <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
-        <button type="button" onClick={() => setActivePanel(null)} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+        <button type="button" onClick={() => setActivePanel(null)} aria-label="Back to Account" title="Account" className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50">
           <ArrowLeft size={19}/>
         </button>
         <h1 className="mb-4 text-2xl font-bold text-slate-900">Profile</h1>
