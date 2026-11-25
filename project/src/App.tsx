@@ -146,7 +146,7 @@ type CustomerCartItem = { id: string; product_id?: string | null; product?: Cart
 type CustomerOrder = { id: string; status?: string | null; price?: number | string | null; product_name?: string | null; quantity?: number | null; wallet_payment_status?: string | null; wallet_payment_id?: string | null; merchant?: MerchantSummary | null; created_at?: string | null; [key: string]: unknown };
 type CustomerBooking = { status?: string | null; fare_amount?: number | string | null; [key: string]: unknown };
 type AnalyticsSummary = { primaryMetric: number; completed: number; pending: number; totalCount: number };
-type AccountSectionProps = { profile: CustomerProfile; wallet: CustomerWallet | null; loggingOut: boolean; onLogout: () => void; onBack: () => void; onLock: () => void; onServices: () => void; onNavigate: (destination: string) => void };
+type AccountSectionProps = { profile: CustomerProfile; wallet: CustomerWallet | null; loggingOut: boolean; onLogout: () => void; onBack: () => void; onLock: () => void; onServices: () => void; };
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) return error.message.trim();
@@ -453,7 +453,6 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
               setActiveSection('home')
             }
             onServices={() => setActiveSection('services')}
-            onNavigate={openHelpDestination}
           />
         </div>
 
@@ -563,7 +562,6 @@ function AccountSection({
   onBack,
   onLock,
   onServices,
-  onNavigate,
 }: AccountSectionProps) {
   const navigate = useNavigate();
   const resumeVerification = () => { if (profile.kyc_status === 'approved') return; sessionStorage.setItem('ob_role', profile.role); navigate('/onboarding/personal?resume=1'); };
