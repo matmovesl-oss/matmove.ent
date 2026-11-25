@@ -16,7 +16,7 @@ This is the server-side delivery path for the Expo iOS/Android app. It deliberat
 2. Deploy `project/supabase/functions/matmove-push/index.ts` as the Edge Function `matmove-push` with JWT verification enabled.
 3. Add the Expo access token as the Edge Function secret `EXPO_ACCESS_TOKEN`. Enable Enhanced Push Security for the Expo project so the delivery service requires this token. Do not place this token in the app, repository, or SQL.
 4. In Supabase Dashboard → Database → Webhooks, create a webhook:
-   - Table: `public.matmove_notification_inbox`
+   - Table: `public.matmove_notification_messages`
    - Event: `INSERT`
    - Type: Supabase Edge Function
    - Function: `matmove-push`
