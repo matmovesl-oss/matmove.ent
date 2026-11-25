@@ -959,12 +959,13 @@ function AccountSection({
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         <button
-          onClick={() =>
-            setViewingAnalytics(false)
-          }
-          className="text-sm font-semibold text-slate-500 hover:text-blue-600 transition mb-5 flex items-center gap-2"
+          type="button"
+          aria-label="Back to Profile"
+          title="Profile"
+          onClick={() => setViewingAnalytics(false)}
+          className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
         >
-          ← Back to Profile
+          <ArrowLeft size={19}/>
         </button>
 
         <div className="flex justify-between items-center mb-6">
@@ -1066,12 +1067,13 @@ function AccountSection({
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         <button
-          onClick={() =>
-            setViewingCartOrders(false)
-          }
-          className="text-sm font-semibold text-slate-500 hover:text-blue-600 transition mb-5 flex items-center gap-2"
+          type="button"
+          aria-label="Back to Profile"
+          title="Profile"
+          onClick={() => setViewingCartOrders(false)}
+          className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
         >
-          ← Back to Profile
+          <ArrowLeft size={19}/>
         </button>
 
         <h1 className="text-3xl font-bold text-slate-900 mb-6">
@@ -1302,7 +1304,7 @@ function AccountSection({
         : <MerchantDashboard profile={profile} wallet={wallet} activeSection="wallet" />;
     return <div className="min-h-screen bg-slate-50 px-4 pb-24 pt-4">
       <div className="mx-auto mb-3 max-w-6xl">
-        <button type="button" onClick={() => setViewingWallet(false)} className="min-h-11 rounded-xl border bg-white px-4 text-sm font-bold text-slate-700">← Back to Account</button>
+        <button type="button" onClick={() => setViewingWallet(false)} aria-label="Back to Account" title="Account" className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm"><ArrowLeft size={19}/></button>
       </div>
       {walletPage}
     </div>;
@@ -1318,7 +1320,7 @@ function AccountSection({
     return (
       <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
         <button type="button" onClick={() => setActivePanel(null)} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
-          <ArrowLeft size={17}/> Back to Account
+          <ArrowLeft size={19}/>
         </button>
         <h1 className="mb-4 text-2xl font-bold text-slate-900">Profile</h1>
         <AccountProfile key={profile.id} userId={profile.id} showPasskey={false}/>
@@ -1344,7 +1346,7 @@ function AccountSection({
 
   if (activePanel === 'invite') {
     return <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
-      <button type="button" onClick={() => setActivePanel(null)} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Account</button>
+      <button type="button" onClick={() => setActivePanel(null)} aria-label="Back to Account" title="Account" className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm"><ArrowLeft size={19}/></button>
       <h1 className="mb-4 text-2xl font-bold text-slate-900">Invite & Earn</h1>
       <InviteEarn key={`referrals:${profile.id}`} userId={profile.id}/>
     </section>;
@@ -1360,7 +1362,7 @@ function AccountSection({
 
   return (
     <div className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
-      <button type="button" onClick={onBack} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"><ArrowLeft size={17}/> Back to portal</button>
+      <button type="button" onClick={onBack} aria-label="Back to portal" title="Portal" className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"><ArrowLeft size={19}/></button>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-xs font-bold uppercase tracking-wider text-emerald-700">MatMove account</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Account & Profile</h1></div>
         <div className="flex shrink-0 items-center gap-2">
