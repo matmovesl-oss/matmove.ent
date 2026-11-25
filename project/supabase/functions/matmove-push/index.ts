@@ -1,9 +1,9 @@
-const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\\/$/, "");
+const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/$/, "");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const EXPO_ACCESS_TOKEN = Deno.env.get("EXPO_ACCESS_TOKEN") ?? "";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const EXPO_TOKEN = /^Expo(nent)?PushToken\\[[A-Za-z0-9_-]{8,256}\\]$/;
+const EXPO_TOKEN = /^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,256}\]$/;
 const DESTINATIONS = new Set(["home", "wallet", "trips", "games", "account", "kyc"]);
 const EXPO_SEND_URL = "https://exp.host/--/api/v2/push/send";
 
