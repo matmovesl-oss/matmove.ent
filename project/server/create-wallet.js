@@ -288,7 +288,7 @@ export async function createWallet(
   });
 }
 
-export async function syncMonimeWalletLabels(context) {
+export async function syncMonimeWalletLabels(context, { verify = verifiedAccount, label = labelExistingAccount } = {}) {
   const results = [];
   for (const wallet of context.wallets || []) {
     const currency = String(wallet?.currency || '').toUpperCase();
