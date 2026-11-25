@@ -33,7 +33,7 @@ test('ride page back returns Home while map back reopens pickup and destination'
   assert.match(merchant, /hasSelectedRoute=\{Boolean\(pickupCoords && destinationCoords\)\}/);
   assert.match(rider, /onBackToSelection=\{\(\) => \{ setRouteEditing\(true\); setViewMode\('new'\); setBookingSheetExpanded\(true\); \}\}/);
   assert.match(merchant, /onBackToSelection=\{\(\) => setRouteEditing\(false\)\}/);
-  assert.match(picker, /aria-label=\\{hasSelectedRoute&&onBackToSelection\\?"Back to pickup and destination":"Back to Home"\\}/);
+  assert.match(picker, /aria-label=\{hasSelectedRoute&&onBackToSelection\?"Back to pickup and destination":"Back to Home"\}/);
   for (const source of [rider, merchant]) {
     assert.match(source, /document\.documentElement\.style\.overflow = 'hidden'/);
     assert.match(source, /document\.body\.style\.overflow = 'hidden'/);
