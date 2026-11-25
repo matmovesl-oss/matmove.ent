@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const migration = readFileSync(new URL('../supabase/migrations/20261125183000_matmove_sports_tournament_management_v1.sql', import.meta.url), 'utf8');
+const migration = readFileSync(new URL('../supabase/migrations/20261125183616_matmove_sports_tournament_management_v1.sql', import.meta.url), 'utf8');
 
 test('16-player Sports bracket creates both group finals and links each champion to the grand final', () => {
   assert.match(migration, /matches_created',15/);
