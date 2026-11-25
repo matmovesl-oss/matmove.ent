@@ -22,7 +22,7 @@ test('customer portal and onboarding modules load lazily behind a route fallback
   assert.ok(app.includes('<Suspense fallback='));
   assert.ok(app.includes('<Suspense fallback={null}><MatMoveHelp'));
   assert.match(app, /aria-label="Open your account"/);
-  assert.match(app, /<UserCircle size=\\{20\\}\\/>/);
+  assert.ok(app.includes('<UserCircle size={20}/>'));
 });
 
 test('the application no longer eagerly imports the full ProductCatalog or help articles for small helpers', () => {
