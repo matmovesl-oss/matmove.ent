@@ -82,12 +82,15 @@ test('native Expo push tokens are owner-bound and unavailable to customer table 
       assert.deepEqual(rows[0], { user_id: rider, expo_push_token: tokenA, platform: 'ios' });
     });
 
-    await t.test('a different customer cannot claim a token already linked to another account', async () => {
+    await t.test('a device token moves to the currently signed-in customer on account switch', async () => {
       await session(driver);
-      await assert.rejects(() => register(tokenA, 'android'), /already linked to another MatMove account/);
+      const result = await register(tokenA, 'android');
+      assert.equal(result.user_id, driver);
+      assert.equal(result.registered, true);
       const rows = await stored();
       assert.equal(rows.length, 1);
-      assert.equal(rows[0].user_id, rider);
+      assert.equal(rows[0].user_id, driver);
+      assert.equal(rows[0].expo_push_token, tokenA);
     });
 
     await t.test('each supported customer role can register a separate device token', async () => {
@@ -114,14 +117,14 @@ test('native Expo push tokens are owner-bound and unavailable to customer table 
       await assert.rejects(() => register('ExpoPushToken[AbCdEfGhIjKlMnOpQrStUvWx]', 'web'), /device notification details are invalid/);
     });
 
-    await t.test('unregister only deletes the signed-in account token', async () => {
-      await session(driver);
-      const result = await unregister(tokenA);
-      assert.equal(result.user_id, driver);
-      assert.equal(result.unregistered, true);
-      let rows = await stored();
-      assert.ok(rows.some(row => row.user_id === rider && row.expo_push_token === tokenA));
+    await t.test('unregister only deletes the current owner account token', async () => {
       await session(rider);
+      const oldOwnerResult = await unregister(tokenA);
+      assert.equal(oldOwnerResult.user_id, rider);
+      assert.equal(oldOwnerResult.unregistered, true);
+      let rows = await stored();
+      assert.ok(rows.some(row => row.user_id === driver && row.expo_push_token === tokenA));
+      await session(driver);
       await unregister(tokenA);
       rows = await stored();
       assert.ok(!rows.some(row => row.expo_push_token === tokenA));
