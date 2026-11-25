@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Copy, Link2, Loader2, Share2, Smartphone, ShieldCheck, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Copy, ExternalLink, Link2, Loader2, Share2, Smartphone, ShieldCheck, X } from 'lucide-react';
 import { walletFetch } from '@/lib/apiFetch';
 
 type ReceiveLink = {
@@ -17,6 +17,8 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
   const [saving, setSaving] = useState(false);
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [notice, setNotice] = useState('');
+  const [copiedLabel, setCopiedLabel] = useState('');
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState('');
 
   const available = Boolean(
@@ -46,6 +48,10 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
 
   useEffect(() => { void refresh(); }, [refresh]);
 
+  useEffect(() => () => {
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+  }, []);
+
   async function saveLink(nextSms = smsEnabled) {
     setSaving(true);
     setNotice('');
@@ -71,7 +77,10 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
   async function copy(value: string, label: string) {
     try {
       await navigator.clipboard.writeText(value);
-      setNotice(`${label} copied.`);
+      setNotice('');
+      setCopiedLabel(label);
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopiedLabel(''), 1000);
     } catch {
       setError(`Unable to copy ${label.toLowerCase()}. Use your browser's share option instead.`);
     }
@@ -140,9 +149,10 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
         <div className="mt-4 space-y-3">
           <div className="rounded-2xl border border-white/90 bg-white/65 p-3">
             <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Your secure MatMove link</p>
-            <p className="mt-1 break-all text-sm font-bold text-slate-800">{link.publicUrl}</p>
+            <a href={link.publicUrl} target="_blank" rel="noopener noreferrer" className="mt-2 block break-all text-sm font-bold text-blue-800 underline decoration-blue-300 underline-offset-4 hover:text-blue-950" aria-label="Open your personal MatMove payment page in a new tab">{link.publicUrl}</a>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" onClick={() => void copy(link.publicUrl!, 'Payment link')} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm"><Copy size={15}/> Copy link</button>
+              <a href={link.publicUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-800 shadow-sm"><ExternalLink size={15}/> Open payment page</a>
+              <button type="button" onClick={() => void copy(link.publicUrl!, 'Payment link')} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm"><Copy size={15}/>{copiedLabel === 'Payment link' ? 'Copied ✓' : 'Copy link'}</button>
               <button type="button" onClick={() => void share()} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-700 to-blue-700 px-3 py-2 text-sm font-bold text-white shadow-sm"><Share2 size={15}/> Share details</button>
             </div>
           </div>
@@ -151,7 +161,7 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Recipient code</p>
               <p className="mt-1 font-mono text-lg font-extrabold tracking-widest text-blue-800">{link.recipientCode}</p>
             </div>
-            <button type="button" onClick={() => void copy(link.recipientCode || '', 'Recipient code')} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm"><Copy size={15}/> Copy code</button>
+            <button type="button" onClick={() => void copy(link.recipientCode || '', 'Recipient code')} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm"><Copy size={15}/>{copiedLabel === 'Recipient code' ? 'Copied ✓' : 'Copy code'}</button>
           </div>
 
           <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/90 bg-white/60 p-3">
@@ -178,6 +188,7 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
         </div>
       )}
 
+      {copiedLabel && <p role="status" aria-live="polite" className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">✓ {copiedLabel} copied</p>}
       {notice && <p role="status" className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
       {error && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     </section>
