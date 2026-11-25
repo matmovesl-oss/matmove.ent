@@ -417,7 +417,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
 
   const guide=<Suspense fallback={null}><PortalGuide key={`${profile.id}:${role}`} userId={profile.id} role={role} verified={profile.kyc_status==='approved'} replay={guideReplay} onNavigate={setActiveSection} onVerify={()=>{if(profile.kyc_status==='approved')return;sessionStorage.setItem('ob_role',role);navigate('/onboarding/personal?resume=1');}}/></Suspense>;
   const openHelpDestination=(destination:string)=>setActiveSection(customerHelpSection(destination,role) as PortalSection);
-  const accountHeader=<header className="border-b border-slate-200 bg-white px-3 pt-[env(safe-area-inset-top)]"><div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-2 py-2"><div className="flex min-w-0 shrink-0 items-center gap-2"><span className="text-base font-black tracking-tight text-slate-950">MatMove</span><button type="button" aria-label="Replay Quick guide" onClick={()=>setGuideReplay(n=>n+1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border px-2 text-sm font-bold text-emerald-800"><span aria-hidden="true" className="sm:hidden">?</span><span className="hidden sm:inline">Quick guide</span></button><Suspense fallback={null}><MatMoveHelp key={`help:${profile.id}:${role}`} userId={profile.id} context={{role}} onNavigate={openHelpDestination}/></Suspense></div><button type="button" aria-label="Open your account" aria-current={activeSection==='account'?'page':undefined} onClick={()=>setActiveSection('account')} className="flex min-h-11 min-w-0 max-w-[48%] items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-slate-50"><Suspense fallback={<span className="text-xs text-slate-500">Account</span>}><AccountIdentity key={profile.id} userId={profile.id} fallbackName={profile.full_name?.trim() || profile.email || 'Complete your profile'}/></Suspense></button></div></header>;
+  const accountHeader=<header className="border-b border-slate-200 bg-white/95 px-3 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur"><div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-3 py-2"><div className="flex min-w-0 items-center gap-2"><button type="button" aria-label="Replay Quick guide" title="Quick guide" onClick={()=>setGuideReplay(n=>n+1)} className="flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-emerald-800 hover:bg-emerald-50">Quick guide</button><Suspense fallback={null}><MatMoveHelp key={`help:${profile.id}:${role}`} userId={profile.id} context={{role}} onNavigate={openHelpDestination}/></Suspense></div><div className="flex shrink-0 items-center gap-2">{(activeSection==='home'||activeSection==='account')&&<Suspense fallback={<span className="h-11 w-11" />}><NotificationBell key={`header-notifications:${profile.id}`} userId={profile.id} onNavigate={openHelpDestination}/></Suspense>}<button type="button" aria-label="Open your account" title="Account" aria-current={activeSection==='account'?'page':undefined} onClick={()=>setActiveSection('account')} className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><UserCircle size={20}/></button></div></div></header>;
 
   if (
     activeSection === 'account'
@@ -460,9 +460,9 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
         <OfflineStatus />
       <div className="mx-auto max-w-6xl px-4"><KycStatusNotice profile={profile} onVerify={() => { sessionStorage.setItem('ob_role', role); navigate('/onboarding/personal?resume=1'); }}/></div>
       {activeSection !== 'home' && activeSection !== 'services' && (
-        <div className="mx-auto max-w-6xl px-4 pt-3">
-          <button type="button" onClick={() => setActiveSection(activeSection === 'ride' || activeSection === 'delivery' ? 'home' : 'services')} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
-            <ArrowLeft size={16}/> {activeSection === 'ride' || activeSection === 'delivery' ? 'Back to Home' : 'Back to Services'}
+        <div className="mx-auto flex max-w-6xl justify-start px-4 pt-4 pb-1">
+          <button type="button" aria-label={activeSection === 'ride' || activeSection === 'delivery' ? 'Back to Home' : 'Back to Services'} title={activeSection === 'ride' || activeSection === 'delivery' ? 'Home' : 'Services'} onClick={() => setActiveSection(activeSection === 'ride' || activeSection === 'delivery' ? 'home' : 'services')} className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
+            <ArrowLeft size={19}/>
           </button>
         </div>
       )}
@@ -1364,10 +1364,7 @@ function AccountSection({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-xs font-bold uppercase tracking-wider text-emerald-700">MatMove account</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Account & Profile</h1></div>
         <div className="flex shrink-0 items-center gap-2">
-          <Suspense fallback={<span className="min-h-11 min-w-11" />}>
-            <NotificationBell key={`notifications:${profile.id}`} userId={profile.id} onNavigate={onNavigate}/>
-          </Suspense>
-          <button type="button" onClick={onLock} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"><LockKeyhole size={17}/> Lock app</button>
+          <button type="button" onClick={onLock} aria-label="Lock app" title="Lock app" className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700"><LockKeyhole size={18}/></button>
         </div>
       </div>
 
