@@ -85,8 +85,8 @@ begin
   end if;
 
   if p_token is null
-    or p_token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]
-    raise exception 'INVALID: The device notification token is invalid.';
+    or p_token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$'
+    or coalesce(char_length(substring(p_token from '\[([A-Za-z0-9_-]+)\]')),0) not between 8 and 256 then
   end if;
 
   delete from public.matmove_push_tokens
