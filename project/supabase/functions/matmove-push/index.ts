@@ -19,7 +19,7 @@ type DispatchContext = {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TOKEN = /^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,256}\]$/;
+const TOKEN = /^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,255}\]$/;
 const DESTINATIONS = new Set(['home', 'wallet', 'trips', 'games', 'account', 'kyc']);
 const EXPO_SEND_URL = 'https://exp.host/--/api/v2/push/send';
 
