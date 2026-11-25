@@ -880,7 +880,7 @@ function RiderMain({ profile, wallet, activeSection }: any) {
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
         <div>
           <h1 className="text-xl font-bold text-slate-900">
-            Where to, {profile?.first_name || profile?.full_name?.split(' ')?.[0] || 'Rider'}? 👋
+            Your MatMove services
           </h1>
         </div>
 
