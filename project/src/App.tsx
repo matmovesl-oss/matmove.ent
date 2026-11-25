@@ -103,7 +103,6 @@ const ReceivePaymentCompletePage = lazy(() => import('@/pages/ReceivePayLinkPage
 const CustomerHome = lazy(() => import('@/components/CustomerHome'));
 const PortalGuide = lazy(() => import('@/components/PortalGuide'));
 const AccountProfile = lazy(() => import('@/components/AccountProfile'));
-const AccountIdentity = lazy(() => import('@/components/AccountProfile').then(m => ({default: m.AccountIdentity})));
 const PasskeySecurity = lazy(() => import('@/components/AccountProfile').then(m => ({default: m.PasskeySecurity})));
 const MerchantCheckout = lazy(() => import('@/components/MerchantCheckout'));
 const AccountPolicy = lazy(() => import('@/components/AccountPolicy').then(m => ({default: m.AccountPolicy})));
@@ -417,7 +416,22 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
 
   const guide=<Suspense fallback={null}><PortalGuide key={`${profile.id}:${role}`} userId={profile.id} role={role} verified={profile.kyc_status==='approved'} replay={guideReplay} onNavigate={setActiveSection} onVerify={()=>{if(profile.kyc_status==='approved')return;sessionStorage.setItem('ob_role',role);navigate('/onboarding/personal?resume=1');}}/></Suspense>;
   const openHelpDestination=(destination:string)=>setActiveSection(customerHelpSection(destination,role) as PortalSection);
-  const accountHeader=<header className="border-b border-slate-200 bg-white/95 px-3 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur"><div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-3 py-2"><div className="flex min-w-0 items-center gap-2"><button type="button" aria-label="Replay Quick guide" title="Quick guide" onClick={()=>setGuideReplay(n=>n+1)} className="flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-emerald-800 hover:bg-emerald-50">Quick guide</button><Suspense fallback={null}><MatMoveHelp key={`help:${profile.id}:${role}`} userId={profile.id} context={{role}} onNavigate={openHelpDestination}/></Suspense></div><div className="flex shrink-0 items-center gap-2">{(activeSection==='home'||activeSection==='account')&&<Suspense fallback={<span className="h-11 w-11" />}><NotificationBell key={`header-notifications:${profile.id}`} userId={profile.id} onNavigate={openHelpDestination}/></Suspense>}<button type="button" aria-label="Open your account" title="Account" aria-current={activeSection==='account'?'page':undefined} onClick={()=>setActiveSection('account')} className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><UserCircle size={20}/></button></div></div></header>;
+  const accountHeader=(
+    <header className="border-b border-slate-200 bg-white/95 px-3 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur">
+      <div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <button type="button" aria-label="Replay Quick guide" title="Quick guide" onClick={()=>setGuideReplay(n=>n+1)} className="flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-emerald-800 hover:bg-emerald-50">Quick guide</button>
+          {(activeSection==='home'||activeSection==='account')&&(
+            <Suspense fallback={<span className="h-11 w-11" />}>
+              <NotificationBell key={`header-notifications:${profile.id}`} userId={profile.id} onNavigate={openHelpDestination}/>
+            </Suspense>
+          )}
+          <Suspense fallback={null}><MatMoveHelp key={`help:${profile.id}:${role}`} userId={profile.id} context={{role}} onNavigate={openHelpDestination}/></Suspense>
+        </div>
+        <button type="button" aria-label="Open your account" title="Account" aria-current={activeSection==='account'?'page':undefined} onClick={()=>setActiveSection('account')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><UserCircle size={20}/></button>
+      </div>
+    </header>
+  );
 
   if (
     activeSection === 'account'
@@ -1354,7 +1368,7 @@ function AccountSection({
 
   if (activePanel === 'policy') {
     return <section className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6">
-      <button type="button" onClick={() => setActivePanel(null)} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700"><ArrowLeft size={17}/> Back to Account</button>
+      <button type="button" onClick={() => setActivePanel(null)} aria-label="Back to Account" title="Account" className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm"><ArrowLeft size={19}/></button>
       <h1 className="mb-4 text-2xl font-bold text-slate-900">Safety & Compliance</h1>
       <AccountPolicy />
     </section>;
