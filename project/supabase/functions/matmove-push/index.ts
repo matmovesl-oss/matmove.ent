@@ -9,6 +9,9 @@ type WebhookPayload = {
     deleted_at?: string | null;
     recipient_count?: number;
   };
+  old_record?: {
+    recipient_count?: number;
+  };
 };
 
 type PushToken = { token: string; platform: 'ios' | 'android' };
@@ -124,6 +127,12 @@ Deno.serve(async (request: Request) => {
   if (payload.record.deleted_at) return json({ ok: true, skipped: 'message-deleted' });
   if (typeof payload.record.recipient_count !== 'number' || payload.record.recipient_count < 1) {
     return json({ ok: true, skipped: 'no-recipients' });
+  }
+  // Only the Admin send RPC's final recipient-count update should trigger delivery.
+  // This prevents later message edits or unrelated updates from sending duplicate alerts.
+  if (typeof payload.old_record?.recipient_count !== 'number' ||
+      payload.record.recipient_count <= payload.old_record.recipient_count) {
+    return json({ ok: true, skipped: 'not-recipient-count-transition' });
   }
 
   const expoAccessToken = Deno.env.get('EXPO_ACCESS_TOKEN')?.trim();
