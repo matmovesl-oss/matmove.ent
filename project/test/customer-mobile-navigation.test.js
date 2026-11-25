@@ -45,7 +45,7 @@ test('ride booking uses the full map-first location picker for rider and merchan
   const driver = await readFile('src/pages/DriverDashboard.tsx', 'utf8');
   assert.ok(picker.includes("layout === 'map-first'"));
   assert.ok(picker.includes("min(56dvh,520px)"));
-  assert.ok(picker.includes('Back to vehicle selection'));
+  assert.ok(picker.includes('Back to pickup and destination'));
   assert.ok(picker.includes('hasSelectedRoute&&onBackToSelection'));
   assert.ok(rider.includes('onBackToSelection={() => { setRouteEditing(false); setViewMode(\'new\'); setBookingSheetExpanded(true); }}'));
   assert.ok(merchant.includes('onBackToSelection={() => setRouteEditing(false)}'));
