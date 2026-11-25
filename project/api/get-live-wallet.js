@@ -21,7 +21,11 @@ const customer = protectedWallet('read', async (req, res) => {
   if (spinActions.has(action)) return spinAction(req, res);
   if (arcadeActions.has(action)) return arcadeAction(req, res);
   if (action !== undefined && action !== null && action !== '') return res.status(400).json({error:'Unknown wallet action.'});
-  const walletData = await liveWallet(req.matmove);\n  // Reconcile provider-side financial-account labels during normal wallet refreshes.\n  // This repairs older/unlabelled accounts without blocking wallet access or payments.\n  const accountLabelSync = await syncMonimeWalletLabels(req.matmove);\n  return res.status(200).json({ ...walletData, accountLabelSync });
+  const walletData = await liveWallet(req.matmove);
+  // Reconcile provider-side financial-account labels during normal wallet refreshes.
+  // This repairs older/unlabelled accounts without blocking wallet access or payments.
+  const accountLabelSync = await syncMonimeWalletLabels(req.matmove);
+  return res.status(200).json({ ...walletData, accountLabelSync });
 });
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
