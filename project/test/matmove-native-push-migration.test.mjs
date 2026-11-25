@@ -7,6 +7,10 @@ const migration = () => readFile(
   new URL('../supabase/migrations/20261125145204_matmove_native_push_notifications_v1.sql', import.meta.url),
   'utf8'
 );
+const cleanupMigration = () => readFile(
+  new URL('../supabase/migrations/20261125150100_matmove_push_token_self_cleanup_v1.sql', import.meta.url),
+  'utf8'
+);
 
 const rider = '11111111-1111-4111-8111-111111111111';
 const driver = '22222222-2222-4222-8222-222222222222';
@@ -64,6 +68,7 @@ test('native push tokens are private, customer-owned and dispatchable only by se
     `);
 
     await db.exec(await migration());
+    await db.exec(await cleanupMigration());
 
     const session = async (userId, role = 'authenticated') => {
       await db.exec('reset role');
