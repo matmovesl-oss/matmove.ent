@@ -126,6 +126,18 @@ test('native push tokens are private, customer-owned and dispatchable only by se
     assert.equal(JSON.stringify(context.rows[0].result).includes('Private message body'), false);
     assert.equal(JSON.stringify(context.rows[0].result).includes('Private heading'), false);
 
+    // A non-customer account may not register a token, but it can always
+    // remove a token previously associated with its own account.
+    await db.exec('reset role');
+    await db.exec(`insert into private.matmove_push_tokens(expo_push_token,user_id,platform)
+      values ('ExpoPushToken[AdminCleanupToken1234]','${admin}','ios')`);
+    await session(admin);
+    const adminCleanup = await db.query(
+      'select public.matmove_unregister_push_token($1) as result',
+      ['ExpoPushToken[AdminCleanupToken1234]']
+    );
+    assert.deepEqual(adminCleanup.rows[0].result, { user_id: admin, unregistered: true });
+
     const staleRemoved = await db.query(
       'select public.matmove_push_remove_invalid_token($1) as result',
       [driverToken]
