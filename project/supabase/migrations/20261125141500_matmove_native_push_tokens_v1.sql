@@ -6,7 +6,8 @@ create table if not exists public.matmove_push_tokens (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   expo_push_token text not null unique
-    check (expo_push_token ~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,256}\]$'),
+    check (expo_push_token ~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$'
+      and char_length(substring(expo_push_token from '\[([A-Za-z0-9_-]+)\]')) between 8 and 256),
   platform text not null check (platform in ('ios','android')),
   created_at timestamptz not null default clock_timestamp(),
   updated_at timestamptz not null default clock_timestamp(),
@@ -43,7 +44,8 @@ begin
   perform public.matmove_preferences_role(actor);
 
   if p_token is null
-    or p_token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,256}\]$'
+    or p_token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$'
+    or coalesce(char_length(substring(p_token from '\[([A-Za-z0-9_-]+)\]')),0) not between 8 and 256
     or p_platform is null
     or p_platform not in ('ios','android') then
     raise exception 'INVALID: The device notification details are invalid.';
@@ -83,7 +85,8 @@ begin
   end if;
 
   if p_token is null
-    or p_token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,256}\]$' then
+    or p_token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$' then
+    or coalesce(char_length(substring(p_token from '\[([A-Za-z0-9_-]+)\]')),0) not between 8 and 256
     raise exception 'INVALID: The device notification token is invalid.';
   end if;
 
