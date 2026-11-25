@@ -6,8 +6,10 @@ create table if not exists public.matmove_push_tokens (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   expo_push_token text not null unique
-    check (expo_push_token ~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$'
-      and char_length(substring(expo_push_token from '\[([A-Za-z0-9_-]+)\]')) between 8 and 256),
+    check (
+      expo_push_token ~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$'
+      and char_length(substring(expo_push_token from '\[([A-Za-z0-9_-]+)\]')) between 8 and 256
+    ),
   platform text not null check (platform in ('ios','android')),
   created_at timestamptz not null default clock_timestamp(),
   updated_at timestamptz not null default clock_timestamp(),
@@ -97,35 +99,13 @@ begin
 end;
 $function$;
 
-revoke all on function public.matmove_register_push_token(text,text) from public,anon,authenticated;
-revoke all on function public.matmove_unregister_push_token(text) from public,anon,authenticated;
+revoke all on function public.matmove_register_push_token(text,text) from public, anon, authenticated;
+revoke all on function public.matmove_unregister_push_token(text) from public, anon, authenticated;
 grant execute on function public.matmove_register_push_token(text,text) to authenticated;
 grant execute on function public.matmove_unregister_push_token(text) to authenticated;
 
 comment on table public.matmove_push_tokens is
   'Private Expo push-token routing records. No direct client access; managed only by authenticated owner-bound RPCs and service_role delivery code.';
 
-notify pgrst,'reload schema';
-commit;
-
-    or coalesce(char_length(substring(p_token from '\[([A-Za-z0-9_-]+)\]')),0) not between 8 and 256 then
-    raise exception 'INVALID: The device notification token is invalid.';
-  end if;
-
-  delete from public.matmove_push_tokens
-  where user_id=actor and expo_push_token=p_token;
-
-  return jsonb_build_object('user_id',actor,'unregistered',true);
-end;
-$function$;
-
-revoke all on function public.matmove_register_push_token(text,text) from public,anon,authenticated;
-revoke all on function public.matmove_unregister_push_token(text) from public,anon,authenticated;
-grant execute on function public.matmove_register_push_token(text,text) to authenticated;
-grant execute on function public.matmove_unregister_push_token(text) to authenticated;
-
-comment on table public.matmove_push_tokens is
-  'Private Expo push-token routing records. No direct client access; managed only by authenticated owner-bound RPCs and service_role delivery code.';
-
-notify pgrst,'reload schema';
+notify pgrst, 'reload schema';
 commit;
