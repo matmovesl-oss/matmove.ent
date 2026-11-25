@@ -56,7 +56,7 @@ test('ride booking uses an inline responsive map and lets the customer page scro
  assert.match(picker,/gestureHandling: 'greedy'/,'map should accept one-finger pan gestures');
  assert.doesNotMatch(picker,/mapFirst\?"fixed inset-0/,'map must not be fixed over the full viewport');
  assert.doesNotMatch(picker,/fixed inset-x-0 bottom-\[calc\(64px/,'location form must not be a fixed overlay');
- assert.match(picker,/Back to vehicle selection/,'map back control must return to vehicle selection after route selection');
+ assert.match(picker,/Back to pickup and destination/,'map back control must reopen pickup and destination after route selection');
  assert.match(picker,/Back to Home/,'map fallback must retain the Home action before a route is selected');
  assert.match(picker,/hasSelectedRoute&&onBackToSelection/,'map back must distinguish a selected route from a fresh map');
  assert.match(picker,/Change locations/,'location edit action must remain available');

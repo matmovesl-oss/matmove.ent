@@ -883,7 +883,7 @@ function RiderMain({ profile, wallet, activeSection, onBack, resumeTripId, onOpe
                   userId={profile?.id}
                   onBack={onBack}
                   hasSelectedRoute={Boolean(pickupCoords && destinationCoords)}
-                  onBackToSelection={() => { setRouteEditing(false); setViewMode('new'); setBookingSheetExpanded(true); }}
+                  onBackToSelection={() => { setRouteEditing(true); setViewMode('new'); setBookingSheetExpanded(true); }}
                   bookingReady={Boolean(pickupCoords && destinationCoords && !routeEditing)}
                   bookingSheetExpanded={bookingSheetExpanded}
                   onRouteEditingChange={setRouteEditing}

@@ -1,0 +1,15 @@
+begin;
+create index if not exists matmove_sports_competitions_created_by_idx on public.matmove_sports_competitions(created_by);
+create index if not exists matmove_sports_matches_confirmed_by_idx on public.matmove_sports_matches(confirmed_by);
+create index if not exists matmove_sports_matches_next_match_idx on public.matmove_sports_matches(next_match_id);
+create index if not exists matmove_sports_matches_player1_idx on public.matmove_sports_matches(player1_id);
+create index if not exists matmove_sports_matches_player2_idx on public.matmove_sports_matches(player2_id);
+create index if not exists matmove_sports_matches_submitted_by_idx on public.matmove_sports_matches(submitted_by);
+create index if not exists matmove_sports_matches_winner_idx on public.matmove_sports_matches(winner_player_id);
+create index if not exists matmove_sports_players_created_by_idx on public.matmove_sports_players(created_by);
+create index if not exists matmove_sports_players_user_idx on public.matmove_sports_players(user_id);
+create index if not exists matmove_sports_players_wallet_idx on public.matmove_sports_players(wallet_id);
+create index if not exists matmove_sports_prizes_player_idx on public.matmove_sports_prizes(player_id);
+create index if not exists matmove_sports_prizes_recorded_by_idx on public.matmove_sports_prizes(recorded_by);
+create index if not exists matmove_sports_rooms_created_by_idx on public.matmove_sports_rooms(created_by);
+commit;
