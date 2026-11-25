@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 
 const migration = () => readFile(
-  new URL('../supabase/migrations/20261125144136_matmove_native_push_notifications_v1.sql', import.meta.url),
+  new URL('../supabase/migrations/20261125145204_matmove_native_push_notifications_v1.sql', import.meta.url),
   'utf8'
 );
 

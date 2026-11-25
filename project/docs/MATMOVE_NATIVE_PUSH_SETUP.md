@@ -11,7 +11,7 @@ This backend connects the Expo iOS/Android app to the existing MatMove customer 
 
 ## Deployment steps
 
-1. Apply the migration `20261125144136_matmove_native_push_notifications_v1.sql` to the active MatMove.Ent project after this pull request has been reviewed and merged.
+1. Apply the migration `20261125145204_matmove_native_push_notifications_v1.sql` to the active MatMove.Ent project after this pull request has been reviewed and merged.
 2. Deploy `supabase/functions/matmove-push/index.ts` as the Edge Function named `matmove-push` with JWT verification disabled. The function authenticates the database webhook itself with a dedicated header; do not expose it as an unauthenticated public endpoint.
 3. Add these Edge Function secrets in Supabase:
    - `EXPO_ACCESS_TOKEN`: a dedicated Expo access token with Enhanced Security for Push Notifications enabled.
