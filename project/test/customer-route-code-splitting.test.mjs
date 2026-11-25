@@ -12,7 +12,7 @@ const passcode = readFileSync(new URL('../src/lib/customerPasscode.ts', import.m
 const lazyComponents = [
   'CustomerPasscode', 'InviteEarn', 'MatMoveHelp', 'SupportMediaPage', 'NotificationBell',
   'ReceivePayLinkPage', 'ReceivePaymentCompletePage', 'CustomerHome', 'PortalGuide',
-  'AccountProfile', 'AccountIdentity', 'PasskeySecurity', 'MerchantCheckout', 'AccountPolicy',
+  'AccountProfile', 'PasskeySecurity', 'MerchantCheckout', 'AccountPolicy',
   'RoleSelectionPage', 'KycWorkspace', 'PersonalInfoPage', 'IdentityPage', 'DocumentsPage',
   'SelfiePage', 'VehicleSelectionPage', 'ReviewPage', 'SubmittedPage', 'VerificationPage'
 ];
@@ -21,7 +21,7 @@ test('customer portal and onboarding modules load lazily behind a route fallback
   for (const name of lazyComponents) assert.ok(app.includes('const ' + name + ' = lazy('), name + ' should be lazy loaded');
   assert.ok(app.includes('<Suspense fallback='));
   assert.ok(app.includes('<Suspense fallback={null}><MatMoveHelp'));
-  assert.ok(app.includes('<Suspense fallback={<span className="text-xs text-slate-500">Account</span>}>'));
+  assert.match(app, /aria-label="Open your account"/);\n  assert.match(app, /<UserCircle size=\\{20\\}\\/>/);
 });
 
 test('the application no longer eagerly imports the full ProductCatalog or help articles for small helpers', () => {
