@@ -9,7 +9,7 @@ export function monimeWalletDisplayName(profile, currency) {
   const roleLabels = { rider: 'Rider', driver: 'Driver', merchant: 'Merchant' };
   const roles = [...new Set((Array.isArray(profile?.roles) ? profile.roles : [profile?.role]).map(role => String(role || '').toLowerCase()).filter(role => roleLabels[role]))];
   if (!roles.length) throw new HttpError(403, 'A verified MatMove customer role is required.');
-  const fullName = String(profile?.full_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'MatMove User').trim().replace(/\s+/g, ' ');
+  const fullName = String(profile?.full_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || profile?.username || profile?.user_name || 'MatMove User').trim().replace(/\s+/g, ' ');
   const suffix = ' · ' + roles.map(role => roleLabels[role]).join('/') + ' · ' + currency;
   return fullName.slice(0, Math.max(1, 100 - suffix.length)).trim() + suffix;
 }
