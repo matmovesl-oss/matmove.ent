@@ -76,14 +76,14 @@ test('Gala landing form is account-bound and never accepts a client-supplied use
 test('landing page downloads the official MatMove APK directly and retains iPhone Home Screen steps', async () => {
   const source = await readFile(new URL('../src/pages/LandingPage.tsx', import.meta.url), 'utf8');
   assert.match(source, /matmove-app-releases/);
-  assert.match(source, /list\('android',\{limit:20,search:'MatMove\\.apk'\}\)/);
+  assert.ok(source.includes("list('android',{limit:20,search:'MatMove.apk'})"));
   assert.match(source, /getPublicUrl\(ANDROID_RELEASE_PATH\)/);
   assert.match(source, /searchParams\.set\('download','MatMove\.apk'\)/);
   assert.match(source, /Install MatMove for Android/);
   assert.doesNotMatch(source, /VITE_ANDROID_DOWNLOAD_URL|median\.co/);
   assert.match(source, /allow your browser or Files app to install this app/);
   assert.match(source, /Keep Play Protect enabled/);
-  assert.match(source, /Open <b>Safari<\\/b> or <b>Chrome<\\/b>/);
+  assert.ok(source.includes('Open <b>Safari</b> or <b>Chrome</b>'));
   assert.match(source, /Add to Home Screen/);
-  assert.match(source, /matmove\\.space/);
+  assert.ok(source.includes('matmove.space'));
 });
