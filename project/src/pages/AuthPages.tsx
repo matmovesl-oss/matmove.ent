@@ -6,7 +6,9 @@ import { useState, useEffect } from 'react';
 import { CarFront, ArrowRight, Mail, Lock, Phone, Eye, EyeOff, ShieldCheck, Zap, Fingerprint } from 'lucide-react';
 import { AuthShell, AuthFormCard, AuthBackButton } from '@/components/AuthShell';
 import { useAuth, customerPath } from '@/context/AuthContext';
-import { signInWithGoogle, resetPassword } from '@/services/authService';
+import { signInWithGoogle } from '@/services/authService';
+import { supabase } from '@/lib/supabase';
+import { hasVerifiedPasswordRecovery } from '@/services/authRecoveryState';
 
 export function LoginPage() {
   const { signIn, signInWithPasskey, loading, authError } = useAuth();
@@ -18,8 +20,6 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const passkeySupported = typeof window !== 'undefined' && window.isSecureContext && typeof window.PublicKeyCredential !== 'undefined' && !!navigator.credentials;
-  const [resetBusy, setResetBusy] = useState(false);
-  const [resetNotice, setResetNotice] = useState('');
 
   const handlePasskeySignIn = async () => {
     if (!passkeySupported || passkeyBusy || busy || loading) return;
@@ -29,14 +29,6 @@ export function LoginPage() {
       const message = err?.code === 'passkey_disabled' || /passkey_disabled/i.test(err?.message || '') ? 'Passkey sign-in is not enabled for MatMove yet. Use your password or Google sign-in instead.' : err?.name === 'AbortError' || err?.name === 'NotAllowedError' ? 'Passkey sign-in was cancelled or not completed. You can sign in with your password instead.' : (err?.message || 'Passkey sign-in could not be completed. Use your password or Google sign-in.');
       setError(message);
     } finally { setPasskeyBusy(false); }
-  };
-
-  const handlePasswordReset = async () => {
-    if (!email.trim()) { setError('Enter your account email address first.'); return; }
-    setResetBusy(true); setError(''); setResetNotice('');
-    try { await resetPassword(email); setResetNotice('If an account exists for this email, a secure password reset link has been sent.'); }
-    catch (err: any) { setError(err?.message || 'Could not request a password reset. Try again.'); }
-    finally { setResetBusy(false); }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -75,8 +67,10 @@ export function LoginPage() {
             </div>
           </label>
           
-          <div className="flex justify-end -mt-2"><button type="button" onClick={() => void handlePasswordReset()} disabled={resetBusy || busy || loading} className="text-sm font-semibold text-[#184f9a] hover:underline disabled:opacity-50">{resetBusy ? 'Sending reset link…' : 'Forgot password?'}</button></div>
-          {resetNotice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{resetNotice}</p>}
+          <div className="flex flex-wrap items-center justify-between gap-3 -mt-2">
+            <button type="button" onClick={() => navigate('/forgot-password', { state: { email } })} className="min-h-10 text-sm font-semibold text-[#184f9a] hover:underline">Forgot password?</button>
+            <button type="button" onClick={() => navigate('/forgot-passcode', { state: { email } })} className="min-h-10 text-sm font-semibold text-[#184f9a] hover:underline">Forgot passcode?</button>
+          </div>
           {error && <div role="alert" className="p-3 bg-red-50 text-red-600 text-sm font-medium rounded-lg border border-red-100">{error}</div>}
           <button className="primary-button full-button" type="submit" disabled={loading || busy}>
             {loading || busy ? <Zap size={17} className="animate-pulse" /> : null}
@@ -198,6 +192,7 @@ export function AuthCallbackPage() {
   const { refreshSession } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState('');
+
   useEffect(() => {
     let mounted = true;
     const params = new URLSearchParams(window.location.search);
@@ -206,15 +201,52 @@ export function AuthCallbackPage() {
     const requestedNext = params.get('next');
     const recoveryNext = requestedNext === '/reset-passcode' ? '/reset-passcode' : '/reset-password';
     const recovery = params.get('type') === 'recovery' || requestedNext === '/reset-password' || requestedNext === '/reset-passcode';
-    if (providerError) { setError(providerError); return; }
-    // Supabase exchanges the one-time PKCE code before the session read completes.
+
+    if (providerError) {
+      setError(providerError);
+      return () => { mounted = false; };
+    }
+
+    if (recovery) {
+      const destination = `${recoveryNext}?type=recovery`;
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (!mounted || event !== 'PASSWORD_RECOVERY' || !session?.user) return;
+        navigate(destination, { replace: true });
+      });
+
+      // Recovery verification is independent of ordinary customer dashboard
+      // profile loading. A valid Auth recovery session is all that is needed.
+      void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+        if (!mounted) return;
+        if (sessionError) throw sessionError;
+        const userId = data.session?.user.id;
+        if (userId && hasVerifiedPasswordRecovery(userId)) {
+          navigate(destination, { replace: true });
+          return;
+        }
+        if (!userId) {
+          throw new Error('This recovery link is invalid or expired. Request a new recovery link from MatMove sign in.');
+        }
+        setError('MatMove could not verify this recovery session. Request a new recovery link and open it on this device.');
+      }).catch(err => {
+        if (mounted) setError(err instanceof Error ? err.message : 'Recovery could not be verified. Request a new link.');
+      });
+
+      return () => {
+        mounted = false;
+        subscription.unsubscribe();
+      };
+    }
+
+    // Signup confirmation and Google sign-in still use the normal customer session.
     void refreshSession().then(current => {
       if (!mounted) return;
       if (!current) throw new Error('Sign-in was not confirmed. Please return to sign in.');
-      navigate(recovery ? `${recoveryNext}?type=recovery` : customerPath(current), { replace: true });
-    }).catch(error => { if (mounted) setError(error.message); });
+      navigate(customerPath(current), { replace: true });
+    }).catch(err => { if (mounted) setError(err?.message || 'Sign-in was not confirmed.'); });
     return () => { mounted = false; };
   }, [refreshSession, navigate]);
+
   return <AuthShell><AuthFormCard title={error ? 'Sign-in needs attention' : 'Completing sign-in'} subtitle="Your existing MatMove account and wallet stay linked.">
     {error ? <><p role="alert">{error}</p><button className="primary-button mt-4" onClick={() => navigate('/login', {replace:true})}>Return to sign in</button></> : <p role="status">Please wait…</p>}
   </AuthFormCard></AuthShell>;
