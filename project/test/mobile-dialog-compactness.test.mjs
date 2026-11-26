@@ -13,11 +13,11 @@ test('receipt and payout dialogs keep close controls compact at narrow mobile wi
   assert.match(receipt, /h-10 w-10 shrink-0 items-center justify-center/);
   assert.match(receipt, /max-h-\[calc\(100dvh-1rem\)\].*overscroll-contain/);
   assert.match(topup, /h-10 w-10 shrink-0 items-center justify-center/);
-  assert.match(getPaid, /max-h-\\[calc\\(100dvh-1rem\\)\\].*overflow-y-auto overscroll-contain/);
+  assert.ok(getPaid.includes('max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto overscroll-contain'));
   assert.match(getPaid, /event.target === event.currentTarget/);
   assert.match(getPaid, /event.key === 'Escape'/);
   assert.match(getPaid, /document.body.style.overflow = 'hidden'/);
-  assert.match(gala, /max-h-\\[calc\\(100dvh-1.5rem\\)\\].*overflow-y-auto overscroll-contain/);
+  assert.ok(gala.includes('max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl overflow-y-auto overscroll-contain'));
   assert.match(gala, /event.target === event.currentTarget/);
   assert.match(gala, /event.key === 'Escape'/);
   assert.match(gala, /document.body.style.overflow = 'hidden'/);
