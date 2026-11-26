@@ -73,13 +73,17 @@ test('Gala landing form is account-bound and never accepts a client-supplied use
   assert.doesNotMatch(source, /p_user_id/);
   assert.match(source, /statusLabel/);
 });
-test('landing page provides Android APK guidance and iPhone Safari/Chrome Home Screen steps', async () => {
+test('landing page downloads the official MatMove APK directly and retains iPhone Home Screen steps', async () => {
   const source = await readFile(new URL('../src/pages/LandingPage.tsx', import.meta.url), 'utf8');
-  assert.match(source, /VITE_ANDROID_DOWNLOAD_URL/);
-  assert.match(source, /Download MatMove for Android/);
+  assert.match(source, /matmove-app-releases/);
+  assert.match(source, /list\('android',\{limit:20,search:'MatMove\\.apk'\}\)/);
+  assert.match(source, /getPublicUrl\(ANDROID_RELEASE_PATH\)/);
+  assert.match(source, /searchParams\.set\('download','MatMove\.apk'\)/);
+  assert.match(source, /Install MatMove for Android/);
+  assert.doesNotMatch(source, /VITE_ANDROID_DOWNLOAD_URL|median\.co/);
   assert.match(source, /allow your browser or Files app to install this app/);
   assert.match(source, /Keep Play Protect enabled/);
-  assert.match(source, /Open <b>Safari<\/b> or <b>Chrome<\/b>/);
+  assert.match(source, /Open <b>Safari<\\/b> or <b>Chrome<\\/b>/);
   assert.match(source, /Add to Home Screen/);
-  assert.match(source, /matmove\.space/);
+  assert.match(source, /matmove\\.space/);
 });
