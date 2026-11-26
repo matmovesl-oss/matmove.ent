@@ -1,7 +1,6 @@
 import {useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {customerPasscode,type Receipt} from '@/lib/customerPasscode';
-import {supabase} from '@/lib/supabase';
 import {resetPasscode as requestPasscodeReset} from '@/services/authService';
 import {setPortalUnlocked} from '@/lib/portalPrivacy';
 import {profilePhotoPickerOpen,onProfilePhotoPickerEnd,clearProfilePhotoPicker} from '@/lib/profilePhotoPicker';
