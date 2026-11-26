@@ -56,7 +56,7 @@ test('landing page only shows Admin-published active competitions and refreshes 
 });
 
 test('public sports feed returns every registration or in-progress competition and hides unpublished or finished seasons', async () => {
-  const sql = await readFile(new URL('../supabase/migrations/20261126172300_matmove_sports_public_competition_feed_v1.sql', import.meta.url), 'utf8');
+  const sql = await readFile(new URL('../supabase/migrations/20261126210052_matmove_sports_public_competition_feed_v1.sql', import.meta.url), 'utf8');
   assert.match(sql, /where status in \('registration', 'in_progress'\)/);
   assert.match(sql, /'competitions', v_competitions/);
   assert.match(sql, /'competition', v_primary/);
