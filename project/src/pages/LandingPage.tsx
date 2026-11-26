@@ -10,6 +10,9 @@ const journeys=[
  {from:'Makeni',via:'Lunsar · Port Loko',to:'Freetown',label:'DELIVERY & TRAVEL',detail:'Keep people, packages and local businesses moving.'}
 ];
 
+const configuredAndroidDownloadUrl = String(import.meta.env.VITE_ANDROID_DOWNLOAD_URL || '').trim();
+const androidDownloadUrl = configuredAndroidDownloadUrl.startsWith('https://') ? configuredAndroidDownloadUrl : '';
+
 const services=[
  {name:'Ride',detail:'Go where life takes you.',icon:Car,illustration:'/matmove-car.svg'},
  {name:'Earn',detail:'Drive and grow with MatMove.',icon:Navigation,illustration:'/matmove-bike.svg'},
