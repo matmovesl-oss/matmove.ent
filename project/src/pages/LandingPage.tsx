@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Bike, Car, ChevronLeft, ChevronRight, MapPin, Package, Store, Truck, Navigation, Sparkles, Trophy, Download, Smartphone, ShieldCheck } from 'lucide-react';
 import PublicHomepagePosts from '@/components/PublicHomepagePosts';
 import GalaRegistration from '@/components/GalaRegistration';
+import { supabase } from '@/lib/supabase';
 
 const journeys=[
  {from:'Freetown',via:'Aberdeen · Lumley',to:'Central Freetown',label:'CITY RIDES',detail:'Move across the capital with a ride that meets you where you are.'},
@@ -10,8 +11,8 @@ const journeys=[
  {from:'Makeni',via:'Lunsar · Port Loko',to:'Freetown',label:'DELIVERY & TRAVEL',detail:'Keep people, packages and local businesses moving.'}
 ];
 
-const configuredAndroidDownloadUrl = String(import.meta.env.VITE_ANDROID_DOWNLOAD_URL || '').trim();
-const androidDownloadUrl = configuredAndroidDownloadUrl.startsWith('https://') ? configuredAndroidDownloadUrl : '';
+const ANDROID_RELEASE_BUCKET = 'matmove-app-releases';
+const ANDROID_RELEASE_PATH = 'android/MatMove.apk';
 
 const services=[
  {name:'Ride',detail:'Go where life takes you.',icon:Car,illustration:'/matmove-car.svg'},
@@ -26,9 +27,40 @@ export function LandingPage(){
  const navigate=useNavigate();
  const [journey,setJourney]=useState(0);
  const [galaRegistrationOpen,setGalaRegistrationOpen]=useState(false);
+ const [androidDownloadUrl,setAndroidDownloadUrl]=useState('');
+ const [androidReleaseState,setAndroidReleaseState]=useState<'checking'|'ready'|'missing'|'error'>('checking');
  useEffect(()=>{
   const timer=window.setInterval(()=>setJourney(current=>(current+1)%journeys.length),5200);
   return()=>window.clearInterval(timer);
+ },[]);
+ useEffect(()=>{
+  let live=true;
+  const loadAndroidRelease=async()=>{
+   try{
+    const {data,error}=await supabase.storage.from(ANDROID_RELEASE_BUCKET).list('android',{limit:20,search:'MatMove.apk'});
+    if(error)throw error;
+    const file=(data||[]).find(item=>item.name==='MatMove.apk');
+    if(!live)return;
+    if(!file){
+     setAndroidDownloadUrl('');
+     setAndroidReleaseState('missing');
+     return;
+    }
+    const publicUrl=supabase.storage.from(ANDROID_RELEASE_BUCKET).getPublicUrl(ANDROID_RELEASE_PATH).data.publicUrl;
+    const downloadUrl=new URL(publicUrl);
+    downloadUrl.searchParams.set('download','MatMove.apk');
+    downloadUrl.searchParams.set('v',file.updated_at||file.created_at||'1');
+    setAndroidDownloadUrl(downloadUrl.toString());
+    setAndroidReleaseState('ready');
+   }catch{
+    if(live){
+     setAndroidDownloadUrl('');
+     setAndroidReleaseState('error');
+    }
+   }
+  };
+  void loadAndroidRelease();
+  return()=>{live=false;};
  },[]);
  const item=journeys[journey];
  const change=(step:number)=>setJourney(current=>(current+step+journeys.length)%journeys.length);
@@ -91,10 +123,10 @@ export function LandingPage(){
    <div className="grid gap-4 lg:grid-cols-2">
     <article className="rounded-[1.7rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
      <div className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-800"><Smartphone size={23}/></span><div><p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-700">Android</p><h3 className="text-lg font-black text-slate-950">Download and install</h3></div></div>
-     <p className="mt-4 text-sm leading-6 text-slate-600">Download the MatMove Android installation file from the official MatMove link, then follow the prompts on your phone.</p>
-     {androidDownloadUrl ? <a href={androidDownloadUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1554a0] px-4 font-bold text-white transition hover:bg-[#10427f]"><Download size={18}/> Download MatMove for Android</a> : <div role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">The Android download button will appear here once the official APK link is connected.</div>}
+     <p className="mt-4 text-sm leading-6 text-slate-600">Download the official MatMove APK directly from MatMove, then follow the installation prompts on your phone.</p>
+     {androidDownloadUrl ? <a href={androidDownloadUrl} download="MatMove.apk" className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1554a0] px-4 font-bold text-white transition hover:bg-[#10427f]"><Download size={18}/> Install MatMove for Android</a> : <div role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">{androidReleaseState==='checking' ? 'Checking the official MatMove APK…' : androidReleaseState==='error' ? 'The Android release could not be checked. Please try again shortly.' : 'The Android installer is being prepared. Please check back shortly.'}</div>}
      <ol className="mt-5 space-y-3 text-sm leading-6 text-slate-700">
-      <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-black text-emerald-800">1</span><span>Tap <b>Download MatMove</b> and wait for the file to finish downloading.</span></li>
+      <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-black text-emerald-800">1</span><span>Tap <b>Install MatMove for Android</b> and wait for MatMove.apk to finish downloading.</span></li>
       <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-black text-emerald-800">2</span><span>Open the downloaded file. If Android asks, allow your browser or Files app to install this app, then return to the installer.</span></li>
       <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-black text-emerald-800">3</span><span>Tap <b>Install</b>. When installation finishes, tap <b>Open</b> to start using MatMove.</span></li>
      </ol>
