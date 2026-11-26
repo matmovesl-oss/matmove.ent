@@ -187,7 +187,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
                  <button type="button" onClick={() => navigate('/forgot-passcode')} className="w-full text-left pt-2 pb-1 text-xs font-semibold text-slate-500 hover:text-emerald-700 transition">
                    Forgot passcode?
                  </button>
-               )}}
+               )}
              </>
            )}
          </form>
