@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import HistoryDateFilter from '@/components/HistoryDateFilter';
+import { isWithinDateRange } from '../../shared/activity-date-range.js';
 import {
   Share2,
   ArrowDownLeft,
@@ -23,6 +25,8 @@ export default function TransactionHistory({
 }: Props) {
   const [recent, setRecent] = useState(true);
   const [notice, setNotice] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const rows = (
     Array.isArray(transactions)
@@ -59,9 +63,14 @@ export default function TransactionHistory({
     }
   }
 
-  const displayedRows = recent
-    ? rows.slice(0, 5)
-    : rows;
+  const validDateRange = !(dateFrom && dateTo && dateFrom > dateTo);
+  const dateRows = validDateRange ? rows.filter(tx => isWithinDateRange(
+    tx.timestamp || tx.createTime || tx.createdAt || tx.created_at || tx.date,
+    dateFrom,
+    dateTo
+  )) : [];
+  const dateFilterActive = Boolean(dateFrom || dateTo);
+  const displayedRows = recent && !dateFilterActive ? dateRows.slice(0, 5) : dateRows;
 
   return (
     <section className="rounded-3xl border bg-white p-5">
@@ -94,6 +103,8 @@ export default function TransactionHistory({
           </button>
         </div>
       </div>
+
+      <HistoryDateFilter fromDate={dateFrom} toDate={dateTo} onFromDateChange={setDateFrom} onToDateChange={setDateTo} filteredCount={dateRows.length} totalCount={rows.length} noun="transactions" />
 
       {!rows.length && (
         <p className="py-5 text-center text-slate-500">
