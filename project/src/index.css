@@ -893,3 +893,81 @@ body {
 .portal-shell :is(input, select, textarea) {
   font-size: max(16px, 1rem);
 }
+
+
+/* Public landing header: keep the brand and actions in one clean row on compact iPhones. */
+.mm-landing-header {
+  position: relative;
+  z-index: 40;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  overflow: visible;
+  background: transparent !important;
+}
+.mm-landing-brand {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 0;
+  background: transparent !important;
+}
+.mm-landing-logo {
+  position: static !important;
+  display: block;
+  width: auto !important;
+  height: 46px !important;
+  max-width: 88px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.mm-landing-actions {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  background: transparent !important;
+}
+@media (max-width: 420px) {
+  .mm-landing-header {
+    gap: 7px;
+    min-height: 62px;
+    padding: 8px 12px !important;
+  }
+  .mm-landing-logo {
+    height: 40px !important;
+    max-width: 72px;
+  }
+  .mm-landing-brand {
+    gap: 0;
+  }
+  .mm-landing-brand > span {
+    display: none !important;
+  }
+  .mm-landing-actions {
+    gap: 2px;
+  }
+  .mm-landing-actions button {
+    min-height: 42px;
+    padding-left: 9px !important;
+    padding-right: 9px !important;
+    font-size: 13px !important;
+    white-space: nowrap;
+  }
+  .mm-landing-actions button:last-child {
+    padding-left: 11px !important;
+    padding-right: 11px !important;
+  }
+}

@@ -115,9 +115,9 @@ export function LandingPage(){
  const item=journeys[journey];
  const change=(step:number)=>setJourney(current=>(current+step+journeys.length)%journeys.length);
  return <main className="min-h-screen overflow-hidden bg-[#f5f8f7] font-sans text-slate-950">
-  <nav className="relative z-20 mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
-   <a href="/" className="flex items-center gap-3" aria-label="MatMove home"><img src="/logo.jpg" alt="MatMove" className="h-12 w-auto object-contain"/><span className="hidden text-xs font-bold uppercase tracking-[.2em] text-emerald-800 sm:block">Move with possibility</span></a>
-   <div className="flex items-center gap-2"><button onClick={()=>navigate('/login')} className="min-h-11 rounded-xl px-4 text-sm font-bold text-slate-700 hover:bg-white">Log in</button><button onClick={()=>navigate('/signup')} className="min-h-11 rounded-xl bg-[#1554a0] px-5 text-sm font-bold text-white shadow-lg shadow-blue-900/15 hover:bg-[#10427f]">Get started <ArrowRight className="ml-1 inline" size={16}/></button></div>
+  <nav className="mm-landing-header mx-auto max-w-7xl px-5 py-4 sm:px-8">
+   <a href="/" className="mm-landing-brand flex items-center gap-3" aria-label="MatMove home"><img src="/logo.jpg" alt="MatMove" className="mm-landing-logo h-12 w-auto object-contain"/><span className="hidden text-xs font-bold uppercase tracking-[.2em] text-emerald-800 sm:block">Move with possibility</span></a>
+   <div className="mm-landing-actions flex items-center gap-2"><button onClick={()=>navigate('/login')} className="min-h-11 rounded-xl px-4 text-sm font-bold text-slate-700 hover:bg-white">Log in</button><button onClick={()=>navigate('/signup')} className="min-h-11 rounded-xl bg-[#1554a0] px-5 text-sm font-bold text-white shadow-lg shadow-blue-900/15 hover:bg-[#10427f]">Get started <ArrowRight className="ml-1 inline" size={16}/></button></div>
   </nav>
 
   {sportsCompetitions.length>0&&<section aria-labelledby="matmove-live-competitions-title" className="mx-auto max-w-7xl px-5 pb-3 sm:px-8">

@@ -124,7 +124,8 @@ test('credential recovery screens are separate and each updates only its selecte
  assert.ok(callback.includes("requestedNext === '/reset-passcode'"));
  assert.match(authService,/next=%2Freset-passcode/);
  assert.match(lock,/Your account password will not change/);
- assert.ok(lock.includes('requestPasscodeReset(resetEmail)'));
+ assert.ok(lock.includes("navigate('/forgot-passcode')"));
+ assert.doesNotMatch(lock,/setForgotMode\(true\)/);
  assert.doesNotMatch(lock,/requestAccountPasswordReset/);
  const operationStart=screen.indexOf("if (mode === 'password') {\n        const { error: updateError }");
  const operationElse=screen.indexOf("} else {",operationStart);

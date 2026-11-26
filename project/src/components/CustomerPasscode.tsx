@@ -1,6 +1,6 @@
 import {useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
+import {useNavigate} from 'react-router-dom';
 import {customerPasscode,type Receipt} from '@/lib/customerPasscode';
-import {supabase} from '@/lib/supabase';
 import {resetPasscode as requestPasscodeReset} from '@/services/authService';
 import {setPortalUnlocked} from '@/lib/portalPrivacy';
 import {profilePhotoPickerOpen,onProfilePhotoPickerEnd,clearProfilePhotoPicker} from '@/lib/profilePhotoPicker';
@@ -24,6 +24,7 @@ export function watchPasscodeBackground(onLock:()=>void,userId='',isUnlocked:()=
 }
 
 export default function CustomerPasscode({userId,onLogout,children}:{userId:string;onLogout:()=>void|Promise<void>;children:(lock:()=>void)=>ReactNode}){
+ const navigate=useNavigate();
  const privacyDialog=useRef<HTMLDialogElement|null>(null),workspace=useRef<HTMLDivElement|null>(null),pinEntryRef=useRef<HTMLInputElement|null>(null);
  const [enteredUser,setEnteredUser]=useState('');
  const [status,setStatus]=useState<Receipt|null>(null),[unlocked,setUnlocked]=useState(false),[upgrade,setUpgrade]=useState(false);
@@ -183,7 +184,7 @@ export default function CustomerPasscode({userId,onLogout,children}:{userId:stri
                </div>
                
                {!creating && (
-                 <button type="button" onClick={() => {setError('');setResetSent(false);setForgotMode(true);void supabase.auth.getUser().then(({data})=>{if(data.user?.email)setResetEmail(data.user.email);});}} className="w-full text-left pt-2 pb-1 text-xs text-slate-500 hover:text-emerald-700 transition">
+                 <button type="button" onClick={() => navigate('/forgot-passcode')} className="w-full text-left pt-2 pb-1 text-xs font-semibold text-slate-500 hover:text-emerald-700 transition">
                    Forgot passcode?
                  </button>
                )}
