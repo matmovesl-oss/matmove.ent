@@ -51,6 +51,20 @@ export function WalletTopUp({userId, allowed, onClose, onPaid}: {
   const [quoting, setQuoting] = useState(false);
   const [verified, setVerified] = useState(false);
   const [error, setError] = useState('');
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') void closeAction.current();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
   const [quoteError, setQuoteError] = useState('');
   const [notice, setNotice] = useState('');
   const mounted = useRef(true);
@@ -216,7 +230,7 @@ export function WalletTopUp({userId, allowed, onClose, onPaid}: {
 
   const canDial = code && verified && code.status === 'pending' && code.ussdCode && code.expireTime && Date.parse(code.expireTime) > Date.now();
   const discrepancy = completion?.settlement && completion.quote?.netMode && completion.settlement.creditMinor !== completion.quote.walletCreditMinor;
-  return <section className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-slate-950/35 p-2 sm:p-4" aria-label="MatMove wallet top-up">
+  return <section className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-slate-950/35 p-2 sm:p-4" aria-label="MatMove wallet top-up" onClick={(event) => { if (event.target === event.currentTarget) void closeLoad(); }}>
     <div role="dialog" aria-modal="true" aria-label="Load your MatMove wallet" className="max-h-[calc(100dvh-1rem)] w-full max-w-lg space-y-4 overflow-y-auto overscroll-contain rounded-3xl bg-white p-4 shadow-lg sm:max-h-[calc(100dvh-2rem)] sm:p-6">
       <div className="flex items-center justify-between"><h2 className="text-2xl font-bold">Load your wallet</h2><button type="button" onClick={() => void closeLoad()} disabled={closing} aria-label="Close top-up" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"><X size={22}/></button></div>
       {closing && <p role="status" className="rounded-xl bg-slate-100 p-3 text-sm">Closing the previous load safely…</p>}
@@ -247,7 +261,7 @@ export function WalletTopUp({userId, allowed, onClose, onPaid}: {
         <p className="text-sm">Status: {code.status}{code.expireTime ? ` · Expires ${new Date(code.expireTime).toLocaleString()}` : ''}</p>
         <button type="button" disabled={checking || busy || closing} onClick={() => void refresh()} className="w-full rounded-xl border p-3 font-bold disabled:opacity-50">{checking ? 'Checking…' : 'Check payment status'}</button>
         <button type="button" onClick={() => void closeLoad()} disabled={closing} className="w-full rounded-xl border p-3 font-bold disabled:opacity-50">{closing ? 'Closing…' : 'Close'}</button>
-        {code.status === 'processing' && <button type="button" disabled={closing} onClick={onClose} className="w-full rounded-xl border p-3 text-sm font-bold">Return to dashboard — payment still processing</button>}
+        {code.status === 'processing' && <button type="button" disabled={closing} onClick={() => void closeLoad()} className="w-full rounded-xl border p-3 text-sm font-bold">Return to dashboard — payment still processing</button>}
         <p className="text-sm text-slate-500">Close disables an unused code and clears this form. Next time you open Load, enter a new amount. A payment already processing must finish before another load.</p>
       </>}
     </div>
