@@ -1,9 +1,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import HistoryDateFilter from '@/components/HistoryDateFilter';
+import { isWithinDateRange } from '../../shared/activity-date-range.js';
 import { shareReceiptPdf } from '@/lib/pdfReceipt';
 import { SkeletonList } from '@/components/Skeleton';
-import { filterTripHistory } from '@/lib/tripHistory';
 import { updateRide, readCashRideStatus } from '@/services/rideService';
 import { attachTripContacts } from '@/lib/tripContacts';
 
@@ -83,9 +84,9 @@ export default function TripHistory({ userId, role, onResume, accountLabel, acco
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [period,setPeriod]=useState<'30'|'90'|'all'>('all');
+  const [dateFrom,setDateFrom]=useState('');
+  const [dateTo,setDateTo]=useState('');
   const [tripView,setTripView]=useState<'active'|'pending'|'history'>(role==='driver'?'active':'pending');
-  const [statusFilter,setStatusFilter]=useState<'all'|'pending'|'pending_admin'|'cash_reserve_pending'|'cash_review_required'|'accepted'|'in_progress'|'completed'|'cancelled'>('all');
   const dialog = useRef<HTMLDialogElement>(null);
   const owner=useRef(userId);owner.current=userId;
   const mounted=useRef(false),inFlight=useRef(false),queuedRefresh=useRef(false),revision=useRef(0),abort=useRef<AbortController|null>(null);
@@ -152,7 +153,8 @@ export default function TripHistory({ userId, role, onResume, accountLabel, acco
   }, [refresh,userId,role]);
   const ownedTrips=loadedOwner===userId?trips:[];
   const selected = ownedTrips.find(t => t.id === selectedId);
-  const filteredTrips=filterTripHistory(ownedTrips,period,statusFilter).filter(t=>tripView==='active'?['accepted','in_progress'].includes(t.status):tripView==='pending'?['pending','pending_admin','cash_reserve_pending','cash_review_required'].includes(t.status):['completed','cancelled'].includes(t.status));
+  const validDateRange=!(dateFrom&&dateTo&&dateFrom>dateTo);
+  const filteredTrips=(validDateRange?ownedTrips.filter(t=>isWithinDateRange(t.created_at,dateFrom,dateTo)):[]).filter(t=>tripView==='active'?['accepted','in_progress'].includes(t.status):tripView==='pending'?['pending','pending_admin','cash_reserve_pending','cash_review_required'].includes(t.status):['completed','cancelled'].includes(t.status));
   const activeRequests = ownedTrips.filter(t => ['pending','pending_admin','cash_reserve_pending','cash_review_required','accepted','in_progress'].includes(t.status));
   const [cancellingId,setCancellingId]=useState<string|null>(null);
   const [actionError,setActionError]=useState('');
@@ -242,6 +244,7 @@ export default function TripHistory({ userId, role, onResume, accountLabel, acco
     <div role="tablist" aria-label="Trips" className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-white p-1">
       {([{id:'active',label:'Active',count:ownedTrips.filter(t=>['accepted','in_progress'].includes(t.status)).length},{id:'pending',label:'Requests',count:ownedTrips.filter(t=>['pending','pending_admin','cash_reserve_pending','cash_review_required'].includes(t.status)).length},{id:'history',label:'History',count:ownedTrips.filter(t=>['completed','cancelled'].includes(t.status)).length}] as const).map(tab=><button key={tab.id} type="button" role="tab" aria-selected={tripView===tab.id} onClick={()=>setTripView(tab.id)} className={`min-h-10 rounded-lg px-2 text-sm font-bold ${tripView===tab.id?'bg-slate-900 text-white':'text-slate-600 hover:bg-slate-50'}`}>{tab.label}<span className="ml-1 text-xs opacity-75">{tab.count}</span></button>)}
     </div>
+    <HistoryDateFilter fromDate={dateFrom} toDate={dateTo} onFromDateChange={setDateFrom} onToDateChange={setDateTo} filteredCount={filteredTrips.length} totalCount={ownedTrips.length} noun="trips" />
     {error&&<p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {actionError&&<p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{actionError}</p>}
     {actionNotice&&<p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{actionNotice}</p>}
