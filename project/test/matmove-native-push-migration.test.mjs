@@ -7,6 +7,10 @@ const migration = () => readFile(
   new URL('../supabase/migrations/20261125145204_matmove_native_push_notifications_v1.sql', import.meta.url),
   'utf8'
 );
+const cleanupMigration = () => readFile(
+  new URL('../supabase/migrations/20261125150100_matmove_push_token_self_cleanup_v1.sql', import.meta.url),
+  'utf8'
+);
 
 const rider = '11111111-1111-4111-8111-111111111111';
 const driver = '22222222-2222-4222-8222-222222222222';
@@ -64,6 +68,7 @@ test('native push tokens are private, customer-owned and dispatchable only by se
     `);
 
     await db.exec(await migration());
+    await db.exec(await cleanupMigration());
 
     const session = async (userId, role = 'authenticated') => {
       await db.exec('reset role');
@@ -125,6 +130,18 @@ test('native push tokens are private, customer-owned and dispatchable only by se
     ]);
     assert.equal(JSON.stringify(context.rows[0].result).includes('Private message body'), false);
     assert.equal(JSON.stringify(context.rows[0].result).includes('Private heading'), false);
+
+    // A non-customer account may not register a token, but it can always
+    // remove a token previously associated with its own account.
+    await db.exec('reset role');
+    await db.exec(`insert into private.matmove_push_tokens(expo_push_token,user_id,platform)
+      values ('ExpoPushToken[AdminCleanupToken1234]','${admin}','ios')`);
+    await session(admin);
+    const adminCleanup = await db.query(
+      'select public.matmove_unregister_push_token($1) as result',
+      ['ExpoPushToken[AdminCleanupToken1234]']
+    );
+    assert.deepEqual(adminCleanup.rows[0].result, { user_id: admin, unregistered: true });
 
     const staleRemoved = await db.query(
       'select public.matmove_push_remove_invalid_token($1) as result',
