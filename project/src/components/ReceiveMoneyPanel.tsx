@@ -19,6 +19,7 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
   const [notice, setNotice] = useState('');
   const [copiedLabel, setCopiedLabel] = useState('');
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onCloseRef = useRef(onClose);
   const [error, setError] = useState('');
 
   const available = Boolean(
@@ -47,19 +48,20 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
   }, [available]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [onClose]);
+  }, []);
 
   useEffect(() => () => {
     if (copiedTimer.current) clearTimeout(copiedTimer.current);
