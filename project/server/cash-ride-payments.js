@@ -560,28 +560,77 @@ export async function cashRideAction(
       throw new HttpError(403, 'Only the rider or assigned driver can cancel this cash ride.');
     }
 
-    if (actorType === 'driver') {
-      const requestId = uuid.test(String(req.body?.requestId || ''))
-        ? req.body.requestId
-        : (globalThis.crypto?.randomUUID?.() || null);
-      if (!requestId) throw new HttpError(400, 'A valid request reference is required. Refresh and retry.');
-      const result = await cashRpc(db, 'matmove_driver_cancel_redispatch', {
-        p_booking_id: bookingId,
-        p_driver_id: user.id,
-        p_request_id: requestId
-      });
-      const updatedBooking = await readBooking(db, bookingId);
-      return res.status(200).json({
-        success: result?.success === true,
-        pending: false,
-        redispatched: result?.redispatched === true,
-        reviewRequired: result?.reviewRequired === true,
-        booking: updatedBooking,
-        payment: await cashStatus(db, bookingId),
-        message: result?.reviewRequired
-          ? 'Admin investigation opened. The trip was not re-dispatched and no fee refund or additional reserve was started.'
-          : 'Driver cancellation re-dispatched the same request. The original MatMove fee reserve is retained; no second reserve or refund was created.'
-      });
+    if (actorType === 'driver' && profile.role === 'driver') {
+      if (
+        booking.status === 'cancelled' &&
+        payment.driver_id === user.id &&
+        payment.status === 'refunded'
+      ) {
+        const snapshot = await cashStatus(db, bookingId);
+        return res.status(200).json({
+          success: true,
+          pending: false,
+          booking,
+          payment: snapshot,
+          message: 'The full reserved MatMove fee refund was already verified.'
+        });
+      }
+
+      // If a previous attempt reached Monime, resume only its stored refund
+      // leg. Never run the cancellation RPC again while that refund is pending.
+      if (
+        booking.status === 'accepted' &&
+        !booking.started_at &&
+        payment.driver_id === user.id &&
+        payment.status === 'refund_pending'
+      ) {
+        const snapshot = await finishCashLeg(db, bookingId, 'refund', user.id, provider);
+        const updatedBooking = await readBooking(db, bookingId);
+        const refunded = snapshot?.status === 'refunded';
+        const reviewRequired = snapshot?.needsReview === true || snapshot?.status === 'review_required';
+        return res.status(refunded ? 200 : 202).json({
+          success: refunded,
+          pending: !refunded,
+          reviewRequired,
+          booking: updatedBooking,
+          payment: snapshot,
+          message: refunded
+            ? 'The full reserved MatMove fee refund is verified.'
+            : reviewRequired
+              ? 'The fee refund needs Admin review. Do not request another transfer.'
+              : 'The reserved MatMove fee refund is still being verified. Do not repeat the cancellation.'
+        });
+      }
+
+      // A Driver cancellation after the trip starts is never auto-refunded.
+      // Preserve the escrow/reserve and open an Admin investigation.
+      if (booking.status === 'in_progress' || booking.started_at) {
+        const requestId = uuid.test(String(req.body?.requestId || ''))
+          ? req.body.requestId
+          : (globalThis.crypto?.randomUUID?.() || null);
+        if (!requestId) throw new HttpError(400, 'A valid request reference is required. Refresh and retry.');
+        const result = await cashRpc(db, 'matmove_driver_cancel_redispatch', {
+          p_booking_id: bookingId,
+          p_driver_id: user.id,
+          p_request_id: requestId
+        });
+        const updatedBooking = await readBooking(db, bookingId);
+        const snapshot = await cashStatus(db, bookingId);
+        const reviewRequired = result?.reviewRequired === true;
+        return res.status(reviewRequired ? 202 : 200).json({
+          success: result?.success === true && !reviewRequired,
+          pending: reviewRequired,
+          reviewRequired,
+          booking: updatedBooking,
+          payment: snapshot,
+          message: reviewRequired
+            ? 'This cash trip has started. It has been sent to Admin for review; no fee refund or additional transfer was started.'
+            : 'The Driver cancellation status was verified.'
+        });
+      }
+
+      // An accepted, unstarted Driver cancellation continues through the
+      // cash ledger below. It refunds the exact verified 15% reserve.
     }
 
     const result = await cashRpc(db, 'matmove_cash_ride_cancel', {
@@ -594,12 +643,18 @@ export async function cashRideAction(
       const snapshot = await finishCashLeg(db, bookingId, 'refund', user.id, provider);
       const updatedBooking = await readBooking(db, bookingId);
       const refunded = snapshot?.status === 'refunded';
+      const reviewRequired = snapshot?.needsReview === true || snapshot?.status === 'review_required';
       return res.status(refunded ? 200 : 202).json({
         success: refunded,
         pending: !refunded,
+        reviewRequired,
         booking: updatedBooking,
         payment: snapshot,
-        message: refunded ? 'The reserved fee has been returned to the rider.' : 'Fee refund is being verified. Do not request another transfer.'
+        message: refunded
+          ? 'The reserved MatMove fee has been returned to the Rider.'
+          : reviewRequired
+            ? 'The fee refund needs Admin review. Do not request another transfer.'
+            : 'The reserved MatMove fee refund is being verified. Do not repeat the cancellation.'
       });
     }
 

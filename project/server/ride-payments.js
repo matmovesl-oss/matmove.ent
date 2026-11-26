@@ -499,27 +499,59 @@ export async function rideAction(
         }
 
         if (isDriver) {
-          const requestId = uuid.test(String(req.body?.requestId || ''))
-            ? req.body.requestId
-            : randomUUID();
-          const result = await rpc(db, 'matmove_driver_cancel_redispatch', {
-            p_booking_id: bookingId,
-            p_driver_id: user.id,
-            p_request_id: requestId
-          });
-          const updatedBooking = await readBooking(db, bookingId);
-          const updatedPayment = await readPayment(db, bookingId);
-          return res.status(200).json({
-            success: result?.success === true,
-            pending: false,
-            redispatched: result?.redispatched === true,
-            reviewRequired: result?.reviewRequired === true,
-            booking: updatedBooking,
-            payment: await paymentSnapshot(db, bookingId, updatedPayment),
-            message: result?.reviewRequired
-              ? 'Admin investigation opened. The trip was not re-dispatched and no refund or payout was started.'
-              : 'Driver cancellation re-dispatched the same request. Customer escrow remains protected; no new customer debit or refund was created.'
-          });
+          // A verified, unstarted acceptance is cancelled through the original
+          // ride-payment ledger. Its existing refund leg returns the full fare
+          // to the original Rider; it never creates a new charge.
+          if (
+            booking.status === 'cancelled' &&
+            payment?.driver_id === user.id &&
+            ['refunded', 'failed'].includes(payment.state)
+          ) {
+            const snapshot = await paymentSnapshot(db, bookingId, payment);
+            return res.status(200).json({
+              success: true,
+              pending: false,
+              booking,
+              payment: snapshot,
+              message: payment.state === 'refunded'
+                ? 'The full Rider fare refund was already verified.'
+                : 'The cancellation was already verified; no fare debit remained to refund.'
+            });
+          }
+
+          // If the trip has started, automatic refund is unsafe. Keep the
+          // assignment and payment untouched and open an Admin investigation.
+          if (booking.status === 'in_progress' || booking.started_at) {
+            const requestId = uuid.test(String(req.body?.requestId || ''))
+              ? req.body.requestId
+              : randomUUID();
+            const result = await rpc(db, 'matmove_driver_cancel_redispatch', {
+              p_booking_id: bookingId,
+              p_driver_id: user.id,
+              p_request_id: requestId
+            });
+            const updatedBooking = await readBooking(db, bookingId);
+            const updatedPayment = await readPayment(db, bookingId);
+            const snapshot = await paymentSnapshot(db, bookingId, updatedPayment);
+            const reviewRequired = result?.reviewRequired === true;
+            return res.status(reviewRequired ? 202 : 200).json({
+              success: result?.success === true && !reviewRequired,
+              pending: reviewRequired,
+              reviewRequired,
+              booking: updatedBooking,
+              payment: snapshot,
+              message: reviewRequired
+                ? 'This trip has started. It has been sent to Admin for review; no automatic refund or new transfer was started.'
+                : 'The Driver cancellation status was verified.'
+            });
+          }
+
+          if (booking.status !== 'accepted') {
+            throw new HttpError(409, 'Only an accepted, not-yet-started trip can be cancelled by its assigned Driver.');
+          }
+          // Accepted and not started: fall through to prepare_ride_payment
+          // below, which authorizes the assigned Driver and creates/reuses
+          // exactly one full-fare refund leg.
         }
 
         // Do not silently turn an accepted rider cancellation into a full

@@ -231,7 +231,7 @@ function response() {
   };
 }
 
-function cancellationDb({ bookingRow, paymentRow }) {
+function cancellationDb({ bookingRow, paymentRow, redispatchResult = { success: true, redispatched: true, reviewRequired: false } }) {
   const calls = [];
   class Query {
     constructor(table) { this.table = table; }
@@ -249,7 +249,7 @@ function cancellationDb({ bookingRow, paymentRow }) {
     async rpc(name, args) {
       calls.push({ name, args });
       if (name === 'matmove_driver_cancel_redispatch') {
-        return { data: { success: true, redispatched: true, reviewRequired: false }, error: null };
+        return { data: redispatchResult, error: null };
       }
       return { data: null, error: null };
     }
@@ -279,30 +279,46 @@ test('API blocks accepted rider cancellation before calling any payment RPC', as
   assert.equal(db.calls.length, 0);
 });
 
-test('API submits same-booking redispatch for the assigned driver and confirms the signed-in actor', async () => {
-  const bookingRow = {
-    id: booking,
-    rider_id: rider,
-    driver_id: driver,
-    status: 'accepted',
-    fare_amount: 100
-  };
-  const paymentRow = { booking_id: booking, state: 'funded' };
+test('API routes an accepted, unstarted Driver cancellation through the full-fare refund ledger', async () => {
+  const bookingRow = { id: booking, rider_id: rider, driver_id: driver, status: 'accepted', started_at: null, fare_amount: 100 };
+  const paymentRow = { booking_id: booking, driver_id: driver, state: 'funded' };
   const db = cancellationDb({ bookingRow, paymentRow });
-  const req = {
-    body: { bookingId: booking, requestId: '00000000-0000-4000-8000-000000000099' },
-    matmove: { db, user: { id: driver }, profile: { role: 'driver' } }
-  };
+  const req = { body: { bookingId: booking, requestId: '00000000-0000-4000-8000-000000000099' }, matmove: { db, user: { id: driver }, profile: { role: 'driver' } } };
   const res = response();
+  await rideAction(req, res, 'cancel');
+  assert.equal(res.statusCode, 202, 'the mocked ledger remains funded, so the API must not report a refund');
+  assert.equal(db.calls[0].name, 'prepare_ride_payment');
+  assert.equal(db.calls[0].args.p_booking_id, booking);
+  assert.equal(db.calls[0].args.p_actor_id, driver);
+  assert.equal(db.calls[0].args.p_action, 'cancel');
+  assert.equal(db.calls.some(call => call.name === 'matmove_driver_cancel_redispatch'), false);
+});
 
+test('API sends a started Driver cancellation to Admin review without creating an automatic refund', async () => {
+  const bookingRow = { id: booking, rider_id: rider, driver_id: driver, status: 'in_progress', started_at: '2026-11-24T16:00:00.000Z', fare_amount: 100 };
+  const paymentRow = { booking_id: booking, driver_id: driver, state: 'funded' };
+  const db = cancellationDb({ bookingRow, paymentRow, redispatchResult: { success: true, redispatched: false, reviewRequired: true } });
+  const req = { body: { bookingId: booking, requestId: '00000000-0000-4000-8000-000000000099' }, matmove: { db, user: { id: driver }, profile: { role: 'driver' } } };
+  const res = response();
+  await rideAction(req, res, 'cancel');
+  assert.equal(res.statusCode, 202);
+  assert.equal(res.body.reviewRequired, true);
+  assert.equal(res.body.pending, true);
+  assert.equal(db.calls[0].name, 'matmove_driver_cancel_redispatch');
+  assert.equal(db.calls.some(call => call.name === 'prepare_ride_payment'), false);
+});
+
+test('API retry of an already verified Driver refund returns the original result without another transfer', async () => {
+  const bookingRow = { id: booking, rider_id: rider, driver_id: driver, status: 'cancelled', started_at: null, fare_amount: 100 };
+  const paymentRow = { booking_id: booking, driver_id: driver, state: 'refunded' };
+  const db = cancellationDb({ bookingRow, paymentRow });
+  const req = { body: { bookingId: booking }, matmove: { db, user: { id: driver }, profile: { role: 'driver' } } };
+  const res = response();
   await rideAction(req, res, 'cancel');
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.success, true);
-  assert.equal(res.body.redispatched, true);
-  assert.equal(db.calls[0].name, 'matmove_driver_cancel_redispatch');
-  assert.equal(db.calls[0].args.p_booking_id, booking);
-  assert.equal(db.calls[0].args.p_driver_id, driver);
-  assert.equal(db.calls[0].args.p_request_id, '00000000-0000-4000-8000-000000000099');
+  assert.equal(res.body.pending, false);
+  assert.equal(db.calls.length, 0);
 });
 
 
