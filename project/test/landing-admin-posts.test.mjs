@@ -110,3 +110,20 @@ test('landing page downloads the official MatMove APK directly and retains iPhon
   assert.match(source, /Add to Home Screen/);
   assert.ok(source.includes('matmove.space'));
 });
+
+
+test('public landing header stays contained on narrow iPhone widths and refreshes the offline shell', async () => {
+  const [landing, css, worker] = await Promise.all([
+    readFile(new URL('../src/pages/LandingPage.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
+    readFile(new URL('../public/sw.js', import.meta.url), 'utf8'),
+  ]);
+  assert.match(landing, /className="mm-landing-header/);
+  assert.match(landing, /className="mm-landing-brand/);
+  assert.match(landing, /className="mm-landing-logo/);
+  assert.match(landing, /className="mm-landing-actions/);
+  assert.match(css, /\.mm-landing-header[\s\S]*?isolation:\s*isolate/);
+  assert.match(css, /@media \(max-width: 420px\)/);
+  assert.match(css, /\.mm-landing-logo[\s\S]*?background:\s*transparent !important/);
+  assert.match(worker, /matmove-shell-v5/);
+});
