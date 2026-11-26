@@ -51,7 +51,8 @@ test('landing page only shows Admin-published active competitions and refreshes 
   assert.match(source, /setInterval\(\(\)=>\{if\(document\.visibilityState==='visible'\)void refreshCompetitions\(\);\},30000\)/);
   assert.match(source, /visibilitychange/);
   assert.match(source, /<GalaRegistration open=\{!!selectedCompetitionId\} competitionId=\{selectedCompetitionId\}/);
-  assert.doesNotMatch(source, /MatMove eFootball Gala<\\/h2>|Register for the Gala/);
+  assert.ok(!source.includes('MatMove eFootball Gala</h2>'));
+  assert.doesNotMatch(source, /Register for the Gala/);
 });
 
 test('public sports feed returns every registration or in-progress competition and hides unpublished or finished seasons', async () => {
