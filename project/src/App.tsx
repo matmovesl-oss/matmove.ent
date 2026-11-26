@@ -103,6 +103,7 @@ const ReceivePaymentCompletePage = lazy(() => import('@/pages/ReceivePayLinkPage
 const CustomerHome = lazy(() => import('@/components/CustomerHome'));
 const PortalGuide = lazy(() => import('@/components/PortalGuide'));
 const AccountProfile = lazy(() => import('@/components/AccountProfile'));
+const AccountIdentity = lazy(() => import('@/components/AccountProfile').then(module => ({ default: module.AccountIdentity })));
 const PasskeySecurity = lazy(() => import('@/components/AccountProfile').then(m => ({default: m.PasskeySecurity})));
 const MerchantCheckout = lazy(() => import('@/components/MerchantCheckout'));
 const AccountPolicy = lazy(() => import('@/components/AccountPolicy').then(m => ({default: m.AccountPolicy})));
@@ -428,7 +429,7 @@ function PortalContent({onPrivacyLock}:{onPrivacyLock:()=>void}) {
           )}
           <Suspense fallback={null}><MatMoveHelp key={`help:${profile.id}:${role}`} userId={profile.id} context={{role}} onNavigate={openHelpDestination}/></Suspense>
         </div>
-        <button type="button" aria-label="Open your account" title="Account" aria-current={activeSection==='account'?'page':undefined} onClick={()=>setActiveSection('account')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><UserCircle size={20}/></button>
+        <button type="button" aria-label="Open your account" title="Account" aria-current={activeSection==='account'?'page':undefined} onClick={()=>setActiveSection('account')} className="flex min-h-11 min-w-0 max-w-[min(48vw,240px)] shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white px-2 text-slate-700 hover:bg-slate-50"><Suspense fallback={<UserCircle size={20}/>}><AccountIdentity key={`account-identity:${profile.id}`} userId={profile.id} fallbackName={profile.full_name || profile.email || 'MatMove account'}/></Suspense></button>
       </div>
     </header>
   );
