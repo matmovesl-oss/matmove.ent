@@ -23,11 +23,10 @@ export function LandingPage(){
  const navigate=useNavigate();
  const [journey,setJourney]=useState(0);
  const [galaRegistrationOpen,setGalaRegistrationOpen]=useState(false);
- const [whatsappPhone,setWhatsappPhone]=useState(verifiedWhatsappFallback);
  useEffect(()=>{
   const timer=window.setInterval(()=>setJourney(current=>(current+1)%journeys.length),5200);
   return()=>window.clearInterval(timer);
- },[]
+ },[]);
  const item=journeys[journey];
  const change=(step:number)=>setJourney(current=>(current+step+journeys.length)%journeys.length);
  return <main className="min-h-screen overflow-hidden bg-[#f5f8f7] font-sans text-slate-950">
