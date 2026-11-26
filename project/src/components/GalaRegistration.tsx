@@ -238,7 +238,7 @@ export default function GalaRegistration({ open, competitionId, onClose }: { ope
     <div className="fixed inset-0 z-[160] flex items-center justify-center overflow-y-auto overscroll-contain bg-slate-950/65 p-3 backdrop-blur-sm sm:p-6" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section role="dialog" aria-modal="true" aria-labelledby="gala-registration-title" className="my-auto max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl overflow-y-auto overscroll-contain rounded-[1.8rem] bg-[#f7faf8] shadow-2xl sm:max-h-[calc(100dvh-3rem)]">
         <header className="relative overflow-hidden bg-[linear-gradient(115deg,#0c1e31_0%,#123b43_58%,#155c4e_100%)] px-5 py-6 text-white sm:px-8">
-          <button type="button" onClick={onClose} aria-label="Close Gala registration" className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20"><X size={19}/></button>
+          <button type="button" onClick={onClose} aria-label="Close competition details" className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20"><X size={19}/></button>
           <div className="flex items-start gap-4 pr-10">
             <span className="grid h-13 w-13 shrink-0 place-items-center rounded-2xl border border-white/15 bg-white/10 text-emerald-200"><Trophy size={27}/></span>
             <div>
@@ -273,7 +273,7 @@ export default function GalaRegistration({ open, competitionId, onClose }: { ope
                 'An active WhatsApp contact number',
               ].map(item => <li key={item} className="flex items-start gap-2"><CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-700"/><span>{item}</span></li>)}
             </ul>
-            <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">Your SLE wallet must belong to the MatMove account you use to sign in and must not be frozen. Admin checks your eligibility again before confirming a Gala place.</p>
+            <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">Your SLE wallet must belong to the MatMove account you use to sign in and must not be frozen. MatMove Sports Admin checks your eligibility again before confirming a place.</p>
           </section>
 
           {loading && <p role="status" className="rounded-xl bg-white p-4 text-sm text-slate-600">Checking the competition schedule…</p>}
@@ -309,7 +309,7 @@ export default function GalaRegistration({ open, competitionId, onClose }: { ope
             <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <label className="flex items-start gap-3 text-sm leading-6 text-slate-700"><input type="checkbox" required checked={form.terms_accepted} onChange={e=>setForm({...form,terms_accepted:e.target.checked})} className="mt-1 h-4 w-4 accent-emerald-700"/><span>I have read and accept the MatMove Terms & Conditions.</span></label>
               <label className="flex items-start gap-3 text-sm leading-6 text-slate-700"><input type="checkbox" required checked={form.rules_accepted} onChange={e=>setForm({...form,rules_accepted:e.target.checked})} className="mt-1 h-4 w-4 accent-emerald-700"/><span>I have read and accept the MatMove eFootball Gala competition rules and permission.</span></label>
-              <p className="text-xs leading-5 text-slate-500">Your contact details and player information will be used to review and administer your Gala application.</p>
+              <p className="text-xs leading-5 text-slate-500">Your contact details and player information will be used to review and administer this competition application.</p>
             </div>
             {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
             {notice && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
