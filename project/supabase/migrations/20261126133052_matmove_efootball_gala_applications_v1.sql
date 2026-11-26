@@ -60,7 +60,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_public_registration_info()
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public'
-AS $function$
+AS $function$;
 declare
   c public.matmove_sports_competitions%rowtype;
   found_competition boolean := false;
@@ -110,7 +110,7 @@ begin
     end
   );
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.matmove_sports_my_application(p_competition_id uuid)
@@ -118,7 +118,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_my_application(p_competition_id
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public'
-AS $function$
+AS $function$;
 declare
   a public.matmove_sports_applications%rowtype;
 begin
@@ -144,7 +144,7 @@ begin
     'updated_at', a.updated_at
   ));
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.matmove_sports_submit_application(p_competition_id uuid, p_wallet_lookup text, p_legal_name text, p_phone text, p_whatsapp_phone text, p_email text, p_efootball_user_id text, p_team_name text, p_terms_accepted boolean, p_rules_accepted boolean)
@@ -152,7 +152,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_submit_application(p_competitio
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public', 'auth'
-AS $function$
+AS $function$;
 declare
   v_user uuid := auth.uid();
   v_wallet_id uuid;
@@ -309,7 +309,7 @@ begin
     'message', 'Your MatMove eFootball Gala application has been submitted for Admin review.'
   );
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.matmove_sports_applications_admin_snapshot(p_competition_id uuid DEFAULT NULL::uuid)
@@ -317,7 +317,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_applications_admin_snapshot(p_c
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public'
-AS $function$
+AS $function$;
 declare
   v_result jsonb;
 begin
@@ -378,7 +378,7 @@ begin
 
   return v_result;
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.matmove_sports_application_admin_action(p_action text, p_payload jsonb DEFAULT '{}'::jsonb)
@@ -386,7 +386,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_application_admin_action(p_acti
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public', 'auth'
-AS $function$
+AS $function$;
 declare
   v_competition_id uuid := nullif(p_payload->>'competition_id', '')::uuid;
   v_application_id uuid := nullif(p_payload->>'application_id', '')::uuid;
@@ -641,7 +641,7 @@ begin
 
   return v_result;
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.matmove_sports_update_registration_window(p_competition_id uuid, p_opens_at timestamp with time zone, p_closes_at timestamp with time zone)
@@ -649,7 +649,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_update_registration_window(p_co
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public'
-AS $function$
+AS $function$;
 begin
   if auth.uid() is null or not public.matmove_admin_can('sports') then
     raise exception 'FORBIDDEN: Sports administrator permission required.';
@@ -691,7 +691,7 @@ begin
     'registration_closes_at', p_closes_at
   );
 end;
-$function$
+$function$;
 
 
 
