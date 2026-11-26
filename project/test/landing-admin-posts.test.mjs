@@ -41,18 +41,38 @@ test('public homepage refreshes from Realtime and retains a 15-second hidden-tab
 });
 
 
-test('landing page places the eFootball League WhatsApp call-to-action before the main hero', async () => {
+test('landing page presents the official MatMove eFootball Gala registration CTA before the main hero', async () => {
   const source = await readFile(new URL('../src/pages/LandingPage.tsx', import.meta.url), 'utf8');
   const navEnd = source.indexOf('</nav>');
-  const leagueStart = source.indexOf('id="efootball-league-title"');
+  const galaStart = source.indexOf('id="efootball-league-title"');
   const heroStart = source.indexOf('Your world moves.');
-  assert.ok(navEnd >= 0 && leagueStart > navEnd && heroStart > leagueStart);
-  assert.match(source, /matmove_public_contacts/);
-  assert.match(source, /https:\/\/wa\.me\//);
-  assert.match(source, /MatMove eFootball League/);
-  assert.match(source, /registration details and next steps/);
+  assert.ok(navEnd >= 0 && galaStart > navEnd && heroStart > galaStart);
+  assert.match(source, /MatMove eFootball Gala/);
+  assert.match(source, /Register for the Gala/);
+  assert.match(source, /<GalaRegistration open=\{galaRegistrationOpen\}/);
+  assert.doesNotMatch(source, /Join via WhatsApp/);
 });
 
+test('Gala application shows the published eligibility, fixed country and required player details', async () => {
+  const source = await readFile(new URL('../src/components/GalaRegistration.tsx', import.meta.url), 'utf8');
+  for (const value of ['An active MatMove account','MatMove KYC already approved','A valid, active MatMove SLE wallet','A valid eFootball User ID','An active WhatsApp contact number','Legal name','Sierra Leone','Contact phone','WhatsApp number','Email address','MatMove SLE Wallet ID','eFootball User ID','eFootball team name']) {
+    assert.ok(source.includes(value), 'Missing Gala requirement or field: ' + value);
+  }
+  assert.match(source, /I have read and accept the MatMove Terms/);
+  assert.match(source, /I have read and accept the MatMove eFootball Gala competition rules/);
+  assert.match(source, /matmove_sports_submit_application/);
+  assert.match(source, /matmove_sports_my_application/);
+  assert.match(source, /matmove_sports_public_registration_info/);
+});
+
+test('Gala landing form is account-bound and never accepts a client-supplied user ID', async () => {
+  const source = await readFile(new URL('../src/components/GalaRegistration.tsx', import.meta.url), 'utf8');
+  assert.match(source, /supabase\.auth\.getSession\(\)/);
+  assert.match(source, /setUserId\(session\?\.user\?\.id/);
+  assert.match(source, /p_competition_id: registration\.id/);
+  assert.doesNotMatch(source, /p_user_id/);
+  assert.match(source, /statusLabel/);
+});
 test('landing page provides Android APK guidance and iPhone Safari/Chrome Home Screen steps', async () => {
   const source = await readFile(new URL('../src/pages/LandingPage.tsx', import.meta.url), 'utf8');
   assert.match(source, /VITE_ANDROID_DOWNLOAD_URL/);
