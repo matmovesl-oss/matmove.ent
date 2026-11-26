@@ -60,7 +60,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_public_registration_info()
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public'
-AS $function$;
+AS $function$
 declare
   c public.matmove_sports_competitions%rowtype;
   found_competition boolean := false;
@@ -118,7 +118,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_my_application(p_competition_id
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public'
-AS $function$;
+AS $function$
 declare
   a public.matmove_sports_applications%rowtype;
 begin
@@ -152,7 +152,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_submit_application(p_competitio
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public', 'auth'
-AS $function$;
+AS $function$
 declare
   v_user uuid := auth.uid();
   v_wallet_id uuid;
@@ -317,7 +317,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_applications_admin_snapshot(p_c
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public'
-AS $function$;
+AS $function$
 declare
   v_result jsonb;
 begin
@@ -386,7 +386,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_application_admin_action(p_acti
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public', 'auth'
-AS $function$;
+AS $function$
 declare
   v_competition_id uuid := nullif(p_payload->>'competition_id', '')::uuid;
   v_application_id uuid := nullif(p_payload->>'application_id', '')::uuid;
@@ -649,7 +649,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_update_registration_window(p_co
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public'
-AS $function$;
+AS $function$
 begin
   if auth.uid() is null or not public.matmove_admin_can('sports') then
     raise exception 'FORBIDDEN: Sports administrator permission required.';
