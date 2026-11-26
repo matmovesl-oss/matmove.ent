@@ -236,3 +236,219 @@ test('MatMove rider-withdrawal and Loading Bonanza migrations apply in an isolat
     await db.close();
   }
 });
+
+
+test('MatMove eFootball Gala migrations replay and unify online and Admin manual applications', async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`
+      create role anon;
+      create role authenticated;
+      create role service_role;
+      create schema auth;
+      create table auth.users (
+        id uuid primary key,
+        deleted_at timestamptz,
+        banned_until timestamptz
+      );
+      create function auth.uid() returns uuid language sql stable as $$
+        select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+      $$;
+      create function public.matmove_admin_can(text)
+      returns boolean language sql stable as $$ select true $$;
+
+      create table public.profiles (
+        id uuid primary key references auth.users(id),
+        kyc_status text,
+        is_wallet_frozen boolean not null default false,
+        account_deletion_requested_at timestamptz
+      );
+      create table public.wallets (
+        id uuid primary key,
+        user_id uuid not null references public.profiles(id),
+        currency text not null,
+        monime_account_id text,
+        is_frozen boolean not null default false
+      );
+      create table public.matmove_sports_competitions (
+        id uuid primary key default gen_random_uuid(),
+        name text not null,
+        game_name text not null default 'eFootball Mobile',
+        capacity integer not null default 16,
+        status text not null default 'draft',
+        entry_fee_minor bigint,
+        prize_minor bigint,
+        registration_closes_at timestamptz,
+        starts_at timestamptz,
+        created_by uuid not null references auth.users(id),
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+      create table public.matmove_sports_players (
+        id uuid primary key default gen_random_uuid(),
+        competition_id uuid not null references public.matmove_sports_competitions(id),
+        user_id uuid not null references public.profiles(id),
+        wallet_id uuid not null references public.wallets(id),
+        efootball_user_id text not null,
+        whatsapp_phone text not null,
+        group_key text,
+        seed integer,
+        status text not null default 'pending_review',
+        admin_note text,
+        created_by uuid not null references auth.users(id),
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (competition_id,user_id)
+      );
+      create table public.matmove_sports_matches (
+        id uuid primary key default gen_random_uuid(),
+        competition_id uuid not null references public.matmove_sports_competitions(id)
+      );
+      create table public.admin_audit_logs (
+        id uuid primary key default gen_random_uuid(),
+        admin_id uuid not null references auth.users(id),
+        action text not null,
+        resource_type text not null,
+        resource_id uuid,
+        metadata jsonb not null default '{}'::jsonb,
+        reason text,
+        created_at timestamptz not null default now()
+      );
+    `);
+
+    const names = [
+      '20261126133052_matmove_efootball_gala_applications_v1.sql',
+      '20261126133117_matmove_efootball_gala_manual_reference_fix_v1.sql',
+      '20261126133518_matmove_efootball_gala_review_after_close_v1.sql',
+      '20261126133548_matmove_efootball_gala_approval_capacity_lock_v1.sql',
+      '20261126133832_matmove_efootball_gala_application_fk_indexes_v1.sql',
+      '20261126134046_matmove_efootball_gala_admin_account_status_v1.sql'
+    ];
+    for (const name of names) {
+      await db.exec(await migration(name));
+    }
+
+    const schema = await db.query(`
+      select
+        (select relrowsecurity from pg_class where oid='public.matmove_sports_applications'::regclass) as rls,
+        (select count(*) from information_schema.columns where table_schema='public' and table_name='matmove_sports_competitions' and column_name='registration_opens_at') as opening_column,
+        (select count(*) from pg_indexes where schemaname='public' and indexname in (
+          'matmove_sports_applications_wallet_id_idx',
+          'matmove_sports_applications_player_id_idx',
+          'matmove_sports_applications_created_by_idx',
+          'matmove_sports_applications_reviewed_by_idx'
+        )) as fk_indexes
+    `);
+    assert.equal(schema.rows[0].rls, true);
+    assert.equal(Number(schema.rows[0].opening_column), 1);
+    assert.equal(Number(schema.rows[0].fk_indexes), 4);
+
+    const adminId = '10000000-0000-4000-8000-000000000001';
+    const firstPlayerId = '10000000-0000-4000-8000-000000000002';
+    const secondPlayerId = '10000000-0000-4000-8000-000000000003';
+    const competitionId = '20000000-0000-4000-8000-000000000001';
+    const firstWalletId = '30000000-0000-4000-8000-000000000001';
+    const secondWalletId = '30000000-0000-4000-8000-000000000002';
+
+    await db.query(
+      'insert into auth.users(id) values($1),($2),($3)',
+      [adminId, firstPlayerId, secondPlayerId]
+    );
+    await db.query(
+      "insert into public.profiles(id,kyc_status) values($1,'approved'),($2,'approved'),($3,'approved')",
+      [adminId, firstPlayerId, secondPlayerId]
+    );
+    await db.query(
+      "insert into public.wallets(id,user_id,currency,monime_account_id) values($1,$2,'SLE','wallet-first'),($3,$4,'SLE','wallet-second')",
+      [firstWalletId, firstPlayerId, secondWalletId, secondPlayerId]
+    );
+    await db.query(
+      "insert into public.matmove_sports_competitions(id,name,created_by,status,registration_closes_at) values($1,'MatMove eFootball Gala — Season 1',$2,'registration',now()+interval '1 day')",
+      [competitionId, adminId]
+    );
+
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)", [firstPlayerId]);
+    const info = await db.query('select public.matmove_sports_public_registration_info() as value');
+    assert.equal(info.rows[0].value.registration_open, true);
+    assert.equal(info.rows[0].value.gala_name, 'MatMove eFootball Gala');
+
+    const online = await db.query(
+      'select public.matmove_sports_submit_application($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) as value',
+      [competitionId, firstWalletId, 'First Player Legal Name', '+23276000001', '+23276000001',
+       'first@example.com', 'efootball-first-001', 'First Team', true, true]
+    );
+    const onlineReceipt = online.rows[0].value;
+    assert.match(onlineReceipt.reference_code, /^GALA-[A-F0-9]{8}$/);
+    assert.equal(onlineReceipt.status, 'submitted');
+
+    const own = await db.query(
+      'select public.matmove_sports_my_application($1) as value',
+      [competitionId]
+    );
+    assert.equal(own.rows[0].value.application.reference_code, onlineReceipt.reference_code);
+    assert.equal(own.rows[0].value.application.status, 'submitted');
+
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)", [adminId]);
+    const manual = await db.query(
+      "select public.matmove_sports_application_admin_action('manual_submit',$1::jsonb) as value",
+      [JSON.stringify({
+        competition_id: competitionId,
+        wallet_lookup: secondWalletId,
+        legal_name: 'Second Player Legal Name',
+        phone: '+23276000002',
+        whatsapp_phone: '+23276000002',
+        email: 'second@example.com',
+        efootball_user_id: 'efootball-second-002',
+        team_name: 'Second Team',
+        terms_accepted: true,
+        rules_accepted: true
+      })]
+    );
+    assert.match(manual.rows[0].value.reference_code, /^GALA-[A-F0-9]{8}$/);
+    const manualApp = await db.query(
+      "select id,source,user_id,status from public.matmove_sports_applications where reference_code=$1",
+      [manual.rows[0].value.reference_code]
+    );
+    assert.equal(manualApp.rows[0].source, 'admin_manual');
+    assert.equal(manualApp.rows[0].user_id, secondPlayerId);
+    assert.equal(manualApp.rows[0].status, 'submitted');
+
+    const queue = await db.query(
+      'select public.matmove_sports_applications_admin_snapshot($1) as value',
+      [competitionId]
+    );
+    assert.equal(queue.rows[0].value.stats.total, 2);
+    assert.equal(queue.rows[0].value.applications.length, 2);
+    assert.equal(queue.rows[0].value.applications.find(a => a.user_id === secondPlayerId).account_active, true);
+
+    const onlineApproval = await db.query(
+      "select public.matmove_sports_application_admin_action('approve',$1::jsonb) as value",
+      [JSON.stringify({competition_id:competitionId,application_id:onlineReceipt.application_id})]
+    );
+    assert.equal(onlineApproval.rows[0].value.status, 'approved');
+    const firstRoster = await db.query(
+      'select status from public.matmove_sports_players where competition_id=$1 and user_id=$2',
+      [competitionId, firstPlayerId]
+    );
+    assert.equal(firstRoster.rows[0].status, 'approved');
+
+    await db.query("update public.matmove_sports_competitions set registration_closes_at=now()-interval '1 minute' where id=$1", [competitionId]);
+    const afterCloseApproval = await db.query(
+      "select public.matmove_sports_application_admin_action('approve',$1::jsonb) as value",
+      [JSON.stringify({competition_id:competitionId,application_id:manualApp.rows[0].id})]
+    );
+    assert.equal(afterCloseApproval.rows[0].value.status, 'approved');
+    const roster = await db.query(
+      'select count(*)::integer as total from public.matmove_sports_players where competition_id=$1 and status=$2',
+      [competitionId, 'approved']
+    );
+    assert.equal(roster.rows[0].total, 2);
+
+    const directTableGrant = await db.query(
+      "select has_table_privilege('anon','public.matmove_sports_applications','select') as anon_read"
+    );
+    assert.equal(directTableGrant.rows[0].anon_read, false);
+  } finally {
+    await db.close();
+  }
+});
