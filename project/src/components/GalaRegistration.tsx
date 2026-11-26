@@ -72,6 +72,20 @@ const statusLabel: Record<string, string> = {
 
 export default function GalaRegistration({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open, onClose]);
   const [info, setInfo] = useState<RegistrationInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -202,8 +216,8 @@ export default function GalaRegistration({ open, onClose }: { open: boolean; onC
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[160] overflow-y-auto bg-slate-950/65 px-3 py-4 backdrop-blur-sm sm:px-6 sm:py-8">
-      <section role="dialog" aria-modal="true" aria-labelledby="gala-registration-title" className="mx-auto w-full max-w-3xl overflow-hidden rounded-[1.8rem] bg-[#f7faf8] shadow-2xl">
+    <div className="fixed inset-0 z-[160] flex items-center justify-center overflow-y-auto overscroll-contain bg-slate-950/65 p-3 backdrop-blur-sm sm:p-6" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="gala-registration-title" className="my-auto max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl overflow-y-auto overscroll-contain rounded-[1.8rem] bg-[#f7faf8] shadow-2xl sm:max-h-[calc(100dvh-3rem)]">
         <header className="relative overflow-hidden bg-[linear-gradient(115deg,#0c1e31_0%,#123b43_58%,#155c4e_100%)] px-5 py-6 text-white sm:px-8">
           <button type="button" onClick={onClose} aria-label="Close Gala registration" className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20"><X size={19}/></button>
           <div className="flex items-start gap-4 pr-10">
