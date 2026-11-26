@@ -39,3 +39,27 @@ test('public homepage refreshes from Realtime and retains a 15-second hidden-tab
   assert.match(source, /document\.removeEventListener\('visibilitychange', refreshWhenVisible\)/);
   assert.match(source, /removeChannel\(channel\)/);
 });
+
+
+test('landing page places the eFootball League WhatsApp call-to-action before the main hero', async () => {
+  const source = await readFile(new URL('../src/pages/LandingPage.tsx', import.meta.url), 'utf8');
+  const navEnd = source.indexOf('</nav>');
+  const leagueStart = source.indexOf('id="efootball-league-title"');
+  const heroStart = source.indexOf('Your world moves.');
+  assert.ok(navEnd >= 0 && leagueStart > navEnd && heroStart > leagueStart);
+  assert.match(source, /matmove_public_contacts/);
+  assert.match(source, /https:\/\/wa\.me\//);
+  assert.match(source, /MatMove eFootball League/);
+  assert.match(source, /registration details and next steps/);
+});
+
+test('landing page provides Android APK guidance and iPhone Safari/Chrome Home Screen steps', async () => {
+  const source = await readFile(new URL('../src/pages/LandingPage.tsx', import.meta.url), 'utf8');
+  assert.match(source, /VITE_ANDROID_DOWNLOAD_URL/);
+  assert.match(source, /Download MatMove for Android/);
+  assert.match(source, /allow your browser or Files app to install this app/);
+  assert.match(source, /Keep Play Protect enabled/);
+  assert.match(source, /Open <b>Safari<\/b> or <b>Chrome<\/b>/);
+  assert.match(source, /Add to Home Screen/);
+  assert.match(source, /matmove\.space/);
+});
