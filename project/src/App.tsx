@@ -48,6 +48,7 @@ import {
 import {
   UpdatePassword,
 } from '@/pages/UpdatePassword';
+import { ForgotPasswordPage, ForgotPasscodePage } from '@/pages/PasswordPages';
 
 
 
@@ -1496,6 +1497,9 @@ export default function App() {
         path="/login"
         element={<LoginPage />}
       />
+
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/forgot-passcode" element={<ForgotPasscodePage />} />
 
       <Route
         path="/signup"
