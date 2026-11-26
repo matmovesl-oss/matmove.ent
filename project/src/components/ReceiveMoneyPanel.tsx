@@ -144,7 +144,7 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
       if (navigator.share) {
         await navigator.share({ title: 'MatMove — Get Paid', text: shareText, url: monimePaymentUrl });
       } else {
-        await copy(monimePaymentUrl, 'Monime Get Paid link');
+        await copy(monimePaymentUrl, 'MatMove payment link');
       }
     } catch (cause: any) {
       if (cause?.name !== 'AbortError') setError('Unable to share your Monime link. Copy it instead.');
@@ -170,16 +170,15 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
       {monimePaymentUrl && (
         <div className="mt-4 space-y-3 rounded-2xl border border-emerald-100 bg-white/75 p-3">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Monime Get Paid</p>
-            <p className="mt-1 text-xs leading-5 text-slate-600">Your personal Monime receiving number and payment link. This link is unique to your verified SLE wallet.</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">MatMove Get Paid</p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">Receive money into your MatMove SLE wallet. Share your MatMove payment link or give someone your receiving code.</p>
             <p className="mt-2 break-all font-mono text-lg font-extrabold tracking-wide text-slate-900">{monimeUvan}</p>
-            <a href={monimePaymentUrl} target="_blank" rel="noopener noreferrer" className="mt-2 block break-all text-sm font-bold text-blue-800 underline underline-offset-4"> {monimePaymentUrl} </a>
+            <p className="mt-2 text-xs font-medium text-slate-500">Your secure payment page is ready to share.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <a href={monimePaymentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-700 px-3 py-2 text-sm font-bold text-white"><ExternalLink size={15}/> Open Monime</a>
-            <button type="button" onClick={() => void copy(monimePaymentUrl, 'Monime Get Paid link')} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700"><Copy size={15}/>{copiedLabel === 'Monime Get Paid link' ? 'Copied ✓' : 'Copy link'}</button>
-            <button type="button" onClick={() => void copy(monimeUvan, 'Monime UVAN')} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700"><Copy size={15}/>{copiedLabel === 'Monime UVAN' ? 'Copied ✓' : 'Copy UVAN'}</button>
-            <button type="button" onClick={() => void shareMonimeLink()} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-blue-700 px-3 py-2 text-sm font-bold text-white"><Share2 size={15}/> Share Monime link</button>
+            <button type="button" onClick={() => void copy(monimePaymentUrl, 'Monime Get Paid link')} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700"><Copy size={15}/>{copiedLabel === 'MatMove payment link' ? 'Copied ✓' : 'Copy link'}</button>
+            <button type="button" onClick={() => void copy(monimeUvan, 'MatMove receiving code')} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700"><Copy size={15}/>{copiedLabel === 'MatMove receiving code' ? 'Copied ✓' : 'Copy UVAN'}</button>
+            <button type="button" onClick={() => void shareMonimeLink()} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-blue-700 px-3 py-2 text-sm font-bold text-white"><Share2 size={15}/> Share payment link</button>
           </div>
         </div>
       )}
