@@ -51,8 +51,6 @@ export function WalletTopUp({userId, allowed, onClose, onPaid}: {
   const [quoting, setQuoting] = useState(false);
   const [verified, setVerified] = useState(false);
   const [error, setError] = useState('');
-  const onCloseRef = useRef(onClose);
-  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
