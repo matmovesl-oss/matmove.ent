@@ -19,6 +19,7 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
   const [notice, setNotice] = useState('');
   const [copiedLabel, setCopiedLabel] = useState('');
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onCloseRef = useRef(onClose);
   const [error, setError] = useState('');
 
   const available = Boolean(
@@ -47,6 +48,20 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
   }, [available]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onCloseRef.current();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   useEffect(() => () => {
     if (copiedTimer.current) clearTimeout(copiedTimer.current);
@@ -152,8 +167,8 @@ export default function ReceiveMoneyPanel({ sleWallet, role, onClose }: { sleWal
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/45 p-2 backdrop-blur-sm sm:items-center sm:p-4">
-    <section role="dialog" aria-modal="true" className="mm-glass-tile max-h-[min(88dvh,760px)] w-full max-w-lg overflow-y-auto rounded-3xl p-4 text-slate-800 shadow-2xl sm:p-5" aria-labelledby="receive-money-title">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/45 p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section role="dialog" aria-modal="true" className="mm-glass-tile max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-3xl p-4 text-slate-800 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-5" aria-labelledby="receive-money-title">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
         <div className="mm-glass-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl">

@@ -41,16 +41,39 @@ test('public homepage refreshes from Realtime and retains a 15-second hidden-tab
 });
 
 
-test('landing page presents the official MatMove eFootball Gala registration CTA before the main hero', async () => {
+test('landing page only shows Admin-published active competitions and refreshes the public feed', async () => {
   const source = await readFile(new URL('../src/pages/LandingPage.tsx', import.meta.url), 'utf8');
-  const navEnd = source.indexOf('</nav>');
-  const galaStart = source.indexOf('id="efootball-league-title"');
-  const heroStart = source.indexOf('Your world moves.');
-  assert.ok(navEnd >= 0 && galaStart > navEnd && heroStart > galaStart);
-  assert.match(source, /MatMove eFootball Gala/);
-  assert.match(source, /Register for the Gala/);
-  assert.match(source, /<GalaRegistration open=\{galaRegistrationOpen\}/);
-  assert.doesNotMatch(source, /Join via WhatsApp/);
+  assert.match(source, /supabase\.rpc\('matmove_sports_public_registration_info'\)/);
+  assert.match(source, /sportsCompetitions\.length>0/);
+  assert.match(source, /sportsCompetitions\.map\(\(competition\)/);
+  assert.match(source, /\{competition\.name\}/);
+  assert.match(source, /\['registration','in_progress'\]\.includes\(item\.status\)/);
+  assert.match(source, /setInterval\(\(\)=>\{if\(document\.visibilityState==='visible'\)void refreshCompetitions\(\);\},30000\)/);
+  assert.match(source, /visibilitychange/);
+  assert.match(source, /<GalaRegistration open=\{!!selectedCompetitionId\} competitionId=\{selectedCompetitionId\}/);
+  assert.ok(!source.includes('MatMove eFootball Gala</h2>'));
+  assert.doesNotMatch(source, /Register for the Gala/);
+});
+
+test('public sports feed returns every registration or in-progress competition and hides unpublished or finished seasons', async () => {
+  const sql = await readFile(new URL('../supabase/migrations/20261126210052_matmove_sports_public_competition_feed_v1.sql', import.meta.url), 'utf8');
+  assert.match(sql, /where status in \('registration', 'in_progress'\)/);
+  assert.match(sql, /'competitions', v_competitions/);
+  assert.match(sql, /'competition', v_primary/);
+  assert.match(sql, /'registration_open'/);
+  assert.match(sql, /'ends_at', c\.ends_at/);
+  assert.match(sql, /'in_progress' then 'This competition is in progress/);
+  assert.match(sql, /There are no published sports competitions at the moment/);
+});
+
+test('competition application modal uses the selected public competition and its own application status', async () => {
+  const source = await readFile(new URL('../src/components/GalaRegistration.tsx', import.meta.url), 'utf8');
+  assert.match(source, /competitionId\?: string \| null/);
+  assert.match(source, /feed\?\.competitions\?\.find\(item => item\.id === competitionId\)/);
+  assert.match(source, /p_competition_id: selectedCompetition\.id/);
+  assert.match(source, /const registrationOpen = !!registration/);
+  assert.match(source, /registration\?\.status === 'in_progress'/);
+  assert.match(source, /p_competition_id: registration\.id/);
 });
 
 test('Gala application shows the published eligibility, fixed country and required player details', async () => {
@@ -73,13 +96,17 @@ test('Gala landing form is account-bound and never accepts a client-supplied use
   assert.doesNotMatch(source, /p_user_id/);
   assert.match(source, /statusLabel/);
 });
-test('landing page provides Android APK guidance and iPhone Safari/Chrome Home Screen steps', async () => {
+test('landing page downloads the official MatMove APK directly and retains iPhone Home Screen steps', async () => {
   const source = await readFile(new URL('../src/pages/LandingPage.tsx', import.meta.url), 'utf8');
-  assert.match(source, /VITE_ANDROID_DOWNLOAD_URL/);
-  assert.match(source, /Download MatMove for Android/);
+  assert.match(source, /matmove-app-releases/);
+  assert.ok(source.includes("list('android',{limit:20,search:'MatMove.apk'})"));
+  assert.match(source, /getPublicUrl\(ANDROID_RELEASE_PATH\)/);
+  assert.match(source, /searchParams\.set\('download','MatMove\.apk'\)/);
+  assert.match(source, /Install MatMove for Android/);
+  assert.doesNotMatch(source, /VITE_ANDROID_DOWNLOAD_URL|median\.co/);
   assert.match(source, /allow your browser or Files app to install this app/);
   assert.match(source, /Keep Play Protect enabled/);
-  assert.match(source, /Open <b>Safari<\/b> or <b>Chrome<\/b>/);
+  assert.ok(source.includes('Open <b>Safari</b> or <b>Chrome</b>'));
   assert.match(source, /Add to Home Screen/);
-  assert.match(source, /matmove\.space/);
+  assert.ok(source.includes('matmove.space'));
 });

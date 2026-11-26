@@ -253,7 +253,7 @@ export default function PayoutPanel({
   const breakdown = withdrawal || quote;
 
   return (
-    <dialog ref={modal} aria-labelledby="mm-payout-title" aria-describedby="mm-payout-help" onCancel={event=>{event.preventDefault();if(!inFlight.current)onClose();}} className="m-auto max-h-[calc(100dvh-1rem)] w-[calc(100%_-_1rem)] max-w-lg overflow-y-auto overscroll-contain rounded-2xl border-0 bg-white p-0 shadow-2xl backdrop:bg-slate-950/60 sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100%_-_2rem)]">
+    <dialog ref={modal} aria-labelledby="mm-payout-title" aria-describedby="mm-payout-help" onCancel={event=>{event.preventDefault();if(!inFlight.current)onClose();}} onClick={event=>{if(event.target===event.currentTarget&&!inFlight.current)onClose();}} className="m-auto max-h-[calc(100dvh-1rem)] w-[calc(100%_-_1rem)] max-w-lg overflow-y-auto overscroll-contain rounded-2xl border-0 bg-white p-0 shadow-2xl backdrop:bg-slate-950/60 sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100%_-_2rem)]">
     <div
       ref={panel}
       className="rounded-2xl bg-white p-4 sm:p-6"
