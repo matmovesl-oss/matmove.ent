@@ -1,4 +1,4 @@
-const CACHE_NAME = 'matmove-shell-v4';
+const CACHE_NAME = 'matmove-shell-v5';
 const APP_SHELL = ['/', '/index.html', '/offline.html', '/logo.jpg', '/image-unavailable.svg'];
 const VERSIONED_VITE_ASSET = /^\/assets\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|woff2?|ttf|otf|svg|png|jpe?g|webp|avif|gif)$/i;
 const BACKSLASH = String.fromCharCode(92);
