@@ -59,13 +59,14 @@ function usePresentation(userId:string){
  },[userId,reload]);
  return{record:record?.user_id===userId?record:null,photoUrl:record?.user_id===userId?photoUrl:'',loading,error,photoError,reload};
 }
-function Photo({url,size='small'}:{url:string;size?:'small'|'large'}){
+function Photo({url,size='small',onImageError}:{url:string;size?:'small'|'large';onImageError?:()=>void}){
  const [failed,setFailed]=useState('');
- return <span className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-emerald-50 text-emerald-700 ${size==='large'?'h-20 w-20':'h-10 w-10'}`}>{url&&failed!==url?<img src={url} alt="Your profile photo" className="h-full w-full object-cover" referrerPolicy="no-referrer" onError={()=>setFailed(url)}/>:<UserCircle size={size==='large'?48:28}/>}</span>;
+ const sizeClass=size==='large'?'h-20 w-20':'h-10 w-10';
+ return <span className={'flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-emerald-50 text-emerald-700 '+sizeClass}>{url&&failed!==url?<img src={url} alt="Your profile photo" className="h-full w-full object-cover" referrerPolicy="no-referrer" onError={()=>{setFailed(url);onImageError?.();}}/>:<UserCircle size={size==='large'?48:28}/>}</span>;
 }
 export function AccountIdentity({userId,fallbackName}:{userId:string;fallbackName:string}){
- const {record,photoUrl}=usePresentation(userId);
- return <><span className="min-w-0"><b className="block text-sm text-slate-900">Account</b><span className="block max-w-48 truncate text-xs text-slate-500">{record?.display_name||fallbackName}</span></span><Photo url={photoUrl}/></>;
+ const {record,photoUrl,reload}=usePresentation(userId);
+ return <><span className="min-w-0"><b className="block text-sm text-slate-900">Account</b><span className="block max-w-48 truncate text-xs text-slate-500">{record?.display_name||fallbackName}</span></span><Photo url={photoUrl} onImageError={()=>void reload()}/></>;
 }
 export async function prepareProfilePhoto(file:File):Promise<Blob>{
  if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size<=0||file.size>5*1024*1024)throw new Error('Choose a JPG, PNG or WebP photo up to 5 MB.');
@@ -203,7 +204,7 @@ export default function AccountProfile({userId,showPasskey=true}:{userId:string;
  }
  return <section aria-labelledby="mm-profile-edit-title" className="mb-6 rounded-3xl border border-slate-200 bg-white p-4 sm:p-6">
   {showPasskey&&<PasskeySecurity userId={userId}/>}
-  <div className="flex flex-wrap items-center gap-4"><Photo size="large" url={removePhoto?'':preview||photoUrl}/><div><h2 id="mm-profile-edit-title" className="text-lg font-bold text-slate-900">Your profile photo & display name</h2><p className="mt-1 max-w-lg text-sm text-slate-600">Personalize your account here. Your legal name, phone, email and verified identity are managed separately through KYC.</p></div></div>
+  <div className="flex flex-wrap items-center gap-4"><Photo size="large" url={removePhoto?'':preview||photoUrl} onImageError={()=>void reload()}/><div><h2 id="mm-profile-edit-title" className="text-lg font-bold text-slate-900">Your profile photo & display name</h2><p className="mt-1 max-w-lg text-sm text-slate-600">Personalize your account here. Your legal name, phone, email and verified identity are managed separately through KYC.</p></div></div>
   {loading?<p role="status" className="mt-4 flex items-center gap-2 text-sm text-slate-600"><Loader2 size={16} className="animate-spin"/>Loading profile…</p>:error?<p role="alert" className="mt-4 text-sm text-red-700">{error}</p>:null}
   {photoError&&!loading&&<p role="status" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{photoError}</p>}
   <div className="mt-4 space-y-4"><label className="block text-sm font-bold text-slate-700">Display name (optional)<input type="text" autoComplete="nickname" value={name} maxLength={60} disabled={busy||loading||!!error||!record} onChange={e=>{setName(e.target.value);dirty.current=true;setNotice('');}} className="mt-2 w-full rounded-xl border p-3 text-base font-normal" placeholder="How you want your account to appear"/></label>
