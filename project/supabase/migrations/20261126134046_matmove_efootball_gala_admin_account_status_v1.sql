@@ -6,7 +6,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_applications_admin_snapshot(p_c
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public'
-AS $function$
+AS $function$;
 declare
   v_result jsonb;
 begin
@@ -69,7 +69,7 @@ begin
 
   return v_result;
 end;
-$function$
+$function$;
 
 notify pgrst, 'reload schema';
 commit;
