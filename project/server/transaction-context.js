@@ -47,7 +47,7 @@ export async function enrichTransactions(
         .order('created_at', {
           ascending: false,
         })
-        .limit(200),
+        .limit(1000),
 
       db
         .from('bookings')
@@ -58,7 +58,7 @@ export async function enrichTransactions(
         .order('created_at', {
           ascending: false,
         })
-        .limit(200),
+        .limit(1000),
 
       db
         .from('matmove_withdrawals')
@@ -67,7 +67,7 @@ export async function enrichTransactions(
         .order('created_at', {
           ascending: false,
         })
-        .limit(200),
+        .limit(1000),
     ]);
 
     const readLegs = async (

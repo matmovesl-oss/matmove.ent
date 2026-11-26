@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Bike, Car, ChevronLeft, ChevronRight, MapPin, Package, Store, Truck, Navigation, Sparkles } from 'lucide-react';
+import { ArrowRight, Bike, Car, ChevronLeft, ChevronRight, MapPin, Package, Store, Truck, Navigation, Sparkles, Trophy, Download, Smartphone, ShieldCheck } from 'lucide-react';
 import PublicHomepagePosts from '@/components/PublicHomepagePosts';
+import GalaRegistration from '@/components/GalaRegistration';
 
 const journeys=[
  {from:'Freetown',via:'Aberdeen · Lumley',to:'Central Freetown',label:'CITY RIDES',detail:'Move across the capital with a ride that meets you where you are.'},
  {from:'Bo',via:'Mile 91 · Masiaka',to:'Kenema',label:'INTERCITY',detail:'Connect towns and districts with journeys made easier.'},
  {from:'Makeni',via:'Lunsar · Port Loko',to:'Freetown',label:'DELIVERY & TRAVEL',detail:'Keep people, packages and local businesses moving.'}
 ];
+
+const configuredAndroidDownloadUrl = String(import.meta.env.VITE_ANDROID_DOWNLOAD_URL || '').trim();
+const androidDownloadUrl = configuredAndroidDownloadUrl.startsWith('https://') ? configuredAndroidDownloadUrl : '';
 
 const services=[
  {name:'Ride',detail:'Go where life takes you.',icon:Car,illustration:'/matmove-car.svg'},
@@ -21,6 +25,7 @@ const services=[
 export function LandingPage(){
  const navigate=useNavigate();
  const [journey,setJourney]=useState(0);
+ const [galaRegistrationOpen,setGalaRegistrationOpen]=useState(false);
  useEffect(()=>{
   const timer=window.setInterval(()=>setJourney(current=>(current+1)%journeys.length),5200);
   return()=>window.clearInterval(timer);
@@ -32,6 +37,16 @@ export function LandingPage(){
    <a href="/" className="flex items-center gap-3" aria-label="MatMove home"><img src="/logo.jpg" alt="MatMove" className="h-12 w-auto object-contain"/><span className="hidden text-xs font-bold uppercase tracking-[.2em] text-emerald-800 sm:block">Move with possibility</span></a>
    <div className="flex items-center gap-2"><button onClick={()=>navigate('/login')} className="min-h-11 rounded-xl px-4 text-sm font-bold text-slate-700 hover:bg-white">Log in</button><button onClick={()=>navigate('/signup')} className="min-h-11 rounded-xl bg-[#1554a0] px-5 text-sm font-bold text-white shadow-lg shadow-blue-900/15 hover:bg-[#10427f]">Get started <ArrowRight className="ml-1 inline" size={16}/></button></div>
   </nav>
+
+  <section aria-labelledby="efootball-league-title" className="mx-auto max-w-7xl px-5 pb-3 sm:px-8">
+   <div className="flex flex-col gap-5 overflow-hidden rounded-[1.8rem] border border-emerald-200/80 bg-[linear-gradient(115deg,#0c1e31_0%,#123b43_58%,#155c4e_100%)] px-5 py-6 text-white shadow-[0_16px_42px_rgba(13,47,57,.17)] sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-7">
+    <div className="flex min-w-0 items-start gap-4">
+     <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-emerald-200"><Trophy size={27}/></span>
+     <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.2em] text-emerald-200">Official competition</p><h2 id="efootball-league-title" className="mt-1 text-xl font-black tracking-tight sm:text-2xl">MatMove eFootball Gala</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-200">Ready to compete? Review the qualification requirements and submit your official player application.</p></div>
+    </div>
+    <button type="button" onClick={()=>setGalaRegistrationOpen(true)} className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 font-extrabold text-[#082b1b] shadow-lg shadow-black/15 transition hover:-translate-y-0.5 hover:bg-[#48e17f]"><Trophy size={19}/> Register for the Gala <ArrowRight size={17}/></button>
+   </div>
+  </section>
 
   <section className="mx-auto grid max-w-7xl items-center gap-10 px-5 pb-16 pt-8 sm:px-8 lg:grid-cols-[.92fr_1.08fr] lg:gap-14 lg:pb-24 lg:pt-14">
    <div className="relative z-10">
@@ -71,6 +86,34 @@ export function LandingPage(){
    </div>
   </section>
 
+  <section id="install-matmove" aria-labelledby="install-matmove-title" className="mx-auto max-w-7xl px-5 pb-8 pt-2 sm:px-8 sm:pb-12">
+   <div className="mb-5 max-w-2xl"><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-700">Get MatMove on your phone</p><h2 id="install-matmove-title" className="font-display mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Install MatMove in a few simple steps.</h2><p className="mt-2 text-sm leading-6 text-slate-600">Choose your phone and follow the instructions below.</p></div>
+   <div className="grid gap-4 lg:grid-cols-2">
+    <article className="rounded-[1.7rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+     <div className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-800"><Smartphone size={23}/></span><div><p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-700">Android</p><h3 className="text-lg font-black text-slate-950">Download and install</h3></div></div>
+     <p className="mt-4 text-sm leading-6 text-slate-600">Download the MatMove Android installation file from the official MatMove link, then follow the prompts on your phone.</p>
+     {androidDownloadUrl ? <a href={androidDownloadUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1554a0] px-4 font-bold text-white transition hover:bg-[#10427f]"><Download size={18}/> Download MatMove for Android</a> : <div role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">The Android download button will appear here once the official APK link is connected.</div>}
+     <ol className="mt-5 space-y-3 text-sm leading-6 text-slate-700">
+      <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-black text-emerald-800">1</span><span>Tap <b>Download MatMove</b> and wait for the file to finish downloading.</span></li>
+      <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-black text-emerald-800">2</span><span>Open the downloaded file. If Android asks, allow your browser or Files app to install this app, then return to the installer.</span></li>
+      <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-black text-emerald-800">3</span><span>Tap <b>Install</b>. When installation finishes, tap <b>Open</b> to start using MatMove.</span></li>
+     </ol>
+     <div className="mt-5 flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5"><ShieldCheck size={19} className="mt-0.5 shrink-0 text-emerald-700"/><p className="text-xs leading-5 text-slate-600">Android may show a notice because this app is being installed directly rather than through Google Play. This is expected for an official APK. Only continue when the file came from MatMove’s official download link. Keep Play Protect enabled and stop if your phone says the app is harmful or blocks the installation.</p></div>
+    </article>
+    <article className="rounded-[1.7rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+     <div className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-800"><Smartphone size={23}/></span><div><p className="text-[10px] font-black uppercase tracking-[.16em] text-sky-700">iPhone</p><h3 className="text-lg font-black text-slate-950">Add MatMove to your Home Screen</h3></div></div>
+     <p className="mt-4 text-sm leading-6 text-slate-600">Open MatMove in Safari or Chrome, then add it to your Home Screen so you can launch it from its own icon.</p>
+     <ol className="mt-5 space-y-3 text-sm leading-6 text-slate-700">
+      <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-black text-sky-800">1</span><span>Open <b>Safari</b> or <b>Chrome</b> on your iPhone and visit <a href="https://matmove.space" className="font-bold text-[#1554a0] underline underline-offset-2">matmove.space</a>.</span></li>
+      <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-black text-sky-800">2</span><span>Tap the browser’s <b>Share</b> button.</span></li>
+      <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-black text-sky-800">3</span><span>Choose <b>Add to Home Screen</b> from the share options.</span></li>
+      <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-black text-sky-800">4</span><span>Tap <b>Add</b>. The MatMove icon will appear on your Home Screen; tap it whenever you want to open MatMove.</span></li>
+     </ol>
+     <div className="mt-5 rounded-xl border border-sky-100 bg-sky-50 p-3.5 text-xs leading-5 text-sky-900">This adds MatMove to your Home Screen for quick access. It does not require an App Store download.</div>
+    </article>
+   </div>
+  </section>
+
   <PublicHomepagePosts/>
 
   <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8"><div className="mb-5"><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-700">MatMove fleet</p><h2 className="font-display mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Choose your way to move.</h2><p className="mt-2 text-sm text-slate-500">A ride for every road and every day.</p></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[{label:'Keke',src:'/matmove-keke.svg',detail:'Easy city trips'},{label:'Bike',src:'/matmove-bike.svg',detail:'Quick solo rides'},{label:'Car',src:'/matmove-car.svg',detail:'Comfortable journeys'},{label:'Van',src:'/matmove-van.svg',detail:'Extra room' }].map(item=><div key={item.label} className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"><div className="flex h-28 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-50 via-white to-emerald-50"><img src={item.src} alt={`MatMove ${item.label}`} className="h-24 w-full object-contain"/></div><p className="mt-3 text-sm font-black text-slate-950">{item.label}</p><p className="mt-1 text-xs text-slate-500">{item.detail}</p></div>)}</div></section>
@@ -81,5 +124,6 @@ export function LandingPage(){
    </div>
   </section>
   <footer className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-8 text-xs text-slate-500 sm:px-8"><span>© {new Date().getFullYear()} MatMove · Sierra Leone</span><span>Moving people, businesses and communities forward.</span></footer>
+  <GalaRegistration open={galaRegistrationOpen} onClose={()=>setGalaRegistrationOpen(false)}/>
  </main>;
 }

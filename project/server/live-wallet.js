@@ -9,6 +9,9 @@ import {
   monimeEnvironment,
 } from './wallet-security.js';
 
+const MAX_FINANCIAL_TRANSACTION_PAGES = 20;
+const FINANCIAL_TRANSACTION_PAGE_SIZE = 50;
+
 export async function liveWallet(
   context,
   {
@@ -53,33 +56,59 @@ export async function liveWallet(
       }
 
       try {
-        const history = await provider(
-          `financial-transactions?financialAccountId=${
-            encodeURIComponent(account.id)
-          }&limit=50`
-        );
+        let after = null;
+        const seenCursors = new Set();
+        const seenTransactionIds = new Set(transactions.map(tx => tx.id).filter(Boolean));
+        let reachedEnd = false;
 
-        if (!Array.isArray(history)) {
-          throw new Error(
-            'Invalid transaction history.'
+        for (let pageIndex = 0; pageIndex < MAX_FINANCIAL_TRANSACTION_PAGES; pageIndex += 1) {
+          const query = new URLSearchParams({
+            financialAccountId: account.id,
+            limit: String(FINANCIAL_TRANSACTION_PAGE_SIZE),
+          });
+          if (after) query.set('after', after);
+
+          const response = await provider(
+            'financial-transactions?' + query.toString(),
+            { includePagination: true }
           );
-        }
+          const history = Array.isArray(response) ? response : response?.result;
 
-        const accountHistory = history.filter(tx => {
-          if (
-            tx.financialAccount?.id &&
-            tx.financialAccount.id !== account.id
-          ) {
-            return false;
+          if (!Array.isArray(history)) {
+            throw new Error('Invalid transaction history.');
           }
 
-          return tx.amount?.currency === currency;
-        });
+          const accountHistory = history.filter(tx => {
+            if (tx.financialAccount?.id && tx.financialAccount.id !== account.id) return false;
+            if (tx.amount?.currency !== currency) return false;
+            if (tx.id && seenTransactionIds.has(tx.id)) return false;
+            if (tx.id) seenTransactionIds.add(tx.id);
+            return true;
+          });
+          transactions.push(...accountHistory);
 
-        transactions.push(...accountHistory);
+          const next = Array.isArray(response) ? null : response?.pagination?.next;
+          if (!next) {
+            reachedEnd = true;
+            break;
+          }
+          if (typeof next !== 'string' || seenCursors.has(next)) {
+            throw new Error('Invalid transaction history pagination cursor.');
+          }
+          seenCursors.add(next);
+          after = next;
+        }
+
+        if (!reachedEnd) {
+          warnings.push(
+            currency + ' transaction history is showing the latest ' +
+            (MAX_FINANCIAL_TRANSACTION_PAGES * FINANCIAL_TRANSACTION_PAGE_SIZE) +
+            ' records. Older records may remain; contact MatMove support for a full statement.'
+          );
+        }
       } catch {
         warnings.push(
-          `${currency} balance is verified; transaction history is temporarily unavailable.`
+          currency + ' balance is verified; transaction history is temporarily unavailable.'
         );
       }
 

@@ -9,7 +9,7 @@ test('Rider and Merchant Trips expose unfinished requests and a real cancellatio
   const switcher = await read('../src/components/CustomerTripSwitcher.tsx');
   assert.match(switcher, /onSelect\(b\.id\);onRefresh\?\.\(\)/);
   assert.match(source, /aria-label="Trips"/);
-  assert.match(source, /filteredTrips=filterTripHistory/);
+  assert.match(source, /const filteredTrips=.*isWithinDateRange/);
   assert.match(source, /updateRide\('cancel',t\.id\)/);
   assert.match(source, /View request/);
   assert.match(source, /'Cancel'/);

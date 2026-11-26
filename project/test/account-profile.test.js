@@ -129,3 +129,15 @@ test('A missing saved photo remains removable instead of trapping the whole prof
 test('A mismatched save receipt never reports the profile saved',()=>page(async h=>{
  await h.name('Display');h.setReply(()=>({data:{...empty,user_id:other,version:1},error:null}));await h.click('Save profile');assert.match(h.text,/could not be verified/);assert.doesNotMatch(h.text,/Profile saved\./);
 }));
+
+
+test('saved profile photos are presented in the shared Home and Account header and refresh signed URLs after image failure', async () => {
+  const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const profile = await readFile(new URL('../src/components/AccountProfile.tsx', import.meta.url), 'utf8');
+
+  assert.match(app, /AccountIdentity/);
+  assert.equal((app.match(/\{accountHeader\}/g) || []).length, 2);
+  assert.match(profile, /matmove_account_presentation_me/);
+  assert.match(profile, /createSignedUrl/);
+  assert.match(profile, /onImageError=\{\(\)=>void reload\(\)\}/);
+});

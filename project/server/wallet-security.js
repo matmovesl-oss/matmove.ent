@@ -142,6 +142,7 @@ export function assertMonimeEnvironment() {
 }
 
 export async function monime(path, options = {}) {
+  const { includePagination = false, ...requestOptions } = options || {};
   assertMonimeEnvironment();
 
   if (
@@ -157,7 +158,7 @@ export async function monime(path, options = {}) {
   const response = await fetch(
     `https://api.monime.io/v1/${path}`,
     {
-      ...options,
+      ...requestOptions,
       signal: AbortSignal.timeout(20000),
 
       headers: {
@@ -170,7 +171,7 @@ export async function monime(path, options = {}) {
         'Monime-Version': 'caph.2025-08-23',
         'Content-Type': 'application/json',
 
-        ...options.headers
+        ...requestOptions.headers
       }
     }
   );
@@ -221,7 +222,9 @@ export async function monime(path, options = {}) {
     );
   }
 
-  return body.result;
+  return includePagination
+    ? { result: body.result, pagination: body.pagination || null }
+    : body.result;
 }
 
 export async function verifiedAccount(db, wallet) {
