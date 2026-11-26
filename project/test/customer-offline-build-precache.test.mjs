@@ -16,7 +16,7 @@ test('Customer offline install precaches every Vite entry without caching privat
   assert.match(worker, /entry\.assets/);
   assert.match(worker, /precacheBuildAssets\(cache\)/);
   assert.match(worker, /isVersionedViteAsset/);
-  assert.match(worker, /matmove-shell-v4/);
+  assert.match(worker, /matmove-shell-v5/);
   assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
   assert.match(worker, /auth\|wallet\|payment\|transaction\|profile\|booking/);
   assert.match(worker, /response\.ok && response\.type === 'basic'/);
