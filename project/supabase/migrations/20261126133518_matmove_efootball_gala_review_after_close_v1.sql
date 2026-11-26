@@ -5,7 +5,7 @@ CREATE OR REPLACE FUNCTION public.matmove_sports_application_admin_action(p_acti
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public', 'auth'
-AS $function$;
+AS $function$
 declare
   v_competition_id uuid := nullif(p_payload->>'competition_id', '')::uuid;
   v_application_id uuid := nullif(p_payload->>'application_id', '')::uuid;
