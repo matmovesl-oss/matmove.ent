@@ -34,5 +34,8 @@ test('the callback keeps recovery actions separate from normal signup confirmati
   assert.ok(authPages.includes("params.get('type') === 'recovery'"));
   assert.ok(authPages.includes("requestedNext === '/reset-passcode'"));
   assert.ok(authPages.includes("requestedNext === '/reset-password'"));
-  assert.ok(authPages.includes('navigate(recovery ?'));
+  assert.ok(authPages.includes('if (recovery) {'));
+  assert.ok(authPages.includes('supabase.auth.getSession()'));
+  assert.ok(authPages.includes("event !== 'PASSWORD_RECOVERY'"));
+  assert.ok(authPages.includes('navigate(destination, { replace: true })'));
 });
