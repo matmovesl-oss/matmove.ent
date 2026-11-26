@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Bike, Car, ChevronLeft, ChevronRight, MapPin, Package, Store, Truck, Navigation, Sparkles, Trophy, MessageCircle, Download, Smartphone, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Bike, Car, ChevronLeft, ChevronRight, MapPin, Package, Store, Truck, Navigation, Sparkles, Trophy, Download, Smartphone, ShieldCheck } from 'lucide-react';
 import PublicHomepagePosts from '@/components/PublicHomepagePosts';
-import { supabase } from '@/lib/supabase';
+import GalaRegistration from '@/components/GalaRegistration';
 
 const journeys=[
  {from:'Freetown',via:'Aberdeen · Lumley',to:'Central Freetown',label:'CITY RIDES',detail:'Move across the capital with a ride that meets you where you are.'},
@@ -19,40 +19,15 @@ const services=[
  {name:'Travel',detail:'Plan journeys beyond the city.',icon:Bike,illustration:'/matmove-keke.svg'}
 ];
 
-const verifiedWhatsappFallback = '23290330362';
-const configuredAndroidDownloadUrl = String(import.meta.env.VITE_ANDROID_DOWNLOAD_URL || '').trim();
-const androidDownloadUrl = configuredAndroidDownloadUrl.startsWith('https://') ? configuredAndroidDownloadUrl : '';
-
 export function LandingPage(){
  const navigate=useNavigate();
  const [journey,setJourney]=useState(0);
+ const [galaRegistrationOpen,setGalaRegistrationOpen]=useState(false);
  const [whatsappPhone,setWhatsappPhone]=useState(verifiedWhatsappFallback);
  useEffect(()=>{
   const timer=window.setInterval(()=>setJourney(current=>(current+1)%journeys.length),5200);
   return()=>window.clearInterval(timer);
- },[]);
- useEffect(()=>{
-  let active=true;
-  const loadOfficialWhatsapp=async()=>{
-   try{
-    const {data,error}=await supabase.from('matmove_public_contacts')
-     .select('whatsapp_phone')
-     .eq('kind','whatsapp')
-     .eq('is_active',true)
-     .order('display_order',{ascending:true})
-     .limit(1)
-     .maybeSingle();
-    if(error)throw error;
-    const digits=String(data?.whatsapp_phone||'').replace(/[^0-9]/g,'');
-    if(active&&digits.length>=8&&digits.length<=15)setWhatsappPhone(digits);
-   }catch{
-    // Keep the last verified official MatMove support number as a safe fallback.
-   }
-  };
-  void loadOfficialWhatsapp();
-  return()=>{active=false;};
- },[]);
- const efootballWhatsappUrl='https://wa.me/'+whatsappPhone+'?text='+encodeURIComponent('Hello MatMove, I am interested in joining the MatMove eFootball League. Please send me the registration details and next steps.');
+ },[]
  const item=journeys[journey];
  const change=(step:number)=>setJourney(current=>(current+step+journeys.length)%journeys.length);
  return <main className="min-h-screen overflow-hidden bg-[#f5f8f7] font-sans text-slate-950">
@@ -65,9 +40,9 @@ export function LandingPage(){
    <div className="flex flex-col gap-5 overflow-hidden rounded-[1.8rem] border border-emerald-200/80 bg-[linear-gradient(115deg,#0c1e31_0%,#123b43_58%,#155c4e_100%)] px-5 py-6 text-white shadow-[0_16px_42px_rgba(13,47,57,.17)] sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-7">
     <div className="flex min-w-0 items-start gap-4">
      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-emerald-200"><Trophy size={27}/></span>
-     <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.2em] text-emerald-200">MatMove eFootball League</p><h2 id="efootball-league-title" className="mt-1 text-xl font-black tracking-tight sm:text-2xl">Ready to compete? Join the league.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-200">Play, represent your community and follow the competition. Message the official MatMove team for registration details.</p></div>
+     <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.2em] text-emerald-200">Official competition</p><h2 id="efootball-league-title" className="mt-1 text-xl font-black tracking-tight sm:text-2xl">MatMove eFootball Gala</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-200">Ready to compete? Review the qualification requirements and submit your official player application.</p></div>
     </div>
-    <a href={efootballWhatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 font-extrabold text-[#082b1b] shadow-lg shadow-black/15 transition hover:-translate-y-0.5 hover:bg-[#48e17f]"><MessageCircle size={19}/> Join via WhatsApp <ArrowRight size={17}/></a>
+    <button type="button" onClick={()=>setGalaRegistrationOpen(true)} className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 font-extrabold text-[#082b1b] shadow-lg shadow-black/15 transition hover:-translate-y-0.5 hover:bg-[#48e17f]"><Trophy size={19}/> Register for the Gala <ArrowRight size={17}/></button>
    </div>
   </section>
 
@@ -147,5 +122,6 @@ export function LandingPage(){
    </div>
   </section>
   <footer className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-8 text-xs text-slate-500 sm:px-8"><span>© {new Date().getFullYear()} MatMove · Sierra Leone</span><span>Moving people, businesses and communities forward.</span></footer>
+  <GalaRegistration open={galaRegistrationOpen} onClose={()=>setGalaRegistrationOpen(false)}/>
  </main>;
 }
