@@ -26,7 +26,7 @@ test('password and passcode recovery each open a dedicated secure email-entry sc
   assert.ok(pages.includes('await resetPasscode(normalizedEmail)'));
   assert.ok(pages.includes('await resetPassword(normalizedEmail)'));
   assert.ok(lock.includes("navigate('/forgot-passcode')"));
-  assert.ok(!lock.includes('requestPasscodeReset(resetEmail)'));
+  assert.doesNotMatch(lock,/setForgotMode\(true\)/);
   assert.ok(service.includes("customerAuthRedirect('/auth/callback?type=recovery&next=%2Freset-password')"));
   assert.ok(service.includes("customerAuthRedirect('/auth/callback?type=recovery&next=%2Freset-passcode')"));
   assert.ok(auth.includes("event !== 'PASSWORD_RECOVERY'"));
