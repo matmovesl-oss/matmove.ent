@@ -11,8 +11,8 @@ import {
   transactionAmount,
   transactionDirection,
   transactionTitle,
-  transactionReceipt,
 } from '../../shared/transaction-display.js';
+import { shareTransactionReceiptPdf } from '@/lib/pdfReceipt';
 
 type Props = {
   transactions: any[];
@@ -45,17 +45,10 @@ export default function TransactionHistory({
 
   async function share(tx: any) {
     try {
-      const text = transactionReceipt(tx);
-
-      if (navigator.share) {
-        await navigator.share({
-          title: transactionTitle(tx),
-          text,
-        });
-      } else {
-        await navigator.clipboard.writeText(text);
-        setNotice('Receipt copied.');
-      }
+      const result = await shareTransactionReceiptPdf(tx);
+      setNotice(result === 'shared'
+        ? 'Branded MatMove PDF receipt shared.'
+        : 'Branded MatMove PDF receipt downloaded.');
     } catch (error: any) {
       if (error.name !== 'AbortError') {
         setNotice('Could not share this receipt.');
