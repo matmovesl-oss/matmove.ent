@@ -1,3 +1,5 @@
+import { transactionAmount, transactionDirection, transactionTitle } from '../../shared/transaction-display.js';
+
 type ReceiptField = { label: string; value: unknown };
 type ShareReceiptPdfInput = {
   title: string;
@@ -196,6 +198,52 @@ function buildPdf(input: ShareReceiptPdfInput, logo: Awaited<ReturnType<typeof l
   xref += `trailer\n<< /Size ${maxId + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
   chunks.push(bytes(xref));
   return new Blob(chunks, { type: 'application/pdf' });
+}
+
+
+/**
+ * Creates and shares the branded MatMove PDF receipt for a wallet transaction.
+ * The existing receipt builder embeds /logo.jpg and falls back to a MatMove
+ * wordmark if the image cannot be loaded.
+ */
+export async function shareTransactionReceiptPdf(tx: any): Promise<'shared' | 'downloaded'> {
+  if (!tx || typeof tx !== 'object') {
+    throw new Error('Transaction details are unavailable.');
+  }
+
+  const rawDate = tx.timestamp || tx.createTime || tx.createdAt || tx.created_at || tx.date;
+  const date = rawDate ? new Date(rawDate) : null;
+  const dateLabel = date && !Number.isNaN(date.getTime())
+    ? date.toLocaleString()
+    : 'Date not provided';
+  const direction = transactionDirection(tx);
+  const directionLabel = direction === 'credit'
+    ? 'Money received'
+    : direction === 'debit'
+      ? 'Money sent'
+      : 'Direction not provided';
+  const reference = String(tx.id || tx.reference || 'Not provided');
+
+  const fields: ReceiptField[] = [
+    { label: 'Description', value: transactionTitle(tx) },
+    { label: 'Amount', value: transactionAmount(tx) },
+    { label: 'Transaction direction', value: directionLabel },
+    { label: 'Status', value: tx.status || 'Recorded in wallet ledger' },
+    { label: 'Date and time', value: dateLabel },
+    { label: 'Transaction reference', value: reference },
+  ];
+
+  if (tx.businessDetails) {
+    fields.push({ label: 'Additional details', value: tx.businessDetails });
+  }
+
+  return shareReceiptPdf({
+    title: 'MatMove Transaction Receipt',
+    subtitle: 'Official wallet transaction record',
+    reference,
+    filename: `MatMove-Transaction-${reference}`,
+    fields,
+  });
 }
 
 export async function shareReceiptPdf(input: ShareReceiptPdfInput): Promise<'shared' | 'downloaded'> {
