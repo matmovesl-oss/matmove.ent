@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { shareTransactionReceiptPdf } from '@/lib/pdfReceipt';
 import {
   X,
   ArrowDownLeft,
@@ -11,7 +12,6 @@ import {
   transactionDirection,
   transactionAmount,
   transactionTitle,
-  transactionReceipt,
 } from '../../shared/transaction-display.js';
 
 type Props = {
@@ -98,20 +98,13 @@ export function TransactionModal({
 
   async function shareReceipt() {
     try {
-      const text = transactionReceipt(tx);
-
-      if (navigator.share) {
-        await navigator.share({
-          title: 'MatMove receipt',
-          text,
-        });
-      } else {
-        await navigator.clipboard.writeText(text);
-        setNotice('Receipt copied.');
-      }
+      const result = await shareTransactionReceiptPdf(tx);
+      setNotice(result === 'shared'
+        ? 'Branded PDF receipt shared.'
+        : 'Branded PDF receipt downloaded.');
     } catch (error: any) {
-      if (error.name !== 'AbortError') {
-        setNotice('Could not share the receipt.');
+      if (error?.name !== 'AbortError') {
+        setNotice(error instanceof Error ? error.message : 'Could not create the PDF receipt.');
       }
     }
   }
