@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import HistoryDateFilter from '@/components/HistoryDateFilter';
+import { shareTransactionReceiptPdf } from '@/lib/pdfReceipt';
 import { isWithinDateRange } from '../../shared/activity-date-range.js';
 import {
   Share2,
@@ -11,7 +12,6 @@ import {
   transactionAmount,
   transactionDirection,
   transactionTitle,
-  transactionReceipt,
 } from '../../shared/transaction-display.js';
 
 type Props = {
@@ -45,20 +45,13 @@ export default function TransactionHistory({
 
   async function share(tx: any) {
     try {
-      const text = transactionReceipt(tx);
-
-      if (navigator.share) {
-        await navigator.share({
-          title: transactionTitle(tx),
-          text,
-        });
-      } else {
-        await navigator.clipboard.writeText(text);
-        setNotice('Receipt copied.');
-      }
+      const result = await shareTransactionReceiptPdf(tx);
+      setNotice(result === 'shared'
+        ? 'Branded PDF receipt shared.'
+        : 'Branded PDF receipt downloaded.');
     } catch (error: any) {
-      if (error.name !== 'AbortError') {
-        setNotice('Could not share this receipt.');
+      if (error?.name !== 'AbortError') {
+        setNotice(error instanceof Error ? error.message : 'Could not create the PDF receipt.');
       }
     }
   }
