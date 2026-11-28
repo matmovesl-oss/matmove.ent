@@ -235,7 +235,7 @@ export function TransactionModal({
             onClick={() => void shareReceipt()}
             className="w-full rounded-xl border py-3 font-bold"
           >
-            Share receipt
+            Share PDF receipt
           </button>
 
           <button
