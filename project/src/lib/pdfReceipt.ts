@@ -1,3 +1,5 @@
+import { transactionAmount, transactionDirection, transactionTitle } from '../../shared/transaction-display.js';
+
 type ReceiptField = { label: string; value: unknown };
 type ShareReceiptPdfInput = {
   title: string;
@@ -230,4 +232,55 @@ export async function shareReceiptPdf(input: ShareReceiptPdfInput): Promise<'sha
     window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
   }
   return 'downloaded';
+}
+
+
+/**
+ * Builds and shares the branded MatMove PDF for a wallet transaction.
+ * The existing shareReceiptPdf() helper embeds /logo.jpg when available and
+ * falls back to a branded text header if the image cannot be loaded.
+ */
+export async function shareTransactionReceiptPdf(tx: any): Promise<'shared' | 'downloaded'> {
+  if (!tx || typeof tx !== 'object') throw new Error('Transaction details are unavailable.');
+
+  const rawDate =
+    tx.timestamp ||
+    tx.createTime ||
+    tx.createdAt ||
+    tx.created_at ||
+    tx.date;
+  const date = new Date(rawDate);
+  const recorded = Number.isNaN(date.getTime())
+    ? 'Not provided'
+    : date.toLocaleString();
+
+  const direction = transactionDirection(tx);
+  const directionLabel =
+    direction === 'credit' ? 'Received' :
+    direction === 'debit' ? 'Sent' :
+    'Not provided';
+  const reference = String(tx.id || tx.reference || 'Not provided');
+  const description = transactionTitle(tx);
+
+  const fields: ReceiptField[] = [
+    { label: 'Transaction description', value: description },
+    { label: 'Transaction direction', value: directionLabel },
+    { label: 'Amount', value: transactionAmount(tx) },
+    { label: 'Currency', value: tx.amount?.currency || 'SLE' },
+    { label: 'Status', value: tx.status || 'Recorded in wallet ledger' },
+    { label: 'Date and time', value: recorded },
+    { label: 'Transaction reference', value: reference },
+  ];
+
+  if (tx.businessDetails) {
+    fields.push({ label: 'Additional details', value: tx.businessDetails });
+  }
+
+  return shareReceiptPdf({
+    title: 'MatMove Transaction Receipt',
+    subtitle: description,
+    reference,
+    filename: `MatMove-transaction-${reference}`,
+    fields,
+  });
 }
